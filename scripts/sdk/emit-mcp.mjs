@@ -22,6 +22,7 @@
 //      top level of the input schema (a model should not have to nest an id under `path`), so a
 //      collision between them would silently drop one. It fails generation instead.
 
+import { snake } from './ir.mjs'
 import {
   GROUP_DOCS,
   GROUPS,
@@ -49,11 +50,18 @@ function lit(value) {
     .replace(/\n/g, '\\n')}'`
 }
 
-/** camelCase → snake_case, for the tool name a model reads. */
-function snake(text) {
-  return String(text)
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .toLowerCase()
+/**
+ * The group as this facade PUBLISHES it: snake_case, the host-safe spelling.
+ *
+ * The surface table spells a group the way the TypeScript client mounts it (`client.taskTypes`),
+ * which is camelCase, and every group was a single word until `taskTypes`, so the two spellings
+ * were the same string and nothing had to choose between them. They are not the same string any
+ * more, and each has exactly one home: the camelCase one indexes the TS client in `invoke` below,
+ * this one is what a host lists, what a model calls, and what an operator names in
+ * `CAT_FACTORY_MCP_GROUPS`. Anything a human or a model reads goes through here.
+ */
+function toolGroup(operation) {
+  return snake(operation.group)
 }
 
 /**
@@ -65,7 +73,7 @@ function snake(text) {
  * are visibly the same call, and renaming one renames the other in the same reviewed diff.
  */
 function toolName(operation) {
-  return `${operation.group}_${snake(operation.method)}`
+  return `${toolGroup(operation)}_${snake(operation.method)}`
 }
 
 /** Look up a named IR type. */
@@ -345,7 +353,7 @@ function emitTool(operation, ir) {
     `  {\n` +
     `    name: ${lit(toolName(operation))},\n` +
     `    title: ${lit(operation.summary)},\n` +
-    `    group: ${lit(operation.group)},\n` +
+    `    group: ${lit(toolGroup(operation))},\n` +
     `    operationId: ${lit(operation.id)},\n` +
     // A GET changes nothing on the deployment, which is the one annotation a host uses to decide
     // whether a call needs a human's confirmation. The two hints `readOnlyHint` cannot express
@@ -531,7 +539,7 @@ ${omitted.join('')}]
 
 /** One line per resource group, for the server's instructions. */
 export const CAT_FACTORY_TOOL_GROUPS: Readonly<Record<string, string>> = {
-${GROUPS.map((group) => `  ${lit(group)}: ${lit(GROUP_DOCS[group])},`).join('\n')}
+${GROUPS.map((group) => `  ${lit(snake(group))}: ${lit(GROUP_DOCS[group])},`).join('\n')}
 }
 `
 }

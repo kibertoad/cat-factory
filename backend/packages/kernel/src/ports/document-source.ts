@@ -3,6 +3,8 @@ import type {
   DocumentSourceDescriptor,
   DocumentSearchResult,
 } from '../domain/types.js'
+import type { DocumentFreshness } from '../domain/document-freshness.js'
+import type { DocumentRecord } from './document-repositories.js'
 
 // Port for a single document source (Confluence, Notion, …). A provider is the
 // only place that knows a source's specifics: how to validate its credentials,
@@ -71,6 +73,36 @@ export interface DocumentSourceProvider {
   /** Resolve a stable page id from raw user input (a bare id or a page URL); null if unparseable. */
   parseRef(input: string): string | null
   /**
+   * The canonical web URL for a page id, rebuilt WITHOUT a fetch: what a pasted share link is
+   * trimmed to once its title segment and tracking params are dropped. It is the half of
+   * {@link parseRef} an attach surface needs to SHOW someone what their paste resolved to,
+   * before any credential is spent or any row is written.
+   *
+   * OPTIONAL, and the absence is a real fact rather than an unimplemented method: a Confluence
+   * page id needs the connection's site base URL and a Linear document id the workspace slug,
+   * neither of which the id carries, so those providers can only answer by fetching. The GitHub
+   * docs source omits it for a different reason worth keeping distinct: the id carries everything
+   * a link needs EXCEPT the host, and the host is a deployment fact (a GitLab-backed deployment
+   * reaches the same source through the VCS adapter), so any URL built here would name the wrong
+   * one half the time. A caller renders the id itself in all these cases; it must NOT read the
+   * absence as a failed resolution.
+   */
+  canonicalUrl?(externalId: string): string | null
+  /**
+   * The narrowing qualifier `input` carried that {@link parseRef}'s id does NOT cover, or null.
+   *
+   * A design source's ref grammar is two-level: a file/project, optionally narrowed to a
+   * frame/screen. When the qualifier is one the parser cannot read, `parseRef` deliberately falls
+   * back to the CONTAINER rather than guessing which frame was meant, which silently widens the
+   * reference from one frame to the whole file. That widening is invisible in the result (a valid
+   * id, a valid canonical URL), so the provider that dropped it is the only thing that can say so.
+   *
+   * OPTIONAL: a source with a single-level grammar has no narrowing to drop, and its absence means
+   * exactly that. Implemented by the design sources (Figma, Zeplin). PURE, taking the same raw
+   * input `parseRef` took, so it costs a pre-flight nothing.
+   */
+  droppedScope?(input: string, externalId: string): string | null
+  /**
    * Fetch a single page by its id using the connection credentials. `workspaceId` is
    * the workspace on whose behalf the read happens: a provider that authenticates
    * per-workspace out-of-band (e.g. the GitHub App/PAT, which ignores `credentials`)
@@ -134,6 +166,56 @@ export interface DocumentContentResolver {
    * same unreachable/not-connected conditions as {@link fetch}.
    */
   probeVersion(workspaceId: string, source: DocumentSourceKind, externalId: string): Promise<string>
+}
+
+/**
+ * What one attempt to bring a linked document up to date concluded, in the small shape the
+ * dispatch-time cache (`AppCaches.linkedDocumentVersion`) holds.
+ *
+ * It is the outcome of the WHOLE ladder (probe, and the re-import a moved page triggers), not of
+ * the probe alone, which is what lets one cached entry bound both halves. `unreachable` is why it
+ * is a value rather than a thrown error: a cache loader that throws caches nothing, so a source
+ * outage would re-run the fan-out on every step dispatch for as long as it lasted.
+ */
+export type LinkedDocumentRefreshOutcome =
+  /** The source's current token for this document, as of the attempt. */
+  | { readonly status: 'versioned'; readonly version: string }
+  /** The source answered but exposes no token to compare against. */
+  | { readonly status: 'unversioned' }
+  /** The probe or the re-fetch failed. The run reads the stored body; see the logged cause. */
+  | { readonly status: 'unreachable' }
+
+/** One linked document as a run is about to read it, with what the refresh concluded about it. */
+export interface RefreshedDocument {
+  /**
+   * The record to read from: the re-imported one when the source had moved, else the stored one
+   * unchanged. The refresher returns the RECORD rather than a body so nothing downstream has to
+   * merge a partial update onto a row (and so a re-import's new title/url travel with its body).
+   */
+  readonly record: DocumentRecord
+  readonly freshness: DocumentFreshness
+}
+
+/**
+ * Re-confirm a run's linked documents against their sources at DISPATCH time, so an agent reads the
+ * current revision of a page rather than the copy import happened to store.
+ *
+ * A port rather than a direct call because the work spans two layers the engine cannot see: the
+ * provider (`probeVersion` / `fetchDocument`) and the local projection the re-import writes. It sits
+ * beside {@link DocumentContentResolver}, which deliberately does NOT persist — the difference is
+ * that a fragment owns its own cached body while a linked document IS the stored projection every
+ * other reader (the SPA row, the planner, the next dispatch) reads.
+ *
+ * BEST-EFFORT by contract: it never throws for a document it could not confirm, returning an
+ * `unconfirmed` verdict instead, because a source outage must cost the run a stale body and never
+ * the run itself. Order and length MIRROR the input, so a caller can zip the results back onto the
+ * list it passed.
+ */
+export interface LinkedDocumentRefresher {
+  refresh(
+    workspaceId: string,
+    documents: readonly DocumentRecord[],
+  ): Promise<readonly RefreshedDocument[]>
 }
 
 /** A lookup of the providers wired for this deployment, keyed by source. */

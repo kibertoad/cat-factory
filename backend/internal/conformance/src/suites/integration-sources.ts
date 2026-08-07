@@ -85,6 +85,17 @@ export function defineSourcesConformance(harness: ConformanceHarness): void {
       const frame = snap.body.blocks.find((b) => b.id === frameId)
       expect(frame?.level).toBe('frame')
       expect(frame?.status).not.toBe('blocked')
+
+      // The frame's own transitions (materialised, then ready) reach the board as coarse events
+      // NAMING it, never as a payload: a frame's position and size are a per-board mount override,
+      // so the one payload published for every board mounting the service would be wrong on all
+      // but one of them. Each board re-reads its own projection instead. The progress ticks in
+      // between ride the `bootstrap` event alone and cost no refresh at all, which is the whole
+      // reason the two are split.
+      const frameSignals = app.boardEmits(frameId)
+      expect(frameSignals.length).toBeGreaterThan(0)
+      expect(frameSignals.every((e) => !e.hasBlock)).toBe(true)
+      expect(frameSignals.some((e) => e.reason === 'bootstrap-succeeded')).toBe(true)
     })
 
     it('reads a stopped run’s structured failure back off the store', async () => {
@@ -128,6 +139,7 @@ export function defineSourcesConformance(harness: ConformanceHarness): void {
   registerTaskSourceTests(harness)
   registerDocumentSourceTests(harness)
   registerDocumentPersistenceTests(harness)
+  registerDocumentFreshnessTests(harness)
 }
 
 /**
@@ -559,6 +571,71 @@ function registerDocumentSourceTests(harness: ConformanceHarness): void {
       expect(explicit(afterDelete.body.connections)).toEqual([])
     })
 
+    it('canonicalises a pasted ref before anything is written, and names a wrong-source paste', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const base = `/workspaces/${workspace.id}/document-sources`
+
+      // The link a designer actually copies out of Figma: a title segment plus the `?p=` / `&t=`
+      // params the share button appends, on top of the frame's node id. Resolving it needs NO
+      // connection and NO upstream call, which is exactly what lets an attach surface run this
+      // before the task is saved rather than discovering the verdict through a failed import.
+      const pasted =
+        'https://www.figma.com/design/6k0gqOC6ppDMAziCmZ2Gv9/Project-Redwood--Autopilot-AI-' +
+        '?node-id=5765-57229&p=f&t=J1SrKp6sgJm9CIeQ-0'
+      const resolved = await call<{
+        source: string
+        externalId: string
+        canonicalUrl: string | null
+        droppedScope: string | null
+      }>('POST', `${base}/figma/resolve-ref`, { ref: pasted })
+      expect(resolved.status).toBe(200)
+      expect(resolved.body).toEqual({
+        source: 'figma',
+        externalId: '6k0gqOC6ppDMAziCmZ2Gv9:5765:57229',
+        canonicalUrl: 'https://www.figma.com/design/6k0gqOC6ppDMAziCmZ2Gv9?node-id=5765-57229',
+        droppedScope: null,
+      })
+
+      // A node id the parser cannot read (Figma's own Copy link emits one for any component
+      // instance) resolves to the whole FILE. That is a valid reference with a valid canonical URL,
+      // so the widening is invisible unless the answer names what it dropped: an attach surface
+      // showing only "trimmed to the supported form" would tell someone who linked one frame
+      // nothing about the agent then reading the entire design.
+      const widened = await call<{ externalId: string; droppedScope: string | null }>(
+        'POST',
+        `${base}/figma/resolve-ref`,
+        { ref: 'https://www.figma.com/design/6k0gqOC6ppDMAziCmZ2Gv9/R?node-id=I2649:14930;2649:1' },
+      )
+      expect(widened.status).toBe(200)
+      expect(widened.body.externalId).toBe('6k0gqOC6ppDMAziCmZ2Gv9')
+      expect(widened.body.droppedScope).toBe('I2649:14930;2649:1')
+
+      // The SAME link aimed at the wrong source is a redirectable paste, not a malformed one, and
+      // the reason says so: the correction is switching sources with the text unchanged. A single
+      // "unrecognized" would tell someone their perfectly good design link is broken.
+      const wrongSource = await call<{ error: { details?: Record<string, unknown> } }>(
+        'POST',
+        `${base}/notion/resolve-ref`,
+        { ref: pasted },
+      )
+      expect(wrongSource.status).toBe(422)
+      expect(wrongSource.body.error.details?.reason).toBe('document_ref_claimed_by_other_source')
+      expect(wrongSource.body.error.details?.claimedBy).toBe('figma')
+
+      // Text no configured source recognises is the other refusal, and it carries the format this
+      // source DOES accept, so the correction is stated rather than left to be guessed.
+      const junk = await call<{ error: { details?: Record<string, unknown> } }>(
+        'POST',
+        `${base}/figma/resolve-ref`,
+        { ref: 'https://example.com/not-a-design' },
+      )
+      expect(junk.status).toBe(422)
+      expect(junk.body.error.details?.reason).toBe('document_ref_unrecognized')
+      expect(junk.body.error.details?.claimedBy).toBeUndefined()
+      expect(junk.body.error.details?.expected).toBeTruthy()
+    })
+
     it('wires Linear as a document source on every facade (connect, list, disconnect)', async () => {
       const { call, createWorkspace } = harness.makeApp()
       const { workspace } = await createWorkspace()
@@ -650,6 +727,7 @@ function registerDocumentPersistenceTests(harness: ConformanceHarness): void {
         excerpt: '',
         body,
         contentHash: '',
+        sourceVersion: null,
         linkedBlockId: null,
         role: null,
         docKind: null,
@@ -728,6 +806,8 @@ function registerDocumentPersistenceTests(harness: ConformanceHarness): void {
         excerpt: 'Support split payments.',
         body: '# Checkout PRD\n\nSupport split payments.',
         contentHash: 'abc123',
+        // An upload has no source, hence no version: nothing can ever re-probe it.
+        sourceVersion: null,
         linkedBlockId: null,
         role: null,
         docKind: null,
@@ -766,6 +846,7 @@ function registerDocumentPersistenceTests(harness: ConformanceHarness): void {
         excerpt: 'x',
         body: 'x',
         contentHash: 'h',
+        sourceVersion: null,
         linkedBlockId: null,
         role: null,
         docKind: null,
@@ -1014,6 +1095,61 @@ function registerDocumentPersistenceTests(harness: ConformanceHarness): void {
       expect((await repo.get(ws, 'jira', 'PROJ-11'))?.title).toBe('Issue PROJ-11')
       // Which is the whole point: a filing of it now succeeds instead of losing the claim.
       expect(await repo.claimBlockLink(ws, 'jira', 'PROJ-11', 'task_refiled')).toBe(true)
+    })
+  })
+}
+
+/**
+ * Dispatch-time document FRESHNESS, at the persistence layer: the `source_version` column the refresh
+ * compares a cheap `probeVersion` against.
+ *
+ * Its own function rather than another test inside `registerDocumentPersistenceTests`, which is at its
+ * per-function line budget. Its own `describe` for the same reason, and because what it covers is one
+ * cohesive column rather than the link/role surface the others drive.
+ */
+function registerDocumentFreshnessTests(harness: ConformanceHarness): void {
+  describe('document freshness persistence', () => {
+    it('round-trips the source version a document body was imported at, and its absence', async () => {
+      // The token the dispatch-time refresh COMPARES: a facade that dropped it on the upsert, or read
+      // an absent one back as `''`, would make every linked document look permanently unconfirmable
+      // and re-download the whole design on every step dispatch — a silent cost, not an error. The
+      // two cases have to stay distinguishable, which is why the column is nullable rather than
+      // defaulted: a recorded version means "this body is provably that revision", NULL means
+      // "cannot be proven, re-import once".
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const ws = workspace.id
+      const repo = app.documentRepository()
+      const base = {
+        workspaceId: ws,
+        source: 'figma' as const,
+        title: 'Checkout flow',
+        url: 'https://figma.com/design/file1',
+        excerpt: 'Checkout',
+        body: '## Checkout',
+        contentHash: 'h',
+        linkedBlockId: null,
+        role: null,
+        docKind: null,
+        syncedAt: 4_000,
+        deletedAt: null,
+      }
+      await repo.upsert({ ...base, externalId: 'file1:1-2', sourceVersion: '2317456' })
+      await repo.upsert({ ...base, externalId: 'file2:3-4', sourceVersion: null })
+
+      expect((await repo.get(ws, 'figma', 'file1:1-2'))?.sourceVersion).toBe('2317456')
+      expect((await repo.get(ws, 'figma', 'file2:3-4'))?.sourceVersion).toBeNull()
+
+      // A re-import overwrites it — the write that makes an un-versioned row self-heal exactly once.
+      await repo.upsert({ ...base, externalId: 'file2:3-4', sourceVersion: '99' })
+      expect((await repo.get(ws, 'figma', 'file2:3-4'))?.sourceVersion).toBe('99')
+
+      // And it survives the batch + block-scoped reads the dispatch path actually uses, not just the
+      // point read: the refresher receives its records from `listByBlock`/`listByRefs`.
+      await repo.linkBlock(ws, 'figma', 'file1:1-2', 'task_fresh')
+      expect((await repo.listByBlock(ws, 'task_fresh'))[0]?.sourceVersion).toBe('2317456')
+      const batched = await repo.listByRefs(ws, [{ source: 'figma', externalId: 'file1:1-2' }])
+      expect(batched[0]?.sourceVersion).toBe('2317456')
     })
   })
 }

@@ -20,7 +20,7 @@ Neighbouring docs, each with its own job:
 - [`custom-agent-roles.md`](./custom-agent-roles.md): the field-by-field authoring reference for
   `McpServerDefinition` and `McpSecretRef`, and how the prompt renders what you declare.
 - [ADR 0029](./adr/0029-agent-kind-capabilities.md): the design record.
-- [ADR 0040](./adr/0040-capability-credential-store.md): the
+- [ADR 0041](./adr/0041-capability-credential-store.md): the
   per-workspace sealed credential store the resolver chain reads first.
 - [`mcp-maturation.md`](../../docs/initiatives/mcp-maturation.md): the roadmap, including every
   known limit below and its disposition.
@@ -275,7 +275,7 @@ ride the log line, since a metric dimension has to be bounded.
   learn what to fill in. It appears only for a caller holding `secrets.manage` and only when
   something is declared, stored or unreadable, and it saves ONE key at a time
   (`PUT /workspaces/:ws/capability-credentials/:key`) because it holds no values to re-send. See
-  [ADR 0040](./adr/0040-capability-credential-store.md).
+  [ADR 0041](./adr/0041-capability-credential-store.md).
 - **Mind what `secretKeys` can reach BEYOND that floor.** Everything outside the platform's own
   configuration is a developer's own tooling, and only the deployment knows which of it an
   integration may see. If a deployment installs agent packages it did not author, wire

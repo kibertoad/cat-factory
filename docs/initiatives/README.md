@@ -58,8 +58,7 @@ a tracker document](../../CLAUDE.md).
 - [Pre-PR validation checks](./pre-pr-validation.md)
 - [Pre-dispatch input gate](./pre-dispatch-input-gate.md)
 - [Ralph loop task type](./ralph-loop.md)
-- [Reusable operations (parameterized canned units of work)](./reusable-operations.md) ·
-  [the extension-seam gaps a consumer build hit](./deployment-extension-seam-gaps.md)
+- [Reusable operations (parameterized canned units of work)](./reusable-operations.md)
 - [Service acceptance criteria](./service-acceptance-criteria.md)
 - [Shared clarification-item abstraction](./clarification-items.md)
 - [Headless clarification loop](./headless-clarification-loop.md)

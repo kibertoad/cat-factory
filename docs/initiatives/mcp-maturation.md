@@ -66,7 +66,7 @@ dump and never uses the word MCP).
   `WebStandardStreamableHTTPServerTransport` (the `Request → Response` sibling of the Node-only
   `StreamableHTTPServerTransport`, which is what let slice 3 land in the shared controller layer).
 - **OAuth tokens live in the capability-credential store**
-  ([ADR 0040](../../backend/docs/adr/0040-capability-credential-store.md)): sealed, per-workspace,
+  ([ADR 0041](../../backend/docs/adr/0041-capability-credential-store.md)): sealed, per-workspace,
   already composed in front of the environment resolver per key.
 
 ## Slices
@@ -136,7 +136,7 @@ dump and never uses the word MCP).
       agent-context snapshot's untyped `extras` bag were deleted rather than kept beside it. The
       job-body observation seam landed with it
       (the last open slice of the capability-credential store, whose tracker this PR converts to
-      [ADR 0040](../../backend/docs/adr/0040-capability-credential-store.md)): a
+      [ADR 0041](../../backend/docs/adr/0041-capability-credential-store.md)): a
       `toolServerDispatch()` harness probe over each facade's OWN composed credential chain,
       giving tool servers and capability credentials their first cross-runtime assertions. Its
       decisions are below.
@@ -265,7 +265,7 @@ Recorded so the next iteration does not re-propose them.
   a product decision to take separately if demand shows up.
 - **Checklist granularity changes.** The (workspace, key) sharing, the `required` fold and the
   deliberately-unscoped list are standing decisions with their reasoning recorded in
-  [ADR 0040](../../backend/docs/adr/0040-capability-credential-store.md); nothing in this review
+  [ADR 0041](../../backend/docs/adr/0041-capability-credential-store.md); nothing in this review
   overturns them.
 - **The environment-fallback default and `allowKeys`.** Both are already tracked: the default is
   the product call the capability-credential store deliberately did not make, and unset
@@ -410,7 +410,7 @@ Recorded so the next iteration does not re-propose them.
   facade's real `container.toolSecretResolver` and `agentKindRegistry` into the SAME
   `resolveToolServers` the executor calls. It closes
   the capability-credential store's last open slice, which had scoped itself as exactly this seam
-  ([ADR 0040](../../backend/docs/adr/0040-capability-credential-store.md)).
+  ([ADR 0041](../../backend/docs/adr/0041-capability-credential-store.md)).
 
 ## Gotchas slice 5 (run record) surfaced
 

@@ -358,6 +358,37 @@
   state in mothership mode too. It rides its own `/internal/*` read, never a second registration on
   the node, whose build is by construction the one that can be stale.
 
+**Code-registered ORG state: the best-practice PROMPT-FRAGMENT pool**
+
+- **`GET /internal/prompt-fragments`**: the THIRD application of the rule, and the one whose
+  failure is quietest. A deployment's standards (and the per-task-type default SETS that select
+  them) were two module globals in `@cat-factory/prompt-fragments`, so they crossed nothing at all;
+  they are now the app-owned `PromptFragmentRegistry`, and a node reads the MOTHERSHIP's over this
+  endpoint. Transport mirrors its two siblings exactly (machine-token pin, no account scope, its own
+  endpoint rather than a persistence hole, reads this process's OWN registry so a satellite cannot
+  answer for a satellite, throws on every unreadable outcome including an older mothership's 404).
+
+  **BOTH projections ride one response.** The pool and the default sets are independent
+  registrations (a default set may legitimately name an account/workspace-tier id that exists only
+  as a row, so the sets cannot be derived from the pool), but they are small, read on the same
+  cadence, and needing two round-trips to answer one question is how two halves drift. The response
+  is memoised for the process lifetime after the first SUCCESS, never after a failure: the pool is
+  code on the mothership, so it changes only on redeploy, and memoising a rejection would pin the
+  node to a permanent throw after one blip.
+
+  **The symptom this prevents is the reason it is worth an endpoint.** A run whose pool is short by
+  one standard produces work judged against guidance the org did write down, and the reviewer's
+  adherence report reads perfectly well either way; nothing anywhere says a standard was missing.
+  That is why the read throws rather than answering empty, and why `FragmentLibraryService` lets the
+  throw propagate: this is the tier every other tier merges ONTO, so a short catalog is not a
+  degraded answer, it is a wrong one.
+
+  **Its interaction with node-local task types is deliberate.** A `CustomTaskType` stays node-local
+  (see below) while the pool its `defaultFragmentIds` name is now remote, so a node one build ahead
+  can name an id the mothership's pool does not carry. That combination is now VISIBLE rather than
+  silent: the run records the ids it dropped (`FragmentLibraryService`), which is the same report
+  that surfaces a typo. Before this, both cases were invisible on every run forever.
+
 **Code-registered ORG state: the generative binary integrations**
 
 - **`GET /internal/binary-generators`** (+ the batched `POST .../contracts`): the second
@@ -941,6 +972,7 @@ never remotely invocable (mothership-internal cron).
 | `sharedStackRepository`                  | ✅ done | full library CRUD                                                                                  |
 | `workspaceSettingsRepository`            | ✅ done | get/upsert; `listByWorkspaceIds` sweeper                                                           |
 | `serviceFragmentDefaultsRepository`      | ✅ done | get/set                                                                                            |
+| `taskTypeSuppressionRepository`          | ✅ done | list/suppress/restore (board load + creation refusal)                                              |
 | `trackerSettingsRepository`              | ✅ done | get/put                                                                                            |
 | `pipelineScheduleRepository`             | ◑ part  | schedule mgmt + runNow; `listByService` pending, sweeper reads internal                            |
 | `serviceRepository`                      | ◑ part  | mount + board-composition + run-path reads; CRUD/`getByRepo` pending (GitHub sync)                 |
@@ -976,7 +1008,7 @@ never remotely invocable (mothership-internal cron).
 | `fragmentSourceRepository`               | ◑ part  | owner-scoped list + link; id-keyed sync mgmt pending                                               |
 | `accountSkillRepository`                 | ✅ done | whole repo: catalog reads (run path) + the source-keyed sync writes                                |
 | `skillSourceRepository`                  | ✅ done | account list + link + the id-keyed sync mgmt; global `listByRepo` internal                         |
-| `documentRepository`                     | ◑ part  | run-path context reads; mgmt writes pending (module needs the connection repo)                     |
+| `documentRepository`                     | ◑ part  | run-path context reads; refresh `upsert` + mgmt writes pending (see the freshness note below)      |
 | `taskRepository`                         | ◑ part  | run-path context reads; mgmt writes pending (module needs the connection repo)                     |
 | `githubInstallationRepository`           | ◑ part  | `getByWorkspace` + `listActiveForAccount` run-path reads; id-keyed / sync writes pending           |
 | `repoProjectionRepository`               | ◑ part  | `list` (SPA + run path); sync/repo-write surface pending; `listByInstallation` internal            |
@@ -989,6 +1021,17 @@ never remotely invocable (mothership-internal cron).
 | `invitationRepository`                   | ◑ part  | `listByAccount` read; `create`/`setStatus` admin, accept-invite lookups pre-auth                   |
 | `emailConnectionRepository`              | ◑ part  | `getByAccount` read (sealed); connect/disconnect admin                                             |
 | `passwordResetTokenRepository`           | ⬜ todo | pre-auth flow (all pending; `deleteExpired` sweeper)                                               |
+
+**Dispatch-time document freshness does not run on a mothership node, and SAYS so.** The linked-context
+refresh (`LinkedDocumentRefreshService`) probes each linked document's source and re-imports what moved,
+so it needs the workspace's document-source CONNECTION — a row sealed with the mothership's
+`ENCRYPTION_KEY`, which by the sealed-secret rule cannot be served over the persistence RPC. The
+connection repository therefore stays db-direct over the node's absent `db` handle and the read always
+fails there. It is reported as its own `credentials_unreadable` gap rather than folded into
+`source_unreachable`: the materialised context file then tells the agent "this deployment cannot read the
+source credentials" instead of claiming Figma is down, and an operator is not sent hunting an incident
+that does not exist. Closing it for real is the secrets-delegation slice (the mothership decrypting on
+the node's behalf), not a routing entry.
 
 **Excluded (never remotely invocable: admin-gated, so the token-scopes-accounts-not-roles rule keeps them off):**
 
@@ -1212,3 +1255,31 @@ Each PR adds a changeset and updates this checklist.
   and the core of the Phase 3 merge gate (now MET).
 - **Pre-1.0 = no back-compat.** No shims for the old siloed-Postgres local mode; mothership mode is a
   parallel boot path selected by `LOCAL_MOTHERSHIP_URL`.
+- **Task types stay NODE-LOCAL, and that is a decision, not a gap.** A `CustomTaskType` gets no
+  `/internal/*` read of its own, unlike the foundational-services `builtin` tier, the
+  `BinaryGeneratorSource` and the `PromptFragmentSource` beside it. The descriptor is inseparable
+  from code registered in the SAME org package: its `defaultPipelineId` names a pipeline in that
+  package, that pipeline names custom KINDS and VARIANTS (functions, which cannot cross a wire), its
+  `defaultFragmentIds` name fragments in the same pool, and its `formPanel` names a component in the
+  deployment's own SPA layer. Serving the descriptor from the mothership while the executable half
+  stayed local would produce a MIXED bundle (a v2 descriptor naming a pipeline the node's v1 package
+  lacks), which boot validation structurally cannot see. The unit of distribution is the org package, exactly as for agent kinds.
+  Consequences, named rather than hidden: a node a build behind offers last build's operations (the
+  lag its agent kinds already have), a stock node in an org deployment offers none, and a run of such
+  a task fails loudly at the existing seams (unknown kind at admission). The dispatch-time parameter
+  fold is built for that drift: it is VALUE-authoritative, so a stale or absent registration costs
+  labels, never data. The per-workspace SUPPRESSION of an operation is the opposite call and is
+  `remote`, because it is pure data with no co-registered code: the catalog is code and the hide-list
+  is a row. Full argument: [`reusable-operations.md`](./reusable-operations.md) (D11);
+  behaviour: [`backend/docs/reusable-operations.md`](../../backend/docs/reusable-operations.md).
+- **The PIPELINE registry stays node-local too, and for a DIFFERENT reason than task types.** It is
+  not inseparability (a pipeline definition is data): it is that the failure is already LOUD.
+  A definition only the mothership has is offered by the board and then refused at `adoptForRun`,
+  which finds no stored row and no catalog entry and returns null; a definition only the node has is
+  adopted INTO a workspace row through the REMOTE repository, so it lands on the mothership. Neither
+  is the silent omission the three sources above exist to prevent. The other half is cost:
+  `seedPipelines` / `retiredPipelines` are synchronous and read on every board list, so a source
+  would put an awaited network hop on a hot path to remove a divergence that already fails safely.
+  Boot warns and names the locally-registered ids. If a future change makes the skew silent (a run
+  resolving a definition with no row and no refusal), this becomes a `PipelineSource`; the reasoning
+  is restated at the warn site in `runtimes/local/src/server.ts` so it is re-read there.

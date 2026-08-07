@@ -9,9 +9,11 @@ import {
   defaultProviderRegistry,
   defaultStepResolverRegistry,
   defaultFoundationalServiceRegistry,
+  defaultPromptFragmentRegistry,
   defaultTaskTypeRegistry,
   registryBinaryGeneratorSource,
   registryBuiltinSource,
+  registryPromptFragmentSource,
 } from '@cat-factory/kernel'
 import { createAppCaches } from '@cat-factory/caching'
 import type { CoreDependencies } from '../container.js'
@@ -37,6 +39,12 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
   // boot validation reads and the default source that wraps it must be ONE instance.
   const binaryGeneratorRegistry =
     dependencies.binaryGeneratorRegistry ?? defaultBinaryGeneratorRegistry()
+  // …and the third of the same pairing, for the best-practice fragment pool. The bare default is
+  // EMPTY rather than the shipped catalog: the built-ins install through the public seam
+  // (`promptFragmentRegistryWithBuiltins()`), which is what a facade injects, so a caller that
+  // passes nothing gets no standards rather than a second silently-different pool.
+  const promptFragmentRegistry =
+    dependencies.promptFragmentRegistry ?? defaultPromptFragmentRegistry()
   return {
     agentKindRegistry: dependencies.agentKindRegistry ?? defaultAgentKindRegistry(),
     gateRegistry: dependencies.gateRegistry ?? defaultGateRegistry(),
@@ -65,6 +73,13 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
     // its own build can only hold a second, drifting copy of.
     foundationalBuiltins:
       dependencies.foundationalBuiltinSource ?? registryBuiltinSource(foundationalServiceRegistry),
+    promptFragmentRegistry,
+    // The third member of the registry/source pair family, and it answers the same two different
+    // questions on a mothership node: the registry is what THIS build registered (the boot
+    // validation's subject, and what `/internal/prompt-fragments` serves when this process is the
+    // mothership), while the source is the pool any RUN folds its standards from.
+    promptFragments:
+      dependencies.promptFragmentSource ?? registryPromptFragmentSource(promptFragmentRegistry),
     initiativePresetRegistry:
       dependencies.initiativePresetRegistry ?? defaultInitiativePresetRegistry(),
     workRunner: dependencies.workRunner ?? new NoopWorkRunner(),

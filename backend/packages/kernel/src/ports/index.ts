@@ -60,6 +60,7 @@ export {
   type LogLevel,
   type LogRecord,
   type LogSink,
+  type LogThreshold,
   type Logger,
   type RecordedLogLine,
   createRecordingLogger,
@@ -320,6 +321,9 @@ export type {
   DocumentSourceProvider,
   DocumentSourceRegistry,
   DocumentContentResolver,
+  LinkedDocumentRefresher,
+  LinkedDocumentRefreshOutcome,
+  RefreshedDocument,
 } from './document-source.js'
 export type {
   DocumentConnectionRecord,
@@ -726,6 +730,7 @@ export type {
 export type { ModelPresetRepository } from './model-preset-repositories.js'
 export type { AgentPromptRepository } from './agent-prompt-repositories.js'
 export type { WorkspaceAgentSettingsRepository } from './agent-settings-repositories.js'
+export type { TaskTypeSuppressionRepository } from './task-type-repositories.js'
 export type { ServiceFragmentDefaultsRepository } from './service-fragment-default-repositories.js'
 export type { DueSchedule, PipelineScheduleRepository } from './recurring-repositories.js'
 export type { TrackerSettingsRepository } from './tracker-settings-repositories.js'

@@ -9,9 +9,12 @@ import { getFragment } from '@cat-factory/prompt-fragments'
 //     is the task's OWN `fragmentIds` (which already carries the service standards it
 //     inherited at creation — the service's set is NOT re-unioned at run time); only a
 //     FRAME-level run adds the frame's `serviceFragmentIds`. Used as-is.
-//  2. `fragmentIds` — the block's own manual selection, resolved against the
-//     universal fragment pool in @cat-factory/prompt-fragments. This is the path
-//     for non-code-aware kinds (the engine attaches no `resolvedFragments` for them).
+//  2. `fragmentIds`: the block's own manual selection, resolved against the SHIPPED
+//     catalog in @cat-factory/prompt-fragments. This is the path for non-code-aware kinds
+//     (the engine attaches no `resolvedFragments` for them) and for a caller that wired no
+//     fragment library at all. It resolves built-ins ONLY: a deployment-registered id lives on
+//     the injected registry this layer cannot see, so it folds nothing here. That asymmetry is
+//     why the engine-resolved path takes priority on PRESENCE rather than on being non-empty.
 //
 // Unknown ids (e.g. a fragment removed from the catalog after selection) are
 // skipped so a stale selection never breaks a run.
@@ -171,7 +174,14 @@ export function composeBlockSystemPrompt(
   verbosity: StandardsVerbosity = 'full',
 ): string {
   if (delivery === 'context-files' && standardsDelivered) return baseSystem
-  if (block.resolvedFragments && block.resolvedFragments.length > 0) {
+  // PRESENCE, not length. An empty `resolvedFragments` is the engine saying it resolved the
+  // selection and the answer was nothing, which is a fact and not a miss: every id was
+  // tier-tombstoned, or the deployment's registered pool is empty. Falling back on it would
+  // re-resolve those same ids against the SHIPPED catalog and fold the built-ins straight back
+  // in, defeating the workspace's own suppression (ADR 0006) and folding a standard the tenant
+  // catalog deliberately does not carry. Only an ABSENT field means "nobody resolved this",
+  // which is the case the static path exists for.
+  if (block.resolvedFragments) {
     return foldStandards(baseSystem, block.resolvedFragments, verbosity)
   }
   return composeSystemPrompt(baseSystem, block.fragmentIds, verbosity)

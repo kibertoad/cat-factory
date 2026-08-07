@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { log } from '../src/logger.js'
+// This suite asserts on RESULTS, never on log lines, so its logger is silent: the harness
+// logger writes straight to stdout with no level gate, and the real one made every green run
+// print a phase line per case. See `silentLogger` in ./helpers.js.
+import { silentLogger as log } from './helpers.js'
 import {
   buildDependencyInstallNote,
   dependencyInstallTimeoutMs,

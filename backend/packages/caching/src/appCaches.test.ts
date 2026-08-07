@@ -392,6 +392,23 @@ describe('profiles', () => {
     expect(ISOLATE_SAFE_APP_CACHES_PROFILE.fragmentDocumentBody.enabled).toBe(true)
   })
 
+  it('keeps the linked-document version probe enabled on the isolate-safe profile', () => {
+    // An external source's version token, not our own mutable state: a peer isolate's copy self-heals
+    // when its short TTL lapses. Passing through would put a live probe in front of every linked
+    // document on every step dispatch, which is the cost the cache exists to remove.
+    expect(ISOLATE_SAFE_APP_CACHES_PROFILE.linkedDocumentVersion).toEqual(
+      DEFAULT_APP_CACHES_PROFILE.linkedDocumentVersion,
+    )
+    expect(ISOLATE_SAFE_APP_CACHES_PROFILE.linkedDocumentVersion.enabled).toBe(true)
+    // NO refresh window, unlike `fragmentDocumentBody`: the load IS the cheap probe, so there is
+    // nothing cheaper to re-validate an entry with — the TTL is the whole coherence story, and it
+    // must stay short enough that a designer's edit reaches the next step of a running pipeline.
+    expect(
+      DEFAULT_APP_CACHES_PROFILE.linkedDocumentVersion.ttlLeftBeforeRefreshInMsecs,
+    ).toBeUndefined()
+    expect(DEFAULT_APP_CACHES_PROFILE.linkedDocumentVersion.ttlInMsecs).toBeLessThanOrEqual(60_000)
+  })
+
   it('makes the repo projection pass-through on the isolate-safe profile (mutable D1 state)', () => {
     expect(ISOLATE_SAFE_APP_CACHES_PROFILE.repoProjection).toEqual({
       ...DEFAULT_APP_CACHES_PROFILE.repoProjection,

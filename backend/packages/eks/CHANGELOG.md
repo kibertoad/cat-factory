@@ -1,5 +1,77 @@
 # @cat-factory/eks
 
+## 0.1.251
+
+### Patch Changes
+
+- Updated dependencies [00bff05]
+  - @cat-factory/contracts@0.257.0
+  - @cat-factory/integrations@0.138.1
+  - @cat-factory/kernel@0.255.1
+
+## 0.1.250
+
+### Patch Changes
+
+- Updated dependencies [ab0c228]
+  - @cat-factory/contracts@0.256.0
+  - @cat-factory/kernel@0.255.0
+  - @cat-factory/integrations@0.138.0
+
+## 0.1.249
+
+### Patch Changes
+
+- Updated dependencies [ee6ce7c]
+  - @cat-factory/kernel@0.254.0
+  - @cat-factory/contracts@0.255.0
+  - @cat-factory/integrations@0.137.2
+
+## 0.1.248
+
+### Patch Changes
+
+- Updated dependencies [16576d6]
+  - @cat-factory/kernel@0.253.0
+  - @cat-factory/contracts@0.254.0
+  - @cat-factory/integrations@0.137.1
+
+## 0.1.247
+
+### Patch Changes
+
+- Updated dependencies [5202fb9]
+  - @cat-factory/integrations@0.137.0
+  - @cat-factory/kernel@0.252.0
+  - @cat-factory/contracts@0.253.0
+
+## 0.1.246
+
+### Patch Changes
+
+- Updated dependencies [e845d65]
+  - @cat-factory/kernel@0.251.0
+  - @cat-factory/integrations@0.136.2
+
+## 0.1.245
+
+### Patch Changes
+
+- Updated dependencies [4c071ec]
+  - @cat-factory/contracts@0.252.0
+  - @cat-factory/kernel@0.250.0
+  - @cat-factory/integrations@0.136.1
+
+## 0.1.244
+
+### Patch Changes
+
+- Updated dependencies [3fbc87e]
+- Updated dependencies [c9adc67]
+  - @cat-factory/contracts@0.251.0
+  - @cat-factory/kernel@0.249.0
+  - @cat-factory/integrations@0.136.0
+
 ## 0.1.243
 
 ### Patch Changes

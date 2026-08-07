@@ -1,4 +1,6 @@
-import type { PromptFragment } from '@cat-factory/contracts'
+import type { PromptFragment, TaskType } from '@cat-factory/contracts'
+import { PromptFragmentRegistry, defaultPromptFragmentRegistry } from '@cat-factory/kernel'
+import { BUILTIN_TASK_TYPE_DEFAULTS } from './task-type-defaults.js'
 import { acceptanceFragments } from './collections/acceptance.js'
 import { designFragments } from './collections/design.js'
 import { migrationFragments } from './collections/migration.js'
@@ -30,67 +32,59 @@ export const FRAGMENTS: PromptFragment[] = [
 // board service seeding a new document task's fragments, the docs-refresh preset building its
 // `styleFragments` form options) draws on the same source of truth the catalog is built from.
 export { styleFragments, DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from './collections/style.js'
-// The per-task-type default-fragments seam: a deployment registers the fragments every new task
-// of a given type (documentation/review/…) starts with; the board service resolves a new task's
-// seed set through `defaultFragmentIdsForTaskType`.
-export {
-  registerTaskTypeDefaultFragments,
-  clearRegisteredTaskTypeDefaultFragments,
-  defaultFragmentIdsForTaskType,
-} from './task-type-defaults.js'
+// The built-in per-task-type default sets, installed onto a registry by
+// `promptFragmentRegistryWithBuiltins` below.
+export { BUILTIN_TASK_TYPE_DEFAULTS } from './task-type-defaults.js'
 // Re-export the migration fragment ids so the `preset_tech_migration` preset draws its default
 // fragment set from the same source of truth the catalog is built from: `MIGRATION_FRAGMENT_IDS`
 // (T8's descriptor `defaultFragmentIds`) + `migrationFragmentIdsFor` (T7's `seedMigrationPlan`,
 // which stamps the per-agent-kind subset that respects each fragment's `appliesTo`).
 export { MIGRATION_FRAGMENT_IDS, migrationFragmentIdsFor } from './collections/migration.js'
+// The design-context fragment's id + the engine's presence rule for folding it: a run whose resolved
+// context carries a design-origin document reads the guidance automatically, rather than depending on
+// a human having ticked it in a picker basic mode does not show.
+export { DESIGN_CONTEXT_FRAGMENT_ID, withDesignContextFragment } from './collections/design.js'
 
 /** Fragments keyed by id for O(1) lookup during prompt composition. */
 export const FRAGMENTS_BY_ID: ReadonlyMap<string, PromptFragment> = new Map(
   FRAGMENTS.map((fragment) => [fragment.id, fragment]),
 )
 
-// Installation-level extension point for the universal fragment pool, mirroring the
-// custom-agent (`registerAgentKind`) and model-provider registry seams. A deployment —
-// e.g. a proprietary org package — adds extra best-practice fragments once at startup
-// (an import side effect); every `getFragment` lookup and the `GET /prompt-fragments`
-// catalog then see them, so a service's fragment selection can draw on them without the
-// core packages knowing they exist. Registering an id that already exists in the
-// built-in catalog overrides it (later registration wins), so a deployment can refine a
-// shipped fragment's body in place.
-const registered = new Map<string, PromptFragment>()
-
-/** Register a custom prompt fragment into the universal pool. Re-registering an id replaces it. */
-export function registerPromptFragment(fragment: PromptFragment): void {
-  registered.set(fragment.id, fragment)
-}
-
-/** Register several custom prompt fragments at once. */
-export function registerPromptFragments(fragments: Iterable<PromptFragment>): void {
-  for (const fragment of fragments) registerPromptFragment(fragment)
-}
-
-/** Drop all registered fragments. Intended for tests that exercise registration. */
-export function clearRegisteredPromptFragments(): void {
-  registered.clear()
-}
-
 /**
- * The universal fragment pool: the built-in catalog plus any deployment-registered
- * fragments, with a registered id shadowing the built-in of the same id. This is what
- * the catalog endpoint serves and what a service's fragment selection is drawn from.
+ * A {@link PromptFragmentRegistry} carrying the SHIPPED catalog and its built-in per-task-type
+ * default sets. Each facade's composition root news one, and a deployment registers its own
+ * standards onto the same instance by reference.
+ *
+ * The built-ins install through the registry's ordinary public methods rather than being baked in,
+ * which is the `defaultGateRegistry()` ⇄ `@cat-factory/gates` shape: the platform exercises the
+ * consumer's own seam on every boot, so it cannot rot for consumers only. Registration order is
+ * what makes a deployment's re-registration of a shipped id an override, so the built-ins go first.
+ *
+ * This replaced two module globals (`registerPromptFragment`'s map and
+ * `registerTaskTypeDefaultFragments`') whose correctness depended on every reader resolving the
+ * same physical copy of this package. A `workspace:*` dependency publishes as an EXACT version, so
+ * a consumer floating the range onto a newer patch got two copies: the registration landed in one,
+ * the server read the other, and every task of the deployment's operation was seeded with ids that
+ * folded nothing. Injection by reference makes that unrepresentable.
  */
-export function universalFragments(): PromptFragment[] {
-  if (registered.size === 0) return [...FRAGMENTS]
-  const byId = new Map<string, PromptFragment>()
-  for (const fragment of FRAGMENTS) byId.set(fragment.id, fragment)
-  for (const fragment of registered.values()) byId.set(fragment.id, fragment)
-  return [...byId.values()]
+export function promptFragmentRegistryWithBuiltins(): PromptFragmentRegistry {
+  const registry = defaultPromptFragmentRegistry()
+  registry.registerAll(FRAGMENTS)
+  for (const [taskType, ids] of Object.entries(BUILTIN_TASK_TYPE_DEFAULTS)) {
+    if (ids) registry.registerTaskTypeDefaults(taskType as TaskType, ids)
+  }
+  return registry
 }
 
 /**
- * Resolve a fragment by id, or `undefined` if no such fragment exists. Checks the
- * deployment-registered fragments first (override-by-id) then the built-in catalog.
+ * Resolve a fragment from the SHIPPED catalog by id, or `undefined`.
+ *
+ * Strictly the built-ins: a deployment's own fragments live on the injected registry, and the
+ * paths still calling this are the ones with no registry in hand (a prompt composed outside a
+ * container, a test harness). That narrowing is deliberate rather than a leftover. Before it,
+ * this function silently answered from a module global that a second copy of the package would
+ * have left empty, which is the whole failure the registry removes.
  */
 export function getFragment(id: string): PromptFragment | undefined {
-  return registered.get(id) ?? FRAGMENTS_BY_ID.get(id)
+  return FRAGMENTS_BY_ID.get(id)
 }

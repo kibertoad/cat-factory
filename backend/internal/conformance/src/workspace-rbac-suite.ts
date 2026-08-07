@@ -355,6 +355,9 @@ function registerRbacMemberManagementTests(
       // permission and NOT to the sandbox controller's `integrations.manage` — otherwise the
       // sandbox would be a way around the gate that guards editing a prompt directly.
       { perm: 'settings.manage', method: 'POST', path: w('/agent-prompts/coder/promote') },
+      // Hiding a reusable operation changes what every member of the board can create, which is
+      // board configuration on the same footing as the prompt overrides above.
+      { perm: 'settings.manage', method: 'DELETE', path: w('/task-type-suppressions/none%3Aop') },
       { perm: 'settings.manage', method: 'DELETE', path: w('/risk-policies/none') },
       { perm: 'settings.manage', method: 'DELETE', path: w('/observability/connection') },
       { perm: 'settings.manage', method: 'DELETE', path: w('/incident-enrichment') },
@@ -423,7 +426,8 @@ function registerRbacMemberManagementTests(
   it('document sources are TIER-SPLIT: a member imports, attaches and spawns; only an admin connects', async () => {
     // The one controller that deliberately splits by TIER, so neither half is provable from the
     // table above: that one asserts a member is refused a representative write per ADMIN
-    // controller, and here the same member must be ALLOWED five writes on the same controller.
+    // controller, and here the same member must be ALLOWED every authoring write on the same
+    // controller.
     //
     // Attaching context to a task is board authoring (the Add-task picker imports the pasted ref
     // and links it), so holding the whole controller at `integrations.manage` locked the feature
@@ -443,6 +447,7 @@ function registerRbacMemberManagementTests(
     // (503 with no documents module, 404 for a ref this workspace never imported), and pinning a
     // concrete status here would make the assertion a test of the harness's own wiring.
     const authoring: Array<{ method: 'POST'; path: string; body: unknown }> = [
+      { method: 'POST', path: w('/document-sources/notion/resolve-ref'), body: { ref: 'nope' } },
       { method: 'POST', path: w('/document-sources/notion/import'), body: { ref: 'nope' } },
       { method: 'POST', path: w('/document-sources/notion/search'), body: { query: 'spec' } },
       { method: 'POST', path: w('/document-sources/notion/plan'), body: { externalId: 'nope' } },

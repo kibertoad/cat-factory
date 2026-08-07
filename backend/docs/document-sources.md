@@ -40,6 +40,14 @@ name every member) rather than an `undefined` at whichever call site reaches for
 wide origin with `isConnectableSource` (`@cat-factory/contracts`), the predicate derived from the
 source picklist, never with an optional lookup.
 
+**A source's TRAITS live beside those unions, not on the provider.** `isDesignSource` (does this
+source describe a design rather than prose) and `isHostPinnedSource` (does its `parseRef` refuse a
+foreign host) are facts the backend AND the SPA have to agree about, and both are read where no
+provider is reachable: the engine folds design guidance from the first, the URL canonicaliser orders
+itself by the second, and a document surface has to label a design source without asking a provider
+it cannot see. They come off ONE exhaustive `Record<DocumentSourceKind, DocumentSourceTraits>`, so a
+new source fails to compile until it is classified.
+
 ## A document is attached to at most ONE block
 
 `linkedBlockId` is a single column, so attaching a document that another block already holds would
@@ -151,6 +159,7 @@ All endpoints are workspace-scoped under `/workspaces/:workspaceId` and return
 | `POST /document-sources/:source/connect`      | Connect: `{ credentials: { … } }`                          |
 | `DELETE /document-sources/:source/connection` | Disconnect a source                                        |
 | `GET /documents`                              | List imported documents (all sources)                      |
+| `POST /document-sources/:source/resolve-ref`  | Canonicalise `{ ref }`: id, canonical URL, dropped scope   |
 | `POST /document-sources/:source/import`       | Fetch + persist a page: `{ ref }` (id or URL)              |
 | `POST /document-sources/:source/plan`         | Preview the board plan for `{ externalId }` (no writes)    |
 | `POST /document-sources/:source/spawn`        | Apply structure: `{ externalId, frameId? }`                |
@@ -165,7 +174,7 @@ touches rather than which controller serves it:
 | -------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /document-sources/:source/connect`, `DELETE …/connection`                                          | `integrations.manage` | Writes and clears the per-workspace source CREDENTIAL.                                                                                      |
 | `POST /document-role-links`, `POST /document-role-links/remove`                                          | `integrations.manage` | A per-DocKind template/exemplar tag decides what EVERY doc run in the board writes from: the fragment-library blast radius, not one task's. |
-| `import`, `search`, `plan`, `spawn`, `POST /documents/link`                                              | member tier           | Reaching for a page and putting it on a task is board authoring.                                                                            |
+| `resolve-ref`, `import`, `search`, `plan`, `spawn`, `POST /documents/link`                               | member tier           | Reaching for a page and putting it on a task is board authoring.                                                                            |
 | every `GET` (`/document-sources`, `/document-sources/connections`, `/documents`, `/document-role-links`) | `workspace.read`      | Reads pass the admin gate by design.                                                                                                        |
 
 The member tier is enforced by the auth gate's own write floor (any non-GET requires `≥ member`),
@@ -178,13 +187,13 @@ feature unusable by the persona it exists for. Someone who links the spec or the
 is about is usually not the operator who connected the source, and the Add-task context picker
 imports the pasted ref and then links it, so for a `member` the attach flow failed on its first
 write. Cross-runtime coverage is in `defineWorkspaceRbacSuite`, which asserts both halves: a member
-is allowed the five authoring writes, a viewer is still refused every one of them (the floor), and
+is allowed the authoring writes, a viewer is still refused every one of them (the floor), and
 connect/disconnect stay admin-only.
 
-Those five are ALSO named in `permissionMounts.test.ts`'s `MEMBER_TIER_WRITES`, the one escape hatch
-from that test's rule that a gated controller covers every route it serves. They are listed as
-routes rather than waived by a flag on the controller so the split reads as five named decisions and
-adding a sixth costs a reviewer's attention: this table is the rationale that list points at. The
+Those writes are ALSO named in `permissionMounts.test.ts`'s `MEMBER_TIER_WRITES`, the one escape
+hatch from that test's rule that a gated controller covers every route it serves. They are listed
+as routes rather than waived by a flag on the controller so the split reads as named decisions and
+adding one more costs a reviewer's attention: this table is the rationale that list points at. The
 same test fails on a row that matches no route, so the hatch cannot rot into a standing
 pre-approval for whatever later takes the name.
 
@@ -193,6 +202,91 @@ modules and tasks are added inside that existing service frame. A document linke
 to a block is resolved at execution time and injected into the agent prompt
 (`resolveLinkedContext` in `packages/orchestration/src/modules/execution/linked-context.ts`
 → `renderLinkedContext` in `packages/agents`), under the delivery rule below.
+
+### A pasted reference is judged BEFORE anything is written
+
+`resolve-ref` is `import` with the fetch removed: `DocumentImportService.resolveRef` runs the
+provider's own `parseRef` and answers `{ externalId, canonicalUrl }`, and `import` now goes
+through it rather than re-parsing, so the pre-flight and the import cannot disagree about which
+refs are usable. It spends no upstream call and needs no connection, which is what lets the
+attach picker call it as the user types.
+
+Two things ride on it, and both were real defects in the attach flow:
+
+- **The paste is TRIMMED to the canonical form and that form is what gets staged.** A share link
+  carries a title segment and tracking params (`?p=` / `&t=` on Figma's own Copy link output);
+  accepting it verbatim hid whether the frame the URL named had survived the parse at all.
+  `canonicalUrl` is the provider rebuilding the link from the id, so what the picker shows is what
+  the import will do. It is `null` where the id genuinely cannot rebuild one: Confluence needs the
+  connection's site base URL and Linear the workspace slug, and GitHub docs needs the deployment's
+  VCS HOST (a GitLab-backed deployment reaches that source through the adapter, so a `github.com`
+  link would be wrong for it and `ResolveRepoOrigin`, which resolves a host, needs a workspace a
+  pure method does not get). The id itself is the canonical form in those cases, NOT a weaker
+  answer, and callers render it rather than reading the null as a failed resolution.
+- **A reference that had to be WIDENED says so, separately from the trim.** A node/screen id the
+  parser cannot read (Figma's Copy link emits a complex instance id for any component instance)
+  makes `parseRef` fall back to the whole file or project rather than guess which frame was meant.
+  That is the right fallback and an invisible one: the result is a valid id with a valid canonical
+  URL, so "I attached this frame" and "I attached the entire design" render identically under a
+  bare "trimmed to the supported form" note. `droppedScope` (optional
+  `DocumentSourceProvider.droppedScope`, implemented by the design sources) carries the discarded
+  qualifier AS PASTED, and the picker states it in its own amber line. Never normalised onto a
+  supported form: nothing knows which frame it meant, which is why the parser refused it.
+- **A refusal names WHICH correction it needs**, as `details.reason` (the closed
+  `documentRefReasonSchema`). `document_ref_unrecognized` means no link of this shape will ever
+  work here, and carries the `expected` format; `document_ref_claimed_by_other_source` means the
+  link is fine and pointed at the wrong source, and names the claimant so the surface can offer
+  to switch with the text unchanged. Claimants are searched host-PINNED first, through the SAME
+  `orderSourcesByClaimConfidence` that `makeDocumentUrlResolver` reads rather than a second copy of
+  its two passes: a blind parser claims a shape, so registration order deciding would point a Figma
+  paste at Notion, and a rule living in two places would be refined in one of them.
+
+The SPA half is the other side of the same rule: `ContextDocumentPicker` stages the RESOLVED
+reference rather than the pasted text, and `useContextLinking().resolvePending` fetches every staged
+attachment BEFORE the task or initiative is created, so an unreachable page is a correction the
+author can still make instead of a toast over a task that already exists without its context.
+
+Two consequences of running the fetch first, both about not overstating what the pre-flight knows:
+
+- **A refusal blocks a paste; a failed CALL does not.** `unchecked` (offline, 5xx, a proxy's own
+  error page, a reason value this build does not know) leaves the reference unjudged and still
+  stageable, with the import as the backstop it always was. Treating the two alike would make a
+  transient outage as final as a refusal, so a perfectly good link could not be attached at all.
+- **A staged item that could not be fetched is MARKED on the form** (`PendingContext.unreadable`),
+  not only named in the toast. The create is refused while any attachment is unresolved, so the
+  chip that caused it has to be identifiable where the author is still working. A tracker ISSUE has
+  no `parseRef` to pre-flight, so the add-task form's body pre-fetch is its warning: it records the
+  cause instead of swallowing it.
+
+### The picker names its source, and is the route to adding one
+
+`ContextDocumentPicker` also decides WHICH source it is reading, and that selector is the surface
+where the tier split above becomes visible copy. The selection rules are shared with the tracker
+pickers through `frontend/app/app/utils/sourcePicker.ts` (see
+[`bug-hunt.md`](./bug-hunt.md) for the tracker side).
+
+- **The source in use is always on screen**, single source or not, because which source is selected
+  decides what a pasted ref resolves to and which repository a file pick browses. When the menu has
+  nothing to decide it renders as a LABEL rather than a chevron: a trigger whose one entry re-selects
+  the current source promises a choice that isn't there.
+- **Its second tier connects a source from inside the form** (`ui.openDocumentConnect`, opened OVER
+  the caller's modal so nothing typed is lost), and `reconcileSource`'s `awaiting` selects that source
+  the moment the probe reports it connected. It routes to that source's own connect screen, never to
+  the Integrations hub, for the reason the bug hunt's tracker menu does.
+- **That second tier is WITHHELD from a member**, because connecting stores a workspace credential
+  and is `integrations.manage` while attaching what it holds is member-tier. `connectableSources` is
+  the one answer to "which sources could I connect", read by the picker's add tier AND by both hosts'
+  connect shortcuts (`ContextAttachmentFields`, `TaskContextDocs`); it withholds everything when the
+  integration is unavailable to the deployment OR the reader may not connect one. So a member sees
+  the source NAMED with no add entry, rather than a connect that opens a modal, takes a token and
+  403s. The no-source empty state splits the same way: the admin tier is told to connect one, a
+  member is told to ask an admin, because an instruction the reader's own menu withholds is not
+  advice they can act on.
+- **A document source cannot be "connected but switched off here"** the way a tracker can, so
+  `buildConnectionSourceChoices` cannot emit the `enable` wording at all, and `sourceMenuItems`
+  derives its wording map from what the choices can carry. A source that one day gains a
+  per-workspace toggle therefore fails the typecheck at this surface rather than rendering
+  "Connect X" over something already connected.
 
 ## A referenced context document reaches the agent, or the run breaks
 
@@ -250,9 +344,9 @@ Testing the body and rendering the excerpt would re-open this very hole one fiel
 
 Two deliberate NON-refusals:
 
-- **A URL that matches nothing imported is logged, not refused.** The providers' `parseRef`
+- **A URL that matches nothing imported is logged, not refused.** SOME providers' `parseRef`
   implementations are host-blind (`parseNotionRef` claims any string carrying a UUID-shaped
-  run; `parseConfluenceRef` any URL with a `/pages/<digits>` segment), so a claim is
+  run; `parseConfluenceRef` any URL with a `/pages/<digits>` segment), so such a claim is
   evidence of a shape, not of a reference: failing runs on it would block a task whose
   description happens to link a dashboard. The drop stays; an `info` line naming the URL and
   the source is what keeps it from being silent (importing the page turns it into real
@@ -260,6 +354,16 @@ Two deliberate NON-refusals:
   description that links a dashboard is a normal, permanent state of a healthy task, and
   this re-resolves on every dispatch; a warning would repeat forever with no remedy anyone
   intends to apply, which is how a channel gets tuned out.
+
+  **That difference in confidence is also what orders the canonicaliser.**
+  `makeDocumentUrlResolver` consults host-PINNED parsers first (`isHostPinnedSource` in
+  contracts: Figma, Zeplin, GitHub, Linear all refuse a foreign host) and host-blind ones
+  second, rather than in registration order. First-registered-wins let Notion claim a Figma
+  URL whose file key happened to carry a UUID-shaped run; the point lookup then searched
+  Notion's key space, found nothing, and the linked design reached the agent as no context at
+  all with only the `info` line above to show for it. Within each pass registration order
+  still decides, since two pinned sources cannot claim one host.
+
 - **A budget that omits an item from a PROMPT states the omission instead.** The
   materialised index is capped at `CONTEXT_BUDGET.maxItems`, and an inline (no-checkout)
   kind's injection at `CONTEXT_BUDGET.inlineBodyTokens`; `renderLinkedContext` says how many
@@ -297,3 +401,6 @@ generically, no per-source form is hard-coded in the frontend.
   `0005_confluence.sql`, migrating any live rows across before dropping them)
 - Tests: `test/integration/documents-*.spec.ts` with `FakeDocumentSourceProvider`
   and the `documentsDeps()` helper
+- SPA: `frontend/app/app/components/documents/ContextDocumentPicker.vue` (+ its
+  `.logic.ts` sibling for the ref pre-flight), with the source-selection rules it
+  shares with the tracker pickers in `frontend/app/app/utils/sourcePicker.ts`

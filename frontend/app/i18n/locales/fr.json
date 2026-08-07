@@ -311,7 +311,8 @@
         "derivedTitleFallback": "Examiner la pull request",
         "prNotFound": "La pull request n° {number} est introuvable dans le dépôt de ce service. Vérifiez le numéro, ou reliez le service au dépôt qui héberge cette pull request.",
         "prRepoMismatch": "Cette pull request se trouve dans un autre dépôt. Ce service examine {repo} : créez la tâche de revue sous le service relié au dépôt de la pull request."
-      }
+      },
+      "contextFailed": "Tâche non créée : {count} pièce jointe illisible | Tâche non créée : {count} pièces jointes illisibles"
     },
     "recurring": {
       "title": "Ajouter une pipeline récurrente",
@@ -403,20 +404,14 @@
       },
       "shared": "Partagé",
       "sharedTitle": "Partagé entre les espaces de travail de cette organisation",
-      "bootstrapping": "Initialisation…",
       "bootstrappingRepository": "Initialisation du dépôt…",
       "bootstrapStepsCount": "{completed}/{total} étapes",
-      "runFailed": "L’exécution a échoué",
-      "mergedOfTotal": "{merged}/{total} fusionnées",
-      "noTasksYet": "Pas encore de tâches",
-      "prCount": "{count} PR",
       "prReadyCount": "{count} PR prêtes",
       "taskCount": "{count} tâche | {count} tâches",
       "moduleCount": "{count} module | {count} modules",
       "addTaskTitle": "Ajouter une tâche",
       "createTaskFromIssueTitle": "Créer une tâche depuis un ticket",
       "addRecurringTitle": "Ajouter une pipeline récurrente",
-      "collapseTitle": "Réduire",
       "dragService": "Faire glisser le service",
       "dragTask": "Faire glisser la tâche",
       "dragToResize": "Glisser pour redimensionner",
@@ -497,7 +492,8 @@
     "attachDocDisabledEnable": "Activez d’abord l’intégration de documents",
     "attachIssueDisabledConnect": "Connectez d’abord un suivi de tickets (Intégrations)",
     "attachIssueDisabledEnable": "Activez d’abord l’intégration du suivi de tickets",
-    "importsOnAdd": "importé à l’ajout"
+    "importsOnAdd": "importé à l’ajout",
+    "unreadable": "Récupération impossible : {error}"
   },
   "errors": {
     "generic": {
@@ -2682,6 +2678,13 @@
         "manageAccount": "Gérer les fragments du compte →"
       }
     },
+    "taskTypeSuppressions": {
+      "intro": "Choisissez les opérations réutilisables de ce déploiement proposées sur ce tableau. En masquer une la retire du sélecteur de création de tâche ici et refuse la création de travail associée ; les autres tableaux ne sont pas affectés.",
+      "loading": "Chargement des opérations…",
+      "empty": "Ce déploiement n'enregistre aucune opération réutilisable.",
+      "offer": "Proposer sur ce tableau",
+      "saveFailed": "Impossible de modifier les opérations proposées sur ce tableau"
+    },
     "issueTracker": {
       "filing": {
         "heading": "Où les tickets sont créés",
@@ -3261,6 +3264,7 @@
         "merge": "Politiques de risque",
         "tracker": "Suivi des tickets",
         "fragments": "Bonnes pratiques du service",
+        "operations": "Opérations",
         "metadata": "Métadonnées",
         "members": "Membres"
       },
@@ -4174,7 +4178,20 @@
       "attachByReference": "Joindre {ref} par référence",
       "noMatches": "Aucune page correspondante.",
       "emptySearchable": "Recherchez par titre ou choisissez un document importé.",
-      "emptyRefOnly": "Collez l'URL ou l'ID d'une page pour la joindre."
+      "emptyRefOnly": "Collez l'URL ou l'ID d'une page pour la joindre.",
+      "sourceLabel": "Source",
+      "noSource": "Choisir une source",
+      "connectSource": "Connecter {label}",
+      "needsSource": "Connectez une source de documents pour joindre une page.",
+      "needsSourceAdmin": "Aucune source de documents n'est connectée. Demandez à un administrateur de l'espace de travail d'en connecter une.",
+      "refChecking": "Vérification de la référence…",
+      "refUnrecognized": "Ce n'est pas une référence {source}. Format attendu : {expected}",
+      "refOtherSource": "C'est un lien {claimed}, pas un lien {source}.",
+      "refSwitchSource": "Utiliser {source} à la place",
+      "refTrimmed": "Réduit au format pris en charge",
+      "refWidened": "Désigne un cadre que cette source ne peut pas lire ({scope}) : le fichier entier est donc joint.",
+      "refAlreadyAttached": "Cette référence est déjà jointe.",
+      "refCheckFailed": "Impossible de vérifier la référence : {error}"
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Rechercher des dépôts…",
@@ -4303,6 +4320,7 @@
       "searchIssues": "Rechercher des tickets",
       "searchPlaceholder": "Recherchez par titre, collez l'URL d'un ticket ou saisissez un numéro de ticket…",
       "createTasksIn": "Créer des tâches dans",
+      "creatingIn": "Les nouvelles tâches sont créées dans {container}",
       "needFrameFirst": "Ajoutez d'abord un cadre de service au tableau pour créer des tâches à partir de tickets.",
       "searchFailed": "Échec de la recherche : {error}",
       "searchResults": "Résultats de la recherche",
@@ -4355,6 +4373,7 @@
     "labels": "Étiquettes",
     "labelsHelp": "Séparées par des virgules. Toutes doivent être présentes.",
     "adoptInto": "Ajouter le bug retenu à",
+    "adoptingInto": "Le bug retenu est ajouté à {container}",
     "run": "Chasser",
     "running": "Lecture du tableau et évaluation des résultats…",
     "huntFailed": "La chasse a échoué",
@@ -6304,7 +6323,8 @@
       "failedTitle": "Impossible de creer l'initiative",
       "contextDocsHint": "Joignez une exigence, une RFC ou un PRD pour que les agents de planification la lisent en cadrant et en rédigeant le plan.",
       "contextIssuesHint": "Joignez un ticket pour que les agents de planification voient sa description et ses commentaires en rédigeant le plan.",
-      "linkFailed": "Initiative créée, mais {count} pièce jointe n’a pas pu être liée | Initiative créée, mais {count} pièces jointes n’ont pas pu être liées"
+      "linkFailed": "Initiative créée, mais {count} pièce jointe n’a pas pu être liée | Initiative créée, mais {count} pièces jointes n’ont pas pu être liées",
+      "contextFailed": "Initiative non créée : {count} pièce jointe illisible | Initiative non créée : {count} pièces jointes illisibles"
     },
     "status": {
       "planning": "Planification",

@@ -10,6 +10,7 @@ import {
   listDocumentSourcesContract,
   listDocumentsContract,
   planDocumentContract,
+  resolveDocumentRefContract,
   searchDocumentsContract,
   spawnDocumentContract,
   unlinkDocumentForKindContract,
@@ -118,6 +119,14 @@ export function documentSourceController(): Hono<AppEnv> {
   buildHonoRoute(app, listDocumentsContract, async (c) => {
     const documents = requireDocuments(c)
     return c.json(await documents.importService.listDocuments(param(c, 'workspaceId')), 200)
+  })
+
+  // The pure pre-flight the attach surfaces run before a task is saved: what a pasted URL/id
+  // canonicalises to for this source, or a 422 naming which of the two corrections it needs. No
+  // upstream call and no write, so it costs nothing to run as the user types.
+  buildHonoRoute(app, resolveDocumentRefContract, async (c) => {
+    const documents = requireDocuments(c)
+    return c.json(documents.importService.resolveRef(sourceParam(c), c.req.valid('json').ref), 200)
   })
 
   // Member tier. It does spend an outbound call against the source under the workspace's stored

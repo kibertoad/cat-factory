@@ -57,12 +57,17 @@ export interface NewPipeline {
 }
 
 /**
- * A built-in's display name for the "new pipeline" advisory, humanised from its catalog id
- * (`pl_review` -> "review", rendered capitalised) — used only until the row is reseeded into
- * existence, at which point its real catalog name is stored. Mirrors `useRiskPolicyHealth`.
+ * A catalog entry's display name for the "new pipeline" advisory, used only while the entry has no
+ * stored row to take a name off. The snapshot's companion name map answers it; the humanised id
+ * (`pl_review` -> "review", rendered capitalised) is the FALLBACK for a facade that ships no map.
+ *
+ * The map is not a nicety. Humanising was fine for the shipped built-ins, whose ids read as their
+ * names, and wrong the moment a deployment registers its own: a reusable operation's
+ * `pl_org_introduce_api` was offered as "org introduce api", a name appearing nowhere else in the
+ * product, on exactly the boards that predate the operation and therefore see this advisory.
  */
-function builtinPipelineName(id: string): string {
-  return id.replace(/^pl_/, '').replace(/_/g, ' ')
+function builtinPipelineName(id: string, names: Record<string, string>): string {
+  return names[id] ?? id.replace(/^pl_/, '').replace(/_/g, ' ')
 }
 
 /** Producers a companion kind is allowed to review (inverse of {@link COMPANION_FOR_PRODUCER}). */
@@ -207,7 +212,7 @@ export function usePipelineHealth() {
     const storedIds = new Set(store.pipelines.map((p) => p.id))
     return Object.keys(store.catalogVersions)
       .filter((id) => !storedIds.has(id))
-      .map((id) => ({ id, name: builtinPipelineName(id) }))
+      .map((id) => ({ id, name: builtinPipelineName(id, store.catalogNames) }))
   })
 
   // Retired built-ins this workspace still stores: the ones seeded before the withdrawal. A
@@ -238,7 +243,8 @@ export function usePipelineHealth() {
   function resolveReplacement(id: string): { id: string; name: string } | undefined {
     const stored = store.getPipeline(id)
     if (stored) return { id, name: stored.name }
-    if (id in store.catalogVersions) return { id, name: builtinPipelineName(id) }
+    if (id in store.catalogVersions)
+      return { id, name: builtinPipelineName(id, store.catalogNames) }
     return undefined
   }
 

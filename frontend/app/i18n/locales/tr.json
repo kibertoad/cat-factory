@@ -311,7 +311,8 @@
         "derivedTitleFallback": "Pull request'i incele",
         "prNotFound": "#{number} numaralı pull request bu servisin deposunda bulunamadı. Numarayı kontrol edin veya servisi, pull request'in bulunduğu depoya bağlayın.",
         "prRepoMismatch": "Bu pull request başka bir depoda. Bu servis {repo} deposunu inceliyor; inceleme görevini pull request'in deposuna bağlı servis altında oluşturun."
-      }
+      },
+      "contextFailed": "Görev oluşturulmadı: {count} ek okunamadı | Görev oluşturulmadı: {count} ek okunamadı"
     },
     "recurring": {
       "title": "Yinelenen bir işlem hattı ekle",
@@ -403,20 +404,14 @@
       },
       "shared": "Paylaşılan",
       "sharedTitle": "Bu organizasyondaki çalışma alanları arasında paylaşılan",
-      "bootstrapping": "Bootstrap yapılıyor…",
       "bootstrappingRepository": "Depo bootstrap'lanıyor…",
       "bootstrapStepsCount": "{completed}/{total} adım",
-      "runFailed": "Çalıştırma başarısız oldu",
-      "mergedOfTotal": "{merged}/{total} birleştirildi",
-      "noTasksYet": "Henüz görev yok",
-      "prCount": "{count} PR",
       "prReadyCount": "{count} PR hazır",
       "taskCount": "{count} görev | {count} görev",
       "moduleCount": "{count} modül | {count} modül",
       "addTaskTitle": "Görev ekle",
       "createTaskFromIssueTitle": "Sorundan görev oluştur",
       "addRecurringTitle": "Yinelenen pipeline ekle",
-      "collapseTitle": "Daralt",
       "dragService": "Servisi sürükle",
       "dragTask": "Görevi sürükle",
       "dragToResize": "Yeniden boyutlandırmak için sürükle",
@@ -497,7 +492,8 @@
     "attachDocDisabledEnable": "Önce belge entegrasyonunu etkinleştirin",
     "attachIssueDisabledConnect": "Önce bir sorun izleyici bağlayın (Entegrasyonlar)",
     "attachIssueDisabledEnable": "Önce sorun izleyici entegrasyonunu etkinleştirin",
-    "importsOnAdd": "eklendiğinde içe aktarılır"
+    "importsOnAdd": "eklendiğinde içe aktarılır",
+    "unreadable": "Getirilemedi: {error}"
   },
   "errors": {
     "generic": {
@@ -2823,6 +2819,13 @@
         "manageAccount": "Hesap parçalarını yönet →"
       }
     },
+    "taskTypeSuppressions": {
+      "intro": "Bu dağıtımın yeniden kullanılabilir operasyonlarından hangilerinin bu panoda sunulacağını seçin. Birini gizlemek onu buradaki görev oluşturma seçicisinden kaldırır ve o türde iş oluşturmayı reddeder; diğer panolar etkilenmez.",
+      "loading": "Operasyonlar yükleniyor…",
+      "empty": "Bu dağıtım hiçbir yeniden kullanılabilir operasyon kaydetmiyor.",
+      "offer": "Bu panoda sun",
+      "saveFailed": "Bu panoda sunulan operasyonlar değiştirilemedi"
+    },
     "issueTracker": {
       "filing": {
         "heading": "Biletlerin nereye açıldığı",
@@ -3402,6 +3405,7 @@
         "merge": "Risk ilkeleri",
         "tracker": "Sorun takipçisi",
         "fragments": "Servis en iyi uygulamaları",
+        "operations": "Operasyonlar",
         "metadata": "Meta veriler",
         "members": "Üyeler"
       },
@@ -4174,7 +4178,20 @@
       "attachByReference": "{ref} öğesini referansla ekle",
       "noMatches": "Eşleşen sayfa yok.",
       "emptySearchable": "Başlığa göre ara veya içe aktarılmış bir belge seç.",
-      "emptyRefOnly": "Eklemek için bir sayfa URL'si veya ID'si yapıştır."
+      "emptyRefOnly": "Eklemek için bir sayfa URL'si veya ID'si yapıştır.",
+      "sourceLabel": "Kaynak",
+      "noSource": "Bir kaynak seç",
+      "connectSource": "{label} bağla",
+      "needsSource": "Bir sayfa eklemek için bir belge kaynağı bağla.",
+      "needsSourceAdmin": "Bağlı belge kaynağı yok. Bir çalışma alanı yöneticisinden birini bağlamasını iste.",
+      "refChecking": "Referans denetleniyor…",
+      "refUnrecognized": "Bu bir {source} referansı değil. Beklenen: {expected}",
+      "refOtherSource": "Bu bir {claimed} bağlantısı, {source} bağlantısı değil.",
+      "refSwitchSource": "Bunun yerine {source} kullan",
+      "refTrimmed": "Desteklenen biçime kısaltıldı",
+      "refWidened": "Bu kaynağın okuyamadığı bir çerçeveyi ({scope}) belirtiyor, bu yüzden dosyanın tamamı ekleniyor.",
+      "refAlreadyAttached": "Bu referans zaten ekli.",
+      "refCheckFailed": "Referans denetlenemedi: {error}"
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Depolarda ara…",
@@ -4303,6 +4320,7 @@
       "searchIssues": "Sorunlarda ara",
       "searchPlaceholder": "Başlığa göre ara, bir sorun URL'si yapıştır veya bir sorun numarası yaz…",
       "createTasksIn": "Görevleri şurada oluştur",
+      "creatingIn": "Yeni görevler {container} içinde oluşturulur",
       "needFrameFirst": "Sorunlardan görev oluşturmak için önce panoya bir servis çerçevesi ekle.",
       "searchFailed": "Arama başarısız: {error}",
       "searchResults": "Arama sonuçları",
@@ -4355,6 +4373,7 @@
     "labels": "Etiketler",
     "labelsHelp": "Virgülle ayrılır. Hepsinin bulunması gerekir.",
     "adoptInto": "Seçilen hatayı şuraya ekle",
+    "adoptingInto": "Seçilen hata {container} içine eklenir",
     "run": "Avla",
     "running": "Pano okunuyor ve bulunanlar değerlendiriliyor…",
     "huntFailed": "Av başarısız oldu",
@@ -6304,7 +6323,8 @@
       "failedTitle": "Girisim olusturulamadi",
       "contextDocsHint": "Planlama ajanlarının kapsamı belirlerken ve planı hazırlarken okuması için bir gereksinim, RFC veya PRD ekleyin.",
       "contextIssuesHint": "Planlama ajanlarının planı hazırlarken açıklamasını ve yorumlarını görmesi için bir sorun kaydı ekleyin.",
-      "linkFailed": "Girişim oluşturuldu, ancak {count} ek bağlanamadı | Girişim oluşturuldu, ancak {count} ek bağlanamadı"
+      "linkFailed": "Girişim oluşturuldu, ancak {count} ek bağlanamadı | Girişim oluşturuldu, ancak {count} ek bağlanamadı",
+      "contextFailed": "Girişim oluşturulmadı: {count} ek okunamadı | Girişim oluşturulmadı: {count} ek okunamadı"
     },
     "status": {
       "planning": "Planlaniyor",

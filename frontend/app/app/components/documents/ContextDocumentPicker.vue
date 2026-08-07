@@ -8,9 +8,47 @@
 // collects PendingContext items and links them once the block exists (see
 // useContextLinking). A search hit / pasted ref carries `needsImport: true` so
 // it's fetched + persisted before linking. Mirrors ContextIssuePicker.
-import type { DocumentSearchResult, DocumentSourceKind } from '~/types/domain'
+//
+// The source being searched is ALWAYS on screen (even when the workspace has exactly one, and
+// even when it has none), and its menu doubles as the "add a source" affordance: which source is
+// selected decides what a pasted ref resolves to and which repository a file pick browses, and
+// attaching context is where a missing integration is discovered. Connecting opens that source's
+// connect modal OVER the caller's form rather than navigating away from it.
+//
+// A PASTED REF IS RESOLVED BEFORE IT CAN BE STAGED, and that is the point of the ref
+// half of this picker. It used to stage whatever text was in the box, so a share link
+// carrying a title segment and `?p=`/`&t=` tracking params (what Figma's own Copy link
+// button produces) was accepted verbatim, and a link the source could not read at all
+// was accepted just as readily. The verdict arrived as a failed import AFTER the task
+// had been created. The resolve call is the source's own `parseRef`, so what is shown
+// here is what the import will do: the canonical trimmed link when it parses, and one
+// of two named corrections when it does not (see `REF_REJECTIONS`).
+//
+// Two distinctions the row has to keep, because collapsing either one recreates the bug in
+// quieter form. A reference the source could parse only by DROPPING the frame the link named
+// carries that fact separately from the trim (`droppedScope`): both change what was pasted,
+// but one resolves the same page and the other attaches the whole design file. And a resolve
+// call that could not be MADE leaves the reference unjudged rather than refused, still
+// stageable with the import as the backstop, because only the source's own refusal is evidence
+// against a link. An outage that made attaching impossible would be a worse failure than the
+// one the pre-flight fixes.
+import { useId } from 'vue'
+import type { DocumentRefReason, DocumentSearchResult, DocumentSourceKind } from '~/types/domain'
+import {
+  classifyRefFailure,
+  refCandidateOf,
+  refRowFor,
+  type RefState,
+} from '~/components/documents/ContextDocumentPicker.logic'
 import EmptyState from '~/components/common/EmptyState.vue'
 import RepoContextDocPicker from '~/components/documents/RepoContextDocPicker.vue'
+import {
+  type AddSourceLabels,
+  buildConnectionSourceChoices,
+  menuIsPickable,
+  reconcileSource,
+  sourceMenuItems,
+} from '~/utils/sourcePicker'
 
 // Repo-backed document sources pick a FILE out of a repository (repo search → file
 // search / tree browse) instead of the generic free-text catalogue search. Today only
@@ -25,18 +63,80 @@ const emit = defineEmits<{ pick: [item: PendingContext] }>()
 
 const { t } = useI18n()
 const documents = useDocumentsStore()
+const ui = useUiStore()
+// Connecting a source stores a workspace credential and is admin-tier, while attaching what it
+// holds is member-tier, so the menu's "add a source" tier is withheld from a member rather than
+// offering a connect that would 403 (see `connectableSources`). The tier also decides which empty
+// state a reader gets, because "connect one" is not advice you can act on without it.
+const { canManageIntegrations } = useWorkspaceAccess()
 
 const chosen = computed(() => new Set(props.chosenKeys ?? []))
 
-// Source: default to the first connected source; a selector appears only when
-// more than one is connected (the common case is a single source).
+// Source: default to the first connected source. The selector is always rendered, single source
+// or not: which source is being searched decides what a pasted ref resolves to, so it must never
+// be invisible.
 const source = ref<DocumentSourceKind | undefined>(documents.connectedSources[0]?.source)
-const sourceItems = computed(() =>
-  documents.connectedSources.map((s) => ({ label: s.label, value: s.source })),
-)
 const descriptor = computed(() =>
   source.value ? documents.descriptorFor(source.value) : undefined,
 )
+
+// The source the user left to connect, so it becomes the selection the moment it turns up
+// connected (the connect modal re-probes on success). Also the reconcile trigger for a source
+// that stops being connected while the caller's form sat open.
+const awaitingConnect = ref<DocumentSourceKind | null>(null)
+function addSource(s: DocumentSourceKind) {
+  awaitingConnect.value = s
+  ui.openDocumentConnect(s)
+}
+watch(
+  () => documents.connectedSources.map((s) => s.source),
+  (connected) => {
+    const next = reconcileSource(connected, source.value, awaitingConnect.value)
+    if (next && next === awaitingConnect.value) awaitingConnect.value = null
+    if (next !== source.value) source.value = next
+  },
+)
+
+// Two-tier menu: pick a connected source, or connect one the workspace hasn't got yet. A document
+// source carries no per-workspace enable toggle, so `connect` is the ONLY add wording it can need,
+// and `buildConnectionSourceChoices` makes that a fact about the type rather than about this call
+// site: a source that one day gains a toggle fails the typecheck here instead of rendering
+// "Connect X" over something already connected.
+const sourceChoices = computed(() =>
+  buildConnectionSourceChoices(documents.sources, {
+    isConnected: documents.isConnected,
+    canConnect: canManageIntegrations.value,
+    available: documents.available,
+    selected: source.value,
+  }),
+)
+const ADD_LABEL: AddSourceLabels<'connect'> = {
+  connect: (label) => t('documents.picker.connectSource', { label }),
+}
+const sourceMenu = computed(() =>
+  sourceMenuItems(sourceChoices.value, {
+    onSelect: (s) => {
+      source.value = s
+    },
+    onAdd: addSource,
+    addLabel: ADD_LABEL,
+  }),
+)
+
+/**
+ * Whether the selector is a CONTROL or just a name. A member's add tier is withheld, so on the
+ * common deployment (GitHub docs implicitly connected, nothing else) their menu holds one entry
+ * that re-selects what is already selected: a chevron promising a choice that isn't there, which is
+ * the same papercut the always-visible selector was meant to remove. The source is still named,
+ * which was the point.
+ */
+const sourcePickable = computed(() => menuIsPickable(sourceChoices.value))
+
+// The trigger's own content is the source NAME, so the visible "Source" caption is joined to it as
+// the accessible name ("Source Confluence"). Per instance: the add-task form and the inspector can
+// both have a picker mounted, and a hard-coded id would make one claim the other's caption.
+const sourceLabelId = useId()
+const sourceTriggerId = useId()
 const searchable = computed(() => descriptor.value?.searchable ?? false)
 // A repo-backed source swaps the whole free-text search body for the repo→file picker.
 const isRepoSource = computed(() => !!source.value && REPO_SOURCES.has(source.value))
@@ -46,6 +146,45 @@ const results = ref<DocumentSearchResult[]>([])
 const searching = ref(false)
 const searchError = ref<string | null>(null)
 
+// What the ref half of the picker knows about the current query. A refusal carries the backend's
+// machine-readable REASON rather than its prose, because the two reasons ask for different
+// corrections and only one of them is fixable from here (see `REF_REJECTIONS`).
+const refState = ref<RefState>({ status: 'none' })
+// Monotonic token so a slow resolve for an earlier query cannot land on a later one: the
+// input is resolved on every keystroke, so out-of-order responses are the normal case.
+let refSeq = 0
+
+/** A source's display name, for a kind the backend named in a refusal (never a raw slug). */
+function sourceLabel(kind: string): string {
+  return documents.sources.find((s) => s.source === kind)?.label ?? kind
+}
+
+/**
+ * Translated copy per refusal reason, an exhaustive `Record` over the closed union so a reason
+ * added on the backend fails the typecheck here rather than reaching the user as English server
+ * prose. Each message names the correction that reason actually calls for.
+ */
+const REF_REJECTIONS: Record<
+  DocumentRefReason,
+  (input: { claimedBy?: string; expected?: string }) => string
+> = {
+  document_ref_unrecognized: ({ expected }) =>
+    t('documents.picker.refUnrecognized', {
+      source: sourceLabel(source.value ?? ''),
+      expected: expected ?? descriptor.value?.refPlaceholder ?? '',
+    }),
+  document_ref_claimed_by_other_source: ({ claimedBy }) =>
+    t('documents.picker.refOtherSource', {
+      source: sourceLabel(source.value ?? ''),
+      claimed: sourceLabel(claimedBy ?? ''),
+    }),
+}
+
+/** The text to resolve as a reference, or null when there is nothing to resolve. */
+const refCandidate = computed(() =>
+  source.value ? refCandidateOf(query.value, searchable.value) : null,
+)
+
 // Debounced search: free text hits the source; a query that's clearly a URL/ID
 // is left to the explicit "by reference" row below (search won't surface it).
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -53,9 +192,14 @@ watch([query, source], () => {
   if (timer) clearTimeout(timer)
   results.value = []
   searchError.value = null
+  refState.value = { status: 'none' }
+  refSeq++
   const q = query.value.trim()
-  if (!q || !searchable.value) return
-  timer = setTimeout(runSearch, 300)
+  if (!q) return
+  timer = setTimeout(() => {
+    if (searchable.value) void runSearch()
+    if (refCandidate.value) void resolveRef(refCandidate.value)
+  }, 300)
 })
 
 async function runSearch() {
@@ -70,6 +214,26 @@ async function runSearch() {
     searchError.value = e instanceof Error ? e.message : String(e)
   } finally {
     searching.value = false
+  }
+}
+
+/**
+ * Ask the backend what this text resolves to for the selected source. A 422 is the source's
+ * own refusal and lands as `rejected` with its reason; anything else (offline, 5xx) leaves
+ * the ref UNCHECKED rather than refused, so an outage in the pre-flight never reads to the
+ * user as "your link is wrong".
+ */
+async function resolveRef(candidate: string) {
+  const src = source.value
+  if (!src) return
+  const seq = ++refSeq
+  refState.value = { status: 'checking' }
+  try {
+    const ref = await documents.resolveRef(src, candidate)
+    if (seq === refSeq) refState.value = { status: 'ok', ref }
+  } catch (e) {
+    if (seq !== refSeq) return
+    refState.value = classifyRefFailure(e)
   }
 }
 
@@ -103,22 +267,87 @@ const searchRows = computed(() => {
     .filter((r) => !chosen.value.has(keyFor(r.externalId)))
 })
 
-// A pasted URL / ID the search won't match: offer it as an explicit reference.
-// When the source isn't searchable, any non-empty query is treated as a ref (the
-// only way to attach a page there, mirroring the import modal's single input).
-const refRow = computed(() => {
-  const q = query.value.trim()
-  if (!q || !source.value) return null
-  const known =
-    importedRows.value.some((d) => d.externalId === q) ||
-    searchRows.value.some((r) => r.externalId === q) ||
-    chosen.value.has(keyFor(q))
-  if (known) return null
-  if (!searchable.value) return q
-  // Only worth offering when it looks like a reference, not a search phrase.
-  const looksLikeRef = q.includes('#') || q.includes('/') || /^https?:\/\//i.test(q)
-  return looksLikeRef ? q : null
+/** The already-imported document a resolved ref points at, when the workspace holds it. */
+const refImported = computed(() => {
+  const state = refState.value
+  if (state.status !== 'ok') return undefined
+  return documents.documents.find(
+    (d) => d.source === state.ref.source && d.externalId === state.ref.externalId,
+  )
 })
+
+/** Every id another row in this dropdown already offers, so one page is never listed twice. */
+const offeredIds = computed(
+  () =>
+    new Set([
+      ...importedRows.value.map((d) => d.externalId),
+      ...searchRows.value.map((r) => r.externalId),
+    ]),
+)
+
+/**
+ * The attachable row for the reference in the box: the CANONICAL form the source settled on, never
+ * the text that was typed (see `refRowFor`, which also carries the unjudged case).
+ *
+ * Suppressed in two cases, each with its own reason. Already STAGED, keyed on the resolved external
+ * id so pasting the share link and then the bare id cannot stage it twice (the `refAlreadyAttached`
+ * line says so, since a row that silently vanishes reads as a picker that lost the paste). Already
+ * OFFERED by an imported/search row above, which is the same page reachable by one click: the
+ * dedupe is against what is VISIBLE rather than against the whole imported list, because a URL
+ * query matches no title, so testing the full list would suppress the only row on offer.
+ */
+const refRow = computed(() => {
+  const pasted = refCandidate.value
+  if (!pasted) return null
+  const row = refRowFor(refState.value, pasted, refImported.value?.title)
+  if (!row) return null
+  if (chosen.value.has(keyFor(row.externalId)) || offeredIds.value.has(row.externalId)) return null
+  return { ...row, imported: !!refImported.value }
+})
+
+/** A resolved reference the caller has already staged: suppressed as a row, stated as a line. */
+const refAlreadyAttached = computed(() => {
+  const state = refState.value
+  return state.status === 'ok' && chosen.value.has(keyFor(state.ref.externalId))
+})
+
+/** The refusal to render under the input, in the reader's language, or null. */
+const refRejection = computed(() => {
+  const state = refState.value
+  if (state.status !== 'rejected') return null
+  return REF_REJECTIONS[state.reason]({
+    ...(state.claimedBy ? { claimedBy: state.claimedBy } : {}),
+    ...(state.expected ? { expected: state.expected } : {}),
+  })
+})
+
+/**
+ * The source named by a `claimed_by_other_source` refusal, when it is one this workspace has
+ * connected. Absent when it is not: offering to switch to a source the picker cannot select
+ * would be a dead end, and the refusal copy alone already names what the link is.
+ */
+const refSwitchTarget = computed(() => {
+  const state = refState.value
+  if (state.status !== 'rejected' || !state.claimedBy) return undefined
+  return documents.connectedSources.find((s) => s.source === state.claimedBy)
+})
+
+function switchToClaimingSource() {
+  const target = refSwitchTarget.value
+  if (target) source.value = target.source
+}
+
+/**
+ * Whether a line about the pasted reference is being rendered under the input. It is what keeps the
+ * dropdown TOTAL: every state now shows a row, a line, or the empty state. Keying the empty state
+ * on `status === 'none'` alone left a hole (a resolved reference the caller had already staged
+ * suppressed the row AND the empty state) that rendered as a blank panel explaining nothing.
+ */
+const refNotice = computed(
+  () =>
+    refState.value.status !== 'none' &&
+    (refState.value.status !== 'ok' || refAlreadyAttached.value),
+)
 
 const empty = computed(
   () =>
@@ -126,7 +355,8 @@ const empty = computed(
     !searchError.value &&
     importedRows.value.length === 0 &&
     searchRows.value.length === 0 &&
-    refRow.value === null,
+    refRow.value === null &&
+    !refNotice.value,
 )
 
 function pickImported(externalId: string, title: string, excerpt: string) {
@@ -154,16 +384,26 @@ function pickSearch(r: DocumentSearchResult) {
   })
 }
 
-function pickRef(q: string) {
-  if (!source.value) return
+/**
+ * Stage a reference. The canonical external id is staged, never the pasted text, so the item the
+ * host commits is the one the pre-flight judged. A reference the workspace has already imported
+ * skips the re-fetch (`needsImport: false`) and carries its real title.
+ *
+ * An UNJUDGED reference (the resolve call itself failed) carries the pasted text against the
+ * SELECTED source, which is what the picker did before any pre-flight existed: the import will
+ * judge it, and a source outage is not a reason to make attaching impossible.
+ */
+function pickRef(row: NonNullable<typeof refRow.value>) {
+  const src = row.source ?? source.value
+  if (!src) return
   emit('pick', {
     kind: 'document',
-    source: source.value,
-    externalId: q,
-    title: q,
-    subtitle: descriptor.value?.label,
+    source: src,
+    externalId: row.externalId,
+    title: row.label,
+    subtitle: row.canonicalUrl ?? descriptor.value?.label,
     icon: icon.value,
-    needsImport: true,
+    needsImport: !row.imported,
   })
   query.value = ''
 }
@@ -176,17 +416,59 @@ onMounted(() => {
 
 <template>
   <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-900/40 p-2">
-    <USelect
-      v-if="sourceItems.length > 1"
-      v-model="source"
-      :items="sourceItems"
-      size="xs"
-      class="w-full"
+    <!-- Which source is being searched, always visible, plus the sources the user could add from
+         here (each opens the connect modal over the caller's form). Rendered as plain text when
+         there is nothing to decide, which for a member is the usual case. -->
+    <div class="flex items-center gap-1.5">
+      <span
+        :id="sourceLabelId"
+        class="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+      >
+        {{ t('documents.picker.sourceLabel') }}
+      </span>
+      <UDropdownMenu
+        v-if="sourcePickable"
+        :items="sourceMenu"
+        :content="{ side: 'bottom', align: 'start' }"
+      >
+        <UButton
+          :id="sourceTriggerId"
+          color="neutral"
+          variant="soft"
+          size="xs"
+          :icon="icon"
+          trailing-icon="i-lucide-chevron-down"
+          class="max-w-full"
+          :aria-labelledby="`${sourceLabelId} ${sourceTriggerId}`"
+        >
+          <span class="truncate">{{ descriptor?.label ?? t('documents.picker.noSource') }}</span>
+        </UButton>
+      </UDropdownMenu>
+      <span v-else class="flex min-w-0 items-center gap-1 text-xs text-slate-300">
+        <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0" />
+        <span class="truncate">{{ descriptor?.label ?? t('documents.picker.noSource') }}</span>
+      </span>
+    </div>
+
+    <!-- No source selected: nothing is connected (or the last one was disconnected while this sat
+         open), so say so rather than render a search box that can only fail. WHICH sentence depends
+         on who is reading: the admin tier is told to connect one, because the menu above is the
+         route; a member has no add tier (see `connectableSources`), so telling them to connect a
+         source would name an action their own menu withholds. -->
+    <EmptyState
+      v-if="!source"
+      compact
+      icon="i-lucide-plug"
+      :title="
+        canManageIntegrations
+          ? t('documents.picker.needsSource')
+          : t('documents.picker.needsSourceAdmin')
+      "
     />
 
     <!-- Repo-backed source (GitHub / GitLab): pick a repository, then a file. -->
     <RepoContextDocPicker
-      v-if="isRepoSource && source"
+      v-else-if="isRepoSource"
       :source="source!"
       :icon="icon"
       :chosen-keys="chosenKeys"
@@ -210,6 +492,50 @@ onMounted(() => {
 
       <p v-if="searchError" class="px-1 text-[11px] text-amber-400">
         {{ t('documents.picker.searchFailed', { error: searchError }) }}
+      </p>
+
+      <!-- The pre-flight's verdict on a pasted ref. A refusal is stated HERE, under the input
+           the user can still edit, rather than as a toast after the task is created. -->
+      <p
+        v-if="refState.status === 'checking'"
+        class="px-1 text-[11px] text-slate-500"
+        data-testid="doc-ref-checking"
+      >
+        {{ t('documents.picker.refChecking') }}
+      </p>
+      <div
+        v-else-if="refRejection"
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-[11px] text-amber-400"
+        data-testid="doc-ref-rejected"
+      >
+        <span>{{ refRejection }}</span>
+        <UButton
+          v-if="refSwitchTarget"
+          color="neutral"
+          variant="link"
+          size="xs"
+          class="p-0"
+          data-testid="doc-ref-switch-source"
+          @click="switchToClaimingSource"
+        >
+          {{ t('documents.picker.refSwitchSource', { source: refSwitchTarget.label }) }}
+        </UButton>
+      </div>
+      <p
+        v-else-if="refState.status === 'unchecked'"
+        class="px-1 text-[11px] text-amber-400"
+        data-testid="doc-ref-unchecked"
+      >
+        {{ t('documents.picker.refCheckFailed', { error: refState.message }) }}
+      </p>
+      <!-- Already staged, so the row is suppressed. Stated, because a paste that produces nothing
+           at all reads as a picker that dropped it. -->
+      <p
+        v-else-if="refAlreadyAttached"
+        class="px-1 text-[11px] text-slate-500"
+        data-testid="doc-ref-already-attached"
+      >
+        {{ t('documents.picker.refAlreadyAttached') }}
       </p>
 
       <div class="max-h-56 space-y-0.5 overflow-y-auto">
@@ -240,21 +566,48 @@ onMounted(() => {
           <span class="truncate">{{ r.title }}</span>
         </button>
 
-        <!-- Explicit URL/ID reference (imported on add). -->
+        <!-- Explicit URL/ID reference, RESOLVED: the row shows the canonical form the source
+             settled on, so a share link's title segment and tracking params are visibly gone
+             before the attachment is staged. -->
         <button
           v-if="refRow"
           type="button"
-          class="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
+          class="flex w-full items-start gap-1.5 rounded-md px-2 py-1.5 text-start text-xs text-slate-300 hover:bg-slate-800/70"
+          data-testid="doc-ref-attach"
           @click="pickRef(refRow)"
         >
-          <UIcon name="i-lucide-link" class="h-3.5 w-3.5 shrink-0 text-slate-400" />
-          <span class="truncate">
-            <i18n-t keypath="documents.picker.attachByReference" scope="global">
-              <template #ref>
-                <span class="text-slate-200">{{ refRow }}</span>
-              </template>
-            </i18n-t>
+          <UIcon name="i-lucide-link" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <span class="min-w-0">
+            <span class="block truncate">
+              <i18n-t keypath="documents.picker.attachByReference" scope="global">
+                <template #ref>
+                  <span class="text-slate-200">{{ refRow.label }}</span>
+                </template>
+              </i18n-t>
+            </span>
+            <span v-if="refRow.trimmed" class="block truncate text-[11px] text-slate-500">
+              {{ t('documents.picker.refTrimmed') }}
+            </span>
+            <!-- A WIDENED reference, which the trim note above must never be left to imply: the
+                 frame this link named could not be read, so what gets attached is everything
+                 around it. Amber and separate, because it is a loss rather than tidying. -->
+            <span
+              v-if="refRow.droppedScope"
+              class="block text-[11px] text-amber-400"
+              data-testid="doc-ref-widened"
+            >
+              {{ t('documents.picker.refWidened', { scope: refRow.droppedScope }) }}
+            </span>
           </span>
+          <UBadge
+            v-if="refRow.imported"
+            color="neutral"
+            variant="soft"
+            size="xs"
+            class="ms-auto shrink-0"
+          >
+            {{ t('documents.picker.importedBadge') }}
+          </UBadge>
         </button>
 
         <EmptyState

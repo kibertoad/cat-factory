@@ -14,6 +14,7 @@ export {
   type LogFields,
   type LogLevel,
   type LogSink,
+  type LogThreshold,
   type Logger,
 } from './observability/logger.js'
 export { operationalMetrics } from './observability/operationalMetrics.js'
@@ -542,6 +543,7 @@ export {
 // registry — the estate is org state, and a second copy in a node's build is only ever a
 // drifting one. Its dedicated `/internal/*` endpoint is the server half.
 export { HttpFoundationalBuiltinSource } from './persistence/foundationalBuiltins.js'
+export { HttpPromptFragmentSource } from './persistence/promptFragments.js'
 // The deployment's generative binary integrations, read from the mothership for the same reason:
 // the set a run resolves against must be the set the picker offered, and a node's own build can
 // only hold a second copy of it.

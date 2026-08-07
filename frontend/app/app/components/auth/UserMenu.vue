@@ -35,6 +35,7 @@ const items = computed<DropdownMenuItem[][]>(() => [
   <UDropdownMenu v-if="auth.user" :items="items" :content="{ side: 'top', align: 'start' }">
     <button
       type="button"
+      data-testid="user-menu"
       :title="collapsed ? auth.user.name || auth.user.login : undefined"
       class="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-2 text-start transition hover:bg-slate-800/60"
       :class="collapsed ? 'justify-center' : ''"

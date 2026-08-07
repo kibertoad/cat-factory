@@ -3,10 +3,10 @@
 The user-facing app, packaged as a **reusable Nuxt 4 layer**: a single-page app
 that runs entirely in the browser and renders the architecture board, drives agent
 pipelines, and reflects live execution. A deployment consumes it via
-`extends: ['@cat-factory/app']` (see [`deploy/frontend`](../../deploy/frontend)).
-It talks to the [backend Worker](../../backend/README.md) over REST and a single
+`extends: ['@cat-factory/app']` (see [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tree/main/deploy/frontend)).
+It talks to the [backend Worker](https://github.com/kibertoad/cat-factory/blob/main/backend/README.md) over REST and a single
 WebSocket, sharing wire types from
-[`@cat-factory/contracts`](../../backend/packages/contracts).
+[`@cat-factory/contracts`](https://github.com/kibertoad/cat-factory/tree/main/backend/packages/contracts).
 
 The SPA source lives under `app/` (the Nuxt srcDir).
 
@@ -79,6 +79,30 @@ earlier than before takes the entire SPA down at boot, and the unit suite cannot
 (nothing there installs the plugin). Every e2e spec does, because every one of them boots
 the app.
 
+### The persisted board pin is UNVALIDATED until `init()` resolves it
+
+`workspace.workspaceId` is restored from persisted state SYNCHRONOUSLY, before any request fires,
+so every `immediate: true` watcher on it (`pages/index.vue`) runs against an id nothing has
+checked. The pin can name a board that was deleted, or one whose access was revoked while the
+browser held it, and the RBAC gate answers both with a 404 (it hides a denial as a not-found, so
+existence never leaks). `init()` then validates the pin against `GET /workspaces` and re-points it
+at a board the user can actually reach.
+
+Firing the per-board reads on the pin anyway is deliberate: it overlaps them with the workspace
+list instead of queueing them behind it, which is why `init()` fetches the pinned SNAPSHOT
+speculatively too. **What travels with that is the miss.** Each of those boot reads states its own
+tolerance at its own seam (`init`'s `.catch(() => null)`, `github.ensureProbed`'s internal catch,
+`models.prefetchForBoard`), because a 404 there is an expected outcome and not a fault: the
+watcher fires again for the board init resolved, which is the read that counts. A bare
+`void store.load(workspace.workspaceId)` in that chain is an uncaught rejection in a real user's
+browser, and the e2e suite's `pageErrors` fixture fails the spec that boots a session whose access
+was just revoked.
+
+Tolerating the miss is not the same as pretending it succeeded: a dropped load leaves its store
+UNLOADED (`models.loaded` stays false, so `useAiReadiness().ready` is false), which reads as
+unresolved rather than as a board with nothing configured, and leaves the next caller free to
+retry. Pin new boot reads with a store-level unit test (`stores/models.spec.ts`).
+
 ### A backend-DECLARED form renders through `DescriptorFields.vue`
 
 When the backend declares the fields and the SPA only collects them, render them with the shared
@@ -87,12 +111,27 @@ When the backend declares the fields and the SPA only collects them, render them
 surfaces use it: an initiative preset's create form and a reusable operation's per-case form on a
 custom task type (`AddTaskModal`). Adding a third is a `:fields` binding, not a component.
 
+**Grouping is the descriptor's own, through `descriptorFieldSections`**, not a wrapper each surface
+builds: consecutive fields sharing a `section` render under one caption, and the reduction applies
+`showWhen` first, so a section whose every field is hidden renders no caption. Never re-group or
+re-order the fields at a call site, or a form renders in an order its author never wrote.
+
+**A captioned run is rendered FLAT, never as a per-run wrapper element** (`descriptorFormRows`
+carries each run's caption on the field that opens it). Run membership is derived state that shifts
+as `showWhen` reveals fields, while a field's identity does not: nesting the fields inside a wrapper
+re-parents them when a boundary moves, and Vue can only do that by unmounting and remounting. The
+remounted input is typically the one being TYPED INTO, because typing into the trigger is what moved
+the boundary, so it loses focus, caret and IME composition mid-keystroke. Keep every field a sibling
+keyed by `field.key` and the diff MOVES it instead. The same trap as keying any list by index, with a
+worse symptom: `descriptorFields.spec.ts` pins that a reveal preserves every field key.
+
 Four rules travel with it. **Validate with the shared `validateDescriptorFields`** so the submit
 button reflects exactly what the server will refuse, and **submit the shared
 `sanitizeDescriptorFields` result** so a stale answer on a since-hidden `showWhen` field never
-reaches the wire. **The labels are deployment-authored English rendered verbatim**: only the chrome
-around them (a path-invalid message, section captions) is i18n, so no descriptor string enters a
-locale catalog. And **the value-bag rules live in `utils/descriptorFields.ts`, not in the SFC**
+reaches the wire. **Every string a descriptor carries is deployment-authored English rendered
+verbatim**, labels, help, option captions and the `section` grouping captions alike: only the
+platform's own chrome around them (the path-invalid message) is i18n, so no descriptor string enters
+a locale catalog. And **the value-bag rules live in `utils/descriptorFields.ts`, not in the SFC**
 (`defaultDescriptorValues` for the initial values, `setDescriptorValue` / `setDescriptorCheckbox` /
 `toggleDescriptorGroupValue` for one edit): what an edit freezes on an entity is what a unit test
 must be able to reach, and a rule inside a component is only reachable by mounting one.
@@ -364,7 +403,7 @@ is SUPPRESSED rather than unmounted, because it holds the running tour's resolve
 remount would re-resolve it against gates that may have flipped since the tour started.
 
 The decisions behind this surface, and why each alternative was rejected, are recorded in
-[ADR 0036](../../backend/docs/adr/0036-in-app-tutorials.md). This section is the authority on how
+[ADR 0036](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0036-in-app-tutorials.md). This section is the authority on how
 the thing WORKS.
 
 A tour is **data, not components**: an ordered list of steps, each pointing at an on-screen
@@ -552,11 +591,26 @@ The recurring product bug behind most e2e flakes: a stale full-snapshot refresh 
 live state. The SPA has two delivery shapes and mixing them wrong drops live-added state with NO
 event left to restore it.
 
-- **Know how your entity is delivered.** A `board` event is COARSE: no payload, only a debounced
-  full `workspace.refresh()`, and `hydrate` REPLACES whole lists. A spawned task/module block
-  reaches the browser ONLY this way. Targeted events (`execution`/`bootstrap`/`initiative`) carry
-  the entity and `upsert` it, so they don't clobber. Prefer a targeted upsert for anything that
-  must appear reliably.
+- **Know how your entity is delivered.** Targeted events (`execution`/`bootstrap`/`initiative`)
+  carry the entity and `upsert` it, so they don't clobber. A `board` event is delivered EITHER
+  way and the backend decides per change: it carries `block` when the change is fully described
+  by one (a spawned task, a field edit, a dependency toggle, a move), and carries none when it is
+  not (a removal, a reparent, a resize, a blueprint reconcile). A payload-less `board` event still
+  means a debounced full `workspace.refresh()`, where `hydrate` REPLACES whole lists. Routing
+  lives in `composables/workspaceStream/applyWorkspaceEvent.ts`, whose `switch` carries a `never`
+  guard: a new `WorkspaceEvent` member fails the BUILD rather than falling through to nothing. The
+  emit-site decision lives in `BoardService.emitBoardChanged`'s doc comment. Prefer a targeted
+  upsert for anything that must appear reliably.
+- **Two blocks are refused a payload at the wire, on EVERY event that carries one.** Kernel's
+  `deliverableBoardBlock` is the single gate (both facades' `boardChanged` AND `bootstrapChanged`
+  assemble through it, via `boardWireEvent`/`bootstrapWireEvent`), so a new emitter cannot
+  reintroduce either by forgetting: a service FRAME, whose position and size are a per-board
+  `WorkspaceMount` override that one shared payload cannot state correctly on the several boards a
+  fan-out reaches; and a headless `internal` anchor block, which `composeBoard` filters out of
+  every snapshot and which would therefore render as a card no later read can remove. Both degrade
+  to the coarse signal, so nothing is lost but the refresh. A bootstrap's frame is always the first
+  case, which is why the `bootstrap` event's job rides live while the frame's own transitions
+  arrive as coarse `board` events beside it.
 - **Full refreshes MUST be monotonic.** Two `refresh()` calls can be in flight; a staler one
   resolving later overwrites the newer. `workspace.refresh()` guards this with a sequence. Do not
   reintroduce an unguarded `hydrate(await fetch())`, and apply the guard to any new coalesced
@@ -583,7 +637,7 @@ event left to restore it.
 All user-facing SPA copy goes through `@nuxtjs/i18n`; never hard-code a display string. This
 layer ships the base `en` locale, and a downstream deployment overrides by dropping its own files
 (the per-layer deep-merge is the override seam, consumer wins key by key). Migration status:
-[`docs/internal/localization.md`](../../docs/internal/localization.md).
+[`docs/internal/localization.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/internal/localization.md).
 
 - `i18n/locales/<locale>.json`: the catalogs (the v9+ `i18n/` convention, NOT `app/locales/`).
 - `i18n/i18n.config.ts`: runtime vue-i18n behaviour only (fallback locale, the plural
@@ -688,7 +742,7 @@ auto-imported
 (`ResultWindowShell`, the `StepRunMeta` run-metadata block, `useResultView`, …), and the
 namespacing / degradation rules are in
 [`app/docs/consumer-extensions.md`](./app/docs/consumer-extensions.md); a full worked
-example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security` module).
+example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tree/main/deploy/frontend) (the `acme:security` module).
 
 ## Key UI surfaces
 
@@ -795,5 +849,5 @@ pnpm lint         # oxlint + oxfmt --check
 ```
 
 > Building/deploying the static site is covered in the deployment docs: see the
-> [top-level README → Deployment](../../README.md#deployment) and
-> [`deploy/frontend/README.md`](../../deploy/frontend/README.md).
+> [top-level README → Deployment](https://github.com/kibertoad/cat-factory/blob/main/README.md#deployment) and
+> [`deploy/frontend/README.md`](https://github.com/kibertoad/cat-factory/blob/main/deploy/frontend/README.md).

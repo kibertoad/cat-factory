@@ -6,8 +6,8 @@ The reviewer raises severity-tagged findings, the run parks, and the dedicated w
 iterative loop: answer/dismiss, then an incorporation companion folds the answers into ONE
 document, then a re-review converges (`incorporated`), continues (`ready`), or hits the cap
 (`exceeded`, where the human picks extra-round / proceed / stop-reset). Findings at or below
-`maxRequirementConcernAllowed` auto-pass; cap and tolerance live on the merge preset. Pass-through
-when the reviewer model isn't wired.
+the merge preset's `maxRequirementConcernAllowed` tolerance auto-pass, and its
+`maxRequirementIterations` is the cap above. Pass-through when the reviewer model isn't wired.
 
 ## Scope: the product / business layer ONLY
 
@@ -69,6 +69,8 @@ its JSON output contract.
   [`the e2e README`](../internal/e2e/README.md#inline-llm-calls-the-e2einlinemodels-seam).
 - Prompt overrides and the role/directives split:
   [`agent-prompt-overrides.md`](./agent-prompt-overrides.md).
-- The merge preset that carries the cap and tolerance knobs: CLAUDE.md, "Merge lifecycle".
+- The preset the two knobs above live on: `RiskPolicySeed` in kernel's `domain/catalog.ts`. The
+  merge policy it belongs to (auto-merge ceilings, `classRules`, who may land what): CLAUDE.md,
+  "Merge lifecycle".
 - The precheck-first sibling: `hasNotesToIncorporate` short-circuits `runIncorporationCycle` so
   the rework + re-review LLM calls are skipped when the human left nothing to fold in.

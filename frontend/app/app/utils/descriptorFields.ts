@@ -1,40 +1,26 @@
+import { descriptorFieldDefaults, descriptorFieldSections } from '@cat-factory/contracts'
 import type { DescriptorField, DescriptorFieldValue, DescriptorFieldValues } from '~/types/domain'
 
 // Form-side helpers over the shared descriptor-field vocabulary (`contracts/src/form-fields.ts`),
 // used by every surface that renders one through `DescriptorFields.vue`: an initiative preset's
 // create form and a reusable operation's per-case form on a custom task type.
 //
-// The RULES (visibility, validation, sanitization, prose rendering) live in contracts, because the
-// server has to agree about them. What lives here is what only a FORM decides: which values to
-// start it with, and how one edit changes the bag. Both are pure functions over the value bag
-// rather than methods inside the SFC, so the mutation rules a wrong answer would freeze on an
-// entity are unit-testable without mounting a component.
+// The RULES (visibility, validation, sanitization, prose rendering, and now default seeding) live
+// in contracts, because the server has to agree about them. What lives here is what only a FORM
+// decides: how one edit changes the bag. Pure functions over the value bag rather than methods
+// inside the SFC, so the mutation rules a wrong answer would freeze on an entity are unit-testable
+// without mounting a component.
 
 /**
- * The initial, typed values a field list implies: its declared DEFAULTS folded into the
- * `DescriptorFieldValues` shape the renderer and the wire contract expect (`checkbox-group` to
- * `string[]`, `checkbox` to a boolean, `number` to a number, everything else a string). Only fields
- * with a meaningful default are seeded, so an unfilled optional field stays absent (which is what
- * validation reads as unset) and never freezes an empty value. A repo-detection probe's prefill and
- * the user's own edits layer on top.
+ * The initial values a field list implies, for seeding a freshly opened form. A repo-detection
+ * probe's prefill and the user's own edits layer on top.
+ *
+ * The SHARED helper, not a form-side copy: the server folds the same defaults in at the creation
+ * door (`withDescriptorFieldDefaults`), so a duplicate here would be the drift that made a headless
+ * caller and this form disagree about what a descriptor's default means.
  */
 export function defaultDescriptorValues(fields: readonly DescriptorField[]): DescriptorFieldValues {
-  const values: DescriptorFieldValues = {}
-  for (const field of fields) {
-    if (field.type === 'checkbox-group') {
-      if (field.defaultValues?.length) values[field.key] = [...field.defaultValues]
-    } else if (field.type === 'checkbox') {
-      if (field.default === 'true') values[field.key] = true
-    } else if (field.type === 'number') {
-      const parsed = Number(field.default)
-      if (field.default !== undefined && field.default !== '' && Number.isFinite(parsed)) {
-        values[field.key] = parsed
-      }
-    } else if (field.default) {
-      values[field.key] = field.default
-    }
-  }
-  return values
+  return descriptorFieldDefaults(fields)
 }
 
 /**
@@ -87,6 +73,45 @@ export function setDescriptorCheckbox(
 export function descriptorGroupValue(values: DescriptorFieldValues, key: string): string[] {
   const value = values[key]
   return Array.isArray(value) ? value : []
+}
+
+/** One row of a rendered descriptor form: a field, plus the section chrome that precedes it. */
+export interface DescriptorFormRow {
+  /** The field to render. Its `key` is the row's identity in the keyed diff. */
+  field: DescriptorField
+  /** The caption to print above this field, set only on the field that OPENS a captioned run. */
+  caption?: string
+  /** Whether this field opens a run with another run before it, i.e. needs the between-runs gap. */
+  startsGroup: boolean
+}
+
+/**
+ * A descriptor form reduced to a FLAT list of rows: the shared `descriptorFieldSections` grouping,
+ * with each run's caption carried on the field that opens it rather than on a wrapper around it.
+ *
+ * Flat is the whole point, and it is a correctness rule rather than a layout preference. Run
+ * membership is DERIVED state that changes as `showWhen` reveals and hides fields, while a field's
+ * identity does not. Rendering the runs as nested `v-for`s re-parents a field the moment a boundary
+ * moves, and Vue cannot move a node between two parents: it unmounts and remounts it. The field being
+ * remounted is typically the one being TYPED INTO, because typing into a `showWhen` trigger is what
+ * moved the boundary, so the input loses focus, caret and any in-flight IME composition mid-keystroke.
+ * Keeping every field a sibling under one parent, keyed by `field.key`, makes that a MOVE, which
+ * preserves the live input: the behaviour the flat column had before sections existed.
+ *
+ * Presentation, so it lives here rather than in contracts: what a caption spans is the shared rule,
+ * and this is only how the SPA lays that out.
+ */
+export function descriptorFormRows(
+  fields: readonly DescriptorField[],
+  values: DescriptorFieldValues,
+): DescriptorFormRow[] {
+  return descriptorFieldSections(fields, values).flatMap((group, groupIndex) =>
+    group.fields.map((field, fieldIndex) => ({
+      field,
+      ...(fieldIndex === 0 && group.section !== undefined ? { caption: group.section } : {}),
+      startsGroup: fieldIndex === 0 && groupIndex > 0,
+    })),
+  )
 }
 
 /** One option toggled on/off in a `checkbox-group` field's value (deduped, order-preserving). */

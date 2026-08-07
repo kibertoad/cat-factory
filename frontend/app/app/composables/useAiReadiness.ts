@@ -13,9 +13,10 @@ import type { ModelPreset } from '~/types/model-presets'
  *    still points at one or more that aren't usable (⇒ the preset-mismatch prompt). Gated on
  *    `hasUsableModel` so the no-AI prompt owns the "nothing works" case on its own.
  *
- * Read-only over the existing stores; the catalog is loaded elsewhere (on workspace-ready
- * and after credential edits), so `ready` simply reports whether that load has landed for
- * the active workspace.
+ * Read-only over the existing stores; the catalog is loaded elsewhere (on the active board
+ * changing and after credential edits), so `ready` simply reports whether that load has landed
+ * for the active workspace. A load that FAILED leaves it false, which is what keeps the no-AI
+ * prompt off a board whose catalog never arrived (see `models.prefetchForBoard`).
  */
 export function useAiReadiness() {
   const models = useModelsStore()

@@ -1,8 +1,11 @@
 import type {
   AgentRunContext,
+  DocumentFreshness,
+  DocumentOrigin,
   DocumentRecord,
   DocumentRepository,
   DocumentSourceKind,
+  LinkedDocumentRefresher,
   Logger,
   TaskRecord,
   TaskRepository,
@@ -14,6 +17,7 @@ import {
   hasReadableContent,
   redactSecrets,
 } from '@cat-factory/kernel'
+import { orderSourcesByClaimConfidence } from '@cat-factory/contracts'
 import { extractReferences } from '@cat-factory/integrations'
 
 /**
@@ -44,6 +48,12 @@ export interface LinkedContextSources {
   /** Canonicalise a pasted URL to a `(source, externalId)` so link variants still resolve. */
   documentUrlResolver?: DocumentUrlResolver
   /**
+   * Re-confirm each resolved document against its source before the run reads it, so an agent gets
+   * the CURRENT revision of a linked page rather than the copy import happened to store. Absent ⇒ no
+   * refresh and no freshness verdict, which is byte-for-byte the prior behaviour.
+   */
+  refresher?: LinkedDocumentRefresher
+  /**
    * Reports the references that a document provider CLAIMED but that matched nothing imported —
    * the one class of unresolved reference that must NOT fail the run (see
    * {@link reportUnmatchedUrls}). Absent ⇒ they are dropped as before.
@@ -55,13 +65,27 @@ export interface LinkedContextSources {
  * Build the URL→document canonicaliser from the configured document providers, so a Figma/Notion
  * link pasted into prose auto-matches its imported page even when it carries a title segment or
  * tracking params the stored canonical url omits. No providers ⇒ undefined (url-string match only).
+ *
+ * TWO PASSES, host-PINNED providers first, through the shared `orderSourcesByClaimConfidence` (the
+ * refusal path that names a claimant reads the same function, so the confidence rule has one home).
+ * The providers' `parseRef` implementations differ in what a claim over a URL is worth: a pinned one
+ * (Figma, Zeplin, GitHub, Linear) refuses anything off its own host, so a claim is near-proof, while
+ * a blind one claims a SHAPE — `parseNotionRef` takes any UUID-shaped run anywhere in the string,
+ * `parseConfluenceRef` any `/pages/<digits>` segment. First claimer used to win in registration
+ * order, so a deployment that registered Notion ahead of Figma had Notion silently claim a Figma URL
+ * whose file key happened to carry a UUID-shaped run, and the point lookup then resolved against the
+ * wrong source's key space and found nothing: a linked design that reached the agent as no context at
+ * all, with only the "nothing is imported" info line to say so. Ordering by confidence rather than by
+ * registration is what makes a pinned claim unstealable; within each pass, registration order still
+ * decides (two pinned sources cannot claim one host).
  */
 export function makeDocumentUrlResolver(
   providers: readonly { kind: DocumentSourceKind; parseRef: (url: string) => string | null }[] = [],
 ): DocumentUrlResolver | undefined {
   if (!providers.length) return undefined
+  const ordered = orderSourcesByClaimConfidence(providers)
   return (url: string) => {
-    for (const provider of providers) {
+    for (const provider of ordered) {
       const externalId = provider.parseRef(url)
       if (externalId) return { source: provider.kind, externalId }
     }
@@ -81,6 +105,7 @@ export function linkedContextSourcesFrom(deps: {
     kind: DocumentSourceKind
     parseRef: (url: string) => string | null
   }[]
+  documentRefresher?: LinkedDocumentRefresher
   logger?: Logger
 }): LinkedContextSources {
   const documentUrlResolver = makeDocumentUrlResolver(deps.documentSourceProviders)
@@ -88,6 +113,7 @@ export function linkedContextSourcesFrom(deps: {
     ...(deps.documentRepository ? { documents: deps.documentRepository } : {}),
     ...(deps.taskRepository ? { tasks: deps.taskRepository } : {}),
     ...(documentUrlResolver ? { documentUrlResolver } : {}),
+    ...(deps.documentRefresher ? { refresher: deps.documentRefresher } : {}),
     ...(deps.logger ? { logger: deps.logger } : {}),
   }
 }
@@ -96,6 +122,20 @@ export function linkedContextSourcesFrom(deps: {
 export interface LinkedContext {
   docs: NonNullable<AgentRunContext['block']['contextDocs']>
   tasks: NonNullable<AgentRunContext['block']['contextTasks']>
+}
+
+/** What a caller of {@link resolveLinkedContext} steers, beyond the block it is resolving for. */
+export interface LinkedContextOptions {
+  /** Skip the block's ATTACHMENTS (reworked mode folds them into the incorporated doc already). */
+  includeLinked: boolean
+  /**
+   * The corpus's document ORIGINS, reported the moment they are known and BEFORE the dispatch-time
+   * refresh (a live probe per source, and a whole-file download for anything that moved). It exists
+   * because a caller that only needs to know WHAT KIND of documents a run carries (the
+   * design-context fragment fold) would otherwise wait on network work whose answer cannot change
+   * the origins, turning two parallel resolutions into one serial chain.
+   */
+  onDocumentsResolved?: (origins: readonly DocumentOrigin[]) => void
 }
 
 /**
@@ -119,7 +159,7 @@ export async function resolveLinkedContext(
   workspaceId: string,
   blockId: string,
   description: string,
-  opts: { includeLinked: boolean },
+  opts: LinkedContextOptions,
 ): Promise<LinkedContext> {
   const docs = new Map<string, DocumentRecord>()
   const tasks = new Map<string, TaskRecord>()
@@ -184,20 +224,52 @@ export async function resolveLinkedContext(
   }
   reportUnmatchedUrls(sources.logger, blockId, urlItems)
 
+  const resolvedDocs = [...docs.values()]
+  // The corpus is settled here; everything below is about its CURRENCY, not its membership. Report
+  // the origins now so a caller that only needs the kinds is not held behind a live source probe.
+  opts.onDocumentsResolved?.(resolvedDocs.map((record) => record.source))
+
+  // Re-confirm every resolved document against its source BEFORE anything else looks at it, so both
+  // the readability refusal below and the body the agent reads are about the CURRENT revision rather
+  // than the copy import stored. Best-effort by the refresher's own contract, so this cannot fail the
+  // run; with no refresher wired every document comes back unchanged and un-annotated.
+  const refreshed = await refreshDocuments(sources.refresher, workspaceId, resolvedDocs)
+
   // BREAK, never skip: a reference that resolved to a page with nothing in it would otherwise put
   // the agent in front of a `.cat-context/` file holding a title and a URL it cannot open, with
   // the run reading as perfectly healthy. Asserted HERE rather than at each caller so no dispatch
   // path can opt out — the engine's builder and the inline initiative interviewer both go through
   // this resolver, which is the whole reason it exists as a shared function.
-  const resolved = [...docs.values()]
+  //
+  // Asserted on the REFRESHED records, because a page emptied since import is exactly the case worth
+  // refusing: asserting on the stored copy would admit a run whose agent then reads a blank file.
   assertContextDocumentsReadable(
-    resolved.filter((d) => !hasReadableContent(d)).map((d) => ({ title: d.title, url: d.url })),
+    refreshed
+      .filter(({ record }) => !hasReadableContent(record))
+      .map(({ record }) => ({ title: record.title, url: record.url })),
   )
 
   return {
-    docs: resolved.map((d) => toContextDoc(d)),
+    docs: refreshed.map(({ record, freshness }) => toContextDoc(record, freshness)),
     tasks: [...tasks.values()].map((t) => toContextTask(t)),
   }
+}
+
+/**
+ * Run the dispatch-time refresh, or pass every document through untouched when none is wired.
+ *
+ * The un-wired shape returns `freshness: undefined` rather than a synthesised verdict: a deployment
+ * with no refresher did not conclude that these bodies are unverifiable, it never asked, and the
+ * materialised header must stay byte-for-byte what it was rather than gaining a warning about a check
+ * this deployment does not run.
+ */
+async function refreshDocuments(
+  refresher: LinkedDocumentRefresher | undefined,
+  workspaceId: string,
+  records: readonly DocumentRecord[],
+): Promise<readonly { record: DocumentRecord; freshness?: DocumentFreshness }[]> {
+  if (!refresher || !records.length) return records.map((record) => ({ record }))
+  return refresher.refresh(workspaceId, records)
 }
 
 /**
@@ -244,13 +316,16 @@ function reportUnmatchedUrls(
 /** Map a document record to the agent-context doc shape (summary index + materialisable body). */
 export function toContextDoc(
   d: DocumentRecord,
+  freshness?: DocumentFreshness,
 ): NonNullable<AgentRunContext['block']['contextDocs']>[number] {
   return {
     title: d.title,
     url: d.url,
+    origin: d.source,
     excerpt: d.excerpt,
     summary: buildExcerpt(d.body || d.excerpt, CONTEXT_BUDGET.summaryChars),
     body: d.body,
+    ...(freshness ? { freshness } : {}),
   }
 }
 

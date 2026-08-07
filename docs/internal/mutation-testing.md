@@ -50,9 +50,9 @@ saturate every core.
 
 | Package               | Mutated                          | Mutants | Score (total / covered) | Floor |
 | --------------------- | -------------------------------- | ------- | ----------------------- | ----- |
-| `@cat-factory/kernel` | `src/domain/**`, `src/shared/**` | 5,805   | 54.63% / 74.65%         | 52%   |
-| `@cat-factory/gates`  | all of `src/`                    | 654     | 38.84% / 57.34%         | 36%   |
-| `@cat-factory/spend`  | all of `src/`                    | 400     | 54.75% / 69.75%         | 52%   |
+| `@cat-factory/kernel` | `src/domain/**`, `src/shared/**` | 6,084   | 66.29% / 77.89%         | 64%   |
+| `@cat-factory/gates`  | all of `src/`                    | 651     | 78.03% / 85.67%         | 76%   |
+| `@cat-factory/spend`  | all of `src/`                    | 400     | 90.25% / 90.70%         | 88%   |
 
 These three are pure logic with fast, database-free unit suites, which is the only shape mutation
 testing can afford: the suite runs once per surviving mutant, so a package whose tests need
@@ -79,10 +79,13 @@ Two scores, both in the summary table and in Stryker's own output:
 - **covered-code score** = detected / (detected + survived), over the mutants a test actually ran.
 
 where detected = `Killed` + `Timeout` and undetected = `Survived` + `NoCoverage`. The gap between
-the two is untested code inside the scope, not weak assertions: kernel sits at ~55% total and ~75%
-covered because `domain/` holds modules with no tests at all beside modules tested thoroughly. The
-covered-code score is the fair read on the tests that exist; the total is the honest read on the
-scope.
+the two is untested code inside the scope, not weak assertions: kernel sits at ~66% total against
+~78% covered because `domain/` still holds modules with no tests at all beside modules tested
+thoroughly. The covered-code score is the fair read on the tests that exist; the total is the
+honest read on the scope. Closing the gap is therefore mostly a question of which module gets its
+first test, which is why the biggest single move so far was writing one for the untested ones
+(`ip-host.logic`, `llm-output`, `subtasks.logic`, `errors`) rather than sharpening assertions in
+the tested ones.
 
 `Ignored`, `CompileError` and `RuntimeError` are excluded from both denominators.
 
@@ -91,10 +94,38 @@ scope.
 `minimumScore` in each package's config becomes Stryker's `thresholds.break`: below it, `stryker
 run` exits non-zero and the nightly job goes red.
 
-The floors above are the measured scores (kernel 54.63, gates 38.84, spend 54.75) less a two-point
-margin, because those numbers were measured on a developer machine and the first nightly is the
-first Linux baseline. **Raise each floor to its measured value once that baseline exists**: the
-margin exists to keep day one from failing over a platform difference, not as permanent slack.
+**A floor is the measured total truncated to a whole percent, less two points** (kernel 66.29 →
+66 → 64, gates 78.03 → 78 → 76, spend 90.25 → 90 → 88). The margin is not provisional slack
+waiting to be reclaimed. It is sized to the one thing that moves this number without any test
+having changed: **the denominator**.
+
+The total score is `detected / (detected + survived + NoCoverage)` over the whole `mutate` scope,
+so every file the scope gains re-bases it. A new `domain/` module arriving before its tests drops
+the total by roughly `its mutants / total`, about 1.6 points for a 150-mutant one. Two points is
+therefore about one ordinary module's worth of room: enough that unrelated growth cannot turn the
+nightly red, small enough that a real regression still does.
+
+This is not a hypothetical. Kernel went 5,805 → 5,956 → 6,034 → 6,084 mutants across the
+baselines behind this table, purely from ordinary main-branch work, and the last of those steps
+landed WHILE the floor above was being set: `prompt-fragment-registry.ts` arrived with no test
+file, adding 20 `NoCoverage` mutants and moving the total 66.36 → 66.29 on its own. One module,
+no test regression anywhere, and a floor pinned to the measured value would already have been
+that much closer to red.
+
+Do not reason about that margin from runner speed. An earlier revision of this file argued the
+floors needed none, because a `Timeout` counts as DETECTED and so a slower runner "can only score
+the same or higher". Both halves fail. It is one-directional (a FASTER runner than the measuring
+machine turns timeout-kills back into survivors, which lowers the score), and the cushion it
+appeals to is mostly not there: the measurements behind the table above found **zero** timeouts in
+gates and spend, and nine in kernel, worth 0.15 points. Runner speed is the small term here;
+scope growth is the large one.
+
+The covered-code score is the metric that is immune to scope growth, and it is deliberately NOT
+the ratchet. It has the opposite bias: writing the FIRST test for an untested module moves that
+module's mutants out of `NoCoverage` and into the covered denominator, so a first test that is
+good rather than exhaustive lowers the covered score while raising the total. Ratcheting it would
+penalise exactly the work that closes the gap between the two columns. Neither ratio moves only on
+regression, which is why the instrument is a floor with margin rather than a cleverer metric.
 
 **Measure on an idle machine, one package at a time.** A `Timeout` counts as DETECTED, and a test
 process starved of CPU trips the timeout exactly like a mutant that hangs, so a saturated machine

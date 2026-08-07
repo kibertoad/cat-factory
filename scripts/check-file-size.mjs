@@ -145,7 +145,13 @@ const LEGACY_ALLOWANCES = new Map([
   // the env-config repairer, the two container dispatchers this root wires beside the step
   // executor. Job-token scoping made them one concern rather than two, since each hands a real
   // clone/push credential to a container and so must narrow it to the repo it touches.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1222],
+  // 1222 -> 1211 by extracting `container-workspace-config-deps.ts` (the `selectPerUserDeps`
+  // precedent): the per-workspace configuration LIBRARIES (model presets, consensus groups, prompt
+  // overrides, per-kind generation settings, offered operations, service fragment defaults). Every
+  // one is workspace-keyed, secret-free, `workspace`-scoped on the persistence allow-list, and
+  // edited from a settings surface rather than written by the engine, so the next such library
+  // lands there rather than among the run-path repositories.
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1192],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
@@ -222,15 +228,42 @@ const LEGACY_ALLOWANCES = new Map([
  * shape (what the flow is, the deadliest trap, the link). It had grown to a five-trap paragraph
  * restating two ADRs that already own every one of them.
  *
+ * Ratcheted 1098 → 1095 by the same move one level up, on the merge-lifecycle entry those bullets
+ * sit in: three siblings re-narrated their linked ADR before linking it, and the threshold-preset
+ * bullet was a field list whose per-flow half belongs to the flow doc that reads it. Every link
+ * survived; only the restatement went. One field had NO other home and a deeper doc pointed up
+ * here for it (`requirements-review.md` cited this entry for the review cap and tolerance), so
+ * that pair of knobs was written down THERE in the same change. Dropping a field list is only a
+ * shrink once something else states it: check for an inbound pointer before condensing one.
+ *
+ * Ratcheted 1095 → 1094 while ADDING the test-lane-parity guard to the guard-scripts list: two
+ * neighbouring entries were a hair short of their own wrap width and gave up a line each. A list
+ * that has to grow is the easiest place to find a line, and a hand-maintained count in it ("CI runs
+ * all five") is the same rot as a pinned total in a test, so that became a relation.
+ *
  * `docs/internal/running-tests.md` is here for a second reason: CLAUDE.md points an agent at it
  * by name, so its whole length is a context cost paid on every read, and it sits in the tree
  * (contributor setup notes) that regrows most easily. A pointer out of a ratcheted file into an
  * unratcheted one relocates the growth rather than bounding it, which is what this entry closes.
  * Same shrink-only contract: if the recipe needs more, the surrounding prose gives up the lines.
+ *
+ * RAISED 78 → 96, which this contract otherwise forbids, so it is written down as the deviation it
+ * is rather than as a number that moved: the doc gained the scoped-run section (`test:changed` /
+ * `test:quick`), NEW SUBJECT MATTER rather than the recipe growing, and 78 was sized when the doc
+ * covered setup and traps only. Three ways out were tried and rejected. Compressing the Postgres
+ * and strict-env passages trades a trap that cost someone an afternoon for a new section, which is
+ * not the shrink this ratchet asks for. Moving the new section (or the Postgres recipe) to an
+ * unratcheted doc is the relocation the paragraph above already refuses, and it relocates the wrong
+ * thing: CLAUDE.md's pointer exists FOR the reader who is about to run tests, so scoping advice is
+ * the most load-bearing content in the file, not the least. Re-wrapping the prose wider buys ~12
+ * lines and is pure metric-gaming, since the guard counts lines. What DID land is real: the
+ * cancelled-sibling fact the section had duplicated now sits once, in the section that owns it.
+ * Set at the file's exact length, with no slack, so the shrink-only contract binds again from here
+ * and the next addition has to earn its own justification instead of spending this one's headroom.
  */
 const DOC_ALLOWANCES = new Map([
-  ['CLAUDE.md', 1098],
-  ['docs/internal/running-tests.md', 78],
+  ['CLAUDE.md', 1094],
+  ['docs/internal/running-tests.md', 96],
 ])
 
 /** Roots scanned for source files (mirrors the workspace layout; deploy/* are one-liners). */

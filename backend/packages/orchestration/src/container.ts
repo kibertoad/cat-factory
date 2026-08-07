@@ -11,6 +11,7 @@ import {
   createPreviewModule,
   createIncidentEnrichmentModule,
   createAgentPromptsModule,
+  createTaskTypeSuppressionModule,
   createWorkspaceAgentSettingsModule,
   createModelPresetsModule,
   createConsensusGroupsModule,
@@ -31,7 +32,7 @@ import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 
 import type { WebhookVerifier } from '@cat-factory/kernel'
 import type {} from '@cat-factory/kernel'
-import type { DocumentContentResolver } from '@cat-factory/kernel'
+import type { DocumentContentResolver, LinkedDocumentRefresher } from '@cat-factory/kernel'
 
 import type {} from '@cat-factory/kernel'
 import type {} from '@cat-factory/kernel'
@@ -110,6 +111,8 @@ import type {
   JudgeRegistry,
   InitiativePresetRegistry,
   PipelineRegistry,
+  PromptFragmentRegistry,
+  PromptFragmentSource,
   TaskTypeRegistry,
 } from '@cat-factory/kernel'
 
@@ -146,6 +149,13 @@ export interface DocumentsModule {
   linkService: DocumentLinkService
   /** Live read seam for document-backed prompt fragments (re-resolved at run time). */
   contentResolver: DocumentContentResolver
+  /**
+   * Dispatch-time freshness for a run's LINKED documents: probe each one's source version through the
+   * app cache and re-import the ones that moved, so an agent builds against the current design rather
+   * than the copy import stored. The engine's counterpart to `contentResolver` — that one serves a
+   * fragment's own cached body, this one refreshes the shared projection every reader sees.
+   */
+  linkedRefresher: LinkedDocumentRefresher
 }
 
 /** The task-source integration's services, present only when configured. */
@@ -240,6 +250,7 @@ import type {
   TrackerWebhookModule,
   TutorialProgressModule,
   UserSettingsModule,
+  TaskTypeSuppressionModule,
   WorkspaceAgentSettingsModule,
   WorkspaceSettingsModule,
 } from './container/module-shapes.js'
@@ -270,6 +281,7 @@ export type {
   TrackerWebhookModule,
   TutorialProgressModule,
   UserSettingsModule,
+  TaskTypeSuppressionModule,
   WorkspaceAgentSettingsModule,
   WorkspaceSettingsModule,
 } from './container/module-shapes.js'
@@ -347,6 +359,20 @@ export interface CoreSpine {
    * drift this seam exists to remove — just moved one surface along.
    */
   binaryGenerators: BinaryGeneratorSource
+  /**
+   * The app-owned prompt-fragment registry the engine resolved (the facade's injected instance,
+   * else the empty default). Re-exposed for the same reason its neighbours are: the facade passes
+   * this instance to `validateRegistrations` at boot, and `/internal/prompt-fragments` serves it
+   * when this process is a mothership.
+   */
+  promptFragmentRegistry: PromptFragmentRegistry
+  /**
+   * Where a RUN's best-practice standards are READ from: this process's own registry above,
+   * unless a mothership-mode node injected the remote source. Re-exposed because the HTTP layer
+   * needs the SAME answer: the fragment picker and the library management surface are fed from
+   * this, and offering ids from a different set than a run folds is the drift the seam removes.
+   */
+  promptFragments: PromptFragmentSource
   /**
    * The app-owned initiative-preset registry the engine resolved (the facade's injected instance,
    * else the built-ins-only default). Re-exposed so the HTTP layer's workspace-snapshot descriptors
@@ -515,6 +541,11 @@ export interface OptionalCoreModules {
   /** Present only when the agent-prompt-override repository is wired (see CoreDependencies). */
   agentPrompts?: AgentPromptsModule
   workspaceAgentSettings?: WorkspaceAgentSettingsModule
+  /**
+   * Present only when the task-type suppression repository is wired (see CoreDependencies).
+   * Absent ⇒ every board offers every registered operation.
+   */
+  taskTypeSuppressions?: TaskTypeSuppressionModule
   /** Present only when the service-fragment-defaults repository is wired (see CoreDependencies). */
   serviceFragmentDefaults?: ServiceFragmentDefaultsModule
   /** Present only when the prompt-fragment library is configured (see CoreDependencies). */
@@ -566,6 +597,7 @@ function registerStandaloneModules(modules: ModuleRegistry, dependencies: CoreDe
   modules.build('consensusGroups', () => createConsensusGroupsModule(dependencies))
   modules.build('agentPrompts', () => createAgentPromptsModule(dependencies))
   modules.build('workspaceAgentSettings', () => createWorkspaceAgentSettingsModule(dependencies))
+  modules.build('taskTypeSuppressions', () => createTaskTypeSuppressionModule(dependencies))
   modules.build('serviceFragmentDefaults', () => createServiceFragmentDefaultsModule(dependencies))
 }
 
@@ -579,6 +611,8 @@ export function createCore(injected: CoreDependencies): Core {
     taskTypeRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
+    promptFragmentRegistry,
+    promptFragments,
     binaryGenerators,
     foundationalBuiltins,
     initiativePresetRegistry,
@@ -623,6 +657,7 @@ export function createCore(injected: CoreDependencies): Core {
       executionEventPublisher,
       taskTypeRegistry,
       pipelineRegistry,
+      promptFragments,
       getSpendService: () => spendServiceRef,
       getEnvironmentHandlerSeeder: () => environmentHandlerSeederRef,
       getSharedStackSeeder: () => sharedStackSeederRef,
@@ -690,6 +725,7 @@ export function createCore(injected: CoreDependencies): Core {
     executionEventPublisher,
     boardService,
     foundationalBuiltins,
+    promptFragments,
   })
   const { environments, environmentHandlerSeeder, sharedStackSeeder, fragmentLibrary } = platform
   environmentHandlerSeederRef = environmentHandlerSeeder
@@ -723,6 +759,7 @@ export function createCore(injected: CoreDependencies): Core {
     executionEventPublisher,
     notifications,
     fragmentLibrary,
+    documents: platform.documents,
     boardService,
     spend: spendService,
   })
@@ -787,6 +824,8 @@ export function createCore(injected: CoreDependencies): Core {
     taskTypeRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
+    promptFragmentRegistry,
+    promptFragments,
     binaryGenerators,
     initiativePresetRegistry,
     executionEventPublisher,

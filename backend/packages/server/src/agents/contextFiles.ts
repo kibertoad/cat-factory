@@ -1,9 +1,11 @@
 import {
   type AgentRunContext,
   type ContextReferenceRef,
+  type DocumentFreshness,
   type HarnessKind,
   assertContextReferencesFit,
   CONTEXT_BUDGET,
+  freshnessHeaderLines,
   originHeaderLine,
   renderTaskContext,
 } from '@cat-factory/kernel'
@@ -56,8 +58,19 @@ export function buildContextFiles(context: AgentRunContext): {
   let totalBytes = 0
   // Write the file when it fits the byte budget; anything past it is recorded so the refusal
   // below can name it (and size the whole corpus against the budget in the same pass).
-  const fit = (title: string, url: string, baseName: string, raw: string): void => {
-    const content = `# ${title}\n${originHeaderLine(url)}\n${raw}`
+  //
+  // `freshness` is the document's dispatch-time currency verdict, rendered right under the origin
+  // line: a confirmed one contributes its revision, an unconfirmed one a warning, and everything else
+  // nothing at all (see `freshnessHeaderLines`). Sized INSIDE the budget like every other byte, so a
+  // corpus that only fits without its headers is still refused honestly.
+  const fit = (
+    title: string,
+    url: string,
+    baseName: string,
+    raw: string,
+    freshness?: DocumentFreshness,
+  ): void => {
+    const content = `# ${title}\n${originHeaderLine(url)}${freshnessHeaderLines(freshness)}\n${raw}`
     const size = new TextEncoder().encode(content).length
     totalBytes += size
     if (bytes + size > CONTEXT_BUDGET.maxContextFileBytes) {
@@ -67,7 +80,8 @@ export function buildContextFiles(context: AgentRunContext): {
     bytes += size
     files.push({ path: contextFileName(baseName, used), title, url, content })
   }
-  for (const doc of contextDocs ?? []) fit(doc.title, doc.url, doc.title, doc.body || doc.excerpt)
+  for (const doc of contextDocs ?? [])
+    fit(doc.title, doc.url, doc.title, doc.body || doc.excerpt, doc.freshness)
   for (const task of contextTasks ?? [])
     fit(`[${task.key}] ${task.title}`, task.url, task.key, renderTaskContext(task))
   assertContextReferencesFit(omitted, {

@@ -353,6 +353,13 @@
         "manageAccount": "Gestisci i frammenti dell'account →"
       }
     },
+    "taskTypeSuppressions": {
+      "intro": "Scegli quali operazioni riutilizzabili di questo deployment vengono offerte su questa board. Nasconderne una la rimuove dal selettore di creazione attività qui e rifiuta la creazione di lavoro con essa; le altre board non sono interessate.",
+      "loading": "Caricamento delle operazioni…",
+      "empty": "Questo deployment non registra operazioni riutilizzabili.",
+      "offer": "Offri su questa board",
+      "saveFailed": "Impossibile modificare le operazioni offerte su questa board"
+    },
     "issueTracker": {
       "filing": {
         "heading": "Dove vengono registrati i ticket",
@@ -932,6 +939,7 @@
         "merge": "Criteri di rischio",
         "tracker": "Tracker degli issue",
         "fragments": "Best practice dei servizi",
+        "operations": "Operazioni",
         "metadata": "Metadati",
         "members": "Membri"
       },
@@ -2826,7 +2834,8 @@
         "derivedTitleFallback": "Rivedi la pull request",
         "prNotFound": "La pull request n. {number} non è stata trovata nel repository di questo servizio. Controlla il numero, oppure collega il servizio al repository in cui si trova la pull request.",
         "prRepoMismatch": "Quella pull request si trova in un altro repository. Questo servizio revisiona {repo}, quindi crea l'attività di revisione sotto il servizio collegato al repository della pull request."
-      }
+      },
+      "contextFailed": "Attività non creata: {count} allegato non leggibile | Attività non creata: {count} allegati non leggibili"
     },
     "recurring": {
       "title": "Aggiungi una pipeline ricorrente",
@@ -2918,20 +2927,14 @@
       },
       "shared": "Condiviso",
       "sharedTitle": "Condiviso tra i workspace di questa org",
-      "bootstrapping": "Bootstrap in corso…",
       "bootstrappingRepository": "Bootstrap del repository in corso…",
       "bootstrapStepsCount": "{completed}/{total} fasi",
-      "runFailed": "Esecuzione fallita",
-      "mergedOfTotal": "{merged}/{total} unite",
-      "noTasksYet": "Ancora nessuna attività",
-      "prCount": "{count} PR",
       "prReadyCount": "{count} PR pronte",
       "taskCount": "{count} attività | {count} attività",
       "moduleCount": "{count} modulo | {count} moduli",
       "addTaskTitle": "Aggiungi attività",
       "createTaskFromIssueTitle": "Crea attività da issue",
       "addRecurringTitle": "Aggiungi pipeline ricorrente",
-      "collapseTitle": "Comprimi",
       "dragService": "Trascina il servizio",
       "dragTask": "Trascina l'attività",
       "dragToResize": "Trascina per ridimensionare",
@@ -3012,7 +3015,8 @@
     "attachDocDisabledEnable": "Abilita prima l'integrazione dei documenti",
     "attachIssueDisabledConnect": "Connetti prima un issue tracker (Integrazioni)",
     "attachIssueDisabledEnable": "Abilita prima l'integrazione dell'issue tracker",
-    "importsOnAdd": "importa all'aggiunta"
+    "importsOnAdd": "importa all'aggiunta",
+    "unreadable": "Impossibile recuperarlo: {error}"
   },
   "providers": {
     "presetMismatch": {
@@ -3791,7 +3795,20 @@
       "attachByReference": "Allega {ref} per riferimento",
       "noMatches": "Nessuna pagina corrispondente.",
       "emptySearchable": "Cerca per titolo, oppure scegli un documento importato.",
-      "emptyRefOnly": "Incolla l'URL o l'ID di una pagina per allegarla."
+      "emptyRefOnly": "Incolla l'URL o l'ID di una pagina per allegarla.",
+      "sourceLabel": "Fonte",
+      "noSource": "Scegli una fonte",
+      "connectSource": "Collega {label}",
+      "needsSource": "Collega una sorgente di documenti per allegare una pagina.",
+      "needsSourceAdmin": "Nessuna sorgente di documenti è collegata. Chiedi a un amministratore del workspace di collegarne una.",
+      "refChecking": "Verifica del riferimento…",
+      "refUnrecognized": "Non è un riferimento {source}. Formato atteso: {expected}",
+      "refOtherSource": "È un link {claimed}, non un link {source}.",
+      "refSwitchSource": "Usa {source} invece",
+      "refTrimmed": "Ridotto al formato supportato",
+      "refWidened": "Indica un frame che questa origine non può leggere ({scope}), quindi viene allegato l’intero file.",
+      "refAlreadyAttached": "Questo riferimento è già allegato.",
+      "refCheckFailed": "Impossibile verificare il riferimento: {error}"
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Cerca repository…",
@@ -3920,6 +3937,7 @@
       "searchIssues": "Cerca issue",
       "searchPlaceholder": "Cerca per titolo, incolla l'URL di una issue, o digita un numero di issue…",
       "createTasksIn": "Crea attività in",
+      "creatingIn": "Le nuove attività vengono create in {container}",
       "needFrameFirst": "Aggiungi prima un frame di servizio alla board per creare attività dalle issue.",
       "searchFailed": "Ricerca non riuscita: {error}",
       "searchResults": "Risultati della ricerca",
@@ -3972,6 +3990,7 @@
     "labels": "Etichette",
     "labelsHelp": "Separate da virgole. Devono essere tutte presenti.",
     "adoptInto": "Aggiungi il bug scelto a",
+    "adoptingInto": "Il bug scelto viene aggiunto a {container}",
     "run": "Cerca",
     "running": "Lettura della bacheca e valutazione di quanto trovato…",
     "huntFailed": "La caccia non è riuscita",
@@ -5048,7 +5067,8 @@
       "failedTitle": "Impossibile creare l'iniziativa",
       "contextDocsHint": "Allega un requisito, una RFC o un PRD così gli agenti di pianificazione lo leggono mentre delimitano e redigono il piano.",
       "contextIssuesHint": "Allega una issue così gli agenti di pianificazione ne vedono descrizione e commenti mentre redigono il piano.",
-      "linkFailed": "Iniziativa creata, ma {count} allegato non è stato collegato | Iniziativa creata, ma {count} allegati non sono stati collegati"
+      "linkFailed": "Iniziativa creata, ma {count} allegato non è stato collegato | Iniziativa creata, ma {count} allegati non sono stati collegati",
+      "contextFailed": "Iniziativa non creata: {count} allegato non leggibile | Iniziativa non creata: {count} allegati non leggibili"
     },
     "status": {
       "planning": "Pianificazione",

@@ -1,5 +1,164 @@
 # @cat-factory/agents
 
+## 0.116.2
+
+### Patch Changes
+
+- Updated dependencies [00bff05]
+  - @cat-factory/contracts@0.257.0
+  - @cat-factory/kernel@0.255.1
+  - @cat-factory/prompt-fragments@1.0.3
+
+## 0.116.1
+
+### Patch Changes
+
+- Updated dependencies [ab0c228]
+  - @cat-factory/contracts@0.256.0
+  - @cat-factory/kernel@0.255.0
+  - @cat-factory/prompt-fragments@1.0.2
+
+## 0.116.0
+
+### Minor Changes
+
+- 184d263: Spec Writer, Blueprinter and Deployer are addable in the pipeline builder again
+
+  The catalog collapse dropped the requirements review, the spec increment, the map refresh and the
+  rest of the optional phases out of every build preset on one stated condition: that each remained
+  available in the builder as an opt-in step. For `spec-writer`, `blueprints` and `deployer` that
+  condition was never met, so the collapse did not move those steps out of the presets, it removed
+  them from the product.
+
+  A step reaches the palette through two independent gates and each of the three failed at least one.
+  A registered kind is offered only when it declares `presentation` (the filter
+  `snapshotCustomAgentKinds` applies), and `spec-writer` / `blueprints` deliberately declared none,
+  recorded in code as "pipeline-internal, not palette kinds". Separately, the SPA's
+  `SYSTEM_AGENT_META` shadows the backend catalog: an entry there DROPS the registry's copy, so all
+  three were suppressed on the client too. Both halves are fixed, the two kinds now declaring their
+  presentation next to the definition rather than the SPA restating it uninvited.
+
+  `spec-writer` also took a second kind down with it. A companion is never placed directly, it is a
+  toggle rendered on its producer step, so with no placeable Spec Writer the Spec Reviewer had
+  nowhere to attach and the whole spec pair was unreachable.
+
+  `deployer` was the sharpest case, because the engine already refuses runs over its absence:
+  `assertDeployerBeforeConsumer` rejects a chain that reaches a tester, human-test or playwright step
+  with no Deployer in front of it on a kubernetes / custom / compose service. The SPA's own copy for
+  that refusal says "Add a Deployer step to the pipeline", which nobody could do. The backend message
+  said to reseed the pipeline instead, which was the honest advice while adding one was impossible and
+  is now the second-best of two, so it leads with the builder.
+
+  Reviewing: `deployer` is a bare engine step with no registered kind, so it is modelled statically in
+  the SPA catalog like `disposer`; the other two are registered kinds and are ALSO mirrored statically,
+  for the reason `pr-reviewer` already is, so a `pl_bugfix` timeline names its steps before the
+  workspace manifest hydrates. That mirroring is the drift risk worth a look. The rest of the palette
+  is untouched: no preset changed, so no reseed advisory fires and no existing pipeline runs
+  differently.
+
+### Patch Changes
+
+- Updated dependencies [ee6ce7c]
+  - @cat-factory/kernel@0.254.0
+  - @cat-factory/contracts@0.255.0
+  - @cat-factory/prompt-fragments@1.0.1
+
+## 0.115.0
+
+### Minor Changes
+
+- 16576d6: Close the deployment extension-seam gaps a consumer build hit: every app-owned registry is now
+  reachable from the documented boot entry point, and the prompt-fragment pool is injected rather than
+  a module global.
+
+  An org package outside this repo built a proprietary reusable operation against the PUBLISHED
+  `@cat-factory/*` packages and reported nine gaps. Each seam it hit typechecks, boots, passes CI, and
+  is either unreachable from the supported entry point or silently inert once reached. None showed up
+  in our own tests because the worked example lives INSIDE this repo, where the composition root calls
+  `buildNodeContainer` directly and every package resolves to one copy on disk.
+
+  **Breaking, `@cat-factory/prompt-fragments`.** `registerPromptFragment(s)`,
+  `clearRegisteredPromptFragments`, `universalFragments`, `registerTaskTypeDefaultFragments`,
+  `clearRegisteredTaskTypeDefaultFragments` and `defaultFragmentIdsForTaskType` are REMOVED. They were
+  two module globals, correct only while every reader resolved the same physical copy of the package;
+  a `workspace:*` dependency publishes as an EXACT version, so a consumer floating the range onto a
+  newer patch got two copies, the registration landed in one, the server read the other, and every
+  task of the operation was seeded with fragment ids that folded nothing. Replaced by the app-owned
+  `PromptFragmentRegistry` (kernel), injected by reference:
+  `promptFragmentRegistryWithBuiltins()` news one carrying the shipped catalog, and it is an option on
+  `start()` / `startLocal()` / the Worker overrides. `getFragment` remains, narrowed to the shipped
+  catalog. One behaviour change rides along: `registerTaskTypeDefaults` REPLACES a built-in per-type
+  set instead of silently unioning with it, so a deployment can now remove a shipped default; spread
+  `DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS` to keep both.
+
+  **Also breaking (internal surfaces, pre-1.0, no shims).** `validateRegistrations` /
+  `collectRegistrationProblems` take their registries as ONE `registries` object (a facade passes its
+  container) instead of seven hand-listed optional fields; that hand-list is why the local mothership
+  boot validated five registries while its own comment claimed parity with `start()`, so a custom task
+  type naming an unregistered pipeline booted clean on a laptop and failed on the Postgres path.
+  `FragmentLibraryService` takes a `promptFragmentSource` and no longer falls back to the module pool.
+  `TaskTypeCreationDefaults.fragmentIdsFor` is async. `PromptFragmentSource` gains a required
+  `inProcess` flag, read by boot validation to tell "this deployment registered nothing" from "the
+  pool lives on the mothership", which are the same empty list and opposite facts.
+
+  **What is new rather than moved.** `start()` and `startLocal()` gain `pipelineRegistry`,
+  `gateRegistry`, `judgeRegistry`, `stepResolverRegistry`, `vcsRegistry` and `promptFragmentRegistry`;
+  the seam drift guard now asserts against those ENTRY POINTS rather than only the container builder
+  behind them, which is how `pipelineRegistry` sat on `NodeContainerOptions` (documented, guarded,
+  green) while no boot path forwarded it and local deployments had no escape hatch at all. A registered
+  task type may declare `conditionalFragmentIds`, standing context selected by a `showWhen` condition
+  over the answers a case supplied, evaluated once at creation by the same evaluator the form's own
+  field visibility uses. A code-registered fragment carrying a `documentRef` now FAILS boot rather than
+  being carried through the catalog, rendered as a live source in the library UI, and ignored at run
+  time. An unresolvable standing-context id is reported on the run that dropped it instead of only as
+  one boot warning that cannot be told apart from a typo, and is COUNTED on the new
+  `fragments.dropped_from_run` operational counter, because a run going without its standards still
+  succeeds and only a rate says a deployment is doing it every time. And a mothership-mode node reads
+  the pool from the mothership over `GET /internal/prompt-fragments`, throwing rather than answering
+  with an empty pool.
+
+### Patch Changes
+
+- Updated dependencies [16576d6]
+  - @cat-factory/prompt-fragments@1.0.0
+  - @cat-factory/kernel@0.253.0
+  - @cat-factory/contracts@0.254.0
+
+## 0.114.7
+
+### Patch Changes
+
+- Updated dependencies [5202fb9]
+  - @cat-factory/kernel@0.252.0
+  - @cat-factory/contracts@0.253.0
+  - @cat-factory/prompt-fragments@0.16.0
+
+## 0.114.6
+
+### Patch Changes
+
+- Updated dependencies [e845d65]
+  - @cat-factory/kernel@0.251.0
+
+## 0.114.5
+
+### Patch Changes
+
+- Updated dependencies [4c071ec]
+  - @cat-factory/contracts@0.252.0
+  - @cat-factory/kernel@0.250.0
+  - @cat-factory/prompt-fragments@0.15.78
+
+## 0.114.4
+
+### Patch Changes
+
+- Updated dependencies [3fbc87e]
+- Updated dependencies [c9adc67]
+  - @cat-factory/contracts@0.251.0
+  - @cat-factory/kernel@0.249.0
+  - @cat-factory/prompt-fragments@0.15.77
+
 ## 0.114.3
 
 ### Patch Changes

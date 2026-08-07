@@ -24,6 +24,7 @@ import {
   parseInitiativePlanDraft,
   sanitizeInitiativePresetInputs,
   validateInitiativePresetInputs,
+  withInitiativePresetDefaults,
 } from '@cat-factory/contracts'
 import { initiativeContentView } from '@cat-factory/agents'
 import { gridSlot } from '../board/board.logic.js'
@@ -112,9 +113,14 @@ export class InitiativeService {
     // on a hidden (`showWhen`-failed) field the validator skips, never lands on the entity.
     let presetInputs: InitiativePresetInputs | undefined
     if (preset) {
-      const problems = validateInitiativePresetInputs(preset.descriptor, input.presetInputs ?? {})
+      // The descriptor's DEFAULTS fold in first, so a caller that omitted a defaulted field is
+      // answered by the deployment's declared value rather than refused for it. The SPA seeds the
+      // same defaults into the form, so a browser submit is unchanged; what this fixes is every
+      // other door (a script, an operation spawning an initiative) refusing what the form accepts.
+      const filled = withInitiativePresetDefaults(preset.descriptor, input.presetInputs ?? {})
+      const problems = validateInitiativePresetInputs(preset.descriptor, filled)
       if (problems.length > 0) throw new ValidationError(problems.join(' '))
-      presetInputs = sanitizeInitiativePresetInputs(preset.descriptor, input.presetInputs ?? {})
+      presetInputs = sanitizeInitiativePresetInputs(preset.descriptor, filled)
     }
     // Seed the qa digest from the filled FORM for ANY preset (T3): for a SKIP-interview preset the
     // form IS the interview; for a FULL-interview preset the seeded answers are the interviewer's
@@ -191,7 +197,7 @@ export class InitiativeService {
     // here BEFORE a dangling initiative-block is written (rather than orphaning one).
     await this.deps.initiativeRepository.insert(workspaceId, initiative)
     await this.deps.blockRepository.insert(workspaceId, block)
-    await this.deps.events.boardChanged(workspaceId, 'initiative-added', block.id)
+    await this.deps.events.boardChanged(workspaceId, { reason: 'initiative-added', block })
     await this.deps.events.initiativeChanged?.(workspaceId, initiative)
     return { initiative, block }
   }

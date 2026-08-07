@@ -1,5 +1,86 @@
 # @cat-factory/gates
 
+## 0.9.19
+
+### Patch Changes
+
+- Updated dependencies [00bff05]
+  - @cat-factory/contracts@0.257.0
+  - @cat-factory/kernel@0.255.1
+
+## 0.9.18
+
+### Patch Changes
+
+- Updated dependencies [ab0c228]
+  - @cat-factory/contracts@0.256.0
+  - @cat-factory/kernel@0.255.0
+
+## 0.9.17
+
+### Patch Changes
+
+- Updated dependencies [ee6ce7c]
+  - @cat-factory/kernel@0.254.0
+  - @cat-factory/contracts@0.255.0
+
+## 0.9.16
+
+### Patch Changes
+
+- Updated dependencies [16576d6]
+  - @cat-factory/kernel@0.253.0
+  - @cat-factory/contracts@0.254.0
+
+## 0.9.15
+
+### Patch Changes
+
+- Updated dependencies [5202fb9]
+  - @cat-factory/kernel@0.252.0
+  - @cat-factory/contracts@0.253.0
+
+## 0.9.14
+
+### Patch Changes
+
+- b8b6888: Close the give-up prose around an absent summary
+
+  Every gate's give-up path splices a `summary` into a sentence, and that summary is routinely
+  absent. Written inline as `${summary ?? ''}` the separator sits on both sides of nothing, and the
+  `.trim()` guarding it binds to the last template literal of the concatenation: it silently does
+  nothing whenever the hole is mid-sentence. The CI, doc-quality and post-release-health cards all
+  reached a human with a doubled space in the body asking them to intervene. The fragments are now
+  composed through `joinSentences`, so an absent one drops out wherever it sits.
+
+  The rest of the change is tests and mutation-score floors across `@cat-factory/gates`,
+  `@cat-factory/spend` and `@cat-factory/kernel`. Those ship no source change, so they take no
+  version bump.
+
+## 0.9.13
+
+### Patch Changes
+
+- Updated dependencies [e845d65]
+  - @cat-factory/kernel@0.251.0
+
+## 0.9.12
+
+### Patch Changes
+
+- Updated dependencies [4c071ec]
+  - @cat-factory/contracts@0.252.0
+  - @cat-factory/kernel@0.250.0
+
+## 0.9.11
+
+### Patch Changes
+
+- Updated dependencies [3fbc87e]
+- Updated dependencies [c9adc67]
+  - @cat-factory/contracts@0.251.0
+  - @cat-factory/kernel@0.249.0
+
 ## 0.9.10
 
 ### Patch Changes

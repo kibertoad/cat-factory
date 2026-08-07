@@ -20,6 +20,7 @@ import type {
   GroupCacheHandle,
   InitiativePresetRegistry,
   InitiativeRepository,
+  LinkedDocumentRefresher,
   Logger,
   ModelPresetCacheValue,
   ModelPresetRepository,
@@ -69,13 +70,18 @@ import { buildRalphValidation } from './ralph.logic.js'
 import { isTesterKind } from './ci.logic.js'
 import { interviewFollowsStep } from '../initiative/initiative.logic.js'
 import { resolveRunSkills } from './run-skills.js'
-import { mergeInjectedContextFiles, priorPrReviewContextFor } from './builder-context-files.js'
+import {
+  linkedContextWithDesignFlag,
+  mergeInjectedContextFiles,
+  priorPrReviewContextFor,
+} from './builder-context-files.js'
 import { type FoundationalServiceResolver } from './run-foundational-services.js'
 import { CatalogRunContext } from './run-catalog-context.js'
-import { getFragment } from '@cat-factory/prompt-fragments'
+import { getFragment, withDesignContextFragment } from '@cat-factory/prompt-fragments'
 import {
   type DocumentUrlResolver,
   type LinkedContext,
+  type LinkedContextOptions,
   resolveLinkedContext as resolveLinkedContextFor,
 } from './linked-context.js'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
@@ -271,6 +277,13 @@ export interface AgentContextBuilderDeps {
    * lookup is used alone.
    */
   documentUrlResolver?: DocumentUrlResolver
+  /**
+   * Optional: re-confirm each linked document against its source at dispatch, so an agent reads the
+   * CURRENT revision of a page rather than the copy import stored (the freshness half of design
+   * support: a frame edited after import otherwise feeds every later run the old markdown). Absent →
+   * no refresh and no freshness note, byte-for-byte the prior behaviour.
+   */
+  documentRefresher?: LinkedDocumentRefresher
   tasks?: TaskRepository
   requirementReviews?: RequirementReviewRepository
   /**
@@ -421,6 +434,11 @@ export class AgentContextBuilder {
       this.serviceFrameFor(workspaceId, block),
     ])
     const description = reworked ?? block.description
+    // One promise, two consumers: the wave's first entry below, and the fragment fold, which needs to
+    // know whether this run carries a DESIGN document without re-resolving the corpus to find out.
+    const linked = linkedContextWithDesignFlag(!reworked, (opts) =>
+      this.resolveLinkedContext(workspaceId, block.id, description, opts),
+    )
     // The remaining context resolutions are mutually independent — the frame resolvers all read
     // from the shared `serviceFrame`, and the rest read disjoint sources — so fan them out in one
     // `Promise.all` wave instead of awaiting each in turn (the initiative's "parallel waves"
@@ -476,7 +494,7 @@ export class AgentContextBuilder {
       // the fan-out and the shared reads inside it; see `CatalogRunContext.sliceFor`.
       catalogSlice,
     ] = await Promise.all([
-      this.resolveLinkedContext(workspaceId, block.id, description, { includeLinked: !reworked }),
+      linked.linkedContext,
       this.resolveEnvironment(workspaceId, block, serviceFrame),
       this.serviceConfigFrom(workspaceId, serviceFrame),
       this.frontendConfigFrom(workspaceId, serviceFrame),
@@ -492,7 +510,10 @@ export class AgentContextBuilder {
       // The fragment fold keys off the EFFECTIVE dispatched kind and reads the shared frame's
       // `serviceFragmentIds`; it records the selection through `observations` (safe under the
       // wave — single-threaded, no other resolver touches the step).
-      this.resolveFragments(workspaceId, agentKind, observations, block, serviceFrame, instance.id),
+      this.resolveFragments(workspaceId, agentKind, observations, block, serviceFrame, {
+        executionId: instance.id,
+        hasDesignContext: linked.hasDesignContext,
+      }),
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
       this.resolveSkillsForStep(workspaceId, agentKind, step),
       resolveDispatchSettings(this.deps, workspaceId, agentKind, step, block),
@@ -1116,6 +1137,12 @@ export class AgentContextBuilder {
    * The selection is recorded through {@link StepObservations}, which is also the only reason the
    * step is reachable from here; the fold itself is unaffected, so a resolution that records
    * nothing still gets the fragments it would have run with.
+   *
+   * `dispatch` carries the two per-RUN facts (as opposed to the block/kind identity above):
+   * `executionId` for the resolver's own telemetry, and `hasDesignContext`, which adds the
+   * design-context guidance for a run that actually carries a design document (see
+   * {@link withDesignContextFragment}). The latter is a PROMISE because linked context resolves in the
+   * same read wave as this — see {@link linkedContextWithDesignFlag} for why that is the cheap shape.
    */
   private async resolveFragments(
     workspaceId: string,
@@ -1123,7 +1150,7 @@ export class AgentContextBuilder {
     observations: StepObservations,
     block: Block,
     serviceFrame: Block | null,
-    executionId: string,
+    dispatch: { executionId: string; hasDesignContext: Promise<boolean> },
   ): Promise<{ fragments: { id: string; title?: string; body: string; brief?: string }[] } | null> {
     // Recorded per dispatch, so it always reflects the kind that actually ran. A step
     // reused across dispatches (a gate/tester host, then its code-aware helper, then a
@@ -1141,7 +1168,10 @@ export class AgentContextBuilder {
       // folds only its own `fragmentIds`; only a frame-level run re-unions the service's
       // `serviceFragmentIds`, where `serviceFrame === block`). Kept in one kernel helper so this
       // and the requirements-review grounding can't drift.
-      const ids = applicableFragmentIds(block, serviceFrame)
+      const ids = withDesignContextFragment(
+        applicableFragmentIds(block, serviceFrame),
+        await dispatch.hasDesignContext,
+      )
       // The verbosity the prompt composer will fold at — resolved HERE, at the same
       // chokepoint that resolves the bodies, because a condensed variant has to be produced
       // for the body that actually won the tier merge. Re-deriving it downstream (where only
@@ -1153,7 +1183,7 @@ export class AgentContextBuilder {
       const fragments = this.deps.fragmentResolver
         ? await this.deps.fragmentResolver.resolveBodiesForRun(workspaceId, ids, {
             verbosity,
-            executionId,
+            executionId: dispatch.executionId,
           })
         : ids
             .map((id) => {
@@ -1373,7 +1403,7 @@ export class AgentContextBuilder {
     workspaceId: string,
     blockId: string,
     description: string,
-    opts: { includeLinked: boolean },
+    opts: LinkedContextOptions,
   ): Promise<LinkedContext> {
     return resolveLinkedContextFor(
       {
@@ -1382,6 +1412,7 @@ export class AgentContextBuilder {
         ...(this.deps.documentUrlResolver
           ? { documentUrlResolver: this.deps.documentUrlResolver }
           : {}),
+        ...(this.deps.documentRefresher ? { refresher: this.deps.documentRefresher } : {}),
         ...(this.deps.logger ? { logger: this.deps.logger } : {}),
       },
       workspaceId,

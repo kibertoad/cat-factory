@@ -33,7 +33,7 @@ import type { SpendService } from '@cat-factory/spend'
 import type { ModuleRegistry } from './module-registry.js'
 import type { BoardService } from '../modules/board/BoardService.js'
 import type { createFragmentLibraryModule } from '../container-content-libraries.js'
-import type { CoreDependencies, NotificationsModule } from '../container.js'
+import type { CoreDependencies, DocumentsModule, NotificationsModule } from '../container.js'
 import type { resolveCoreRuntime } from './runtime.js'
 import {
   linkedContextSourcesFrom,
@@ -49,6 +49,15 @@ export interface EngineCollaboratorsInput {
   executionEventPublisher: CoreRuntime['executionEventPublisher']
   notifications: NotificationsModule | undefined
   fragmentLibrary: ReturnType<typeof createFragmentLibraryModule> | undefined
+  /**
+   * The document module, for its dispatch-time linked-document refresher. Both inline readers of a
+   * block's attachments take it, for one reason: an inline step that resolves the same linked
+   * context a later dispatch will must re-confirm it the same way, or it reasons about a revision
+   * the build no longer matches. The initiative INTERVIEWER is one; the REQUIREMENTS REVIEW is the
+   * other, and the more consequential, being the first step of the default pipelines and the one a
+   * human signs off on.
+   */
+  documents: DocumentsModule | undefined
   boardService: BoardService
   /** The spend safeguard, so the bug hunt's billable ranking honours the same budget a run does. */
   spend: SpendService
@@ -101,7 +110,10 @@ export function createEngineCollaborators(input: EngineCollaboratorsInput) {
     // reworked-description path it guards is task-only, and an initiative block never has one.
     resolveLinkedContext: (workspaceId, blockId, description) =>
       resolveLinkedContext(
-        linkedContextSourcesFrom(dependencies),
+        linkedContextSourcesFrom({
+          ...dependencies,
+          documentRefresher: input.documents?.linkedRefresher,
+        }),
         workspaceId,
         blockId,
         description,
@@ -113,7 +125,12 @@ export function createEngineCollaborators(input: EngineCollaboratorsInput) {
   // Built before the execution engine so the special `requirements-review` gate step can
   // drive the inline reviewer + the iterative answer → incorporate → re-review loop.
   const requirements = modules.build('requirements', () =>
-    createRequirementsModule(dependencies, notifications?.service, fragmentLibrary),
+    createRequirementsModule(
+      dependencies,
+      notifications?.service,
+      fragmentLibrary,
+      input.documents?.linkedRefresher,
+    ),
   )
   const docInterview = createDocInterviewService(dependencies)
   const forkChat = createForkChatService(dependencies)

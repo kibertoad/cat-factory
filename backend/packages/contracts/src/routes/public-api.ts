@@ -25,6 +25,7 @@ import {
   startPublicTaskSchema,
   updatePublicTaskSchema,
 } from '../public-api.js'
+import { publicTaskTypeListSchema } from '../public-task-types.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -208,6 +209,17 @@ export const deletePublicTaskContract = defineApiContract({
 })
 
 // ---- pipeline discovery (key-authenticated) --------------------------------
+
+/**
+ * List the task types this key's workspace may create, with the form each accepts. The discovery
+ * half of `createPublicTaskSchema.fields`: a caller reads the descriptors here and fills them
+ * there, rather than guessing at a shape the create call would then refuse.
+ */
+export const listPublicTaskTypesContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/api/v1/task-types',
+  responsesByStatusCode: { 200: publicTaskTypeListSchema, ...errorResponses },
+})
 
 /** List the workspace's pipelines (id/name/steps + a headless-startable flag). */
 export const listPublicPipelinesContract = defineApiContract({

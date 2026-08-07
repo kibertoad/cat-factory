@@ -50,7 +50,7 @@ export function parseNotionSearchResults(json: unknown): DocumentSearchResult[] 
       source: 'notion',
       externalId: formatNotionId(id.replace(/-/g, '')),
       title: notionPageTitle(row.properties),
-      url: row.url ?? `https://www.notion.so/${id.replace(/-/g, '')}`,
+      url: row.url ?? notionPageUrl(id),
       excerpt: '',
     })
   }
@@ -61,6 +61,19 @@ export function parseNotionSearchResults(json: unknown): DocumentSearchResult[] 
 export function formatNotionId(hex32: string): string {
   const h = hex32.toLowerCase()
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`
+}
+
+/**
+ * The canonical web URL for a Notion page id, rebuilt with NO fetch: Notion resolves a bare
+ * `notion.so/<32 hex>` to the page whatever workspace or title slug it lives under, which is why
+ * this source can answer the attach pre-flight while Confluence (needs the site base URL) cannot.
+ *
+ * ONE builder rather than the `id.replace(/-/g, '')` that used to be spelled at each site, so the
+ * page-fetch fallback, the search-hit fallback and the pre-flight cannot answer three different
+ * URLs for one page.
+ */
+export function notionPageUrl(id: string): string {
+  return `https://www.notion.so/${id.replace(/-/g, '')}`
 }
 
 /**

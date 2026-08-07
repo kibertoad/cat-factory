@@ -1,5 +1,479 @@
 # @cat-factory/app
 
+## 0.237.0
+
+### Minor Changes
+
+- 00bff05: A descriptor-driven form groups under section captions
+
+  The last open gap from the extension-seam report an org build filed against the published packages: a
+  reusable operation that collects thirteen fields, every one of which changes what the agents do,
+  rendered as one undifferentiated column. `DescriptorFields.vue` walked `fields` in declaration order
+  and the vocabulary had no grouping attribute, so the only way to signal structure was to bury it in
+  each `label`.
+
+  A field may now carry `section`, the caption its run of fields renders under. It sits on the SHARED
+  `descriptorFieldEntries` spread, so both declaring surfaces (a custom task type's per-case form and
+  an initiative preset's create form) gain it at once and cannot drift, and the gate-config form the
+  pipeline builder renders through the same component gets it for free. It is presentation and nothing
+  else: validation, what is frozen on the entity, and the prompt fold are all untouched, so moving a
+  field between sections can never change what the platform does with its answer.
+
+  The grouping RULE lives in contracts (`descriptorFieldSections`) rather than in the renderer, because
+  two readers depend on it. Visibility is applied BEFORE the runs are cut, which is what makes a
+  section whose every field is hidden by `showWhen` render no caption at all (a caption over nothing
+  reads as a form that failed to load its own controls) and what keeps a hidden field between two
+  fields of one section from splitting its caption in half. Two spellings of one caption fold together
+  on case and whitespace, exactly as the task-type picker's category rows do, and the first spelling is
+  the one rendered, because a caption is the deployment's own words rather than an id.
+
+  Declaration order is never rearranged, and that is what makes the second reader a boot ERROR
+  (`task_type_field_section_interleaved` and its `initiative_preset_` / `gate_` siblings, through the
+  same `descriptorFormProblems` checker every declaring surface shares). A section a form can be made to
+  caption twice has no honest rendering: the caption prints twice, which reads as a platform fault
+  rather than as the declaration it is, and the alternative repair moves a field away from where its
+  author wrote it. Refusing the declaration at boot is the only disposition that leaves the renderer
+  free of a repair nobody asked for, and it is the bar the surrounding checks already hold registrations
+  to (error on what is fully knowable from the registration).
+
+  What that check judges is REACHABILITY, never contiguity in the declared list, because the reduction
+  it mirrors applies visibility before it cuts the runs. A branching form is written with its branches
+  interleaved (each branch's fields beside the picker they qualify), so a section is reported only on
+  finding a concrete state that prints it twice: two of its fields with a differently-captioned field
+  between them that can be on screen beside both. For the single-condition vocabulary that is decidable
+  pairwise, since the only contradictions available are two `equals` on one key and an `equals` against
+  an `includes`. Reading contiguity alone would fail a deployment's boot outright over a form no user
+  can break, which is a far worse failure than the duplicate caption it is guarding.
+
+  The third surface reaching that checker is new here: a registered GATE's per-step config form
+  rendered through the same component, which had none of these checks behind it, so a gate could boot
+  clean and print the duplicate caption the platform calls its own fault (along with unchecked duplicate
+  keys, optionless pickers and out-of-options defaults). It declares its form as an option on
+  `GateRegistry.register` rather than as a field of a descriptor type, which is why nothing at the call
+  site read as a descriptor form; the code prefix is now a named union so the next such surface has to
+  be added deliberately.
+
+  Reviewing: the interesting question is that severity, since grouping is cosmetic and every other
+  error in that checker is a form that cannot be filled. The renderer's own behaviour for an
+  interleaved declaration is still defined and total, because it has to be for a wire descriptor from a
+  node whose build differs.
+
+  One rendering constraint is worth knowing before touching the component: the captioned runs render
+  FLAT, with each run's caption on the field that opens it, never as a per-run wrapper element. Run
+  membership shifts as `showWhen` reveals fields while a field's identity does not, so nesting the
+  fields inside a wrapper re-parents them when a boundary moves, and Vue can only do that by remounting
+  them. The remounted input is the one being typed into, because typing into the trigger is what moved
+  the boundary.
+
+  `section` reaches `/api/v1` through `GET /api/v1/task-types`, so the surface version steps to
+  `1.20.0` and the SDKs are regenerated. Additive per ADR 0034: it groups nothing the create call
+  validates, so a client that ignores it fills exactly the same bag as before.
+
+  With this the `deployment-extension-seam-gaps` tracker's committed scope is complete, so it converts
+  to [ADR 0040](../backend/docs/adr/0040-deployment-extension-seam-reachability.md). The one item that
+  does NOT land is the deployment-scoped document source, declined rather than deferred: the account
+  tier already serves an org-wide living document, and the boot error added earlier in that initiative
+  names that path at the moment a deployment reaches for the wrong one.
+
+### Patch Changes
+
+- Updated dependencies [00bff05]
+  - @cat-factory/contracts@0.257.0
+
+## 0.236.1
+
+### Patch Changes
+
+- 982deff: Cover the front door and the three policies that decide what lands, end to end
+
+  Four surfaces the product cannot be used without had no browser coverage, and each fails in the one
+  direction a test suite is supposed to catch: silently, in production, on someone else's behalf.
+
+  - **Sign-in.** The whole suite ran with authentication OFF, so the one screen every user of a hosted
+    deployment passes through was untested, and its failure mode is the worst in the product: nobody
+    gets in and nothing says so. The spec drives the real form (gate, refusal, sign-in, reload,
+    sign-out) and asserts the live WebSocket connects for the session too, which is the only assertion
+    that separates a session good enough for REST from one good enough for the stream.
+  - **The merge policy.** The auto-merge ceilings are the one setting that decides, unattended, whether
+    an agent's work lands on the default branch, and neither the library in Workspace Settings nor the
+    per-task picker was covered. `merge-review.spec` looked like coverage but reaches its refusal by
+    making the AGENT report a bad diff, so nothing in it depends on the policy at all: a panel that
+    dropped a field or wrote percentages where fractions were expected would leave it green while
+    auto-merging what an operator had forbidden. The new spec hands the merger the SAME assessment
+    twice and changes only the policy, so the two outcomes ARE the policy.
+  - **Access administration.** `rbac.spec` proves a viewer's board and an admin's board render
+    differently, but it seeds both roles into the database. The act itself (a role changed, a member
+    removed) was uncovered, and the proof of it is what a DIFFERENT signed-in user's browser then
+    renders, so each test spends a second context booted after the change.
+  - **Quorum and named approvers.** "Two people must sign off, and only these people may" is the shape
+    a team uses for anything that ships. Every way it can break is invisible: a quorum that counts one
+    person's two clicks, a policy saved against the wrong step index, a refusal enforced only in the
+    SPA. Three signed-in people now drive one parked step.
+
+  The last two need identities the browser can see, and the suite's backend deliberately has none: its
+  `TESTING_NO_AUTH` opt-in is what lets 40-odd specs seed over anonymous REST, and under it the SPA
+  renders the board anonymously and never resolves a user, so a gate policy that names people refuses
+  everybody. Rather than fork the backend, the e2e process now serves a SECOND HTTP surface with
+  `config.auth` on (the same container, one engine, one worker) and a second instance of the same SPA
+  build pointed at it. Two properties of the product made that cheap and are worth knowing: `authConfig`
+  reads `container.config.auth` per request, so an auth-enabled deployment is a config clone rather than
+  a second wiring; and the SPA's Nitro shell re-reads `NUXT_PUBLIC_API_BASE` at startup, so a second
+  origin costs a process rather than a second (slowest-step) build. The one thing that is not free is
+  the WebSocket hub, which `start()` keeps to itself, so engine events are teed into both listeners.
+
+  The SPA changes are `data-testid` hooks the specs select through, plus one attribute worth calling
+  out: the risk-policy picker's hook lived on its DEFAULT trigger, which the inspector replaces via the
+  `#trigger` slot, so the inspector's own picker had no hook at all. Selecting the merge policy a task
+  runs under was, until now, unreachable from a test.
+
+  The access-administration spec also found a real one, which is fixed here. A removed member's next
+  visit still carries the persisted pin for the board they just lost, and the boot watcher loads the
+  model catalog for whatever that pin says before `init()` has validated it, so the gate's 404 escaped
+  as an uncaught rejection in the page. Every other boot read of the unvalidated pin already tolerates
+  the miss (init's own speculative snapshot fetch, the GitHub probe, the stream ticket mint); the
+  catalog load now says so too, through `models.prefetchForBoard`, which keeps the store UNLOADED on a
+  miss so the failure reads as unresolved rather than as a board with no AI configured.
+
+## 0.236.0
+
+### Minor Changes
+
+- ab0c228: A pasted document link is judged before the task is saved, not after
+
+  Attaching a page to a task accepted whatever text sat in the picker's box. The only thing that ever
+  checked it was the IMPORT, and the import ran after the task had been created, so a link the source
+  could not read produced a task that already existed, carrying context it never got, with the verdict
+  arriving as a toast over a closed dialog. A Figma share link is where this bit hardest, because the
+  Copy link button emits a title segment plus `?p=` / `&t=` tracking params on top of the frame's node
+  id: that whole string was staged verbatim, and a node id the parser cannot read degrades silently to
+  the WHOLE FILE, so "I attached this frame" and "I attached the entire design" looked identical right
+  up until an agent read the wrong thing.
+
+  `POST /document-sources/:source/resolve-ref` is the fix's spine: `DocumentImportService.resolveRef`
+  is `import` with the fetch removed, and `import` now goes through it rather than parsing again, so
+  the pre-flight and the import cannot disagree about which refs are usable. It spends no upstream
+  call and needs no connection, which is what makes it cheap enough for the picker to call as the user
+  types. It answers the canonical form the reference will be stored under, including a `canonicalUrl`
+  the provider rebuilds from the id (a new optional `DocumentSourceProvider.canonicalUrl`, implemented
+  by Figma, Zeplin and Notion). That method is optional because the absence is a real fact rather than
+  a gap, and the two shapes of absence are worth keeping apart: Confluence needs the connection's site
+  base URL and Linear the workspace slug, while GitHub docs has everything but the HOST, which is a
+  deployment fact (a GitLab-backed deployment reaches that source through the VCS adapter, so a
+  `github.com` link built from the id would be wrong for it and presented as the supported form the
+  paste was trimmed to). All of them answer null, and the id itself is the canonical form there, which
+  callers must render rather than read as a failed resolution.
+
+  A reference the provider could only parse by DROPPING the frame it named says so on its own field.
+  `parseRef` falling back to the whole file is right (nothing knows which frame a complex instance id
+  meant, and Figma's Copy link emits one for any component instance), but the fallback is invisible: a
+  valid id, a valid canonical URL, and a "trimmed to the supported form" note that reads the same
+  whether tracking params were dropped or the whole design was swapped in for one frame. The new
+  optional `DocumentSourceProvider.droppedScope` carries the discarded qualifier as pasted, and the
+  picker gives it its own warning line, because a trim and a widening are opposite facts.
+
+  A refusal names WHICH correction it needs, as a closed `details.reason` vocabulary with two members
+  rather than one. `document_ref_unrecognized` means no link of this shape will work here and carries
+  the format that would; `document_ref_claimed_by_other_source` means the link is perfectly good and
+  aimed at the wrong source, and names the claimant so the picker can offer to switch with the text
+  unchanged. Collapsing them would tell someone who pasted a valid Figma frame URL into a Notion-backed
+  picker that their link is malformed. Claimants are searched host-PINNED first, through the same
+  `orderSourcesByClaimConfidence` the prose-URL canonicaliser reads rather than a second copy of its
+  two passes: a blind parser claims a shape, so registration order deciding would point a design link
+  at Notion, and a confidence rule living in two places gets refined in one of them. The quoted input
+  goes through `redactSecrets`, since a pasted link routinely carries a `?token=` the error envelope
+  would otherwise echo into the logs. Both reason codes reach `/api/v1` through the public task-create
+  attachment, so the surface version steps to `1.19.0` and `public-api.md` names them.
+
+  The SPA half is the other side of one rule, not a second copy of it: the picker asks the backend
+  rather than restating any provider's parse, and shows the canonical form on the row it is about to
+  stage, saying when it trimmed and, separately, when the reference is WIDER than what was pasted. Only
+  the source's own refusal blocks a paste: a resolve call that FAILED leaves the reference unjudged and
+  still stageable with the import as the backstop, and an unknown reason value falls into that same
+  bucket, because reading a 502 or an older backend's vocabulary as "your link is wrong" is the
+  misattribution this surface exists to avoid, and an outage that made attaching impossible would be a
+  worse failure than the one being fixed. Fetching moved ahead of the create too
+  (`useContextLinking().resolvePending`, used by both the add-task and create-initiative forms): every
+  attachment is imported before the block is written, all failures are reported together rather than
+  one round trip at a time, and nothing is created while any of them is unresolved, so the correction
+  is made with the form still open. That raises the bar on saying WHICH attachment is at fault, so a
+  failed fetch is marked on the staged chip itself and not only in the toast, and the add-task form's
+  issue-body pre-fetch records its cause instead of swallowing it (a tracker reference has no
+  `parseRef` to pre-flight, so that attempt is its pre-flight). What stays after the create is the LINK
+  step alone, whose realistic failure is a document another task already holds.
+
+  Reviewing: the interesting part is the split between "the source refused this" and "we could not
+  ask", since only the first may be shown to a user as a bad link, and the parallel split between a
+  trim and a widening. Worth checking too that the picker stages the RESOLVED external id rather than
+  the pasted text (there is a round-trip test for it: a provider whose bare-id branch were stricter
+  than its URL branch would refuse the very reference the pre-flight approved), and that a task is
+  genuinely not created when an attachment cannot be fetched. Nothing about the description-paste path
+  changed: a URL named in prose still resolves best-effort against the imported corpus and still
+  degrades to an info log when it matches nothing.
+
+### Patch Changes
+
+- Updated dependencies [ab0c228]
+  - @cat-factory/contracts@0.256.0
+
+## 0.235.0
+
+### Minor Changes
+
+- 184d263: Spec Writer, Blueprinter and Deployer are addable in the pipeline builder again
+
+  The catalog collapse dropped the requirements review, the spec increment, the map refresh and the
+  rest of the optional phases out of every build preset on one stated condition: that each remained
+  available in the builder as an opt-in step. For `spec-writer`, `blueprints` and `deployer` that
+  condition was never met, so the collapse did not move those steps out of the presets, it removed
+  them from the product.
+
+  A step reaches the palette through two independent gates and each of the three failed at least one.
+  A registered kind is offered only when it declares `presentation` (the filter
+  `snapshotCustomAgentKinds` applies), and `spec-writer` / `blueprints` deliberately declared none,
+  recorded in code as "pipeline-internal, not palette kinds". Separately, the SPA's
+  `SYSTEM_AGENT_META` shadows the backend catalog: an entry there DROPS the registry's copy, so all
+  three were suppressed on the client too. Both halves are fixed, the two kinds now declaring their
+  presentation next to the definition rather than the SPA restating it uninvited.
+
+  `spec-writer` also took a second kind down with it. A companion is never placed directly, it is a
+  toggle rendered on its producer step, so with no placeable Spec Writer the Spec Reviewer had
+  nowhere to attach and the whole spec pair was unreachable.
+
+  `deployer` was the sharpest case, because the engine already refuses runs over its absence:
+  `assertDeployerBeforeConsumer` rejects a chain that reaches a tester, human-test or playwright step
+  with no Deployer in front of it on a kubernetes / custom / compose service. The SPA's own copy for
+  that refusal says "Add a Deployer step to the pipeline", which nobody could do. The backend message
+  said to reseed the pipeline instead, which was the honest advice while adding one was impossible and
+  is now the second-best of two, so it leads with the builder.
+
+  Reviewing: `deployer` is a bare engine step with no registered kind, so it is modelled statically in
+  the SPA catalog like `disposer`; the other two are registered kinds and are ALSO mirrored statically,
+  for the reason `pr-reviewer` already is, so a `pl_bugfix` timeline names its steps before the
+  workspace manifest hydrates. That mirroring is the drift risk worth a look. The rest of the palette
+  is untouched: no preset changed, so no reseed advisory fires and no existing pipeline runs
+  differently.
+
+- ee6ce7c: Patch the board from a `board` event instead of re-fetching the whole snapshot
+
+  Every `board` event collapsed to one thing in the SPA: a debounced full `workspace.refresh()`,
+  which is a REPLACE-style rehydrate of ~20 stores. The backend already knew which block changed
+  and threw the id away at the publisher, so a spawned task cost the same as a service being
+  deleted. An initiative loop firing one `block-added` per spawned item put every open board into a
+  snapshot fetch every ~300ms debounce window, and a board mounting the shared service paid it too.
+
+  A `board` event now carries the changed block when the change is FULLY DESCRIBED by that one
+  block (a spawned task, a module materialising, a field edit, a move, a dependency toggle, an epic
+  assignment, a cancel), and the SPA upserts it through the same path an `execution` event's block
+  takes. That path is the one with the monotonic live-upsert stamp on it, so a targeted board
+  upsert is protected from a slower snapshot resolving on top of it exactly as run transitions
+  already were.
+
+  The change that is NOT fully described by one block keeps the full refresh, and that half is the
+  point rather than a leftover: a removal cascades over descendants and prunes edges on blocks the
+  event never names, a reparent moves a subtree between parents, a resize shifts children, a
+  blueprint reconcile rewrites a whole service. A payload there would state part of the change and
+  read as all of it.
+
+  Two blocks are never carried, on any reason or event. A service FRAME, because one payload is
+  published for every board that mounts the affected service and a frame's position and size live on
+  the per-workspace mount rather than on the shared row, so whichever mount a publisher projected
+  through would be wrong on every other board and would jump the frame to coordinates none of them
+  shows it at. And a headless `internal` anchor block (a public-API run's own "task"), which the
+  snapshot read filters out of every board and which would otherwise render as a card carrying the
+  external caller's brief that no later read can remove. Both are refused once at the wire, by
+  kernel's `deliverableBoardBlock`, which every block-carrying event on both facades is assembled
+  through (`boardWireEvent` / `bootstrapWireEvent`) rather than trusted to each emit site.
+
+  That makes the `bootstrap` event's frame payload a withheld one too, so a repo bootstrap now
+  announces its frame's transitions (materialised, ready, blocked) as coarse `board` events beside
+  the job. The live "bootstrapping…" progress still rides the job with no refresh at all; what
+  stops is a poll tick pushing frame coordinates that are stale the moment anyone drags the card.
+
+  Internal breaks, all pre-1.0 surfaces: `ExecutionEventPublisher.boardChanged` now takes a
+  `BoardChange` value instead of four positional arguments; the `board` wire event gained `block`;
+  and the `bootstrap` wire event's `block` is now always null. A client on the old shape sees
+  `block` as absent and refreshes, which is the behaviour it already had.
+
+### Patch Changes
+
+- Updated dependencies [ee6ce7c]
+  - @cat-factory/contracts@0.255.0
+
+## 0.234.2
+
+### Patch Changes
+
+- Updated dependencies [16576d6]
+  - @cat-factory/contracts@0.254.0
+
+## 0.234.1
+
+### Patch Changes
+
+- Updated dependencies [5202fb9]
+  - @cat-factory/contracts@0.253.0
+
+## 0.234.0
+
+### Minor Changes
+
+- 4c071ec: Close the last committed gaps in reusable operations: hide one per board, invoke one headlessly.
+
+  Five changes, landed together because the last two turned out to depend on each other: the public
+  task-type catalog has to honour suppression (a type it lists and creation then refuses is worse than
+  one it omits), and both read the registry through the same projection the board snapshot does.
+
+  - **Per-workspace suppression.** An org registers its operations process-wide, so twenty of them
+    flood the picker of a team that runs three. A workspace admin (`settings.manage`) now hides the
+    ones that board does not use. Tombstones in a new `task_type_suppressions` table (D1 ⇄ Drizzle,
+    with conformance), so ABSENCE is the default and a newly registered operation reaches every board
+    until somebody hides it: the only direction whose silent failure is a surplus rather than a
+    withheld capability. Three readers, and their failure postures differ on purpose: the board
+    snapshot and the public catalog are best-effort (a picker must not take a board load down over a
+    cosmetic preference), while `BoardService.addTask` PROPAGATES, because it decides whether a row is
+    written and hits the same database as the insert. The creation refusal is what makes the hiding
+    real: the internal API, the public API, an initiative spawn and a tracker import all reach
+    `addTask` without ever seeing a picker. Built-in types stay unsuppressible (they carry hardcoded
+    creation affordances). Mothership bucket: `remote`, because the catalog is code and the hide-list
+    is data.
+
+  - **Public API: discover a form, then fill it.** `/api/v1` could always NAME a task type and fill
+    none of it, so a headless caller filed an operation and every agent in the run worked from a blank
+    form. `GET /api/v1/task-types` (`read`) serves the built-in types plus this workspace's registered,
+    non-suppressed ones with the fields each accepts; `fields` on task creation fills them, landing in
+    `taskTypeFields.custom` for a custom type and on the schema-typed top-level keys for a built-in
+    one, so existing creation machinery runs unchanged. Additive per ADR 0034: OpenAPI `info.version`
+    → 1.18.0, SDKs regenerated. One table (`contracts/src/public-task-types.ts`) backs BOTH directions
+    rather than the descriptors-plus-hand-written-OpenAPI-shape the design sketched, so what discovery
+    advertises is exactly what creation validates, through the shared `validateDescriptorFields` the
+    app's own form runs. Refusal is a 422 with `details.reason: 'task_type_fields_invalid'` carrying
+    every problem at once.
+
+  - **Descriptor defaults apply at the door, not in the form.** `withDescriptorFieldDefaults` runs
+    server-side at both descriptor doors (a custom type's creation bag and an initiative preset's
+    inputs) before validate + sanitize. A field that is both `required` and defaulted was accepted
+    from the SPA (which had already seeded it) and refused for every other caller, which had no way
+    to know it must restate a value the deployment already declared. The SPA now seeds from the same
+    shared helper rather than its own copy. Consequence worth naming: because defaults are
+    authoritative, a `select` default outside its own options is now a boot ERROR
+    (`task_type_field_default_outside_options`) instead of a form that merely opened oddly.
+
+  - **The new-pipeline advisory names a pipeline instead of humanising its id.** `pipelineCatalogNames`
+    rides beside `pipelineCatalogVersions`, built from the same `seedPipelines()` read so the two
+    cannot list different ids. Humanising was fine for shipped built-ins and wrong the moment a
+    deployment registered its own: `pl_org_introduce_api` was offered as "org introduce api", on
+    exactly the boards that predate an operation and therefore see this advisory.
+
+  - **The Go SDK client's accessor list was three groups stale.** `me`, `evidence` and `keys`
+    generated services that nothing constructed, so those endpoints were uncallable from Go while
+    every drift check passed. All are wired, and `check-sdks.mjs` now fails on a resource group Go's
+    hand-written client never constructs. Two emitters had the sibling latent bug: group names are
+    camelCase in the surface table and every group was one word until `taskTypes`, so Python now
+    snake-cases them (`client.task_types`) and so does the MCP facade, whose tool name and group are
+    the strings a HOST allow-lists and a model calls (`task_types_list`, and `task_types` in
+    `CAT_FACTORY_MCP_GROUPS`). A NEW resource group, as opposed to a new operation, is what exercises
+    those paths.
+
+  Breaks, all internal and unreleased: `CoreDependencies` and `BoardServiceDependencies` gain an
+  optional `taskTypeSuppressionRepository`; `snapshotRegistryProjections` takes an optional workspace
+  id (absent at workspace-create, which cannot have hidden anything); `PublicTaskCreationDeps` gains
+  `taskTypeRegistry`; the snapshot gains `suppressedTaskTypes`; the Python SDK's and the MCP
+  facade's multi-word resource names are now snake_case.
+
+### Patch Changes
+
+- Updated dependencies [4c071ec]
+  - @cat-factory/contracts@0.252.0
+
+## 0.233.0
+
+### Minor Changes
+
+- 3fbc87e: Failing-call-first debugging: pin what broke, and let both drill-downs narrow to it
+
+  The observability panel already held everything needed to diagnose a run, and asked an operator to
+  find it by scrolling. Worse, one whole failure class had nowhere to be found from: a tool that
+  errors executes INSIDE the container, so the model call that requested it still records `ok` with a
+  clean finish reason. Every LLM number on the panel, and every rollup on the debug overview, reads
+  healthy right up to the moment the run dies. The remote-debugging doc named this as a known
+  limitation ("tool-execution errors are rows, but no rollup counts them"); this closes it on both
+  surfaces.
+
+  **The panel opens with the failure.** A pinned section above the lists carries the run's structured
+  `failure` record (kind, message, hint, the step it died on) beside the last model call that failed
+  and the last tool call that failed, each with a count of the earlier ones and a jump into the list.
+  It appears whenever there is something to pin rather than only on `status === 'failed'`: a run still
+  in flight whose calls are already erroring is exactly the one worth interrupting.
+
+  The two evidence rows are shown in a fixed order and are deliberately NOT ranked against each other.
+  They come from different clocks (a call's recorded `createdAt`, a tool span's harness-stamped
+  `startedAt`), so "which happened last" is not a comparison this can make honestly, and a confident
+  wrong ordering is worse than none in a section whose whole job is to be believed.
+
+  **When nothing failing can be pinned, it says which of four things that means.** A sink's read
+  FAILED (nothing can be concluded, and this outranks the rest); both sinks answered and nothing
+  failed (the cause left no row: look at the engine); neither sink recorded anything (the run died
+  before any agent work); or one answered with rows and the other did not. A single "no failures
+  found" would render a clean bill of health over a run that died with no telemetry at all, which is
+  the same false picture in the opposite direction. A read still in flight is none of the four: the
+  section withholds every verdict until both sinks have answered.
+
+  **Both drill-downs narrow by outcome.** The model-call list gets `All / Failed / Cut short / OK`
+  with live counts, split that way because a failed call and a truncated one need different fixes
+  (transport, proxy or spend-gate trouble versus an output-limit conversation). The tool-call
+  trajectory is a new panel view with `All / Failed / OK`, keeping trajectory order under every
+  filter: reading the failures in sequence is what tells one tool that failed and was worked around
+  from an edit loop stuck repeating the same failing call.
+
+  On the public API (OpenAPI `1.14.0`): `GET /api/v1/debug/runs/:runId/tool-calls` takes
+  `?outcome=ok|error`, composing with both orders and with `?jobId=`.
+  `failure_outside_model_calls` now states what the trajectory actually holds instead of pointing at
+  it unconditionally.
+
+  **That parameter REPLACES the `?ok=true|false` filter published in `1.13.0`, which is a breaking
+  change taken deliberately as a minor.** `?ok=` shipped one release ago, has no known consumer, and
+  two drill-downs answering the same question under two spellings is the wart this change exists to
+  remove: an operator who learned `?outcome=` on the model-call list should not have to discover that
+  the tool-call list spells it differently. A picklist also lets the set gain a member (a timeout, a
+  refusal) where `true|false` could only be retyped. Had there been an adopter, the honest shape would
+  have been `?ok=` served beside `?outcome=` for a release window, not a rename.
+
+  The run's failure count stays on the `toolCalls` rollup (`totals.failures`) rather than being copied
+  onto `sinks.toolCalls`: both come out of ONE `(agentKind, tool)` aggregate pass, and a second copy
+  could only be a second read of the same rows, which is how a `failed` above its own `count` gets
+  published.
+
+  The narrowing is applied IN SQL on all three stores, which is the part that makes it correct rather
+  than convenient: the trajectory read is bounded to a PREFIX of the run, so a filter applied after
+  the read would report no failures on any run whose failures came after its opening moves. Internal
+  break: the trajectory/page queries gain an `ok?: boolean` field, and the panel's per-run counts are
+  folded from `AgentToolCallRepository.summarizeByExecution` rather than counted by a query of their
+  own.
+
+  **The panel obeys the same prefix rule the stores do.** It reads the sink through two
+  workspace-scoped routes rather than one. `tool-call-failures` is the headline, made on open: the
+  run's exact `{ total, failed }` from the store's aggregate pass, plus the failing rows narrowed in
+  SQL. `tool-calls` is the browse view, loaded only when the trajectory is opened, because it carries
+  every captured argument and result the run produced. Folding them into one read would either make
+  the headline wait on megabytes or make its counts a statement about the run's opening moves wearing
+  the run's name, and the second is the same false all-clear from the other direction. The trajectory
+  now reports `truncated`, and a bounded view says so on screen instead of presenting a prefix as
+  everything the run did.
+
+  **One classification, in one place.** `LLM_WARNING_FINISH_REASONS`, the `ok | warning | error`
+  vocabulary and the rule that produces it now live once in `@cat-factory/contracts`. Four copies
+  existed: kernel's `LlmCallOutcomeFilter`, orchestration's `classifyCall`, the debug wire's
+  `debugCallOutcomeSchema`, and a hand-written list in the SPA. All four now alias or re-export the
+  one definition, so a member added to the vocabulary cannot exist in the badge and not in the filter.
+  Internal break: `classifyCall`/`isWarningFinishReason` are exported from `@cat-factory/orchestration`
+  as `classifyLlmCallOutcome`/`isLlmWarningFinishReason`.
+
+### Patch Changes
+
+- Updated dependencies [3fbc87e]
+- Updated dependencies [c9adc67]
+  - @cat-factory/contracts@0.251.0
+
 ## 0.232.2
 
 ### Patch Changes

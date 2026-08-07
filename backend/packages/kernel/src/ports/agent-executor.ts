@@ -4,6 +4,7 @@ import type {
   BlockType,
   CloudProvider,
   ConsensusStepConfig,
+  DocumentOrigin,
   EnvironmentAccessHandle,
   EnvironmentStatus,
   FrontendConfig,
@@ -28,6 +29,7 @@ import type {
   UnavailableToolServer,
 } from '../domain/agent-capabilities.js'
 import type { ResolvedBinaryGenerator } from '../domain/binary-generators.js'
+import type { DocumentFreshness } from '../domain/document-freshness.js'
 import type { OwnServiceContext } from '../domain/block-tree.js'
 import type { CustomTaskTypeContext } from '../domain/task-type-context.js'
 import type { ContainerEvictionKind } from './runner-transport.js'
@@ -322,12 +324,24 @@ export interface AgentRunContext {
     contextDocs?: {
       title: string
       url: string
+      /**
+       * Where the document came from (`figma`, `notion`, …, or `upload`). Carried so a reader can
+       * tell a DESIGN document from prose — `isDesignSource` off this one field, rather than each
+       * reader re-guessing from the URL's host, which is how a self-hosted source would be missed.
+       */
+      origin: DocumentOrigin
       /** Short plain-text excerpt for list/preview rendering. */
       excerpt: string
       /** One-line summary rendered into the in-prompt summary index. */
       summary: string
       /** Full normalized-Markdown body, materialised as a file for the agent to explore. */
       body: string
+      /**
+       * What the dispatch-time refresh concluded about this body's currency. Absent when no
+       * refresher is wired, which the renderer treats exactly like "nothing to state" — the prior
+       * behaviour, byte for byte.
+       */
+      freshness?: DocumentFreshness
     }[]
     /**
      * Tracker issues (Jira, …) linked to this block, supplied as extra context.

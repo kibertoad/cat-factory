@@ -886,7 +886,7 @@ function registerBoardPlanningTests(harness: ConformanceHarness): void {
 
     it('pushes a real-time board event for human board mutations (add/rename/delete)', async () => {
       // Other users active on a workspace must learn of a board edit live, not only on
-      // refresh — so every board mutation emits a coarse `boardChanged`. Asserted on every
+      // refresh, so every board mutation emits a `boardChanged`. Asserted on every
       // runtime so a facade can't silently drop the push.
       const { call, createWorkspace, boardEmits } = harness.makeApp()
       const { workspace } = await createWorkspace()
@@ -911,6 +911,48 @@ function registerBoardPlanningTests(harness: ConformanceHarness): void {
       const removed = await call('DELETE', `/workspaces/${wsId}/blocks/${created.body.id}`)
       expect(removed.status).toBe(204)
       expect(boardEmits().some((e) => e.reason === 'block-removed')).toBe(true)
+    })
+
+    it('carries the block on a task mutation and withholds it on a structural one', async () => {
+      // A board event either CARRIES the changed block (subscribers upsert it and pay one small
+      // payload) or only names one (every open board re-reads a whole snapshot). Getting that
+      // wrong is silent in both directions: a withheld payload just costs a refresh nobody
+      // notices in a test, and a payload that should have been withheld renders stale state.
+      // The block round-trips through each runtime's own store on the way here, so this belongs
+      // on both rather than on whichever facade a feature spec happened to use.
+      const { call, createWorkspace, boardEmits } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+
+      // A task is fully described by itself: add and edit both carry it.
+      const created = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+        title: 'Patch me in place',
+      })
+      expect(created.status).toBe(201)
+      const added = boardEmits(created.body.id)
+      expect(added.at(-1)?.hasBlock, 'a spawned task rides along').toBe(true)
+      expect(added.at(-1)?.blockId).toBe(created.body.id)
+
+      const renamed = await call('PATCH', `/workspaces/${wsId}/blocks/${created.body.id}`, {
+        title: 'Still patchable',
+      })
+      expect(renamed.status).toBe(200)
+      expect(boardEmits(created.body.id).at(-1)?.hasBlock, 'an edited task rides along').toBe(true)
+
+      // A service FRAME does not: its position and size are a per-board mount override, so one
+      // payload cannot be correct on the several boards a shared service's event reaches.
+      const frame = await call<Block>('POST', `/workspaces/${wsId}/blocks`, {
+        type: 'service',
+        position: { x: 500, y: 500 },
+      })
+      expect(frame.status).toBe(201)
+      expect(boardEmits(frame.body.id).at(-1)?.hasBlock, 'a frame is per-board').toBe(false)
+
+      // Nor does a delete: it cascades onto rows the event never names.
+      const removed = await call('DELETE', `/workspaces/${wsId}/blocks/${created.body.id}`)
+      expect(removed.status).toBe(204)
+      const removal = boardEmits().filter((e) => e.reason === 'block-removed')
+      expect(removal.at(-1)?.hasBlock, 'a cascade cannot be stated by one block').toBe(false)
     })
 
     it('enforces a per-service running-task limit and lifts it when the mode is off', async () => {

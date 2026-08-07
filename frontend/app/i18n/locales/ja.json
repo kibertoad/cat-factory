@@ -311,7 +311,8 @@
         "derivedTitleFallback": "プルリクエストをレビュー",
         "prNotFound": "プルリクエスト #{number} はこのサービスのリポジトリで見つかりませんでした。番号を確認するか、そのプルリクエストがあるリポジトリをサービスに紐付けてください。",
         "prRepoMismatch": "そのプルリクエストは別のリポジトリにあります。このサービスは {repo} をレビューします。プルリクエストのリポジトリに紐付いたサービスの下にレビュータスクを作成してください。"
-      }
+      },
+      "contextFailed": "タスクは作成されていません: {count} 件の添付を読み取れませんでした | タスクは作成されていません: {count} 件の添付を読み取れませんでした"
     },
     "recurring": {
       "title": "繰り返しパイプラインを追加",
@@ -403,20 +404,14 @@
       },
       "shared": "共有",
       "sharedTitle": "この組織内のワークスペース間で共有",
-      "bootstrapping": "ブートストラップ中…",
       "bootstrappingRepository": "リポジトリをブートストラップ中…",
       "bootstrapStepsCount": "{completed}/{total} ステップ",
-      "runFailed": "実行に失敗しました",
-      "mergedOfTotal": "{merged}/{total} マージ済み",
-      "noTasksYet": "タスクはまだありません",
-      "prCount": "{count} 件の PR",
       "prReadyCount": "{count} 件の PR が準備完了",
       "taskCount": "{count} 件のタスク | {count} 件のタスク",
       "moduleCount": "{count} 件のモジュール | {count} 件のモジュール",
       "addTaskTitle": "タスクを追加",
       "createTaskFromIssueTitle": "課題からタスクを作成",
       "addRecurringTitle": "繰り返しパイプラインを追加",
-      "collapseTitle": "折りたたむ",
       "dragService": "サービスをドラッグ",
       "dragTask": "タスクをドラッグ",
       "dragToResize": "ドラッグしてサイズ変更",
@@ -497,7 +492,8 @@
     "attachDocDisabledEnable": "まずドキュメント連携を有効にしてください",
     "attachIssueDisabledConnect": "まず issue トラッカーを接続してください（連携）",
     "attachIssueDisabledEnable": "まず issue トラッカー連携を有効にしてください",
-    "importsOnAdd": "追加時にインポート"
+    "importsOnAdd": "追加時にインポート",
+    "unreadable": "取得できませんでした: {error}"
   },
   "errors": {
     "generic": {
@@ -2823,6 +2819,13 @@
         "manageAccount": "アカウントのフラグメントを管理 →"
       }
     },
+    "taskTypeSuppressions": {
+      "intro": "このデプロイメントの再利用可能オペレーションのうち、このボードで提供するものを選びます。非表示にするとここのタスク作成ピッカーから消え、そのタイプでの作成は拒否されます。他のボードには影響しません。",
+      "loading": "オペレーションを読み込んでいます…",
+      "empty": "このデプロイメントには再利用可能オペレーションが登録されていません。",
+      "offer": "このボードで提供する",
+      "saveFailed": "このボードで提供するオペレーションを変更できませんでした"
+    },
     "issueTracker": {
       "filing": {
         "heading": "チケットの起票先",
@@ -3402,6 +3405,7 @@
         "merge": "リスクポリシー",
         "tracker": "課題トラッカー",
         "fragments": "サービスのベストプラクティス",
+        "operations": "オペレーション",
         "metadata": "メタデータ",
         "members": "メンバー"
       },
@@ -4174,7 +4178,20 @@
       "attachByReference": "{ref} を参照で添付",
       "noMatches": "一致するページがありません。",
       "emptySearchable": "タイトルで検索するか、インポート済みドキュメントを選択してください。",
-      "emptyRefOnly": "ページの URL または ID を貼り付けて添付します。"
+      "emptyRefOnly": "ページの URL または ID を貼り付けて添付します。",
+      "sourceLabel": "ソース",
+      "noSource": "ソースを選択",
+      "connectSource": "{label} を接続",
+      "needsSource": "ページを添付するにはドキュメントソースを接続してください。",
+      "needsSourceAdmin": "ドキュメントソースが接続されていません。ワークスペースの管理者に接続を依頼してください。",
+      "refChecking": "参照を確認しています…",
+      "refUnrecognized": "{source} の参照ではありません。想定される形式: {expected}",
+      "refOtherSource": "これは {claimed} のリンクであり、{source} のものではありません。",
+      "refSwitchSource": "代わりに {source} を使う",
+      "refTrimmed": "サポートされる形式に整形しました",
+      "refWidened": "このソースが読み取れないフレーム（{scope}）を指しているため、ファイル全体を添付します。",
+      "refAlreadyAttached": "この参照はすでに添付されています。",
+      "refCheckFailed": "参照を確認できませんでした: {error}"
     },
     "repoPicker": {
       "searchRepoPlaceholder": "リポジトリを検索…",
@@ -4303,6 +4320,7 @@
       "searchIssues": "課題を検索",
       "searchPlaceholder": "タイトルで検索、課題の URL を貼り付け、または課題番号を入力…",
       "createTasksIn": "タスクの作成先",
+      "creatingIn": "新しいタスクは {container} に作成されます",
       "needFrameFirst": "課題からタスクを作成するには、先にボードにサービスフレームを追加してください。",
       "searchFailed": "検索に失敗しました: {error}",
       "searchResults": "検索結果",
@@ -4355,6 +4373,7 @@
     "labels": "ラベル",
     "labelsHelp": "カンマ区切り。すべて付いている必要があります。",
     "adoptInto": "選んだバグの追加先",
+    "adoptingInto": "選んだバグは {container} に追加されます",
     "run": "ハント",
     "running": "ボードを読み取り、見つかったものを評価しています…",
     "huntFailed": "ハントに失敗しました",
@@ -6304,7 +6323,8 @@
       "failedTitle": "イニシアチブを作成できませんでした",
       "contextDocsHint": "要件・RFC・PRD を添付すると、計画エージェントが範囲の確定と計画の作成の際にそれを読みます。",
       "contextIssuesHint": "issue を添付すると、計画エージェントが計画を作成する際にその説明とコメントを参照します。",
-      "linkFailed": "イニシアチブを作成しましたが、{count} 件の添付をリンクできませんでした | イニシアチブを作成しましたが、{count} 件の添付をリンクできませんでした"
+      "linkFailed": "イニシアチブを作成しましたが、{count} 件の添付をリンクできませんでした | イニシアチブを作成しましたが、{count} 件の添付をリンクできませんでした",
+      "contextFailed": "イニシアチブは作成されていません: {count} 件の添付を読み取れませんでした | イニシアチブは作成されていません: {count} 件の添付を読み取れませんでした"
     },
     "status": {
       "planning": "計画中",

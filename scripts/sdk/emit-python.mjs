@@ -588,9 +588,15 @@ def _quote(value: str) -> str:
 ${resources}
 
 def build_resources(transport: Transport) -> dict[str, Any]:
-    """Every resource client, keyed by the attribute it is mounted at on the client."""
+    """Every resource client, keyed by the attribute it is mounted at on the client.
+
+    The key is the SNAKE_CASE spelling of the surface table's camelCase group, because it becomes an
+    attribute name: client.task_types, not client.taskTypes. Every group was a single word until
+    one was not, at which point the un-spelled camelCase would have shipped a Python client whose
+    only multi-word resource read like TypeScript.
+    """
     return {
-${GROUPS.map((g) => `        ${lit(g)}: ${pascal(g)}Resource(transport),`).join('\n')}
+${GROUPS.map((g) => `        ${lit(snake(g))}: ${pascal(g)}Resource(transport),`).join('\n')}
     }
 `
 }

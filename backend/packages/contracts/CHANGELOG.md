@@ -1,5 +1,564 @@
 # @cat-factory/contracts
 
+## 0.257.0
+
+### Minor Changes
+
+- 00bff05: A descriptor-driven form groups under section captions
+
+  The last open gap from the extension-seam report an org build filed against the published packages: a
+  reusable operation that collects thirteen fields, every one of which changes what the agents do,
+  rendered as one undifferentiated column. `DescriptorFields.vue` walked `fields` in declaration order
+  and the vocabulary had no grouping attribute, so the only way to signal structure was to bury it in
+  each `label`.
+
+  A field may now carry `section`, the caption its run of fields renders under. It sits on the SHARED
+  `descriptorFieldEntries` spread, so both declaring surfaces (a custom task type's per-case form and
+  an initiative preset's create form) gain it at once and cannot drift, and the gate-config form the
+  pipeline builder renders through the same component gets it for free. It is presentation and nothing
+  else: validation, what is frozen on the entity, and the prompt fold are all untouched, so moving a
+  field between sections can never change what the platform does with its answer.
+
+  The grouping RULE lives in contracts (`descriptorFieldSections`) rather than in the renderer, because
+  two readers depend on it. Visibility is applied BEFORE the runs are cut, which is what makes a
+  section whose every field is hidden by `showWhen` render no caption at all (a caption over nothing
+  reads as a form that failed to load its own controls) and what keeps a hidden field between two
+  fields of one section from splitting its caption in half. Two spellings of one caption fold together
+  on case and whitespace, exactly as the task-type picker's category rows do, and the first spelling is
+  the one rendered, because a caption is the deployment's own words rather than an id.
+
+  Declaration order is never rearranged, and that is what makes the second reader a boot ERROR
+  (`task_type_field_section_interleaved` and its `initiative_preset_` / `gate_` siblings, through the
+  same `descriptorFormProblems` checker every declaring surface shares). A section a form can be made to
+  caption twice has no honest rendering: the caption prints twice, which reads as a platform fault
+  rather than as the declaration it is, and the alternative repair moves a field away from where its
+  author wrote it. Refusing the declaration at boot is the only disposition that leaves the renderer
+  free of a repair nobody asked for, and it is the bar the surrounding checks already hold registrations
+  to (error on what is fully knowable from the registration).
+
+  What that check judges is REACHABILITY, never contiguity in the declared list, because the reduction
+  it mirrors applies visibility before it cuts the runs. A branching form is written with its branches
+  interleaved (each branch's fields beside the picker they qualify), so a section is reported only on
+  finding a concrete state that prints it twice: two of its fields with a differently-captioned field
+  between them that can be on screen beside both. For the single-condition vocabulary that is decidable
+  pairwise, since the only contradictions available are two `equals` on one key and an `equals` against
+  an `includes`. Reading contiguity alone would fail a deployment's boot outright over a form no user
+  can break, which is a far worse failure than the duplicate caption it is guarding.
+
+  The third surface reaching that checker is new here: a registered GATE's per-step config form
+  rendered through the same component, which had none of these checks behind it, so a gate could boot
+  clean and print the duplicate caption the platform calls its own fault (along with unchecked duplicate
+  keys, optionless pickers and out-of-options defaults). It declares its form as an option on
+  `GateRegistry.register` rather than as a field of a descriptor type, which is why nothing at the call
+  site read as a descriptor form; the code prefix is now a named union so the next such surface has to
+  be added deliberately.
+
+  Reviewing: the interesting question is that severity, since grouping is cosmetic and every other
+  error in that checker is a form that cannot be filled. The renderer's own behaviour for an
+  interleaved declaration is still defined and total, because it has to be for a wire descriptor from a
+  node whose build differs.
+
+  One rendering constraint is worth knowing before touching the component: the captioned runs render
+  FLAT, with each run's caption on the field that opens it, never as a per-run wrapper element. Run
+  membership shifts as `showWhen` reveals fields while a field's identity does not, so nesting the
+  fields inside a wrapper re-parents them when a boundary moves, and Vue can only do that by remounting
+  them. The remounted input is the one being typed into, because typing into the trigger is what moved
+  the boundary.
+
+  `section` reaches `/api/v1` through `GET /api/v1/task-types`, so the surface version steps to
+  `1.20.0` and the SDKs are regenerated. Additive per ADR 0034: it groups nothing the create call
+  validates, so a client that ignores it fills exactly the same bag as before.
+
+  With this the `deployment-extension-seam-gaps` tracker's committed scope is complete, so it converts
+  to [ADR 0040](../backend/docs/adr/0040-deployment-extension-seam-reachability.md). The one item that
+  does NOT land is the deployment-scoped document source, declined rather than deferred: the account
+  tier already serves an org-wide living document, and the boot error added earlier in that initiative
+  names that path at the moment a deployment reaches for the wrong one.
+
+## 0.256.0
+
+### Minor Changes
+
+- ab0c228: A pasted document link is judged before the task is saved, not after
+
+  Attaching a page to a task accepted whatever text sat in the picker's box. The only thing that ever
+  checked it was the IMPORT, and the import ran after the task had been created, so a link the source
+  could not read produced a task that already existed, carrying context it never got, with the verdict
+  arriving as a toast over a closed dialog. A Figma share link is where this bit hardest, because the
+  Copy link button emits a title segment plus `?p=` / `&t=` tracking params on top of the frame's node
+  id: that whole string was staged verbatim, and a node id the parser cannot read degrades silently to
+  the WHOLE FILE, so "I attached this frame" and "I attached the entire design" looked identical right
+  up until an agent read the wrong thing.
+
+  `POST /document-sources/:source/resolve-ref` is the fix's spine: `DocumentImportService.resolveRef`
+  is `import` with the fetch removed, and `import` now goes through it rather than parsing again, so
+  the pre-flight and the import cannot disagree about which refs are usable. It spends no upstream
+  call and needs no connection, which is what makes it cheap enough for the picker to call as the user
+  types. It answers the canonical form the reference will be stored under, including a `canonicalUrl`
+  the provider rebuilds from the id (a new optional `DocumentSourceProvider.canonicalUrl`, implemented
+  by Figma, Zeplin and Notion). That method is optional because the absence is a real fact rather than
+  a gap, and the two shapes of absence are worth keeping apart: Confluence needs the connection's site
+  base URL and Linear the workspace slug, while GitHub docs has everything but the HOST, which is a
+  deployment fact (a GitLab-backed deployment reaches that source through the VCS adapter, so a
+  `github.com` link built from the id would be wrong for it and presented as the supported form the
+  paste was trimmed to). All of them answer null, and the id itself is the canonical form there, which
+  callers must render rather than read as a failed resolution.
+
+  A reference the provider could only parse by DROPPING the frame it named says so on its own field.
+  `parseRef` falling back to the whole file is right (nothing knows which frame a complex instance id
+  meant, and Figma's Copy link emits one for any component instance), but the fallback is invisible: a
+  valid id, a valid canonical URL, and a "trimmed to the supported form" note that reads the same
+  whether tracking params were dropped or the whole design was swapped in for one frame. The new
+  optional `DocumentSourceProvider.droppedScope` carries the discarded qualifier as pasted, and the
+  picker gives it its own warning line, because a trim and a widening are opposite facts.
+
+  A refusal names WHICH correction it needs, as a closed `details.reason` vocabulary with two members
+  rather than one. `document_ref_unrecognized` means no link of this shape will work here and carries
+  the format that would; `document_ref_claimed_by_other_source` means the link is perfectly good and
+  aimed at the wrong source, and names the claimant so the picker can offer to switch with the text
+  unchanged. Collapsing them would tell someone who pasted a valid Figma frame URL into a Notion-backed
+  picker that their link is malformed. Claimants are searched host-PINNED first, through the same
+  `orderSourcesByClaimConfidence` the prose-URL canonicaliser reads rather than a second copy of its
+  two passes: a blind parser claims a shape, so registration order deciding would point a design link
+  at Notion, and a confidence rule living in two places gets refined in one of them. The quoted input
+  goes through `redactSecrets`, since a pasted link routinely carries a `?token=` the error envelope
+  would otherwise echo into the logs. Both reason codes reach `/api/v1` through the public task-create
+  attachment, so the surface version steps to `1.19.0` and `public-api.md` names them.
+
+  The SPA half is the other side of one rule, not a second copy of it: the picker asks the backend
+  rather than restating any provider's parse, and shows the canonical form on the row it is about to
+  stage, saying when it trimmed and, separately, when the reference is WIDER than what was pasted. Only
+  the source's own refusal blocks a paste: a resolve call that FAILED leaves the reference unjudged and
+  still stageable with the import as the backstop, and an unknown reason value falls into that same
+  bucket, because reading a 502 or an older backend's vocabulary as "your link is wrong" is the
+  misattribution this surface exists to avoid, and an outage that made attaching impossible would be a
+  worse failure than the one being fixed. Fetching moved ahead of the create too
+  (`useContextLinking().resolvePending`, used by both the add-task and create-initiative forms): every
+  attachment is imported before the block is written, all failures are reported together rather than
+  one round trip at a time, and nothing is created while any of them is unresolved, so the correction
+  is made with the form still open. That raises the bar on saying WHICH attachment is at fault, so a
+  failed fetch is marked on the staged chip itself and not only in the toast, and the add-task form's
+  issue-body pre-fetch records its cause instead of swallowing it (a tracker reference has no
+  `parseRef` to pre-flight, so that attempt is its pre-flight). What stays after the create is the LINK
+  step alone, whose realistic failure is a document another task already holds.
+
+  Reviewing: the interesting part is the split between "the source refused this" and "we could not
+  ask", since only the first may be shown to a user as a bad link, and the parallel split between a
+  trim and a widening. Worth checking too that the picker stages the RESOLVED external id rather than
+  the pasted text (there is a round-trip test for it: a provider whose bare-id branch were stricter
+  than its URL branch would refuse the very reference the pre-flight approved), and that a task is
+  genuinely not created when an attachment cannot be fetched. Nothing about the description-paste path
+  changed: a URL named in prose still resolves best-effort against the imported corpus and still
+  degrades to an info log when it matches nothing.
+
+## 0.255.0
+
+### Minor Changes
+
+- ee6ce7c: Patch the board from a `board` event instead of re-fetching the whole snapshot
+
+  Every `board` event collapsed to one thing in the SPA: a debounced full `workspace.refresh()`,
+  which is a REPLACE-style rehydrate of ~20 stores. The backend already knew which block changed
+  and threw the id away at the publisher, so a spawned task cost the same as a service being
+  deleted. An initiative loop firing one `block-added` per spawned item put every open board into a
+  snapshot fetch every ~300ms debounce window, and a board mounting the shared service paid it too.
+
+  A `board` event now carries the changed block when the change is FULLY DESCRIBED by that one
+  block (a spawned task, a module materialising, a field edit, a move, a dependency toggle, an epic
+  assignment, a cancel), and the SPA upserts it through the same path an `execution` event's block
+  takes. That path is the one with the monotonic live-upsert stamp on it, so a targeted board
+  upsert is protected from a slower snapshot resolving on top of it exactly as run transitions
+  already were.
+
+  The change that is NOT fully described by one block keeps the full refresh, and that half is the
+  point rather than a leftover: a removal cascades over descendants and prunes edges on blocks the
+  event never names, a reparent moves a subtree between parents, a resize shifts children, a
+  blueprint reconcile rewrites a whole service. A payload there would state part of the change and
+  read as all of it.
+
+  Two blocks are never carried, on any reason or event. A service FRAME, because one payload is
+  published for every board that mounts the affected service and a frame's position and size live on
+  the per-workspace mount rather than on the shared row, so whichever mount a publisher projected
+  through would be wrong on every other board and would jump the frame to coordinates none of them
+  shows it at. And a headless `internal` anchor block (a public-API run's own "task"), which the
+  snapshot read filters out of every board and which would otherwise render as a card carrying the
+  external caller's brief that no later read can remove. Both are refused once at the wire, by
+  kernel's `deliverableBoardBlock`, which every block-carrying event on both facades is assembled
+  through (`boardWireEvent` / `bootstrapWireEvent`) rather than trusted to each emit site.
+
+  That makes the `bootstrap` event's frame payload a withheld one too, so a repo bootstrap now
+  announces its frame's transitions (materialised, ready, blocked) as coarse `board` events beside
+  the job. The live "bootstrapping…" progress still rides the job with no refresh at all; what
+  stops is a poll tick pushing frame coordinates that are stale the moment anyone drags the card.
+
+  Internal breaks, all pre-1.0 surfaces: `ExecutionEventPublisher.boardChanged` now takes a
+  `BoardChange` value instead of four positional arguments; the `board` wire event gained `block`;
+  and the `bootstrap` wire event's `block` is now always null. A client on the old shape sees
+  `block` as absent and refreshes, which is the behaviour it already had.
+
+## 0.254.0
+
+### Minor Changes
+
+- 16576d6: Close the deployment extension-seam gaps a consumer build hit: every app-owned registry is now
+  reachable from the documented boot entry point, and the prompt-fragment pool is injected rather than
+  a module global.
+
+  An org package outside this repo built a proprietary reusable operation against the PUBLISHED
+  `@cat-factory/*` packages and reported nine gaps. Each seam it hit typechecks, boots, passes CI, and
+  is either unreachable from the supported entry point or silently inert once reached. None showed up
+  in our own tests because the worked example lives INSIDE this repo, where the composition root calls
+  `buildNodeContainer` directly and every package resolves to one copy on disk.
+
+  **Breaking, `@cat-factory/prompt-fragments`.** `registerPromptFragment(s)`,
+  `clearRegisteredPromptFragments`, `universalFragments`, `registerTaskTypeDefaultFragments`,
+  `clearRegisteredTaskTypeDefaultFragments` and `defaultFragmentIdsForTaskType` are REMOVED. They were
+  two module globals, correct only while every reader resolved the same physical copy of the package;
+  a `workspace:*` dependency publishes as an EXACT version, so a consumer floating the range onto a
+  newer patch got two copies, the registration landed in one, the server read the other, and every
+  task of the operation was seeded with fragment ids that folded nothing. Replaced by the app-owned
+  `PromptFragmentRegistry` (kernel), injected by reference:
+  `promptFragmentRegistryWithBuiltins()` news one carrying the shipped catalog, and it is an option on
+  `start()` / `startLocal()` / the Worker overrides. `getFragment` remains, narrowed to the shipped
+  catalog. One behaviour change rides along: `registerTaskTypeDefaults` REPLACES a built-in per-type
+  set instead of silently unioning with it, so a deployment can now remove a shipped default; spread
+  `DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS` to keep both.
+
+  **Also breaking (internal surfaces, pre-1.0, no shims).** `validateRegistrations` /
+  `collectRegistrationProblems` take their registries as ONE `registries` object (a facade passes its
+  container) instead of seven hand-listed optional fields; that hand-list is why the local mothership
+  boot validated five registries while its own comment claimed parity with `start()`, so a custom task
+  type naming an unregistered pipeline booted clean on a laptop and failed on the Postgres path.
+  `FragmentLibraryService` takes a `promptFragmentSource` and no longer falls back to the module pool.
+  `TaskTypeCreationDefaults.fragmentIdsFor` is async. `PromptFragmentSource` gains a required
+  `inProcess` flag, read by boot validation to tell "this deployment registered nothing" from "the
+  pool lives on the mothership", which are the same empty list and opposite facts.
+
+  **What is new rather than moved.** `start()` and `startLocal()` gain `pipelineRegistry`,
+  `gateRegistry`, `judgeRegistry`, `stepResolverRegistry`, `vcsRegistry` and `promptFragmentRegistry`;
+  the seam drift guard now asserts against those ENTRY POINTS rather than only the container builder
+  behind them, which is how `pipelineRegistry` sat on `NodeContainerOptions` (documented, guarded,
+  green) while no boot path forwarded it and local deployments had no escape hatch at all. A registered
+  task type may declare `conditionalFragmentIds`, standing context selected by a `showWhen` condition
+  over the answers a case supplied, evaluated once at creation by the same evaluator the form's own
+  field visibility uses. A code-registered fragment carrying a `documentRef` now FAILS boot rather than
+  being carried through the catalog, rendered as a live source in the library UI, and ignored at run
+  time. An unresolvable standing-context id is reported on the run that dropped it instead of only as
+  one boot warning that cannot be told apart from a typo, and is COUNTED on the new
+  `fragments.dropped_from_run` operational counter, because a run going without its standards still
+  succeeds and only a rate says a deployment is doing it every time. And a mothership-mode node reads
+  the pool from the mothership over `GET /internal/prompt-fragments`, throwing rather than answering
+  with an empty pool.
+
+## 0.253.0
+
+### Minor Changes
+
+- 5202fb9: An agent now builds against the current design, and is told how to read it
+
+  A linked document was frozen at import time. `probeVersion` existed on every provider and had exactly
+  one caller (the fragment-library body cache); nothing on the run path ever looked at the source again.
+  So a Figma frame edited after import fed every later run the old markdown, with the run reading as
+  perfectly healthy. For a requirements page that is an annoyance; for a design under active iteration
+  it means the agent routinely builds the previous revision.
+
+  The linked-context resolution path now re-confirms each document at dispatch, through the kernel
+  `LinkedDocumentRefresher` port. The cost model is the design, because that path runs per STEP: probe
+  the source's version, compare it against the token the stored body came from, and re-import only what
+  actually moved. That comparison needed something to compare to, which the row did not have, so
+  `documents.source_version` is new. It is part of the idempotent-reimport comparison even though no
+  agent reads it: a Figma file version bumps on any edit anywhere in the file, so leaving a stale token
+  on an unchanged body would re-download the whole design on every dispatch, forever. NULL covers three
+  cases that all mean "cannot be proven current" and all self-heal on one re-import: an upload, a
+  source exposing no version, a row predating the column.
+
+  Three things bound the cost, each a different half of it. The new short-TTL `linkedDocumentVersion`
+  cache holds the OUTCOME of the whole ladder rather than the body or just the probe, so a burst of step
+  dispatches costs one round trip per document, concurrent dispatches of one document dedupe onto a
+  single download, and a source that is DOWN is remembered as down instead of being re-asked by every
+  dispatch for as long as the outage lasts (a cache loader that throws caches nothing, which is why the
+  failure is a value). It has no refresh window, since the load already is the check. The workspace's
+  connection is resolved ONCE per pass for the whole corpus through a new batched
+  `resolveConnections`, not per document and again inside each probe. And the per-document fan-out is
+  bounded, because a task can attach a corpus budget's worth of Figma frames and each miss expands into
+  chunked per-frame node reads. Coherence is invalidation plus the TTL: connect/disconnect drops the
+  workspace group, a manual import drops that document's entry. The entry stays enabled on the Worker's
+  isolate-safe profile, since an external version token is neither our own mutable state nor in need of
+  a bus to heal.
+
+  The ladder also has to CONVERGE, which took one non-obvious hop: `reimport` records the caller's
+  probed token when the source's own fetch exposes none. A provider may resolve its version best-effort
+  inside `fetchDocument` (GitHub docs' commit sha degrades to null on a rate-limited request) while its
+  cheap probe still answers, so the row was left holding null, mismatched the probe on every future
+  dispatch, and re-downloaded the whole document forever while reporting "this source has no revision"
+  about a source that plainly has one.
+
+  Freshness reaches the agent as a header line, and it is a three-way verdict rather than a boolean.
+  `confirmed` contributes `Revision: <token>`, so "which revision did this run build against" is
+  answerable from the checkout afterwards. `not-applicable` renders nothing: an upload has no source to
+  trail, so a staleness warning there would invent a problem. `unconfirmed` warns and names which of
+  four gaps applies, because "reconnect the source", "wait out the outage", "this source has no revision
+  to compare" and "this deployment cannot read the credential" are four different fixes and one merged
+  "unknown" sends the reader at the wrong one. The last of those is mothership mode, not a defensive
+  branch: a node with no main database cannot read a connection sealed with the mothership's key, so the
+  read fails permanently and by design, and calling that an outage would send an operator hunting a
+  Figma incident that does not exist. One renderer serves both surfaces a document reaches (the
+  materialised `.cat-context/` file and the in-prompt injection an INLINE kind gets instead of a
+  checkout), because a judge or reviewer scoring against a stale design is the same failure as a
+  container agent building from one, and an omitted note reads exactly like a copy that was checked.
+  Every gap also increments the new `document.freshness_gap` counter, dimensioned by reason and source:
+  each of these conditions repeats per dispatch while it lasts, so the log line answers "what happened
+  to this run" and only a rate answers "is this spreading". The refresh still never throws, so a source
+  outage costs the run a stale body and a stated warning rather than the run, and the readability
+  refusal now runs on the refreshed records, since a page emptied since import is the case most worth
+  refusing. That
+  includes the REQUIREMENTS REVIEW, the first step of the default pipelines and the one a human signs
+  off on, which resolves its attachments through the same refresher rather than reviewing the
+  import-time copy while the coder two steps later builds from the current one. A deployment with no
+  refresher wired gets no verdict at all rather than a synthesised one: it did not conclude these bodies
+  are unverifiable, it never asked.
+
+  Separately, the one fragment that tells an agent how to consume design context was selected by nothing.
+  Its `appliesTo` selector is a management-surface hint the run path never drove, it is in no seed pin
+  set, and basic mode hides the per-task fragment picker — so the standard case, a designer links a frame
+  and starts a run, executed with a design context file on disk and no instruction anywhere to honour it.
+  The engine now folds it whenever the run's resolved context carries a design-origin document. The
+  trigger is the document rather than the block type, which the retired selector got wrong in both
+  directions (it missed a design linked to an unlabelled task and fired on a frontend task with no
+  design), and that selector is DELETED rather than left beside the new rule: the deterministic
+  selector and the management surface still read it, so leaving it would keep labelling the fragment
+  frontend-only while the engine folded it for anything carrying a design. It rides the normal fold, so
+  a workspace override still wins and the two-tier brief/full verbosity still applies. The flag settles
+  off the corpus read rather than off the finished linked context, so the fragment fold (an LLM call,
+  when a standard needs condensing) is not serialised behind a live source probe on every dispatch.
+
+  Two hygiene fixes ride along, both about a claim over a pasted URL. `makeDocumentUrlResolver` now
+  consults host-pinned parsers before host-blind ones instead of in registration order: Notion's
+  `parseRef` claims any UUID-shaped run anywhere, so registered first it stole a Figma URL whose file key
+  carried one, and the point lookup then searched the wrong key space and found nothing — a linked design
+  reaching the agent as no context at all. And the two source traits that decide these things
+  (`isDesignSource`, `isHostPinnedSource`) live in contracts off one exhaustive `Record`, because the SPA
+  has to label a design source too and the run path reads them where no provider is reachable.
+
+  Reviewing: the refresh sits on the hot path of every dispatch, so the thing to check is the ladder's
+  short-circuits (an unchanged design must cost one cached round trip and no download, a failed one must
+  not be retried per dispatch, and the second dispatch after a re-import must do nothing at all) rather
+  than the verdicts. The re-import running INSIDE the cache loader is the deliberate part: it is what
+  lets one entry bound the expensive half and dedupe concurrent dispatches, and its consequence is that
+  a caller which deduped onto someone else's outcome re-reads the row rather than labelling the body it
+  already holds with a revision it does not carry. The `sourceVersion` column is nullable on purpose and
+  a backfill would be wrong: an empty string cannot be told apart from a source that genuinely has no
+  version, and the two get different treatment.
+
+## 0.252.0
+
+### Minor Changes
+
+- 4c071ec: Close the last committed gaps in reusable operations: hide one per board, invoke one headlessly.
+
+  Five changes, landed together because the last two turned out to depend on each other: the public
+  task-type catalog has to honour suppression (a type it lists and creation then refuses is worse than
+  one it omits), and both read the registry through the same projection the board snapshot does.
+
+  - **Per-workspace suppression.** An org registers its operations process-wide, so twenty of them
+    flood the picker of a team that runs three. A workspace admin (`settings.manage`) now hides the
+    ones that board does not use. Tombstones in a new `task_type_suppressions` table (D1 ⇄ Drizzle,
+    with conformance), so ABSENCE is the default and a newly registered operation reaches every board
+    until somebody hides it: the only direction whose silent failure is a surplus rather than a
+    withheld capability. Three readers, and their failure postures differ on purpose: the board
+    snapshot and the public catalog are best-effort (a picker must not take a board load down over a
+    cosmetic preference), while `BoardService.addTask` PROPAGATES, because it decides whether a row is
+    written and hits the same database as the insert. The creation refusal is what makes the hiding
+    real: the internal API, the public API, an initiative spawn and a tracker import all reach
+    `addTask` without ever seeing a picker. Built-in types stay unsuppressible (they carry hardcoded
+    creation affordances). Mothership bucket: `remote`, because the catalog is code and the hide-list
+    is data.
+
+  - **Public API: discover a form, then fill it.** `/api/v1` could always NAME a task type and fill
+    none of it, so a headless caller filed an operation and every agent in the run worked from a blank
+    form. `GET /api/v1/task-types` (`read`) serves the built-in types plus this workspace's registered,
+    non-suppressed ones with the fields each accepts; `fields` on task creation fills them, landing in
+    `taskTypeFields.custom` for a custom type and on the schema-typed top-level keys for a built-in
+    one, so existing creation machinery runs unchanged. Additive per ADR 0034: OpenAPI `info.version`
+    → 1.18.0, SDKs regenerated. One table (`contracts/src/public-task-types.ts`) backs BOTH directions
+    rather than the descriptors-plus-hand-written-OpenAPI-shape the design sketched, so what discovery
+    advertises is exactly what creation validates, through the shared `validateDescriptorFields` the
+    app's own form runs. Refusal is a 422 with `details.reason: 'task_type_fields_invalid'` carrying
+    every problem at once.
+
+  - **Descriptor defaults apply at the door, not in the form.** `withDescriptorFieldDefaults` runs
+    server-side at both descriptor doors (a custom type's creation bag and an initiative preset's
+    inputs) before validate + sanitize. A field that is both `required` and defaulted was accepted
+    from the SPA (which had already seeded it) and refused for every other caller, which had no way
+    to know it must restate a value the deployment already declared. The SPA now seeds from the same
+    shared helper rather than its own copy. Consequence worth naming: because defaults are
+    authoritative, a `select` default outside its own options is now a boot ERROR
+    (`task_type_field_default_outside_options`) instead of a form that merely opened oddly.
+
+  - **The new-pipeline advisory names a pipeline instead of humanising its id.** `pipelineCatalogNames`
+    rides beside `pipelineCatalogVersions`, built from the same `seedPipelines()` read so the two
+    cannot list different ids. Humanising was fine for shipped built-ins and wrong the moment a
+    deployment registered its own: `pl_org_introduce_api` was offered as "org introduce api", on
+    exactly the boards that predate an operation and therefore see this advisory.
+
+  - **The Go SDK client's accessor list was three groups stale.** `me`, `evidence` and `keys`
+    generated services that nothing constructed, so those endpoints were uncallable from Go while
+    every drift check passed. All are wired, and `check-sdks.mjs` now fails on a resource group Go's
+    hand-written client never constructs. Two emitters had the sibling latent bug: group names are
+    camelCase in the surface table and every group was one word until `taskTypes`, so Python now
+    snake-cases them (`client.task_types`) and so does the MCP facade, whose tool name and group are
+    the strings a HOST allow-lists and a model calls (`task_types_list`, and `task_types` in
+    `CAT_FACTORY_MCP_GROUPS`). A NEW resource group, as opposed to a new operation, is what exercises
+    those paths.
+
+  Breaks, all internal and unreleased: `CoreDependencies` and `BoardServiceDependencies` gain an
+  optional `taskTypeSuppressionRepository`; `snapshotRegistryProjections` takes an optional workspace
+  id (absent at workspace-create, which cannot have hidden anything); `PublicTaskCreationDeps` gains
+  `taskTypeRegistry`; the snapshot gains `suppressedTaskTypes`; the Python SDK's and the MCP
+  facade's multi-word resource names are now snake_case.
+
+## 0.251.0
+
+### Minor Changes
+
+- 3fbc87e: Failing-call-first debugging: pin what broke, and let both drill-downs narrow to it
+
+  The observability panel already held everything needed to diagnose a run, and asked an operator to
+  find it by scrolling. Worse, one whole failure class had nowhere to be found from: a tool that
+  errors executes INSIDE the container, so the model call that requested it still records `ok` with a
+  clean finish reason. Every LLM number on the panel, and every rollup on the debug overview, reads
+  healthy right up to the moment the run dies. The remote-debugging doc named this as a known
+  limitation ("tool-execution errors are rows, but no rollup counts them"); this closes it on both
+  surfaces.
+
+  **The panel opens with the failure.** A pinned section above the lists carries the run's structured
+  `failure` record (kind, message, hint, the step it died on) beside the last model call that failed
+  and the last tool call that failed, each with a count of the earlier ones and a jump into the list.
+  It appears whenever there is something to pin rather than only on `status === 'failed'`: a run still
+  in flight whose calls are already erroring is exactly the one worth interrupting.
+
+  The two evidence rows are shown in a fixed order and are deliberately NOT ranked against each other.
+  They come from different clocks (a call's recorded `createdAt`, a tool span's harness-stamped
+  `startedAt`), so "which happened last" is not a comparison this can make honestly, and a confident
+  wrong ordering is worse than none in a section whose whole job is to be believed.
+
+  **When nothing failing can be pinned, it says which of four things that means.** A sink's read
+  FAILED (nothing can be concluded, and this outranks the rest); both sinks answered and nothing
+  failed (the cause left no row: look at the engine); neither sink recorded anything (the run died
+  before any agent work); or one answered with rows and the other did not. A single "no failures
+  found" would render a clean bill of health over a run that died with no telemetry at all, which is
+  the same false picture in the opposite direction. A read still in flight is none of the four: the
+  section withholds every verdict until both sinks have answered.
+
+  **Both drill-downs narrow by outcome.** The model-call list gets `All / Failed / Cut short / OK`
+  with live counts, split that way because a failed call and a truncated one need different fixes
+  (transport, proxy or spend-gate trouble versus an output-limit conversation). The tool-call
+  trajectory is a new panel view with `All / Failed / OK`, keeping trajectory order under every
+  filter: reading the failures in sequence is what tells one tool that failed and was worked around
+  from an edit loop stuck repeating the same failing call.
+
+  On the public API (OpenAPI `1.14.0`): `GET /api/v1/debug/runs/:runId/tool-calls` takes
+  `?outcome=ok|error`, composing with both orders and with `?jobId=`.
+  `failure_outside_model_calls` now states what the trajectory actually holds instead of pointing at
+  it unconditionally.
+
+  **That parameter REPLACES the `?ok=true|false` filter published in `1.13.0`, which is a breaking
+  change taken deliberately as a minor.** `?ok=` shipped one release ago, has no known consumer, and
+  two drill-downs answering the same question under two spellings is the wart this change exists to
+  remove: an operator who learned `?outcome=` on the model-call list should not have to discover that
+  the tool-call list spells it differently. A picklist also lets the set gain a member (a timeout, a
+  refusal) where `true|false` could only be retyped. Had there been an adopter, the honest shape would
+  have been `?ok=` served beside `?outcome=` for a release window, not a rename.
+
+  The run's failure count stays on the `toolCalls` rollup (`totals.failures`) rather than being copied
+  onto `sinks.toolCalls`: both come out of ONE `(agentKind, tool)` aggregate pass, and a second copy
+  could only be a second read of the same rows, which is how a `failed` above its own `count` gets
+  published.
+
+  The narrowing is applied IN SQL on all three stores, which is the part that makes it correct rather
+  than convenient: the trajectory read is bounded to a PREFIX of the run, so a filter applied after
+  the read would report no failures on any run whose failures came after its opening moves. Internal
+  break: the trajectory/page queries gain an `ok?: boolean` field, and the panel's per-run counts are
+  folded from `AgentToolCallRepository.summarizeByExecution` rather than counted by a query of their
+  own.
+
+  **The panel obeys the same prefix rule the stores do.** It reads the sink through two
+  workspace-scoped routes rather than one. `tool-call-failures` is the headline, made on open: the
+  run's exact `{ total, failed }` from the store's aggregate pass, plus the failing rows narrowed in
+  SQL. `tool-calls` is the browse view, loaded only when the trajectory is opened, because it carries
+  every captured argument and result the run produced. Folding them into one read would either make
+  the headline wait on megabytes or make its counts a statement about the run's opening moves wearing
+  the run's name, and the second is the same false all-clear from the other direction. The trajectory
+  now reports `truncated`, and a bounded view says so on screen instead of presenting a prefix as
+  everything the run did.
+
+  **One classification, in one place.** `LLM_WARNING_FINISH_REASONS`, the `ok | warning | error`
+  vocabulary and the rule that produces it now live once in `@cat-factory/contracts`. Four copies
+  existed: kernel's `LlmCallOutcomeFilter`, orchestration's `classifyCall`, the debug wire's
+  `debugCallOutcomeSchema`, and a hand-written list in the SPA. All four now alias or re-export the
+  one definition, so a member added to the vocabulary cannot exist in the badge and not in the filter.
+  Internal break: `classifyCall`/`isWarningFinishReason` are exported from `@cat-factory/orchestration`
+  as `classifyLlmCallOutcome`/`isLlmWarningFinishReason`.
+
+- c9adc67: Refuse a blind run: the harness now tells the backend which job-body capabilities it parses
+
+  An image older than a body capability does not reject the field, it ignores it. For most of the
+  job body that degrades honestly, but a CAPABILITY is different: the backend composes the PROMPT,
+  so a dropped `mcpServers` leaves the agent reading "you have these tools, prefer them over
+  guessing" with no client wired, and a dropped `skills` leaves a claude-code run told a playbook
+  "is installed for this step" that was never written. The harness CHANGELOG has documented this
+  twice as an operator hazard, both times ending at the same wall: the backend has no way to know
+  what image a self-hosted runner pool pins, so it could not be gated server-side. A blind run
+  rather than a failed one, and the run that most needs a signal produced none.
+
+  The handshake is a list of body field names the image reports on `/health` and on its job
+  ACCEPTANCE. The acceptance is where it matters: the dispatch site is the only place the body it
+  just sent is still in scope, and the last moment before the agent starts working from a prompt the
+  body cannot back up. `RunnerTransport.dispatch` therefore returns an optional ack, forwarded by
+  every transport that can see the harness's own response.
+
+  The answer is deliberately THREE-STATE, and the middle state is the whole design. An image that
+  reported nothing is not an image that reported "not this": every image between the capability
+  landing and the handshake landing serves it perfectly and reports no list, so folding the two
+  would refuse those runs on no evidence. So `unsupported` (the image said it cannot) refuses the
+  dispatch and stops the job the harness already started, as an `UnavailableError` whose
+  `runner_image_capability` reason makes the step a `preflight` fault rather than a container that
+  died; `unknown` proceeds and is REPORTED as the deployment's own blind spot, on a warn line and a
+  `container.capability_unknown` counter that should decay to zero as pools update. A body carrying
+  no capability says nothing at all, which is most dispatches.
+
+  Refusing the step is only half of it: the harness begins work on acceptance, so a refusal that
+  merely throws leaves a full agent pass running against the repository, free to push a branch and
+  open a pull request for a step the engine already failed. The refusal therefore STOPS the job,
+  through a new `RunnerTransport.stopJob` and a new harness `DELETE /jobs/{id}` that aborts one job
+  and waits for it to settle before answering. Never through `release`, which is a reclaim and means
+  something different on every backend: on a per-run container it happens to kill the job, on a warm
+  pool member it hands the container BACK with the agent still working in it, and on a self-hosted
+  pool with no `release` template it does nothing at all.
+
+  Not every backend can PROVE the job died, so the outcome is reported rather than assumed and the
+  failure message says which of four it was: `stopped` (nothing is still running), `requested` (a
+  pool cancel was accepted but cannot be verified), `unsupported` (no cancel path exists), `failed`.
+  The last three also increment `container.blind_job_not_stopped`, dimensioned by the outcome,
+  because each is a different operator fix. A backend that owns the container always reaches
+  `stopped`, since a graceful abort that fails escalates to destroying it; on the local warm pool
+  that escalation is also what keeps a member whose job could not be aborted off the idle list, where
+  it still answers `/health` and the next run would lease a container with a live agent and a live
+  checkout in it.
+
+  A runner pool gets the handshake only when its manifest MAPS it: `response.dispatchCapabilitiesPath`,
+  one line for a pool that proxies `POST /jobs` verbatim. Deliberately not read by name, because
+  `capabilities` is an ordinary word for a scheduler to use about its own runners (`["gpu","docker"]`)
+  and reading one of those as the harness's answer would narrow to an empty list and hard-refuse every
+  capability dispatch against a perfectly current image. Unmapped lands in `unknown`, which is honest
+  about a control plane this backend knows nothing about.
+
+  OPERATORS: this bumps the runner image to `1.93.0`. A pool on an older image keeps working exactly
+  as before; it simply reports no handshake, so tool-server and skill dispatches there are counted as
+  unverifiable instead of confirmed. To get the check on a self-hosted pool, map
+  `response.dispatchCapabilitiesPath` to `capabilities` and declare a `release` template so a refused
+  run can actually be cancelled.
+
 ## 0.250.0
 
 ### Minor Changes

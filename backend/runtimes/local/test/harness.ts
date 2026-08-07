@@ -160,6 +160,7 @@ type ConformanceAppOpts = {
   cloudflareModelsEnabled?: boolean
   resolveRunRepoContext?: CoreDependencies['resolveRunRepoContext']
   resolveBinaryArtifactStore?: CoreDependencies['resolveBinaryArtifactStore']
+  promptFragmentRegistry?: CoreDependencies['promptFragmentRegistry']
   gateProviders?: GateProviderOverrides
   environmentProvider?: CoreDependencies['environmentProvider']
   resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
@@ -257,6 +258,8 @@ function buildConformanceOverrides(
     ...onlyTruthy({
       resolveRunRepoContext: o.resolveRunRepoContext,
       resolveBinaryArtifactStore: o.resolveBinaryArtifactStore,
+      // The app-owned standards pool the suite registered its own fragments onto.
+      promptFragmentRegistry: o.promptFragmentRegistry,
       environmentProvider: o.environmentProvider,
       resolveRepoFilesForCoords: o.resolveRepoFilesForCoords,
       detectionConventions: o.detectionConventions,

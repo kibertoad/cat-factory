@@ -18,6 +18,7 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle only matters to a type chec
         PipelinesResource,
         ServicesResource,
         TasksResource,
+        TaskTypesResource,
         UsageResource,
         WebhookResource,
     )
@@ -56,6 +57,7 @@ class CatFactoryClient:
         services: ServicesResource
         tasks: TasksResource
         pipelines: PipelinesResource
+        task_types: TaskTypesResource
         notifications: NotificationsResource
         webhook: WebhookResource
         usage: UsageResource

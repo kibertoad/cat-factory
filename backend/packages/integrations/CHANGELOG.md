@@ -1,5 +1,302 @@
 # @cat-factory/integrations
 
+## 0.138.1
+
+### Patch Changes
+
+- Updated dependencies [00bff05]
+  - @cat-factory/contracts@0.257.0
+  - @cat-factory/kernel@0.255.1
+
+## 0.138.0
+
+### Minor Changes
+
+- ab0c228: A pasted document link is judged before the task is saved, not after
+
+  Attaching a page to a task accepted whatever text sat in the picker's box. The only thing that ever
+  checked it was the IMPORT, and the import ran after the task had been created, so a link the source
+  could not read produced a task that already existed, carrying context it never got, with the verdict
+  arriving as a toast over a closed dialog. A Figma share link is where this bit hardest, because the
+  Copy link button emits a title segment plus `?p=` / `&t=` tracking params on top of the frame's node
+  id: that whole string was staged verbatim, and a node id the parser cannot read degrades silently to
+  the WHOLE FILE, so "I attached this frame" and "I attached the entire design" looked identical right
+  up until an agent read the wrong thing.
+
+  `POST /document-sources/:source/resolve-ref` is the fix's spine: `DocumentImportService.resolveRef`
+  is `import` with the fetch removed, and `import` now goes through it rather than parsing again, so
+  the pre-flight and the import cannot disagree about which refs are usable. It spends no upstream
+  call and needs no connection, which is what makes it cheap enough for the picker to call as the user
+  types. It answers the canonical form the reference will be stored under, including a `canonicalUrl`
+  the provider rebuilds from the id (a new optional `DocumentSourceProvider.canonicalUrl`, implemented
+  by Figma, Zeplin and Notion). That method is optional because the absence is a real fact rather than
+  a gap, and the two shapes of absence are worth keeping apart: Confluence needs the connection's site
+  base URL and Linear the workspace slug, while GitHub docs has everything but the HOST, which is a
+  deployment fact (a GitLab-backed deployment reaches that source through the VCS adapter, so a
+  `github.com` link built from the id would be wrong for it and presented as the supported form the
+  paste was trimmed to). All of them answer null, and the id itself is the canonical form there, which
+  callers must render rather than read as a failed resolution.
+
+  A reference the provider could only parse by DROPPING the frame it named says so on its own field.
+  `parseRef` falling back to the whole file is right (nothing knows which frame a complex instance id
+  meant, and Figma's Copy link emits one for any component instance), but the fallback is invisible: a
+  valid id, a valid canonical URL, and a "trimmed to the supported form" note that reads the same
+  whether tracking params were dropped or the whole design was swapped in for one frame. The new
+  optional `DocumentSourceProvider.droppedScope` carries the discarded qualifier as pasted, and the
+  picker gives it its own warning line, because a trim and a widening are opposite facts.
+
+  A refusal names WHICH correction it needs, as a closed `details.reason` vocabulary with two members
+  rather than one. `document_ref_unrecognized` means no link of this shape will work here and carries
+  the format that would; `document_ref_claimed_by_other_source` means the link is perfectly good and
+  aimed at the wrong source, and names the claimant so the picker can offer to switch with the text
+  unchanged. Collapsing them would tell someone who pasted a valid Figma frame URL into a Notion-backed
+  picker that their link is malformed. Claimants are searched host-PINNED first, through the same
+  `orderSourcesByClaimConfidence` the prose-URL canonicaliser reads rather than a second copy of its
+  two passes: a blind parser claims a shape, so registration order deciding would point a design link
+  at Notion, and a confidence rule living in two places gets refined in one of them. The quoted input
+  goes through `redactSecrets`, since a pasted link routinely carries a `?token=` the error envelope
+  would otherwise echo into the logs. Both reason codes reach `/api/v1` through the public task-create
+  attachment, so the surface version steps to `1.19.0` and `public-api.md` names them.
+
+  The SPA half is the other side of one rule, not a second copy of it: the picker asks the backend
+  rather than restating any provider's parse, and shows the canonical form on the row it is about to
+  stage, saying when it trimmed and, separately, when the reference is WIDER than what was pasted. Only
+  the source's own refusal blocks a paste: a resolve call that FAILED leaves the reference unjudged and
+  still stageable with the import as the backstop, and an unknown reason value falls into that same
+  bucket, because reading a 502 or an older backend's vocabulary as "your link is wrong" is the
+  misattribution this surface exists to avoid, and an outage that made attaching impossible would be a
+  worse failure than the one being fixed. Fetching moved ahead of the create too
+  (`useContextLinking().resolvePending`, used by both the add-task and create-initiative forms): every
+  attachment is imported before the block is written, all failures are reported together rather than
+  one round trip at a time, and nothing is created while any of them is unresolved, so the correction
+  is made with the form still open. That raises the bar on saying WHICH attachment is at fault, so a
+  failed fetch is marked on the staged chip itself and not only in the toast, and the add-task form's
+  issue-body pre-fetch records its cause instead of swallowing it (a tracker reference has no
+  `parseRef` to pre-flight, so that attempt is its pre-flight). What stays after the create is the LINK
+  step alone, whose realistic failure is a document another task already holds.
+
+  Reviewing: the interesting part is the split between "the source refused this" and "we could not
+  ask", since only the first may be shown to a user as a bad link, and the parallel split between a
+  trim and a widening. Worth checking too that the picker stages the RESOLVED external id rather than
+  the pasted text (there is a round-trip test for it: a provider whose bare-id branch were stricter
+  than its URL branch would refuse the very reference the pre-flight approved), and that a task is
+  genuinely not created when an attachment cannot be fetched. Nothing about the description-paste path
+  changed: a URL named in prose still resolves best-effort against the imported corpus and still
+  degrades to an info log when it matches nothing.
+
+### Patch Changes
+
+- Updated dependencies [ab0c228]
+  - @cat-factory/contracts@0.256.0
+  - @cat-factory/kernel@0.255.0
+
+## 0.137.2
+
+### Patch Changes
+
+- Updated dependencies [ee6ce7c]
+  - @cat-factory/kernel@0.254.0
+  - @cat-factory/contracts@0.255.0
+
+## 0.137.1
+
+### Patch Changes
+
+- Updated dependencies [16576d6]
+  - @cat-factory/kernel@0.253.0
+  - @cat-factory/contracts@0.254.0
+
+## 0.137.0
+
+### Minor Changes
+
+- 5202fb9: An agent now builds against the current design, and is told how to read it
+
+  A linked document was frozen at import time. `probeVersion` existed on every provider and had exactly
+  one caller (the fragment-library body cache); nothing on the run path ever looked at the source again.
+  So a Figma frame edited after import fed every later run the old markdown, with the run reading as
+  perfectly healthy. For a requirements page that is an annoyance; for a design under active iteration
+  it means the agent routinely builds the previous revision.
+
+  The linked-context resolution path now re-confirms each document at dispatch, through the kernel
+  `LinkedDocumentRefresher` port. The cost model is the design, because that path runs per STEP: probe
+  the source's version, compare it against the token the stored body came from, and re-import only what
+  actually moved. That comparison needed something to compare to, which the row did not have, so
+  `documents.source_version` is new. It is part of the idempotent-reimport comparison even though no
+  agent reads it: a Figma file version bumps on any edit anywhere in the file, so leaving a stale token
+  on an unchanged body would re-download the whole design on every dispatch, forever. NULL covers three
+  cases that all mean "cannot be proven current" and all self-heal on one re-import: an upload, a
+  source exposing no version, a row predating the column.
+
+  Three things bound the cost, each a different half of it. The new short-TTL `linkedDocumentVersion`
+  cache holds the OUTCOME of the whole ladder rather than the body or just the probe, so a burst of step
+  dispatches costs one round trip per document, concurrent dispatches of one document dedupe onto a
+  single download, and a source that is DOWN is remembered as down instead of being re-asked by every
+  dispatch for as long as the outage lasts (a cache loader that throws caches nothing, which is why the
+  failure is a value). It has no refresh window, since the load already is the check. The workspace's
+  connection is resolved ONCE per pass for the whole corpus through a new batched
+  `resolveConnections`, not per document and again inside each probe. And the per-document fan-out is
+  bounded, because a task can attach a corpus budget's worth of Figma frames and each miss expands into
+  chunked per-frame node reads. Coherence is invalidation plus the TTL: connect/disconnect drops the
+  workspace group, a manual import drops that document's entry. The entry stays enabled on the Worker's
+  isolate-safe profile, since an external version token is neither our own mutable state nor in need of
+  a bus to heal.
+
+  The ladder also has to CONVERGE, which took one non-obvious hop: `reimport` records the caller's
+  probed token when the source's own fetch exposes none. A provider may resolve its version best-effort
+  inside `fetchDocument` (GitHub docs' commit sha degrades to null on a rate-limited request) while its
+  cheap probe still answers, so the row was left holding null, mismatched the probe on every future
+  dispatch, and re-downloaded the whole document forever while reporting "this source has no revision"
+  about a source that plainly has one.
+
+  Freshness reaches the agent as a header line, and it is a three-way verdict rather than a boolean.
+  `confirmed` contributes `Revision: <token>`, so "which revision did this run build against" is
+  answerable from the checkout afterwards. `not-applicable` renders nothing: an upload has no source to
+  trail, so a staleness warning there would invent a problem. `unconfirmed` warns and names which of
+  four gaps applies, because "reconnect the source", "wait out the outage", "this source has no revision
+  to compare" and "this deployment cannot read the credential" are four different fixes and one merged
+  "unknown" sends the reader at the wrong one. The last of those is mothership mode, not a defensive
+  branch: a node with no main database cannot read a connection sealed with the mothership's key, so the
+  read fails permanently and by design, and calling that an outage would send an operator hunting a
+  Figma incident that does not exist. One renderer serves both surfaces a document reaches (the
+  materialised `.cat-context/` file and the in-prompt injection an INLINE kind gets instead of a
+  checkout), because a judge or reviewer scoring against a stale design is the same failure as a
+  container agent building from one, and an omitted note reads exactly like a copy that was checked.
+  Every gap also increments the new `document.freshness_gap` counter, dimensioned by reason and source:
+  each of these conditions repeats per dispatch while it lasts, so the log line answers "what happened
+  to this run" and only a rate answers "is this spreading". The refresh still never throws, so a source
+  outage costs the run a stale body and a stated warning rather than the run, and the readability
+  refusal now runs on the refreshed records, since a page emptied since import is the case most worth
+  refusing. That
+  includes the REQUIREMENTS REVIEW, the first step of the default pipelines and the one a human signs
+  off on, which resolves its attachments through the same refresher rather than reviewing the
+  import-time copy while the coder two steps later builds from the current one. A deployment with no
+  refresher wired gets no verdict at all rather than a synthesised one: it did not conclude these bodies
+  are unverifiable, it never asked.
+
+  Separately, the one fragment that tells an agent how to consume design context was selected by nothing.
+  Its `appliesTo` selector is a management-surface hint the run path never drove, it is in no seed pin
+  set, and basic mode hides the per-task fragment picker — so the standard case, a designer links a frame
+  and starts a run, executed with a design context file on disk and no instruction anywhere to honour it.
+  The engine now folds it whenever the run's resolved context carries a design-origin document. The
+  trigger is the document rather than the block type, which the retired selector got wrong in both
+  directions (it missed a design linked to an unlabelled task and fired on a frontend task with no
+  design), and that selector is DELETED rather than left beside the new rule: the deterministic
+  selector and the management surface still read it, so leaving it would keep labelling the fragment
+  frontend-only while the engine folded it for anything carrying a design. It rides the normal fold, so
+  a workspace override still wins and the two-tier brief/full verbosity still applies. The flag settles
+  off the corpus read rather than off the finished linked context, so the fragment fold (an LLM call,
+  when a standard needs condensing) is not serialised behind a live source probe on every dispatch.
+
+  Two hygiene fixes ride along, both about a claim over a pasted URL. `makeDocumentUrlResolver` now
+  consults host-pinned parsers before host-blind ones instead of in registration order: Notion's
+  `parseRef` claims any UUID-shaped run anywhere, so registered first it stole a Figma URL whose file key
+  carried one, and the point lookup then searched the wrong key space and found nothing — a linked design
+  reaching the agent as no context at all. And the two source traits that decide these things
+  (`isDesignSource`, `isHostPinnedSource`) live in contracts off one exhaustive `Record`, because the SPA
+  has to label a design source too and the run path reads them where no provider is reachable.
+
+  Reviewing: the refresh sits on the hot path of every dispatch, so the thing to check is the ladder's
+  short-circuits (an unchanged design must cost one cached round trip and no download, a failed one must
+  not be retried per dispatch, and the second dispatch after a re-import must do nothing at all) rather
+  than the verdicts. The re-import running INSIDE the cache loader is the deliberate part: it is what
+  lets one entry bound the expensive half and dedupe concurrent dispatches, and its consequence is that
+  a caller which deduped onto someone else's outcome re-reads the row rather than labelling the body it
+  already holds with a revision it does not carry. The `sourceVersion` column is nullable on purpose and
+  a backfill would be wrong: an empty string cannot be told apart from a source that genuinely has no
+  version, and the two get different treatment.
+
+### Patch Changes
+
+- Updated dependencies [5202fb9]
+  - @cat-factory/kernel@0.252.0
+  - @cat-factory/contracts@0.253.0
+
+## 0.136.2
+
+### Patch Changes
+
+- Updated dependencies [e845d65]
+  - @cat-factory/kernel@0.251.0
+
+## 0.136.1
+
+### Patch Changes
+
+- Updated dependencies [4c071ec]
+  - @cat-factory/contracts@0.252.0
+  - @cat-factory/kernel@0.250.0
+
+## 0.136.0
+
+### Minor Changes
+
+- c9adc67: Refuse a blind run: the harness now tells the backend which job-body capabilities it parses
+
+  An image older than a body capability does not reject the field, it ignores it. For most of the
+  job body that degrades honestly, but a CAPABILITY is different: the backend composes the PROMPT,
+  so a dropped `mcpServers` leaves the agent reading "you have these tools, prefer them over
+  guessing" with no client wired, and a dropped `skills` leaves a claude-code run told a playbook
+  "is installed for this step" that was never written. The harness CHANGELOG has documented this
+  twice as an operator hazard, both times ending at the same wall: the backend has no way to know
+  what image a self-hosted runner pool pins, so it could not be gated server-side. A blind run
+  rather than a failed one, and the run that most needs a signal produced none.
+
+  The handshake is a list of body field names the image reports on `/health` and on its job
+  ACCEPTANCE. The acceptance is where it matters: the dispatch site is the only place the body it
+  just sent is still in scope, and the last moment before the agent starts working from a prompt the
+  body cannot back up. `RunnerTransport.dispatch` therefore returns an optional ack, forwarded by
+  every transport that can see the harness's own response.
+
+  The answer is deliberately THREE-STATE, and the middle state is the whole design. An image that
+  reported nothing is not an image that reported "not this": every image between the capability
+  landing and the handshake landing serves it perfectly and reports no list, so folding the two
+  would refuse those runs on no evidence. So `unsupported` (the image said it cannot) refuses the
+  dispatch and stops the job the harness already started, as an `UnavailableError` whose
+  `runner_image_capability` reason makes the step a `preflight` fault rather than a container that
+  died; `unknown` proceeds and is REPORTED as the deployment's own blind spot, on a warn line and a
+  `container.capability_unknown` counter that should decay to zero as pools update. A body carrying
+  no capability says nothing at all, which is most dispatches.
+
+  Refusing the step is only half of it: the harness begins work on acceptance, so a refusal that
+  merely throws leaves a full agent pass running against the repository, free to push a branch and
+  open a pull request for a step the engine already failed. The refusal therefore STOPS the job,
+  through a new `RunnerTransport.stopJob` and a new harness `DELETE /jobs/{id}` that aborts one job
+  and waits for it to settle before answering. Never through `release`, which is a reclaim and means
+  something different on every backend: on a per-run container it happens to kill the job, on a warm
+  pool member it hands the container BACK with the agent still working in it, and on a self-hosted
+  pool with no `release` template it does nothing at all.
+
+  Not every backend can PROVE the job died, so the outcome is reported rather than assumed and the
+  failure message says which of four it was: `stopped` (nothing is still running), `requested` (a
+  pool cancel was accepted but cannot be verified), `unsupported` (no cancel path exists), `failed`.
+  The last three also increment `container.blind_job_not_stopped`, dimensioned by the outcome,
+  because each is a different operator fix. A backend that owns the container always reaches
+  `stopped`, since a graceful abort that fails escalates to destroying it; on the local warm pool
+  that escalation is also what keeps a member whose job could not be aborted off the idle list, where
+  it still answers `/health` and the next run would lease a container with a live agent and a live
+  checkout in it.
+
+  A runner pool gets the handshake only when its manifest MAPS it: `response.dispatchCapabilitiesPath`,
+  one line for a pool that proxies `POST /jobs` verbatim. Deliberately not read by name, because
+  `capabilities` is an ordinary word for a scheduler to use about its own runners (`["gpu","docker"]`)
+  and reading one of those as the harness's answer would narrow to an empty list and hard-refuse every
+  capability dispatch against a perfectly current image. Unmapped lands in `unknown`, which is honest
+  about a control plane this backend knows nothing about.
+
+  OPERATORS: this bumps the runner image to `1.93.0`. A pool on an older image keeps working exactly
+  as before; it simply reports no handshake, so tool-server and skill dispatches there are counted as
+  unverifiable instead of confirmed. To get the check on a self-hosted pool, map
+  `response.dispatchCapabilitiesPath` to `capabilities` and declare a `release` template so a refused
+  run can actually be cancelled.
+
+### Patch Changes
+
+- Updated dependencies [3fbc87e]
+- Updated dependencies [c9adc67]
+  - @cat-factory/contracts@0.251.0
+  - @cat-factory/kernel@0.249.0
+
 ## 0.135.0
 
 ### Minor Changes

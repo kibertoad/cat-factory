@@ -25,6 +25,7 @@ function contextFor(agentKind: AgentKind): AgentRunContext {
         {
           title: 'Export PRD',
           url: 'https://docs/export-prd',
+          origin: 'confluence' as const,
           excerpt: 'Export must be UTF-8.',
           summary: 'Export must be UTF-8.',
           body: '# Export PRD\n\nExport must be UTF-8.',
@@ -145,5 +146,40 @@ describe('linked context in agent prompts', () => {
     expect(prompt).toContain('Addendum 0 (https://docs/addendum-0)')
     expect(prompt).toContain('and 25 more')
     expect(prompt).not.toContain('Addendum 29')
+  })
+
+  // An INLINE kind has no `.cat-context/` file to read the freshness header from, so whatever the
+  // refresh concluded has to travel in the prompt itself. Otherwise a judge, estimator or reviewer
+  // receives an unconfirmed body indistinguishable from a checked one and scores against it.
+  it('states an UNCONFIRMED verdict to an inline kind, which has no context file', () => {
+    const ctx = contextFor('reviewer' as AgentKind)
+    ctx.block.contextDocs![0]!.freshness = { status: 'unconfirmed', reason: 'source_unreachable' }
+
+    const prompt = userPromptFor(ctx, registry)
+
+    expect(prompt).toContain('Freshness: NOT confirmed against the source')
+    expect(prompt).toContain('the source could not be reached')
+  })
+
+  it('states a confirmed revision to an inline kind', () => {
+    const ctx = contextFor('reviewer' as AgentKind)
+    ctx.block.contextDocs![0]!.freshness = {
+      status: 'confirmed',
+      version: 'v42',
+      reimported: false,
+    }
+
+    expect(userPromptFor(ctx, registry)).toContain('Revision: v42')
+  })
+
+  it('says NOTHING when there is nothing to state', () => {
+    // An `upload` has no source to trail and an unwired deployment never asked, so both must render
+    // byte-for-byte the prior prompt rather than a note implying a check happened.
+    const ctx = contextFor('reviewer' as AgentKind)
+    ctx.block.contextDocs![0]!.freshness = { status: 'not-applicable' }
+
+    expect(userPromptFor(ctx, registry)).not.toContain('Freshness')
+    delete ctx.block.contextDocs![0]!.freshness
+    expect(userPromptFor(ctx, registry)).not.toContain('Freshness')
   })
 })

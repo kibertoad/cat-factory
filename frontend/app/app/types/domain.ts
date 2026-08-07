@@ -67,6 +67,9 @@ export type {
   TaskTypePresentation,
   TaskTypeFieldDescriptor,
   TaskTypeFieldOption,
+  // One row of the workspace's operation-suppression screen: a registered custom task type plus
+  // whether THIS board hides it (`backend/docs/reusable-operations.md`).
+  TaskTypeSuppression,
   // The shared descriptor-driven form vocabulary (`contracts/src/form-fields.ts`): one field
   // shape and one filled-value bag behind both the initiative-preset form and a custom task
   // type's per-case form, so `DescriptorFields.vue` renders either.

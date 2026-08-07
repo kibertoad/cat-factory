@@ -1,4 +1,4 @@
-# ADR 0040: Per-workspace capability credentials
+# ADR 0041: Per-workspace capability credentials
 
 - **Status:** Accepted (implemented)
 - **Date:** 2026-08-06

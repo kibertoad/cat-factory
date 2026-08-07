@@ -30,6 +30,7 @@ import {
   DocumentImportService,
   DocumentLinkService,
   DocumentPlannerService,
+  LinkedDocumentRefreshService,
   EnvironmentConnectionService,
   EnvironmentTeardownService,
   GitHubInstallationService,
@@ -82,6 +83,7 @@ import { PreviewService } from '../modules/preview/PreviewService.js'
 import { IncidentEnrichmentService } from '../modules/incidentEnrichment/IncidentEnrichmentService.js'
 import { AgentPromptService } from '../modules/agentPrompts/AgentPromptService.js'
 import { WorkspaceAgentSettingsService } from '../modules/agentSettings/WorkspaceAgentSettingsService.js'
+import { TaskTypeSuppressionService } from '../modules/taskTypes/TaskTypeSuppressionService.js'
 import { ModelPresetService } from '../modules/modelPresets/ModelPresetService.js'
 import { inlineModelResolutionDeps } from './inline-model-deps.js'
 import { ConsensusGroupService } from '../modules/consensusGroups/ConsensusGroupService.js'
@@ -123,6 +125,7 @@ import type {
   SlackModule,
   TrackerModule,
   TrackerWebhookModule,
+  TaskTypeSuppressionModule,
   WorkspaceAgentSettingsModule,
   WorkspaceSettingsModule,
 } from './module-shapes.js'
@@ -260,6 +263,7 @@ export function createGitHubModule(
 export function createDocumentsModule(
   deps: CoreDependencies,
   boardService: BoardService,
+  caches: AppCaches,
 ): DocumentsModule | undefined {
   const { documentSourceProviders, documentConnectionRepository, documentRepository } = deps
   if (
@@ -277,6 +281,11 @@ export function createDocumentsModule(
     registry,
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
+    // Connecting or disconnecting a source invalidates every freshness verdict it authorised, and
+    // a manual re-import invalidates that one document's: the TTL bounds how long a run dispatches
+    // against an unnoticed edit, but only invalidation keeps a verdict from outliving the write
+    // that made it wrong.
+    versionCache: caches.linkedDocumentVersion,
   })
   const importService = new DocumentImportService({
     registry,
@@ -285,6 +294,7 @@ export function createDocumentsModule(
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
     idGenerator: deps.idGenerator,
+    versionCache: caches.linkedDocumentVersion,
   })
   const plannerService = new DocumentPlannerService({
     modelProviderResolver: deps.modelProviderResolver,
@@ -297,7 +307,29 @@ export function createDocumentsModule(
     documentRepository,
   })
   const contentResolver = new DocumentContentResolverService({ registry, connectionService })
-  return { connectionService, importService, plannerService, linkService, contentResolver }
+  // Wired unconditionally alongside the rest of the module: the refresh is not an opt-in capability
+  // but the correct behaviour of reading a linked document, and a facade that could forget it would
+  // silently go back to serving import-time copies (the failure this closes). Its own dependencies
+  // are all already in hand — the version cache passes through where a profile disables it, which
+  // costs a probe per dispatch rather than turning the refresh off.
+  const linkedRefresher = new LinkedDocumentRefreshService({
+    registry,
+    connectionService,
+    importService,
+    versionCache: caches.linkedDocumentVersion,
+    logger: deps.logger,
+    // Every gap is per-DISPATCH and most are permanent while they last, so the log line answers
+    // "what happened to this run" and only the counter answers "is this rising".
+    metrics: deps.operationalMetrics,
+  })
+  return {
+    connectionService,
+    importService,
+    plannerService,
+    linkService,
+    contentResolver,
+    linkedRefresher,
+  }
 }
 
 /**
@@ -1100,6 +1132,24 @@ export function createWorkspaceAgentSettingsModule(
   const service = new WorkspaceAgentSettingsService({
     workspaceAgentSettingsRepository,
     workspaceRepository: deps.workspaceRepository,
+    clock: deps.clock,
+  })
+  return { service }
+}
+
+/**
+ * Assemble the per-workspace operation-suppression module when its repository is present.
+ * Absent ⇒ the controller 503s and every board offers every registered operation.
+ */
+export function createTaskTypeSuppressionModule(
+  deps: CoreDependencies,
+): TaskTypeSuppressionModule | undefined {
+  const { taskTypeSuppressionRepository } = deps
+  if (!taskTypeSuppressionRepository) return undefined
+  const service = new TaskTypeSuppressionService({
+    taskTypeSuppressionRepository,
+    workspaceRepository: deps.workspaceRepository,
+    taskTypeRegistry: deps.taskTypeRegistry,
     clock: deps.clock,
   })
   return { service }

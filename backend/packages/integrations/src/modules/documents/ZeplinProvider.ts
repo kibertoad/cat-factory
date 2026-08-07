@@ -16,6 +16,8 @@ import {
   splitZeplinExternalId,
   unwrapArray,
   unwrapObject,
+  zeplinDroppedScreenId,
+  zeplinUrlFor,
   type ZeplinComponent,
   type ZeplinDesignTokens,
   type ZeplinScreen,
@@ -65,6 +67,19 @@ export class ZeplinProvider implements DocumentSourceProvider {
 
   parseRef(input: string): string | null {
     return parseZeplinRef(input)
+  }
+
+  canonicalUrl(externalId: string): string {
+    return zeplinUrlFor(externalId)
+  }
+
+  /**
+   * The screen the link named when `parseRef` could not read its id and fell back to the whole
+   * project. See `zeplinDroppedScreenId`: the widened reference is otherwise indistinguishable
+   * from the one the user meant.
+   */
+  droppedScope(input: string, externalId: string): string | null {
+    return zeplinDroppedScreenId(input, externalId)
   }
 
   async fetchDocument(

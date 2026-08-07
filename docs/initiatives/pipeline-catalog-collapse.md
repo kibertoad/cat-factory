@@ -194,6 +194,11 @@ explicitly rather than papered over.
       schema member, the `assertPipelineLaunchable` arm, and care that the programmatic start paths
       pass no user `origin`. Until it lands, those three are still offered on a task (and
       `pl_initiative_breakdown` on an initiative block, where the engine would refuse it).
+- [x] **WS3c: make the omitted steps actually addable.** The `remain available in the builder`
+      promise above was never true for `spec-writer`, `blueprints` or `deployer`: the first two are
+      registered kinds that declared no `presentation`, and the SPA's `SYSTEM_AGENT_META` shadowed
+      all three out of the palette. Both halves fixed, plus the admission message that told a user
+      to reseed because adding a Deployer was impossible.
 - [ ] **WS4: the merge-preset human-gate floor.** Per-change-class required-human-review rules on
       the merge preset, so the estimate can escalate but never fall below policy.
 - [ ] **WS5: second retirement wave.** `pl_visual` + `pl_frontend` (both `experimental`, both
@@ -202,6 +207,15 @@ explicitly rather than papered over.
 
 ## Gotchas the first slice surfaced
 
+- **"Remains available in the builder" is a claim about TWO catalogs, and neither was checked.** A
+  step is offered only when the kind declares `presentation` (which is what carries a registered
+  kind into `customAgentKinds`) AND the SPA does not list it in `SYSTEM_AGENT_META`, whose entries
+  DROP the registry's copy. Dropping a step from a preset on the strength of that promise therefore
+  removed the capability outright for `spec-writer` and `blueprints`, and took `spec-companion` with
+  the spec-writer, since a companion is rendered as a toggle on a producer that must be placeable.
+  `deployer` was the sharpest case: `assertDeployerBeforeConsumer` REFUSES a run whose chain reaches
+  a tester with no Deployer, on a pipeline the builder could not add one to. **A future preset that
+  sheds a step owes a check that the step is placeable**, not just that the kind still exists.
 - **`merger` must never be gatable.** `runOpensPr` (`RunRepoOpsController.ts:44`) tests
   `instance.steps.some(s => s.agentKind === 'merger')`: the authored steps, not the un-skipped
   ones. A skipped merger would leave delivering kinds (`spike`, `spec-writer`) opening a PR that

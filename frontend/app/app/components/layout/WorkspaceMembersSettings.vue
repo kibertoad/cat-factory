@@ -187,6 +187,7 @@ function memberLabel(userId: string, name?: string | null, email?: string | null
           :key="m.userId"
           class="flex items-center justify-between gap-2 rounded-md bg-slate-800/40 px-2 py-1"
           data-testid="workspace-member-row"
+          :data-user-id="m.userId"
         >
           <span class="truncate">{{ memberLabel(m.userId, m.name, m.email) }}</span>
           <span class="flex shrink-0 items-center gap-2">

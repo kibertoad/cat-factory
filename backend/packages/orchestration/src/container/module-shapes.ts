@@ -27,6 +27,7 @@ import type { SandboxService } from '../modules/sandbox/SandboxService.js'
 import type { ServiceFragmentDefaultsService } from '../modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
 import type { AgentPromptService } from '../modules/agentPrompts/AgentPromptService.js'
 import type { WorkspaceAgentSettingsService } from '../modules/agentSettings/WorkspaceAgentSettingsService.js'
+import type { TaskTypeSuppressionService } from '../modules/taskTypes/TaskTypeSuppressionService.js'
 import type { ModelPresetService } from '../modules/modelPresets/ModelPresetService.js'
 import type { ConsensusGroupService } from '../modules/consensusGroups/ConsensusGroupService.js'
 import type { TrackerSettingsService } from '../modules/recurring/TrackerSettingsService.js'
@@ -171,6 +172,14 @@ export interface AgentPromptsModule {
 /** The per-agent-kind generation settings service, present only when its repository is wired. */
 export interface WorkspaceAgentSettingsModule {
   service: WorkspaceAgentSettingsService
+}
+
+/**
+ * The per-workspace operation-suppression service, present only when its repository is wired.
+ * Absent ⇒ every board offers every registered operation (today's behaviour).
+ */
+export interface TaskTypeSuppressionModule {
+  service: TaskTypeSuppressionService
 }
 
 /** The default service-fragment feature's service, present only when its repository is wired. */

@@ -69,6 +69,6 @@ artifact's storage key.
 ## Related
 
 Part of cat-factory's opt-in **AWS stack** alongside
-[`@cat-factory/provider-bedrock`](../provider-bedrock) (LLM models) and
-[`@cat-factory/eks`](../eks) (runner + environment backends). Each is independent and registers
+[`@cat-factory/provider-bedrock`](https://github.com/kibertoad/cat-factory/tree/main/backend/packages/provider-bedrock) (LLM models) and
+[`@cat-factory/eks`](https://github.com/kibertoad/cat-factory/tree/main/backend/packages/eks) (runner + environment backends). Each is independent and registers
 into its own seam: mix in only what you use.

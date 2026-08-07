@@ -15,6 +15,7 @@ import type {
   RequirementReview,
 } from '../domain/types.js'
 import type { InfraSetupTransition } from '../domain/infra-reachability.js'
+import type { BoardChange } from '../domain/board-events.js'
 
 // Port for pushing state changes to connected clients in real time, instead of
 // the browser polling for them. The execution engine calls this whenever it
@@ -36,26 +37,19 @@ export interface ExecutionEventPublisher {
     block?: Block | null,
   ): Promise<void>
   /**
-   * A structural board change the per-instance event can't express (a module
-   * materialised, a run cancelled) — a coarse signal that prompts a full refresh.
-   * `blockId` (when known) identifies a block of the affected service so the change can
-   * be fanned out to every workspace that mounts it (in-org sharing); omit it for a
-   * genuinely board-wide signal, which then reaches the originating workspace only.
-   * `originConnectionId` (when known) is the realtime connection that caused the change:
-   * the transport skips delivering the echo back to it, so a client never refreshes off
-   * its own move (which would snap an in-flight drag back to a stale position).
+   * The board changed in a way the per-instance event can't express (a task spawned, a module
+   * materialised, a run cancelled). Carries the changed block when the change is fully described
+   * by one, so the client patches it in place; otherwise it is a coarse signal prompting a full
+   * refresh. See {@link BoardChange}.
    */
-  boardChanged(
-    workspaceId: string,
-    reason: string,
-    blockId?: string | null,
-    originConnectionId?: string | null,
-  ): Promise<void>
+  boardChanged(workspaceId: string, change: BoardChange): Promise<void>
   /**
-   * A repo-bootstrap run advanced: push the updated job (with live `subtasks`)
-   * and its provisional/linked service frame, so the board patches the
-   * "bootstrapping…" card and its progress without a refetch. Optional so
-   * publishers/tests that predate bootstrap progress need no change.
+   * A repo-bootstrap run advanced: push the updated job (with live `subtasks`) so the board
+   * patches the "bootstrapping…" card and its progress without a refetch. `block` is the run's
+   * provisional/linked service FRAME, which the wire refuses to carry as a payload for the reason
+   * `deliverableBoardBlock` states; it is passed anyway because the port may not assume its own
+   * callers only ever hand it frames. Optional so publishers/tests that predate bootstrap progress
+   * need no change.
    */
   bootstrapChanged?(workspaceId: string, job: BootstrapJob, block?: Block | null): Promise<void>
   /**

@@ -351,3 +351,437 @@ describe('SpendService forecast batching', () => {
     expect(accountRepository.get).not.toHaveBeenCalled()
   })
 })
+
+describe('SpendService tier statuses', () => {
+  const NOW = Date.UTC(2026, 6, 17, 9, 30)
+  const at = (costEstimate: number) => ({ inputTokens: 100, outputTokens: 50, costEstimate })
+
+  /** A ledger reporting a different period total per tier, so a status cannot read the wrong one. */
+  function tieredLedger(totals: { workspace?: number; account?: number; user?: number }) {
+    return {
+      ...fakeTokenUsage(),
+      totalsSinceForWorkspace: async () => at(totals.workspace ?? 0),
+      totalsSinceForAccount: async () => at(totals.account ?? 0),
+      totalsSinceForUser: async () => at(totals.user ?? 0),
+    } as unknown as TokenUsageRepository
+  }
+
+  const service = (repo: TokenUsageRepository, pricing = DEFAULT_SPEND_PRICING) =>
+    new SpendService({
+      tokenUsageRepository: repo,
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing,
+    })
+
+  it('reports the workspace period, and counts spend AT the limit as exceeded', async () => {
+    const limit = DEFAULT_SPEND_PRICING.monthlyLimit
+    const status = await service(tieredLedger({ workspace: limit })).status('ws')
+    expect(status.periodStart).toBe(Date.UTC(2026, 6, 1))
+    expect(status.costSpent).toBe(limit)
+    expect(status.costLimit).toBe(limit)
+    expect(status.currency).toBe(DEFAULT_SPEND_PRICING.currency)
+    // The gate pauses at the ceiling, not one cent past it.
+    expect(status.exceeded).toBe(true)
+    expect((await service(tieredLedger({ workspace: limit - 0.01 })).status('ws')).exceeded).toBe(
+      false,
+    )
+  })
+
+  it('serves the same budget verdict through periodUsage as through status', async () => {
+    const limit = DEFAULT_SPEND_PRICING.monthlyLimit
+    const usage = await service(tieredLedger({ workspace: limit })).periodUsage('ws')
+    expect(usage.budget.exceeded).toBe(true)
+    expect(usage.budget.costLimit).toBe(limit)
+    expect(
+      (await service(tieredLedger({ workspace: limit - 0.01 })).periodUsage('ws')).budget.exceeded,
+    ).toBe(false)
+  })
+
+  it('reports the account tier against its effective limit, and nothing for an inactive one', async () => {
+    const accountRepository = {
+      get: async () => ({ spendMonthlyLimit: 500 }),
+    } as unknown as AccountRepository
+    const svc = new SpendService({
+      tokenUsageRepository: tieredLedger({ account: 500 }),
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: DEFAULT_SPEND_PRICING,
+      accountRepository,
+    })
+    const status = await svc.accountStatus('acc')
+    expect(status?.costLimit).toBe(500)
+    expect(status?.exceeded).toBe(true)
+
+    // No configured limit and no operator cap: the tier does not gate, so there is no status
+    // to report — null, never a status against an infinite ceiling.
+    const inactive = new SpendService({
+      tokenUsageRepository: tieredLedger({ account: 500 }),
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: DEFAULT_SPEND_PRICING,
+      accountRepository: {
+        get: async () => ({ spendMonthlyLimit: null }),
+      } as unknown as AccountRepository,
+    })
+    expect(await inactive.accountStatus('acc')).toBeNull()
+  })
+
+  it('clamps a configured tier limit by the operator env cap', async () => {
+    const svc = new SpendService({
+      tokenUsageRepository: tieredLedger({ account: 90, user: 90 }),
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: { ...DEFAULT_SPEND_PRICING, accountMonthlyLimitCap: 80, userMonthlyLimitCap: 80 },
+      accountRepository: {
+        get: async () => ({ spendMonthlyLimit: 500 }),
+      } as unknown as AccountRepository,
+      userSettingsRepository: {
+        get: async () => ({ spendMonthlyLimit: 500 }),
+      } as unknown as UserSettingsRepository,
+    })
+    expect((await svc.accountStatus('acc'))?.costLimit).toBe(80)
+    expect((await svc.userStatus('usr'))?.costLimit).toBe(80)
+    // Spend of 90 against the clamped 80: the CAP is what the tier gates on, not the 500.
+    expect((await svc.accountStatus('acc'))?.exceeded).toBe(true)
+    expect((await svc.userStatus('usr'))?.exceeded).toBe(true)
+  })
+
+  // The tier above configured a limit, so it stays active whatever the cap does. This is the
+  // OTHER activation route, and the only one that tells a configured-limit-only reading of
+  // `effectiveTierLimit` apart from the real rule: nothing is configured, so the tier owes its
+  // very existence to the operator cap.
+  it('activates a tier on the operator cap alone when nothing is configured', async () => {
+    const svc = new SpendService({
+      tokenUsageRepository: tieredLedger({ account: 90, user: 5 }),
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: { ...DEFAULT_SPEND_PRICING, accountMonthlyLimitCap: 80, userMonthlyLimitCap: 80 },
+      accountRepository: {
+        get: async () => ({ spendMonthlyLimit: null }),
+      } as unknown as AccountRepository,
+      userSettingsRepository: {
+        get: async () => ({ spendMonthlyLimit: null }),
+      } as unknown as UserSettingsRepository,
+    })
+    const account = await svc.accountStatus('acc')
+    expect(account?.costLimit).toBe(80)
+    expect(account?.exceeded).toBe(true)
+    // Active does not mean exceeded: the same cap-only tier reports a status well under it.
+    const user = await svc.userStatus('usr')
+    expect(user?.costLimit).toBe(80)
+    expect(user?.exceeded).toBe(false)
+  })
+
+  // A tier with NO repository wired at all resolves through the same rule, so an operator cap
+  // still gates it: the absent row and a row holding null are the same fact here.
+  it('gates an unwired tier on the operator cap', async () => {
+    const svc = new SpendService({
+      tokenUsageRepository: tieredLedger({ account: 90 }),
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: { ...DEFAULT_SPEND_PRICING, accountMonthlyLimitCap: 80 },
+    })
+    expect((await svc.accountStatus('acc'))?.costLimit).toBe(80)
+    // ...and with no cap either, it does not gate at all.
+    const uncapped = new SpendService({
+      tokenUsageRepository: tieredLedger({ account: 90 }),
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: DEFAULT_SPEND_PRICING,
+    })
+    expect(await uncapped.accountStatus('acc')).toBeNull()
+  })
+
+  it('takes a preloaded user limit instead of re-reading the settings row', async () => {
+    const userSettingsRepository = {
+      get: vi.fn(async () => ({ spendMonthlyLimit: 500 })),
+    } as unknown as UserSettingsRepository
+    const svc = new SpendService({
+      tokenUsageRepository: tieredLedger({ user: 40 }),
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: DEFAULT_SPEND_PRICING,
+      userSettingsRepository,
+    })
+    const status = await svc.userStatus('usr', { configuredLimit: 50 })
+    expect(status?.costLimit).toBe(50)
+    expect(status?.exceeded).toBe(false)
+    expect(userSettingsRepository.get).not.toHaveBeenCalled()
+    // A preloaded tier with nothing configured is inactive, exactly as a read one would be.
+    expect(await svc.userStatus('usr', { configuredLimit: null })).toBeNull()
+  })
+
+  it('reports the operator ceilings for the budget screens', () => {
+    expect(service(fakeTokenUsage()).budgetCaps()).toEqual({
+      accountMonthlyLimitMax: null,
+      userMonthlyLimitMax: null,
+      currency: DEFAULT_SPEND_PRICING.currency,
+    })
+    const capped = service(fakeTokenUsage(), {
+      ...DEFAULT_SPEND_PRICING,
+      accountMonthlyLimitCap: 400,
+      userMonthlyLimitCap: 0,
+    })
+    // A 0 ceiling is a real ceiling ("no paid spend"), so it must not read back as "uncapped".
+    expect(capped.budgetCaps()).toEqual({
+      accountMonthlyLimitMax: 400,
+      userMonthlyLimitMax: 0,
+      currency: DEFAULT_SPEND_PRICING.currency,
+    })
+  })
+
+  it('reports the breakdown against the workspace currency and this period', async () => {
+    const rows = [
+      {
+        billing: 'metered',
+        vendor: null,
+        provider: 'anthropic',
+        model: 'claude-opus-5',
+        inputTokens: 10,
+        outputTokens: 5,
+        costEstimate: 1.5,
+        calls: 2,
+      },
+    ]
+    const svc = new SpendService({
+      tokenUsageRepository: {
+        ...fakeTokenUsage(),
+        usageBreakdownForWorkspace: async () => rows,
+      } as unknown as TokenUsageRepository,
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: DEFAULT_SPEND_PRICING,
+      workspaceSettingsRepository: {
+        get: async () => workspaceSettings({ spendCurrency: 'USD' }),
+      } as unknown as WorkspaceSettingsRepository,
+    })
+    const breakdown = await svc.usageBreakdown('ws')
+    expect(breakdown.periodStart).toBe(Date.UTC(2026, 6, 1))
+    expect(breakdown.currency).toBe('USD')
+    expect(breakdown.rows).toEqual(rows)
+  })
+})
+
+describe('SpendService.isOverBudget', () => {
+  const NOW = Date.UTC(2026, 6, 17)
+  const at = (costEstimate: number) => ({ inputTokens: 0, outputTokens: 0, costEstimate })
+
+  function svcFor(
+    totals: { workspace?: number; account?: number; user?: number },
+    extra: Partial<ConstructorParameters<typeof SpendService>[0]> = {},
+  ) {
+    return new SpendService({
+      tokenUsageRepository: {
+        ...fakeTokenUsage(),
+        totalsSinceForWorkspace: async () => at(totals.workspace ?? 0),
+        totalsSinceForAccount: async () => at(totals.account ?? 0),
+        totalsSinceForUser: async () => at(totals.user ?? 0),
+      } as unknown as TokenUsageRepository,
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: DEFAULT_SPEND_PRICING,
+      ...extra,
+    })
+  }
+
+  const limit = DEFAULT_SPEND_PRICING.monthlyLimit
+
+  it('pauses at exactly the workspace limit and not a cent below it', async () => {
+    expect(await svcFor({ workspace: limit }).isOverBudget('ws')).toBe(true)
+    expect(await svcFor({ workspace: limit - 0.01 }).isOverBudget('ws')).toBe(false)
+  })
+
+  it('checks the ACCOUNT tier when the caller names one, even with the workspace tier clear', async () => {
+    const accountRepository = {
+      get: async () => ({ spendMonthlyLimit: 200 }),
+    } as unknown as AccountRepository
+    expect(
+      await svcFor({ account: 200 }, { accountRepository }).isOverBudget('ws', {
+        accountId: 'acc',
+      }),
+    ).toBe(true)
+    expect(
+      await svcFor({ account: 199 }, { accountRepository }).isOverBudget('ws', {
+        accountId: 'acc',
+      }),
+    ).toBe(false)
+    // Named tiers are only consulted when the caller supplies the id.
+    expect(await svcFor({ account: 200 }, { accountRepository }).isOverBudget('ws')).toBe(false)
+  })
+
+  it('checks the USER tier the same way', async () => {
+    const userSettingsRepository = {
+      get: async () => ({ spendMonthlyLimit: 20 }),
+    } as unknown as UserSettingsRepository
+    expect(
+      await svcFor({ user: 20 }, { userSettingsRepository }).isOverBudget('ws', { userId: 'usr' }),
+    ).toBe(true)
+    expect(
+      await svcFor({ user: 19.99 }, { userSettingsRepository }).isOverBudget('ws', {
+        userId: 'usr',
+      }),
+    ).toBe(false)
+    expect(await svcFor({ user: 20 }, { userSettingsRepository }).isOverBudget('ws')).toBe(false)
+  })
+
+  it('never gates on an INACTIVE tier, however much it spent', async () => {
+    // No configured limit and no operator cap: `Infinity` is not a ceiling, so the tier's
+    // ledger is not even read for a verdict.
+    const totalsSinceForAccount = vi.fn(async () => at(1_000_000))
+    const svc = new SpendService({
+      tokenUsageRepository: {
+        ...fakeTokenUsage(),
+        totalsSinceForWorkspace: async () => at(0),
+        totalsSinceForAccount,
+      } as unknown as TokenUsageRepository,
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: DEFAULT_SPEND_PRICING,
+      accountRepository: {
+        get: async () => ({ spendMonthlyLimit: null }),
+      } as unknown as AccountRepository,
+    })
+    expect(await svc.isOverBudget('ws', { accountId: 'acc' })).toBe(false)
+    expect(totalsSinceForAccount).not.toHaveBeenCalled()
+  })
+
+  it('reads every tier against ONE period start', async () => {
+    const seen: number[] = []
+    const record = async (_id: string, since: number) => {
+      seen.push(since)
+      return at(0)
+    }
+    const svc = new SpendService({
+      tokenUsageRepository: {
+        ...fakeTokenUsage(),
+        totalsSinceForWorkspace: record,
+        totalsSinceForAccount: record,
+        totalsSinceForUser: record,
+      } as unknown as TokenUsageRepository,
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: DEFAULT_SPEND_PRICING,
+      accountRepository: {
+        get: async () => ({ spendMonthlyLimit: 100 }),
+      } as unknown as AccountRepository,
+      userSettingsRepository: {
+        get: async () => ({ spendMonthlyLimit: 100 }),
+      } as unknown as UserSettingsRepository,
+    })
+    await svc.isOverBudget('ws', { accountId: 'acc', userId: 'usr' })
+    expect(seen).toEqual([Date.UTC(2026, 6, 1), Date.UTC(2026, 6, 1), Date.UTC(2026, 6, 1)])
+  })
+})
+
+describe('SpendService.record — the persisted row', () => {
+  function recordingRepo(): { repo: TokenUsageRepository; rows: TokenUsageRecord[] } {
+    const rows: TokenUsageRecord[] = []
+    return {
+      rows,
+      repo: {
+        ...fakeTokenUsage(),
+        record: async (row: TokenUsageRecord) => {
+          rows.push(row)
+        },
+      } as unknown as TokenUsageRepository,
+    }
+  }
+
+  it('splits `provider:model` and stamps the row with the id generator and clock', async () => {
+    const { repo, rows } = recordingRepo()
+    const svc = new SpendService({
+      tokenUsageRepository: repo,
+      idGenerator: { next: (prefix: string) => `${prefix}_1` },
+      clock: { now: () => 1_700_000_000_000 },
+      pricing: DEFAULT_SPEND_PRICING,
+    })
+    await svc.record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      model: 'anthropic:claude-opus-5',
+      usage: { inputTokens: 1, outputTokens: 1 },
+      accountId: 'acc',
+      userId: 'usr',
+      billing: 'subscription',
+      vendor: 'claude-code',
+    })
+    expect(rows[0]).toMatchObject({
+      id: 'tok_1',
+      workspaceId: 'ws',
+      provider: 'anthropic',
+      model: 'claude-opus-5',
+      accountId: 'acc',
+      userId: 'usr',
+      billing: 'subscription',
+      vendor: 'claude-code',
+      createdAt: 1_700_000_000_000,
+    })
+  })
+
+  it('defaults an unattributed row to a metered workspace-only row rather than dropping the fields', async () => {
+    const { repo, rows } = recordingRepo()
+    const svc = new SpendService({
+      tokenUsageRepository: repo,
+      idGenerator,
+      clock,
+      pricing: DEFAULT_SPEND_PRICING,
+    })
+    await svc.record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      // A bare identifier with no `:` is the whole provider; the model half is empty, which is
+      // what makes it resolve to the provider-level (or default) price rather than to nothing.
+      model: 'litellm',
+      usage: { inputTokens: 1_000_000, outputTokens: 0 },
+    })
+    expect(rows[0]).toMatchObject({
+      provider: 'litellm',
+      model: '',
+      accountId: null,
+      userId: null,
+      billing: 'metered',
+      vendor: null,
+    })
+    expect(rows[0]?.costEstimate).toBeCloseTo(
+      DEFAULT_SPEND_PRICING.prices.litellm?.inputPerMillion ?? 0,
+      6,
+    )
+  })
+
+  it('prices a dynamic OpenRouter model at its catalog rate, and asks nothing for other providers', async () => {
+    const { repo, rows } = recordingRepo()
+    const dynamicPricesFor = vi.fn(async () => [
+      { id: 'vendor/model', inputPerMillion: 9, outputPerMillion: 18 },
+    ])
+    const svc = new SpendService({
+      tokenUsageRepository: repo,
+      idGenerator,
+      clock,
+      pricing: DEFAULT_SPEND_PRICING,
+      dynamicPricesFor: dynamicPricesFor as unknown as ConstructorParameters<
+        typeof SpendService
+      >[0]['dynamicPricesFor'],
+    })
+    await svc.record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      model: 'openrouter:vendor/model',
+      usage: { inputTokens: 1_000_000, outputTokens: 0 },
+    })
+    // The catalog rate, not the bare-`openrouter` fallback the base table would have used.
+    expect(rows[0]?.costEstimate).toBeCloseTo(9, 6)
+
+    await svc.record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      model: 'anthropic:claude-opus-5',
+      usage: { inputTokens: 1_000_000, outputTokens: 0 },
+    })
+    expect(dynamicPricesFor).toHaveBeenCalledTimes(1)
+  })
+})

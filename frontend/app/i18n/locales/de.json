@@ -353,6 +353,13 @@
         "manageAccount": "Kontofragmente verwalten →"
       }
     },
+    "taskTypeSuppressions": {
+      "intro": "Wählen Sie aus, welche wiederverwendbaren Operationen dieses Deployments auf diesem Board angeboten werden. Wird eine ausgeblendet, verschwindet sie hier aus der Aufgabenauswahl und das Anlegen von Arbeit darunter wird abgelehnt; andere Boards bleiben unberührt.",
+      "loading": "Operationen werden geladen…",
+      "empty": "Dieses Deployment registriert keine wiederverwendbaren Operationen.",
+      "offer": "Auf diesem Board anbieten",
+      "saveFailed": "Die angebotenen Operationen konnten nicht geändert werden"
+    },
     "issueTracker": {
       "filing": {
         "heading": "Wo Tickets abgelegt werden",
@@ -932,6 +939,7 @@
         "merge": "Risikorichtlinien",
         "tracker": "Issue-Tracker",
         "fragments": "Dienst-Best-Practices",
+        "operations": "Operationen",
         "metadata": "Metadaten",
         "members": "Mitglieder"
       },
@@ -2826,7 +2834,8 @@
         "derivedTitleFallback": "Pull Request prüfen",
         "prNotFound": "Pull Request #{number} wurde im Repository dieses Service nicht gefunden. Prüfe die Nummer, oder verknüpfe den Service mit dem Repository, in dem der Pull Request liegt.",
         "prRepoMismatch": "Dieser Pull Request liegt in einem anderen Repository. Dieser Service prüft {repo}; lege die Prüfaufgabe unter dem Service an, der mit dem Repository des Pull Requests verknüpft ist."
-      }
+      },
+      "contextFailed": "Aufgabe nicht erstellt: {count} Anhang konnte nicht gelesen werden | Aufgabe nicht erstellt: {count} Anhänge konnten nicht gelesen werden"
     },
     "recurring": {
       "title": "Eine wiederkehrende Pipeline hinzufügen",
@@ -2918,20 +2927,14 @@
       },
       "shared": "Geteilt",
       "sharedTitle": "Über Workspaces in dieser Organisation hinweg geteilt",
-      "bootstrapping": "Wird gebootstrappt…",
       "bootstrappingRepository": "Repository wird gebootstrappt…",
       "bootstrapStepsCount": "{completed}/{total} Schritte",
-      "runFailed": "Lauf fehlgeschlagen",
-      "mergedOfTotal": "{merged}/{total} gemergt",
-      "noTasksYet": "Noch keine Aufgaben",
-      "prCount": "{count} PR",
       "prReadyCount": "{count} PR bereit",
       "taskCount": "{count} Aufgabe | {count} Aufgaben",
       "moduleCount": "{count} Modul | {count} Module",
       "addTaskTitle": "Aufgabe hinzufügen",
       "createTaskFromIssueTitle": "Aufgabe aus Issue erstellen",
       "addRecurringTitle": "Wiederkehrende Pipeline hinzufügen",
-      "collapseTitle": "Einklappen",
       "dragService": "Service ziehen",
       "dragTask": "Aufgabe ziehen",
       "dragToResize": "Zum Ändern der Größe ziehen",
@@ -3012,7 +3015,8 @@
     "attachDocDisabledEnable": "Aktivieren Sie zuerst die Dokumente-Integration",
     "attachIssueDisabledConnect": "Verbinden Sie zuerst einen Issue-Tracker (Integrationen)",
     "attachIssueDisabledEnable": "Aktivieren Sie zuerst die Issue-Tracker-Integration",
-    "importsOnAdd": "importiert beim Hinzufügen"
+    "importsOnAdd": "importiert beim Hinzufügen",
+    "unreadable": "Konnte nicht abgerufen werden: {error}"
   },
   "providers": {
     "presetMismatch": {
@@ -3791,7 +3795,20 @@
       "attachByReference": "{ref} per Referenz anhängen",
       "noMatches": "Keine passenden Seiten.",
       "emptySearchable": "Nach Titel suchen oder ein importiertes Dokument auswählen.",
-      "emptyRefOnly": "Fügen Sie eine Seiten-URL oder -ID ein, um sie anzuhängen."
+      "emptyRefOnly": "Fügen Sie eine Seiten-URL oder -ID ein, um sie anzuhängen.",
+      "sourceLabel": "Quelle",
+      "noSource": "Quelle wählen",
+      "connectSource": "{label} verbinden",
+      "needsSource": "Verbinden Sie eine Dokumentquelle, um eine Seite anzuhängen.",
+      "needsSourceAdmin": "Es ist keine Dokumentquelle verbunden. Bitte einen Workspace-Admin, eine zu verbinden.",
+      "refChecking": "Referenz wird geprüft…",
+      "refUnrecognized": "Keine {source}-Referenz. Erwartet: {expected}",
+      "refOtherSource": "Das ist ein {claimed}-Link, kein {source}-Link.",
+      "refSwitchSource": "Stattdessen {source} verwenden",
+      "refTrimmed": "Auf die unterstützte Form gekürzt",
+      "refWidened": "Nennt einen Frame, den diese Quelle nicht lesen kann ({scope}); daher wird die gesamte Datei angehängt.",
+      "refAlreadyAttached": "Diese Referenz ist bereits angehängt.",
+      "refCheckFailed": "Referenz konnte nicht geprüft werden: {error}"
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Repositorys suchen…",
@@ -3920,6 +3937,7 @@
       "searchIssues": "Issues durchsuchen",
       "searchPlaceholder": "Nach Titel suchen, eine Issue-URL einfügen oder eine Issue-Nummer eingeben…",
       "createTasksIn": "Aufgaben erstellen in",
+      "creatingIn": "Neue Aufgaben landen in {container}",
       "needFrameFirst": "Fügen Sie dem Board zuerst einen Service-Frame hinzu, um Aufgaben aus Issues zu erstellen.",
       "searchFailed": "Suche fehlgeschlagen: {error}",
       "searchResults": "Suchergebnisse",
@@ -3972,6 +3990,7 @@
     "labels": "Labels",
     "labelsHelp": "Durch Komma getrennt. Alle müssen vorhanden sein.",
     "adoptInto": "Ausgewählten Fehler hinzufügen zu",
+    "adoptingInto": "Der ausgewählte Fehler landet in {container}",
     "run": "Jagen",
     "running": "Board wird gelesen und die Funde werden bewertet…",
     "huntFailed": "Die Jagd ist fehlgeschlagen",
@@ -5048,7 +5067,8 @@
       "failedTitle": "Die Initiative konnte nicht erstellt werden",
       "contextDocsHint": "Hänge eine Anforderung, ein RFC oder ein PRD an, damit die Planungsagenten es beim Abstecken und Entwerfen des Plans lesen.",
       "contextIssuesHint": "Hänge ein Tracker-Issue an, damit die Planungsagenten beim Entwerfen des Plans seine Beschreibung und Kommentare sehen.",
-      "linkFailed": "Initiative erstellt, aber {count} Anhang konnte nicht verknüpft werden | Initiative erstellt, aber {count} Anhänge konnten nicht verknüpft werden"
+      "linkFailed": "Initiative erstellt, aber {count} Anhang konnte nicht verknüpft werden | Initiative erstellt, aber {count} Anhänge konnten nicht verknüpft werden",
+      "contextFailed": "Initiative nicht erstellt: {count} Anhang konnte nicht gelesen werden | Initiative nicht erstellt: {count} Anhänge konnten nicht gelesen werden"
     },
     "status": {
       "planning": "Planung",

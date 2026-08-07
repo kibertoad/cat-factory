@@ -35,6 +35,7 @@ import {
   resolveWorkspaceAccess,
   runBestEffort,
 } from '@cat-factory/kernel'
+import { suppressedTaskTypeIds } from '@cat-factory/orchestration'
 import type { AccountRole, ModelRef, TaskTypeRegistry, WorkspaceRole } from '@cat-factory/kernel'
 import type { Workspace } from '@cat-factory/contracts'
 import type { ServerContainer } from '../../http/env.js'
@@ -217,14 +218,48 @@ function snapshotAgentKindVariants(registry: AgentKindRegistry): AgentKindVarian
 /**
  * The registered CUSTOM task types, mapped to the wire shape the SPA merges into its
  * task-type catalog (create-task choice + card badge). The registry already stores the
- * wire projection, so this is a straight `all()`. Static (engine-level registry), so
- * identical for every workspace and every facade. Returns undefined when none are
- * registered, so the field is simply absent on the stock product — symmetric with
- * {@link snapshotCustomAgentKinds}.
+ * wire projection, so this is a straight `all()` minus what this board SUPPRESSES.
+ *
+ * The one member of this bag that is NOT workspace-independent, and the reason the projections
+ * take a workspace at all: an org registers its reusable operations process-wide, so a workspace
+ * admin can hide the ones that board does not run
+ * (`backend/docs/reusable-operations.md`). Filtering HERE rather than in the SPA is what makes the
+ * suppression real: the picker, the card badges and the create-form all read this one list, and
+ * `BoardService` refuses a suppressed type independently so no other door bypasses it.
+ *
+ * Returns undefined when nothing survives, so the field is simply absent on the stock product,
+ * symmetric with {@link snapshotCustomAgentKinds}.
  */
-function snapshotCustomTaskTypes(registry: TaskTypeRegistry): CustomTaskType[] | undefined {
-  const types = registry.all()
+function snapshotCustomTaskTypes(
+  registry: TaskTypeRegistry,
+  suppressed: ReadonlySet<string>,
+): CustomTaskType[] | undefined {
+  const types = registry.all().filter((type) => !suppressed.has(type.taskType))
   return types.length > 0 ? types : undefined
+}
+
+/**
+ * The complement of {@link snapshotCustomTaskTypes}: the registered ids this board HIDES.
+ *
+ * Narrowed to ids the registry still knows, so a tombstone left by a WITHDRAWN registration is
+ * absent here exactly as it is absent from the settings screen: it names an operation with no
+ * label, no description and no fields, and reporting it would have the SPA count a row it can
+ * neither render nor act on.
+ *
+ * Without this the offered catalog is ambiguous in the one direction that traps a user. An admin
+ * hiding the last operation empties `customTaskTypes`, which reads identically to a stock
+ * deployment that registers none, so the SPA drops the settings tab that is the ONLY way to
+ * un-hide one. Absent and empty are different facts here, and this is the field that states which.
+ */
+function snapshotSuppressedTaskTypes(
+  registry: TaskTypeRegistry,
+  suppressed: ReadonlySet<string>,
+): string[] | undefined {
+  const ids = registry
+    .all()
+    .map((type) => type.taskType)
+    .filter((taskType) => suppressed.has(taskType))
+  return ids.length > 0 ? ids : undefined
 }
 
 /**
@@ -290,21 +325,43 @@ async function snapshotBinaryGenerators(
  * synchronous reads inside it — an agent kind carries FUNCTIONS, so it could not cross a wire even
  * if we wanted it to, and nothing has asked the rest to.
  */
-async function snapshotRegistryProjections(container: ServerContainer): Promise<{
+async function snapshotRegistryProjections(
+  container: ServerContainer,
+  /**
+   * The board whose suppressions apply, or undefined at CREATE time: a workspace that does not
+   * exist yet cannot have hidden anything, so reading for it would be a round trip whose only
+   * possible answer is the empty set.
+   */
+  workspaceId?: string,
+): Promise<{
   customAgentKinds: CustomAgentKind[] | undefined
   agentKindVariants: AgentKindVariant[] | undefined
   customTaskTypes: CustomTaskType[] | undefined
+  suppressedTaskTypes: string[] | undefined
   gateConfigForms: GateConfigForm[] | undefined
   binaryGenerators: RegisteredBinaryGenerator[] | undefined
   /** Set only when the set could not be READ — never alongside `binaryGenerators`. */
   binaryGeneratorsUnavailable: true | undefined
   initiativePresets: InitiativePresetDescriptor[] | undefined
 }> {
-  const binaryGenerators = await snapshotBinaryGenerators(container)
+  const [binaryGenerators, suppressedTaskTypes] = await Promise.all([
+    snapshotBinaryGenerators(container),
+    workspaceId
+      ? suppressedTaskTypeIds(
+          container.taskTypeSuppressions?.service,
+          workspaceId,
+          container.logger,
+        )
+      : Promise.resolve(new Set<string>()),
+  ])
   return {
     customAgentKinds: snapshotCustomAgentKinds(container.agentKindRegistry, container),
     agentKindVariants: snapshotAgentKindVariants(container.agentKindRegistry),
-    customTaskTypes: snapshotCustomTaskTypes(container.taskTypeRegistry),
+    customTaskTypes: snapshotCustomTaskTypes(container.taskTypeRegistry, suppressedTaskTypes),
+    suppressedTaskTypes: snapshotSuppressedTaskTypes(
+      container.taskTypeRegistry,
+      suppressedTaskTypes,
+    ),
     // The per-step parameters each registered gate declares, so the pipeline builder can render a
     // gate's own config form. Read off the SAME registry instance run admission validates against,
     // so what the builder offers is exactly what a run will accept.
@@ -708,7 +765,7 @@ export function workspaceController(): Hono<AppEnv> {
     // afterwards put a whole round trip on the end of every refresh for nothing.
     const [slices, registryProjections] = await Promise.all([
       loadSnapshotSlices(container, workspaceId, budgetAccountId),
-      snapshotRegistryProjections(container),
+      snapshotRegistryProjections(container, workspaceId),
     ])
     const {
       snapshot,

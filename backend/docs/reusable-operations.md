@@ -19,7 +19,9 @@ A task type carrying only `presentation` is still just a work-item classificatio
 a card). The three fields above are what turn it into an operation.
 
 > The design record, including the alternatives rejected and the slices still open, is
-> [`docs/initiatives/reusable-operations.md`](../../docs/initiatives/reusable-operations.md).
+> [`docs/initiatives/reusable-operations.md`](../../docs/initiatives/reusable-operations.md), and
+> [ADR 0040](./adr/0040-deployment-extension-seam-reachability.md) records what an org build outside
+> this repo could not reach when it registered one against the published packages.
 > Related: [`custom-agents.md`](./custom-agents.md) (the extension trust model these
 > registrations share), [`initiative-presets.md`](./initiative-presets.md) (the vehicle when
 > the work must be PLANNED and decomposed), and
@@ -117,8 +119,18 @@ in the other and one validator covers both.
 
 - **Types a task type admits**: `text`, `textarea`, `number`, `select`, `checkbox`,
   `checkbox-group`, `path`. Each field may carry `help`, `placeholder`, `required`, `options`,
-  `default` / `defaultValues`, `maxLength`, `min` / `max`, and a single-condition
-  `showWhen: { key, equals? | includes? }`.
+  `default` / `defaultValues`, `maxLength`, `min` / `max`, a single-condition
+  `showWhen: { key, equals? | includes? }`, and a `section` caption.
+- **`section` groups a long form and does nothing else.** An operation that collects a dozen fields,
+  each of which changes what the agents do, reads as one undifferentiated column; a caption above a
+  run of related fields fixes that. It is PRESENTATION: validation, what is frozen, and the prompt
+  fold are all unchanged, so moving a field between sections can never change what the platform does
+  with its answer. Declare a section's fields CONSECUTIVELY (case and spacing are folded, as in the
+  picker's category rows): boot refuses a section a filled form could caption TWICE, because the
+  renderer keeps your declaration order rather than repairing it. What boot judges is REACHABILITY,
+  not the order of the declared list, so a section interleaved only with a MUTUALLY EXCLUSIVE branch
+  is fine and is the normal way to write a branching form (each branch's fields beside the picker
+  they qualify). A section whose every field is hidden by `showWhen` renders no caption at all.
 - **`password` is excluded by construction.** A collected value is folded into prompts, projected
   onto the board snapshot and captured in agent-context telemetry. A capability whose agents need
   a credential declares it BY NAME against the per-workspace capability-credential store, where
@@ -155,10 +167,17 @@ schema-typed top-level keys, validated there), an UNREGISTERED namespaced type (
 since task types are node-local by design, and degrading data must not brick creation), and a
 descriptor declaring a `formPanel` (the panel owns the bag).
 
-Defaults are the one rule that stays frontend-side (`app/utils/descriptorFields.ts`
-`defaultDescriptorValues`), matching the preset precedent: the server validates and sanitizes but
-never fills a default in. So a headless caller omitting a field that is `required` AND has a
-`default` is refused where the SPA is not.
+**A declared DEFAULT is applied at the door, not in the form** (`withDescriptorFieldDefaults`,
+shared). The SPA seeds a fresh form from the same helper, so a browser submit is unchanged; what it
+fixes is every other caller. Before, a field that was both `required` and defaulted was accepted
+from the SPA (which had already filled it) and refused for a headless caller (which had no way to
+know it had to restate a value the deployment already declared). Only ABSENT keys are filled, so an
+explicit value always wins, including the one case where that matters: a `false` on a default-ON
+`checkbox`, which is the opt-out.
+
+Because defaults are now authoritative, a default OUTSIDE a `select`'s own options is a boot ERROR
+(`task_type_field_default_outside_options`): it would otherwise refuse every creation of the type
+for a value the caller never sent.
 
 ## Parameters reach the prompt: one generic, value-authoritative fold
 
@@ -203,8 +222,9 @@ harness change and no image bump: the fold rides the user prompt the backend com
 ## Standing context, and the trait that gates it
 
 `defaultFragmentIds` name best-practice fragments from the universal code pool (the built-in
-catalog ∪ `registerPromptFragments`) or from the tenant tiers (account / workspace rows, and the
-`src:<sourceId>:<slug>` ids of a repo-backed fragment source).
+catalog plus whatever the deployment passes to `promptFragmentRegistry.registerAll()`) or from the
+tenant tiers (account / workspace rows, and the `src:<sourceId>:<slug>` ids of a repo-backed
+fragment source).
 
 - **Fragments fold only for `code-aware` / `doc-aware` agent kinds**
   (`AgentContextBuilder.resolveFragments`). An operation whose pipeline runs the deployment's own
@@ -213,9 +233,9 @@ catalog ∪ `registerPromptFragments`) or from the tenant tiers (account / works
 - **A long fragment is folded as its condensed `brief` for implementer kinds** and in full for
   reviewer/planner kinds, so ship a `brief` alongside a long `body`
   ([`prompt-fragments/README.md`](../packages/prompt-fragments/README.md)).
-- **`registerTaskTypeDefaultFragments` is NOT the seam for an operation.** That module-global is
-  for attaching defaults to a BUILT-IN type, which has no descriptor to carry them. A registered
-  type declares `defaultFragmentIds` on its own registration, where boot validation can see it.
+- **`promptFragmentRegistry.registerTaskTypeDefaults()` is NOT the seam for an operation.** It
+  attaches defaults to a BUILT-IN type, which has no descriptor to carry them. A registered type
+  declares `defaultFragmentIds` on its own registration, where boot validation can see it.
 - **Seeding STATES an unregistered type.** A task created on a process whose package lacks the
   registration is accepted and gets NONE of the operation's fragments, and a later build does not
   go back for it, because only the id SET freezes at creation. `BoardService` logs a warning
@@ -292,15 +312,16 @@ about a prospective run. A bare `pipelineRepository.get` on a run-adjacent path 
 that boot ERRORS on anything fully knowable from the registration and WARNS only where it
 structurally cannot see the answer.
 
-| Code                                | Severity | Cause                                                                              |
-| ----------------------------------- | -------- | ---------------------------------------------------------------------------------- |
-| `task_type_not_namespaced`          | error    | the id is not `<ns>:<name>`, so it collides with the built-in picklist             |
-| `task_type_form_panel_invalid`      | error    | `formPanel` is not a namespaced id                                                 |
-| `task_type_unknown_pipeline`        | error    | `defaultPipelineId` resolves to neither a built-in nor a registered pipeline       |
-| `task_type_field_duplicate`         | error    | the form declares one field `key` twice                                            |
-| `task_type_field_no_options`        | error    | a `select` / `checkbox-group` with no options, so the form renders an empty picker |
-| `task_type_field_unknown_condition` | error    | a `showWhen` gating a field on a key the form does not declare, so it never shows  |
-| `task_type_unknown_fragment`        | **warn** | a `defaultFragmentIds` id the CODE pool does not resolve                           |
+| Code                                  | Severity | Cause                                                                               |
+| ------------------------------------- | -------- | ----------------------------------------------------------------------------------- |
+| `task_type_not_namespaced`            | error    | the id is not `<ns>:<name>`, so it collides with the built-in picklist              |
+| `task_type_form_panel_invalid`        | error    | `formPanel` is not a namespaced id                                                  |
+| `task_type_unknown_pipeline`          | error    | `defaultPipelineId` resolves to neither a built-in nor a registered pipeline        |
+| `task_type_field_duplicate`           | error    | the form declares one field `key` twice                                             |
+| `task_type_field_no_options`          | error    | a `select` / `checkbox-group` with no options, so the form renders an empty picker  |
+| `task_type_field_unknown_condition`   | error    | a `showWhen` gating a field on a key the form does not declare, so it never shows   |
+| `task_type_field_section_interleaved` | error    | a `section` split by a field that can show beside both halves, so it captions twice |
+| `task_type_unknown_fragment`          | **warn** | a `defaultFragmentIds` id the CODE pool does not resolve                            |
 
 The fragment check is the one warning because both causes are live: a typo, or an
 account/workspace-tier id, which merges per workspace at run time and is invisible at boot. The
@@ -317,29 +338,62 @@ a custom agent kind.
 const agentKindRegistry = defaultAgentKindRegistry()
 const pipelineRegistry = defaultPipelineRegistry()
 const taskTypeRegistry = defaultTaskTypeRegistry()
+// The shipped best-practice catalog, so the org's own standards join it rather than replace it.
+const promptFragmentRegistry = promptFragmentRegistryWithBuiltins()
 
-registerMyOrgOperations({ agentKindRegistry, pipelineRegistry, taskTypeRegistry })
-start({ agentKindRegistry, pipelineRegistry, taskTypeRegistry /* …the rest */ })
+registerMyOrgOperations({
+  agentKindRegistry,
+  pipelineRegistry,
+  taskTypeRegistry,
+  promptFragmentRegistry,
+})
+start({
+  agentKindRegistry,
+  pipelineRegistry,
+  taskTypeRegistry,
+  promptFragmentRegistry /* …the rest */,
+})
 ```
 
-> Two things a deployment outside this repo needs to know about that snippet. The whole
-> vocabulary it types against (`CustomTaskType`, `TaskTypeFieldDescriptor`, `PromptFragment`, the
+> One thing a deployment outside this repo needs to know about that snippet: the whole vocabulary
+> it types against (`CustomTaskType`, `TaskTypeFieldDescriptor`, `PromptFragment`, the
 > descriptor-field rules, the `*_PIPELINE_ID` constants) is re-exported from
-> `@cat-factory/kernel`, so no `@cat-factory/contracts` dependency is needed. And
-> `pipelineRegistry` is NOT yet an option on `start()` / `startLocal()`: on the Node facade it
-> currently rides `buildContainer`, and on the local facade a registered pipeline is unreachable.
-> That gap and the rest of what a consumer build hit are tracked in
-> [`deployment-extension-seam-gaps.md`](../../docs/initiatives/deployment-extension-seam-gaps.md).
+> `@cat-factory/kernel`, so no `@cat-factory/contracts` dependency is needed.
+> `promptFragmentRegistryWithBuiltins()` comes from `@cat-factory/prompt-fragments`; a deployment
+> that wants ONLY its own standards news a bare `defaultPromptFragmentRegistry()` (kernel) instead.
+>
+> Every app-owned registry is an option on BOTH `start()` and `startLocal()`, and a drift guard
+> asserts that against the entry points themselves rather than the container builder behind them
+> (`backend/runtimes/node/test/registry-seams.spec.ts`). `pipelineRegistry` used to be the
+> exception: it was a documented builder option that no boot path forwarded, so on the local facade
+> a registered pipeline was unreachable outright.
 
 Inside, order matters for boot validation rather than for behaviour: register the fragments and
 the variants, then the pipeline that selects them, then the task type that names the pipeline, so
 `validateRegistrations` resolves every reference.
 
-1. **Standing context**: `registerPromptFragments([...])` with the org's guidelines (or reference
-   a repo fragment source's `src:<sourceId>:<slug>` ids; tenant-tier ids warn rather than refuse).
+1. **Standing context**: `promptFragmentRegistry.registerAll([...])` with the org's guidelines (or
+   reference a repo fragment source's `src:<sourceId>:<slug>` ids; tenant-tier ids warn rather than
+   refuse). Registering by REFERENCE onto the injected instance is what makes this work from a
+   published install: the module-global `registerPromptFragments` it replaced was correct only
+   while every reader resolved the same physical copy of `@cat-factory/prompt-fragments`, and a
+   `workspace:*` dependency publishes as an EXACT version, so a consumer floating the range onto a
+   newer patch got two copies and every task of the operation folded nothing.
+   A fragment registered here may NOT carry a `documentRef`: a code registration lands on the
+   `builtin` tier, whose live resolution needs a connection workspace a deployment-wide
+   registration cannot name, so boot refuses it (`fragment_document_ref_unsupported`) rather than
+   rendering it as live and ignoring it. Register the body inline, or create the fragment at the
+   ACCOUNT tier with a fetch-via workspace.
 2. **Steering**: `registerVariant` per steered step.
 3. **The canned pipeline**: `pipelineRegistry.register({ builtin: true, version: 1, … })`.
 4. **The operation**: `taskTypeRegistry.register({ taskType, presentation, fields, defaultFragmentIds, defaultPipelineId })`.
+   Standing context that depends on the ANSWERS a case supplies goes in `conditionalFragmentIds`:
+   each entry is `{ when, fragmentIds }` where `when` is a `showWhen` condition in the same
+   vocabulary the form's own field visibility uses, evaluated once at creation against the
+   collected values. That is what lets one operation collecting `protocol: rest | graphql` seed the
+   GraphQL standard only for a GraphQL case, instead of paying for every branch on every run or
+   folding the conditional material into one long standard and losing its per-standard citation. A
+   `when.key` naming a field the type does not declare fails boot.
 
 Pass the SAME registry instances into the facade build. `resolveCoreRuntime` supplies an empty
 default for an un-passed registry, and the engine reads `runtime.taskTypeRegistry` rather than an
@@ -371,6 +425,69 @@ The frontend can also ship a task type as a CODE contribution to the `taskTypes`
 registering it on the backend, and the SPA merges both into one catalog. A code-shipped entry is
 trusted and unvalidated, so prefer backend registration for the fail-fast guardrail. See
 [`consumer-extensions.md`](../../frontend/app/app/docs/consumer-extensions.md).
+
+## Per-workspace suppression: hiding an operation from one board
+
+A deployment registers its operations PROCESS-WIDE, so every board in the org offers every one of
+them. Twenty operations is a realistic org catalog and a flooded picker for a team that runs three,
+so a workspace admin can hide the ones that board does not use.
+
+The store is a set of TOMBSTONES (`task_type_suppressions`, keyed `(workspaceId, taskType)`): a row
+means "this board does not offer this operation", and restoring hard-DELETES it. Absence is
+therefore the default and nothing needs seeding: a newly registered operation is offered everywhere
+until somebody hides it, the only direction that cannot silently withhold a capability from every
+existing board at once.
+
+Three surfaces read it, and they read it differently on purpose:
+
+| Surface                                | Read                     | On a read failure                                                                        |
+| -------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------- |
+| The board snapshot's `customTaskTypes` | filter the projection    | BEST-EFFORT: a picker must never take a board load down over a cosmetic preference       |
+| `GET /api/v1/task-types`               | filter the catalog       | best-effort, same reason: a startup discovery must not fail over one                     |
+| `BoardService.addTask`                 | refuse a suppressed type | PROPAGATES: this decides whether a row is WRITTEN, and it hits the same DB as the insert |
+
+The creation refusal is what makes the hiding real. The picker not offering a type is presentation;
+the internal API, the public API, an initiative spawn and a tracker import all reach `addTask`
+without ever seeing one.
+
+Two rules bound the surface:
+
+- **The LIST is its own read** (`GET /workspaces/:ws/task-type-suppressions`, `settings.manage`).
+  A suppressed type is by construction absent from the projected catalog, so nothing else could
+  offer the way back. The foundational-services suppression model, for the same reason.
+- **The snapshot carries the COMPLEMENT too**, as `suppressedTaskTypes` (ids only), exactly as
+  `retiredPipelines` complements `pipelineCatalogVersions`. Without it the offered catalog is
+  ambiguous in the one direction that traps a user: an admin hiding the LAST operation empties
+  `customTaskTypes`, which reads identically to a deployment that registers none, so the SPA drops
+  the settings tab that is the only way to un-hide one. The tab is gated on the union of the two.
+- **BUILT-IN types are not suppressible.** They carry hardcoded creation affordances (the
+  document-frame restriction, the per-type form sections), so hiding one would remove a capability
+  with no descriptor stating what was lost. Suppressing an id the deployment does not register is a
+  404; RESTORING one is not, so a withdrawn registration never strands a row only a database edit
+  could clear.
+
+## The public API: discover a form, then fill it
+
+`/api/v1` could always NAME a task type and could fill none of it, so a headless caller filed an
+operation and every agent in the run worked from a blank form. Two additive changes close that
+(ADR [0034](./adr/0034-public-api-stability.md); OpenAPI minor + SDK regeneration):
+
+- **`GET /api/v1/task-types`** (`read`) serves the built-in types plus this workspace's registered,
+  non-suppressed ones, each with the fields it accepts. `formPanel` is deliberately not projected:
+  it names a component in the deployment's own SPA layer, which no external client can act on.
+- **`fields` on task creation** fills them. For a registered custom type the values land in
+  `taskTypeFields.custom`; for a BUILT-IN type they land on the schema-typed TOP-LEVEL keys, so the
+  existing creation machinery (the review task's PR resolution, the document fields) runs unchanged.
+
+ONE table stands behind both directions (`contracts/src/public-task-types.ts`), which is the point:
+the built-ins get real descriptors rather than a hand-written OpenAPI shape beside a validator, so
+what discovery advertises is exactly what creation checks, through the same shared
+`validateDescriptorFields` the app's own form runs. Refusal is a 422 with
+`details.reason: 'task_type_fields_invalid'` and every problem at once, because a headless caller
+fixing one field per round trip against a form it cannot see is the experience this exists to avoid.
+
+An unregistered namespaced type has no descriptor to check against; its values are carried through
+verbatim, matching the internal door's pass-through (task types are node-local by design, below).
 
 ## Mothership position: node-local by design
 
@@ -437,11 +554,6 @@ foundational-services catalog via its trait), then the coder, the tester and the
 
 Tracked in [`docs/initiatives/reusable-operations.md`](../../docs/initiatives/reusable-operations.md):
 
-- **Per-workspace suppression** of registered operations (an org's twenty operations should not
-  flood every team's picker).
-- **Public API**: a `GET /api/v1/task-types` discovery read and a `fields` key on
-  `createPublicTaskSchema`, so "invoke operation X with params Y" is two SDK calls. Additive per
-  [ADR 0034](./adr/0034-public-api-stability.md).
 - **A `detect` prefill probe** (the initiative-preset mirror), deferred: operation forms carry
   per-case BUSINESS input, which no repo probe can prefill.
 - **Data-only operations** authored in the UI with no code: the descriptor/code split keeps the

@@ -311,7 +311,8 @@
         "derivedTitleFallback": "סקירת בקשת המשיכה",
         "prNotFound": "בקשת משיכה #{number} לא נמצאה במאגר של שירות זה. בדקו את המספר, או קשרו את השירות למאגר שבו נמצאת בקשת המשיכה.",
         "prRepoMismatch": "בקשת המשיכה הזו נמצאת במאגר אחר. שירות זה סוקר את {repo}, לכן צרו את משימת הסקירה תחת השירות המקושר למאגר של בקשת המשיכה."
-      }
+      },
+      "contextFailed": "המשימה לא נוצרה: לא ניתן היה לקרוא {count} קובץ מצורף | המשימה לא נוצרה: לא ניתן היה לקרוא שני קבצים מצורפים | המשימה לא נוצרה: לא ניתן היה לקרוא {count} קבצים מצורפים"
     },
     "recurring": {
       "title": "הוסף צינור מחזורי",
@@ -403,20 +404,14 @@
       },
       "shared": "משותף",
       "sharedTitle": "משותף בין סביבות העבודה בארגון זה",
-      "bootstrapping": "מאתחל…",
       "bootstrappingRepository": "מאתחל מאגר…",
       "bootstrapStepsCount": "{completed}/{total} שלבים",
-      "runFailed": "הריצה נכשלה",
-      "mergedOfTotal": "{merged}/{total} מוזגו",
-      "noTasksYet": "אין עדיין משימות",
-      "prCount": "{count} PR",
       "prReadyCount": "{count} PR מוכנים",
       "taskCount": "{count} משימה | שתי משימות | {count} משימות",
       "moduleCount": "{count} מודול | שני מודולים | {count} מודולים",
       "addTaskTitle": "הוסף משימה",
       "createTaskFromIssueTitle": "צור משימה מאישיו",
       "addRecurringTitle": "הוסף צינור מחזורי",
-      "collapseTitle": "כווץ",
       "dragService": "גרור שירות",
       "dragTask": "גרור משימה",
       "dragToResize": "גרור לשינוי גודל",
@@ -497,7 +492,8 @@
     "attachDocDisabledEnable": "הפעל תחילה את אינטגרציית המסמכים",
     "attachIssueDisabledConnect": "חבר תחילה מערכת לניהול אישיו (אינטגרציות)",
     "attachIssueDisabledEnable": "הפעל תחילה את אינטגרציית מערכת האישיו",
-    "importsOnAdd": "מיובא בעת ההוספה"
+    "importsOnAdd": "מיובא בעת ההוספה",
+    "unreadable": "לא ניתן לאחזר: {error}"
   },
   "errors": {
     "generic": {
@@ -2823,6 +2819,13 @@
         "manageAccount": "נהל מקטעי חשבון ←"
       }
     },
+    "taskTypeSuppressions": {
+      "intro": "בחרו אילו פעולות רב-פעמיות של פריסה זו יוצעו בלוח הזה. הסתרה של פעולה מסירה אותה מבורר יצירת המשימות כאן ומונעת יצירת עבודה תחתיה; לוחות אחרים אינם מושפעים.",
+      "loading": "טוען פעולות…",
+      "empty": "פריסה זו אינה רושמת פעולות רב-פעמיות.",
+      "offer": "הצעה בלוח הזה",
+      "saveFailed": "לא ניתן היה לשנות אילו פעולות מוצעות בלוח הזה"
+    },
     "issueTracker": {
       "filing": {
         "heading": "היכן מוגשים כרטיסים",
@@ -3402,6 +3405,7 @@
         "merge": "מדיניות סיכון",
         "tracker": "מעקב כרטיסים",
         "fragments": "שיטות עבודה מומלצות לשירות",
+        "operations": "פעולות",
         "metadata": "מטא-נתונים",
         "members": "חברים"
       },
@@ -4174,7 +4178,20 @@
       "attachByReference": "צרף את {ref} לפי הפניה",
       "noMatches": "אין דפים תואמים.",
       "emptySearchable": "חפש לפי כותרת, או בחר מסמך שיובא.",
-      "emptyRefOnly": "הדבק כתובת URL או מזהה של דף כדי לצרף אותו."
+      "emptyRefOnly": "הדבק כתובת URL או מזהה של דף כדי לצרף אותו.",
+      "sourceLabel": "מקור",
+      "noSource": "בחר מקור",
+      "connectSource": "חבר {label}",
+      "needsSource": "חבר מקור מסמכים כדי לצרף עמוד.",
+      "needsSourceAdmin": "לא מחובר שום מקור מסמכים. בקש ממנהל סביבת העבודה לחבר מקור.",
+      "refChecking": "בודקים את ההפניה…",
+      "refUnrecognized": "זו אינה הפניה של {source}. הפורמט הצפוי: {expected}",
+      "refOtherSource": "זה קישור של {claimed}, לא של {source}.",
+      "refSwitchSource": "להשתמש ב-{source} במקום",
+      "refTrimmed": "קוצר לפורמט הנתמך",
+      "refWidened": "מציין מסגרת שהמקור הזה אינו יכול לקרוא ({scope}), ולכן מצורף כל הקובץ.",
+      "refAlreadyAttached": "ההפניה הזאת כבר מצורפת.",
+      "refCheckFailed": "לא ניתן לבדוק את ההפניה: {error}"
     },
     "repoPicker": {
       "searchRepoPlaceholder": "חיפוש מאגרים…",
@@ -4303,6 +4320,7 @@
       "searchIssues": "חפש ניושנים",
       "searchPlaceholder": "חפש לפי כותרת, הדבק URL של ניושן, או הקלד מספר ניושן…",
       "createTasksIn": "צור משימות ב-",
+      "creatingIn": "משימות חדשות ייווצרו ב-{container}",
       "needFrameFirst": "הוסף תחילה מסגרת שירות ללוח כדי ליצור משימות מניושנים.",
       "searchFailed": "החיפוש נכשל: {error}",
       "searchResults": "תוצאות חיפוש",
@@ -4355,6 +4373,7 @@
     "labels": "תוויות",
     "labelsHelp": "מופרדות בפסיקים. כולן חייבות להופיע.",
     "adoptInto": "הוסף את הבאג הנבחר אל",
+    "adoptingInto": "הבאג הנבחר יתווסף ל-{container}",
     "run": "צוד",
     "running": "קורא את הלוח ומעריך את מה שנמצא…",
     "huntFailed": "הציד נכשל",
@@ -6304,7 +6323,8 @@
       "failedTitle": "לא ניתן היה ליצור את היוזמה",
       "contextDocsHint": "צרף דרישה, RFC או PRD כדי שסוכני התכנון יקראו אותם בעת תיחום וגיבוש התוכנית.",
       "contextIssuesHint": "צרף אישיו כדי שסוכני התכנון יראו את התיאור והתגובות שלו בעת גיבוש התוכנית.",
-      "linkFailed": "היוזמה נוצרה, אך {count} צרופה לא ניתנה לקישור | היוזמה נוצרה, אך שתי צרופות לא ניתנו לקישור | היוזמה נוצרה, אך {count} צרופות לא ניתנו לקישור"
+      "linkFailed": "היוזמה נוצרה, אך {count} צרופה לא ניתנה לקישור | היוזמה נוצרה, אך שתי צרופות לא ניתנו לקישור | היוזמה נוצרה, אך {count} צרופות לא ניתנו לקישור",
+      "contextFailed": "היוזמה לא נוצרה: לא ניתן היה לקרוא {count} קובץ מצורף | היוזמה לא נוצרה: לא ניתן היה לקרוא שני קבצים מצורפים | היוזמה לא נוצרה: לא ניתן היה לקרוא {count} קבצים מצורפים"
     },
     "status": {
       "planning": "בתכנון",

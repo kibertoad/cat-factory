@@ -74,6 +74,8 @@ import type {
   ExecutionRepository,
   FoundationalBuiltinSource,
   FoundationalServiceRegistry,
+  PromptFragmentRegistry,
+  PromptFragmentSource,
   FoundationalServiceRepository,
   FoundationalServiceSourceRepository,
   FoundationalSourceResyncRequest,
@@ -174,6 +176,7 @@ import type {
   VcsProviderRegistry,
   WebhookVerifier,
   WorkRunner,
+  TaskTypeSuppressionRepository,
   WorkspaceAgentSettingsRepository,
   WorkspaceMemberRepository,
   WorkspaceMountRepository,
@@ -1015,6 +1018,27 @@ export interface CoreDependencies {
    */
   foundationalBuiltinSource?: FoundationalBuiltinSource
   /**
+   * The app-owned registry a deployment registers its best-practice PROMPT FRAGMENTS on, plus the
+   * per-task-type default sets that select them. Optional + defaulted to
+   * `defaultPromptFragmentRegistry()` (EMPTY, because the shipped catalog installs onto one through
+   * `promptFragmentRegistryWithBuiltins()`, which is what each facade injects, so a caller that
+   * passes nothing gets no standards rather than a silently different second pool).
+   *
+   * It replaced two module globals in `@cat-factory/prompt-fragments`, whose correctness depended
+   * on every reader resolving the same physical copy of that package. The published graph does not
+   * guarantee that, and the failure was silent: registrations landed in one copy, readers saw the
+   * other, and every task of the deployment's operation was seeded with ids that folded nothing.
+   */
+  promptFragmentRegistry?: PromptFragmentRegistry
+  /**
+   * Where the fragment POOL is READ from, when that is not this process's own registry. The exact
+   * sibling of {@link foundationalBuiltinSource}, with the same one overriding caller (a
+   * mothership-mode node, over `GET /internal/prompt-fragments`) and the same alternatives-never-a-
+   * merge rule: a merge would let a stale local copy win by id over the authoritative one, which is
+   * the drift the source exists to remove.
+   */
+  promptFragmentSource?: PromptFragmentSource
+  /**
    * Enqueues a targeted foundational-source resync onto the runtime's GitHub-sync queue — the
    * push-webhook freshness fan-out, the twin of {@link CoreDependencies.enqueueSkillResync}.
    * Facade-provided (Worker Queue / Node pg-boss); absent (no queue, or a pure-logic test) ⇒ no
@@ -1211,6 +1235,14 @@ export interface CoreDependencies {
    * resolves the dispatched kind's ceiling at dispatch.
    */
   workspaceAgentSettingsRepository?: WorkspaceAgentSettingsRepository
+  /**
+   * Stores which deployment-registered custom task types (REUSABLE OPERATIONS) a workspace HIDES
+   * from its create picker (`backend/docs/reusable-operations.md`). Optional and default-off:
+   * absent → the `taskTypeSuppressions` module isn't assembled, the controller 503s, and every
+   * board offers every registered operation, which is today's behaviour. Read on the CREATION path
+   * too: `BoardService` refuses a task of a suppressed type, so no door bypasses the picker.
+   */
+  taskTypeSuppressionRepository?: TaskTypeSuppressionRepository
   /**
    * The catalog id of the built-in model preset a fresh workspace is seeded with as its
    * DEFAULT: Cloudflare/Node deploy `mdp_kimi` (Cloudflare-runnable on the bare baseline),

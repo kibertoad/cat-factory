@@ -3,6 +3,7 @@ import type { Block, CreatePublicTaskInput } from '@cat-factory/contracts'
 import type { Logger } from '@cat-factory/kernel'
 import type { ServerContainer } from '../../http/env.js'
 import { releaseUnattachedTask, resolveDocuments } from './documentAttachment.js'
+import { resolveTaskTypeFields } from './taskTypeFields.js'
 import { resolveTicket } from './ticketLinkage.js'
 
 // The ORDERING of `POST /api/v1/services/:serviceId/tasks`, which is the whole design of that
@@ -22,6 +23,8 @@ import { resolveTicket } from './ticketLinkage.js'
 /** What creating a public task needs from the container. */
 export interface PublicTaskCreationDeps {
   boardService: ServerContainer['boardService']
+  /** The registry a custom type's field descriptors are read off; absent ⇒ built-in types only. */
+  taskTypeRegistry: ServerContainer['taskTypeRegistry']
   tasks: ServerContainer['tasks']
   documents: ServerContainer['documents']
   logger: Logger
@@ -31,6 +34,7 @@ export interface PublicTaskCreationDeps {
 export function taskCreationDeps(container: ServerContainer): PublicTaskCreationDeps {
   return {
     boardService: container.boardService,
+    taskTypeRegistry: container.taskTypeRegistry,
     tasks: container.tasks,
     documents: container.documents,
     logger: container.logger,
@@ -51,7 +55,12 @@ export async function createTaskWithAttachments(
   serviceId: string,
   body: CreatePublicTaskInput,
 ): Promise<Block> {
-  const { ticket, documents, ...input } = body
+  const { ticket, documents, fields: _fields, ...rest } = body
+  // The caller's `fields` bag becomes the internal per-type shape BEFORE anything is resolved: it
+  // is a pure, deterministic refusal, so it must land ahead of the outbound ticket/document
+  // fetches, exactly like the container check below.
+  const taskTypeFields = resolveTaskTypeFields(body, deps.taskTypeRegistry)
+  const input = { ...rest, ...(taskTypeFields ? { taskTypeFields } : {}) }
   if (ticket || documents?.length) {
     // The container is checked FIRST because resolving a ticket or a source document is an
     // outbound call to the workspace's own tracker/wiki: a bad `serviceId` should be answered by
