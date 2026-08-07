@@ -23,7 +23,7 @@ public record PrReportContextDocument(
 
     @JsonProperty("movedDuringRun") Boolean movedDuringRun,
 
-    @JsonProperty("origin") DocumentOrigin origin,
+    @JsonProperty("origin") PrReportContextDocumentOrigin origin,
 
     @JsonProperty("title") String title,
 
@@ -45,7 +45,7 @@ public record PrReportContextDocument(
     public static final class Builder {
         private @Nullable DocumentFreshness freshness;
         private @Nullable Boolean movedDuringRun;
-        private @Nullable DocumentOrigin origin;
+        private @Nullable PrReportContextDocumentOrigin origin;
         private @Nullable String title;
         private @Nullable String url;
 
@@ -62,7 +62,7 @@ public record PrReportContextDocument(
         }
 
         /** Set {@code origin}. */
-        public Builder origin(@Nullable DocumentOrigin origin) {
+        public Builder origin(@Nullable PrReportContextDocumentOrigin origin) {
             this.origin = origin;
             return this;
         }

@@ -195,18 +195,6 @@
           }
         ]
       },
-      "DocumentOrigin": {
-        "enum": [
-          "confluence",
-          "notion",
-          "github",
-          "figma",
-          "zeplin",
-          "linear",
-          "upload"
-        ],
-        "type": "string"
-      },
       "ErrorResponse": {
         "properties": {
           "error": {
@@ -912,7 +900,16 @@
             "type": "boolean"
           },
           "origin": {
-            "$ref": "#/components/schemas/DocumentOrigin"
+            "enum": [
+              "confluence",
+              "notion",
+              "github",
+              "figma",
+              "zeplin",
+              "linear",
+              "upload"
+            ],
+            "type": "string"
           },
           "title": {
             "type": "string"
@@ -12327,7 +12324,16 @@
                                     "type": "boolean"
                                   },
                                   "origin": {
-                                    "$ref": "#/components/schemas/DocumentOrigin"
+                                    "enum": [
+                                      "confluence",
+                                      "notion",
+                                      "github",
+                                      "figma",
+                                      "zeplin",
+                                      "linear",
+                                      "upload"
+                                    ],
+                                    "type": "string"
                                   },
                                   "title": {
                                     "type": "string"

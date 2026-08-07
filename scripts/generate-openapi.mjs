@@ -265,13 +265,11 @@ const COMPONENT_SCHEMAS = {
    * the union's members would silently RENUMBER a type a consumer had written code against.
    */
   DocumentFreshness: 'documentFreshnessSchema',
-  /**
-   * The origin vocabulary, hoisted with it. Un-hoisted the emitter names an inline enum after the
-   * FIRST path that reaches it, so the run outcome's own rows would ship carrying a type named
-   * after the verification report. Distinct from `PublicTaskSourceDocumentSource`, which is the
-   * narrower set a caller may ATTACH from (no `upload`, which is the other variant).
-   */
-  DocumentOrigin: 'documentOriginSchema',
+  // Its sibling `documentOriginSchema` is deliberately NOT hoisted beside it: a bare picklist has
+  // no object body, and the SDK emitter renders a hoisted one as an empty `interface`. It stays
+  // an inline enum named after the first path that reaches it, which is what every other
+  // vocabulary on this surface does (`PublicTaskSourceDocumentSource`, `PrReportCiStatus`).
+  // `sdk/typescript/test/contract-conformance.test.ts` is what refuses the empty interface.
   PrReportRequirements: 'prReportRequirementsSchema',
   PrReportEnvironments: 'prReportEnvironmentsSchema',
   PrReportMerge: 'prReportMergeSchema',

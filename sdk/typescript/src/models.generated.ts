@@ -515,9 +515,6 @@ export type DocumentFreshnessVariant2Reason = 'not_connected' | 'credentials_unr
 /** Every `DocumentFreshnessVariant2Reason` value, for exhaustive handling and runtime validation. */
 export const DOCUMENT_FRESHNESS_VARIANT2_REASON_VALUES = ['not_connected', 'credentials_unreadable', 'unversioned', 'source_unreachable'] as const
 
-export interface DocumentOrigin {
-}
-
 export interface ErrorResponse {
   error: ErrorResponseError
 }
@@ -654,7 +651,7 @@ export interface GetPublicRunOutcomeResponseSourcesVariant1Source {
   /** Always present; `null` when the server has no value for it. */
   freshness: DocumentFreshness | null
   movedDuringRun: boolean
-  origin: DocumentOrigin
+  origin: PrReportContextDocumentOrigin
   title: string
   /** Always present; `null` when the server has no value for it. */
   url: string | null
@@ -1104,11 +1101,16 @@ export interface PrReportContext {
 export interface PrReportContextDocument {
   freshness?: DocumentFreshness
   movedDuringRun: boolean
-  origin: DocumentOrigin
+  origin: PrReportContextDocumentOrigin
   title: string
   /** Always present; `null` when the server has no value for it. */
   url: string | null
 }
+
+export type PrReportContextDocumentOrigin = 'confluence' | 'notion' | 'github' | 'figma' | 'zeplin' | 'linear' | 'upload'
+
+/** Every `PrReportContextDocumentOrigin` value, for exhaustive handling and runtime validation. */
+export const PR_REPORT_CONTEXT_DOCUMENT_ORIGIN_VALUES = ['confluence', 'notion', 'github', 'figma', 'zeplin', 'linear', 'upload'] as const
 
 export interface PrReportEnvironments {
   entries: PrReportEnvironmentsEntry[]

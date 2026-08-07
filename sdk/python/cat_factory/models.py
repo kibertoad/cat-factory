@@ -2091,33 +2091,6 @@ class DocumentFreshnessVariant2Reason(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class DocumentOrigin:
-    """`DocumentOrigin`, as carried on the wire."""
-
-
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "DocumentOrigin":
-        """Decode a `DocumentOrigin` from its JSON object."""
-        known = {}
-        return cls(
-
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        pass
-        return out
-
-
-@dataclass(frozen=True, slots=True)
 class ErrorResponse:
     """`ErrorResponse`, as carried on the wire."""
 
@@ -2646,7 +2619,7 @@ class GetPublicRunOutcomeResponseSourcesVariant1Source:
     """`GetPublicRunOutcomeResponseSourcesVariant1Source`, as carried on the wire."""
 
     moved_during_run: bool
-    origin: DocumentOrigin
+    origin: PrReportContextDocumentOrigin
     title: str
     #: Always present; ``None`` when the server has no value for it.
     freshness: DocumentFreshness | None = None
@@ -2664,7 +2637,7 @@ class GetPublicRunOutcomeResponseSourcesVariant1Source:
         known = {"movedDuringRun", "origin", "title", "freshness", "url"}
         return cls(
             moved_during_run=data.get("movedDuringRun"),
-            origin=DocumentOrigin.from_dict(data.get("origin")),
+            origin=_enum(PrReportContextDocumentOrigin, data.get("origin")),
             title=data.get("title"),
             freshness=None if data.get("freshness") is None else DocumentFreshness.from_dict(data.get("freshness")),
             url=data.get("url"),
@@ -4472,7 +4445,7 @@ class PrReportContextDocument:
     """`PrReportContextDocument`, as carried on the wire."""
 
     moved_during_run: bool
-    origin: DocumentOrigin
+    origin: PrReportContextDocumentOrigin
     title: str
     #: May be absent entirely.
     freshness: DocumentFreshness | None = None
@@ -4490,7 +4463,7 @@ class PrReportContextDocument:
         known = {"movedDuringRun", "origin", "title", "freshness", "url"}
         return cls(
             moved_during_run=data.get("movedDuringRun"),
-            origin=DocumentOrigin.from_dict(data.get("origin")),
+            origin=_enum(PrReportContextDocumentOrigin, data.get("origin")),
             title=data.get("title"),
             freshness=None if data.get("freshness") is None else DocumentFreshness.from_dict(data.get("freshness")),
             url=data.get("url"),
@@ -4507,6 +4480,25 @@ class PrReportContextDocument:
             out["freshness"] = _encode(self.freshness)
         out["url"] = self.url
         return out
+
+
+class PrReportContextDocumentOrigin(StrEnum):
+    """The `PrReportContextDocumentOrigin` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    CONFLUENCE = "confluence"
+    NOTION = "notion"
+    GITHUB = "github"
+    FIGMA = "figma"
+    ZEPLIN = "zeplin"
+    LINEAR = "linear"
+    UPLOAD = "upload"
 
 
 @dataclass(frozen=True, slots=True)

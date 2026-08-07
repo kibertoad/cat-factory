@@ -773,11 +773,6 @@ const (
 // DocumentFreshnessVariant2ReasonValues lists every DocumentFreshnessVariant2Reason this SDK release knows.
 var DocumentFreshnessVariant2ReasonValues = []DocumentFreshnessVariant2Reason{DocumentFreshnessVariant2ReasonNotConnected, DocumentFreshnessVariant2ReasonCredentialsUnreadable, DocumentFreshnessVariant2ReasonUnversioned, DocumentFreshnessVariant2ReasonSourceUnreachable}
 
-// DocumentOrigin is the `DocumentOrigin` wire model.
-type DocumentOrigin struct {
-
-}
-
 // ErrorResponse is the `ErrorResponse` wire model.
 type ErrorResponse struct {
 	Error ErrorResponseError `json:"error"`
@@ -1112,10 +1107,10 @@ type GetPublicRunOutcomeResponseSourcesVariant1 struct {
 // GetPublicRunOutcomeResponseSourcesVariant1Source is the `GetPublicRunOutcomeResponseSourcesVariant1Source` wire model.
 type GetPublicRunOutcomeResponseSourcesVariant1Source struct {
 	// Freshness always present; nil when the server has no value for it.
-	Freshness      *DocumentFreshness `json:"freshness"`
-	MovedDuringRun bool               `json:"movedDuringRun"`
-	Origin         DocumentOrigin     `json:"origin"`
-	Title          string             `json:"title"`
+	Freshness      *DocumentFreshness            `json:"freshness"`
+	MovedDuringRun bool                          `json:"movedDuringRun"`
+	Origin         PrReportContextDocumentOrigin `json:"origin"`
+	Title          string                        `json:"title"`
 	// URL always present; nil when the server has no value for it.
 	URL *string `json:"url"`
 }
@@ -2035,13 +2030,32 @@ type PrReportContext struct {
 // PrReportContextDocument is the `PrReportContextDocument` wire model.
 type PrReportContextDocument struct {
 	// Freshness may be absent entirely.
-	Freshness      *DocumentFreshness `json:"freshness,omitempty"`
-	MovedDuringRun bool               `json:"movedDuringRun"`
-	Origin         DocumentOrigin     `json:"origin"`
-	Title          string             `json:"title"`
+	Freshness      *DocumentFreshness            `json:"freshness,omitempty"`
+	MovedDuringRun bool                          `json:"movedDuringRun"`
+	Origin         PrReportContextDocumentOrigin `json:"origin"`
+	Title          string                        `json:"title"`
 	// URL always present; nil when the server has no value for it.
 	URL *string `json:"url"`
 }
+
+// PrReportContextDocumentOrigin is the `PrReportContextDocumentOrigin` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PrReportContextDocumentOrigin string
+
+const (
+	PrReportContextDocumentOriginConfluence PrReportContextDocumentOrigin = "confluence"
+	PrReportContextDocumentOriginNotion     PrReportContextDocumentOrigin = "notion"
+	PrReportContextDocumentOriginGithub     PrReportContextDocumentOrigin = "github"
+	PrReportContextDocumentOriginFigma      PrReportContextDocumentOrigin = "figma"
+	PrReportContextDocumentOriginZeplin     PrReportContextDocumentOrigin = "zeplin"
+	PrReportContextDocumentOriginLinear     PrReportContextDocumentOrigin = "linear"
+	PrReportContextDocumentOriginUpload     PrReportContextDocumentOrigin = "upload"
+)
+
+// PrReportContextDocumentOriginValues lists every PrReportContextDocumentOrigin this SDK release knows.
+var PrReportContextDocumentOriginValues = []PrReportContextDocumentOrigin{PrReportContextDocumentOriginConfluence, PrReportContextDocumentOriginNotion, PrReportContextDocumentOriginGithub, PrReportContextDocumentOriginFigma, PrReportContextDocumentOriginZeplin, PrReportContextDocumentOriginLinear, PrReportContextDocumentOriginUpload}
 
 // PrReportEnvironments is the `PrReportEnvironments` wire model.
 type PrReportEnvironments struct {
