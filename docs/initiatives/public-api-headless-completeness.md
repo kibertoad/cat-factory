@@ -1,6 +1,6 @@
 # Initiative: public API headless completeness (repair, provision, and read what you judge)
 
-**Status:** not started; A1 is the recommended pilot · **Owner:** core · **Started:** 2026-08-07
+**Status:** in progress; A1 and A5 landed · **Owner:** core · **Started:** 2026-08-07
 
 **Context layer:** backend (`@cat-factory/contracts`, `@cat-factory/orchestration`,
 `@cat-factory/server`) + the four SDKs and the MCP facade
@@ -110,16 +110,16 @@ Nothing here renames, retypes or re-scopes anything already served. Each one fol
 
 ## Slices, in priority order
 
-| #   | Slice                                                       | Sev | Status  | PR  |
-| --- | ----------------------------------------------------------- | --- | ------- | --- |
-| A1  | Repair a refused input: `fields` on the task PATCH          | P1  | ⬜ todo |     |
-| A2  | Board provisioning: create a service, link a repo           | P1  | ⬜ todo |     |
-| A3  | Task dependencies over the API                              | P2  | ⬜ todo |     |
-| A4  | The artifact list under-reports reference designs           | P2  | ⬜ todo |     |
-| A5  | Retire the stale visual-confirmation caveat (docs only)     | P2  | ⬜ todo |     |
-| A6  | Documents after create: list, attach, detach                | P2  | ⬜ todo |     |
-| B1  | A deployment-registered wait gate is invisible to admission | P2  | ⬜ todo |     |
-| B2  | Step output on `GET /api/v1/tasks/:taskId/run`              | P3  | ⬜ todo |     |
+| #   | Slice                                                       | Sev | Status  | PR                                                          |
+| --- | ----------------------------------------------------------- | --- | ------- | ----------------------------------------------------------- |
+| A1  | Repair a refused input: `fields` on the task PATCH          | P1  | ✅ done | [#1808](https://github.com/kibertoad/cat-factory/pull/1808) |
+| A2  | Board provisioning: create a service, link a repo           | P1  | ⬜ todo |                                                             |
+| A3  | Task dependencies over the API                              | P2  | ⬜ todo |                                                             |
+| A4  | The artifact list under-reports reference designs           | P2  | ⬜ todo |                                                             |
+| A5  | Retire the stale visual-confirmation caveat (docs only)     | P2  | ✅ done | [#1808](https://github.com/kibertoad/cat-factory/pull/1808) |
+| A6  | Documents after create: list, attach, detach                | P2  | ⬜ todo |                                                             |
+| B1  | A deployment-registered wait gate is invisible to admission | P2  | ⬜ todo |                                                             |
+| B2  | Step output on `GET /api/v1/tasks/:taskId/run`              | P3  | ⬜ todo |                                                             |
 
 ### A1: repair a refused input (the pilot)
 
@@ -143,6 +143,33 @@ There are two honest shapes for it and this tracker does not pick one:
 
 Whichever is chosen, **fix the doc comment in `contracts/src/public-decisions.ts` in the same PR**:
 it currently tells callers to PATCH, which is the claim this slice exists to make true.
+
+**SHIPPED — both halves in one PR, on the first shape.** The two were not worth splitting once the
+built-in half turned out to need no new mechanism, only creation's own two collaborators called
+again. What the tracker had not seen is that the obstacle is narrower than "the fields have
+resolution": three of the four built-in codes name a field with NO resolution at all
+(`stepsToReproduce`, `successCriteria`, `researchQuestion`), and the review target's resolution
+splits in two, of which only the DESCRIPTION FOLD is problematic. Verifying the pull request
+against the provider simply repeats; the fold is a prepend, so repeating it would leave the
+description naming two pull requests.
+
+The fold is therefore made idempotent BY CONTENT rather than by a marker: the preamble is
+recomputed from the fields as they stand, and where it is the description's prefix it is swapped
+for the new one. Nothing folded before (the `review_target_missing` repair itself) prepends
+cleanly; a description since rewritten by hand REFUSES, because the platform can no longer tell
+which part of it was the fold. A marker would have been the obvious alternative and is worthless
+here: no review task in any database carries one, and the tasks this exists to repair are exactly
+the ones that predate it.
+
+Two things the tracker got wrong, corrected here rather than left to trip the next slice:
+
+- The internal `updateBlockSchema` does NOT gain the built-in fields under `customTaskTypeFields`.
+  The halves are validated by different authorities (a schema here, a deployment's descriptor
+  there), so the request carries `builtinTaskTypeFields` beside it and each replaces its own half.
+- **Merge vs replace is a DOOR question, not a bag question.** The internal keys replace, as the
+  app's form has always sent them; the PUBLIC `fields` merges, because this API does not serve the
+  bag back and a replacing patch would ask a caller to restate values it cannot read. That
+  asymmetry lives in `publicApi/taskTypeFields.ts` and nowhere near the rule.
 
 ### A2: board provisioning
 
@@ -185,6 +212,13 @@ Fact 9. Three places say the images are not readable over `/api/v1`: the schema 
 `publicVisualConfirmDecisionSchema`, ADR 0043, and `public-api.md`. All three predate E1. Cheapest
 item here and the most misleading one left in place, because it tells a caller not to attempt
 something that works.
+
+**SHIPPED, and it was TWO places, not three.** ADR 0043 never carried the caveat: it names the
+artifact blob among the reads it inherits and says nothing about resolvability. Fact 9 asserted a
+third site from the shape of the other two rather than from a grep, which is the failure mode a
+"validated facts" section exists to prevent; the remaining two (the schema doc, plus the
+`visual-confirmation` bullet in `public-api.md`) are fixed, each stating that the caveat outlived
+its cause so the correction is not silently re-litigated.
 
 ### B1: a deployment-registered wait gate is invisible to admission
 

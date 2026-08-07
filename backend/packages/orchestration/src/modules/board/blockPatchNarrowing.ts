@@ -1,7 +1,6 @@
-import type { Block, BlockPatch, TaskTypeFields } from '@cat-factory/kernel'
+import type { Block } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
 import type { UpdateBlockInput } from '@cat-factory/contracts'
-import type { ResolvedTaskType } from './taskTypeCreationDefaults.js'
 import {
   aprioriBranchesError,
   involvedServiceIdsError,
@@ -14,15 +13,19 @@ import {
 // One concern, stated once: `updateBlock` takes a partial patch that may name fields belonging to
 // a DIFFERENT kind of block than the one addressed, and each such field has to be dropped rather
 // than persisted as dead data nothing reads. Two of them additionally validate against state the
-// patch cannot see (the board's other blocks, a task type's declaration), which is why this takes
-// bound callbacks rather than being pure.
+// patch cannot see (the board's other blocks), which is why this takes bound callbacks rather
+// than being pure.
+//
+// The per-type FIELDS patch is deliberately NOT here: it changes the patch's shape and resolves a
+// pull request against the provider, which is a different kind of work than deciding whether a
+// key applies to this block. It lives in `taskTypeFieldsPatch.ts` and runs after these.
 //
 // The drops are silent by design and that is the ONE trap here: patching `serviceConnections` onto
 // a task is not an error a caller should have to handle, because the SPA only ever offers the
 // field where it applies. A drop that threw would turn an inspector's harmless over-send into a
 // failed save.
 
-/** What the narrowing needs from the service: two reads and the create door's own validator. */
+/** What the narrowing needs from the service: two reads of blocks a patch may name. */
 export interface BlockPatchNarrowingDeps {
   /** Every block homed in a workspace, for validating ids a patch names. */
   listByWorkspace: (homeWorkspaceId: string) => Promise<Block[]>
@@ -32,15 +35,6 @@ export interface BlockPatchNarrowingDeps {
    * refused for living on the board it was mounted from.
    */
   resolveForeign: (workspaceId: string, id: string) => Promise<Block | null>
-  /**
-   * The create form's own validator for a custom task type's collected values
-   * (`TaskTypeCreationDefaults.validatedFields`), passed in rather than re-implemented: the doors
-   * agreeing is the whole reason the patch path is allowed to write this bag at all.
-   */
-  validatedFields: (
-    taskType: ResolvedTaskType,
-    fields: TaskTypeFields | undefined,
-  ) => TaskTypeFields | undefined
 }
 
 /** Where a patch targets the wrong kind of block, the field is dropped rather than persisted. */
@@ -174,37 +168,6 @@ export function createBlockPatchNarrowing(deps: BlockPatchNarrowingDeps) {
       const involved = patch.involvedServiceIds ?? block.involvedServiceIds ?? []
       const error = aprioriBranchesError(branches, block, involved.length > 0)
       if (error) throw new ValidationError(error)
-    },
-
-    /**
-     * Turn a `customTaskTypeFields` patch into the `taskTypeFields` the row actually stores, and
-     * validate it through the SAME door the create form goes through. This is also where the
-     * REQUEST type becomes the REPOSITORY's, which is why it runs last.
-     *
-     * It is what makes a custom type's declaration answerable AFTER creation, and the pre-dispatch
-     * input gate is why that matters. The gate parks a run whose task leaves a declared-required
-     * field unanswered, re-evaluating the declaration as it stands NOW, so a requirement a
-     * deployment adds in a later release reaches tasks that predate it. Without a write path those
-     * parks had one exit, a human waiving the gate: `recheck` would re-read the same unanswered bag
-     * forever, and the remedy the SPA names ("fill it in on the task") would be one nothing offers.
-     *
-     * Reusing `validatedFields` means the same rule refuses the same values whichever door wrote
-     * them, INCLUDING its two stand-downs (an unregistered type, and one whose bespoke `formPanel`
-     * owns the bag). A bag that sanitizes away is stored as `null` rather than `{}`, keeping
-     * `custom`'s presence meaning "parameters were collected".
-     *
-     * Deliberately NOT frozen once a run is working, matching `title` and `description` (the other
-     * free-text inputs a run reads): the case this exists for is a task parked precisely because
-     * the value is missing.
-     */
-    customTaskTypeFields(patch: UpdateBlockInput, block: Block): BlockPatch {
-      const { customTaskTypeFields, ...rest } = patch
-      if (customTaskTypeFields === undefined || block.level !== 'task') return rest
-      const validated = deps.validatedFields(block.taskType ?? 'feature', {
-        ...block.taskTypeFields,
-        custom: customTaskTypeFields,
-      })
-      return { ...rest, taskTypeFields: validated ?? null }
     },
   }
 }

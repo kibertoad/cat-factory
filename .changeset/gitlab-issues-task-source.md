@@ -19,9 +19,9 @@ workspace's existing GitLab connection, the same credentialless shape GitHub Iss
 recurring `bug-intake` schedule, the bug hunt, push intake and ticket writeback are the remaining
 slices ([`docs/initiatives/gitlab-issues-intake.md`](./docs/initiatives/gitlab-issues-intake.md)).
 
-The public-API `TaskSourceKind` enum gains a member (OpenAPI 1.24.0, SDKs regenerated). Additive on
+The public-API `TaskSourceKind` enum gains a member (OpenAPI 1.25.0, SDKs regenerated). Additive on
 a closed vocabulary the clients already tolerate unknown members of, so a consumer built against
-1.23.0 keeps parsing every response it understood.
+1.24.0 keeps parsing every response it understood.
 
 Four internal shapes changed, none externally consumed:
 

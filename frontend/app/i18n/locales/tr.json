@@ -6979,7 +6979,7 @@
           },
           "commandBar": {
             "title": "Komut paleti",
-            "body": "Herhangi bir eyleme ulaşmanın en hızlı yolu: açın ve yazmaya başlayın. Bu eğitimi oradan istediğiniz zaman yeniden başlatabilirsiniz."
+            "body": "Herhangi bir eyleme ulaşmanın en hızlı yolu: açın ve yazmaya başlayın. Bu eğitimi istediğiniz zaman yeniden başlatmak için oradan \"@:{'nav.tutorials'}\" seçeneğini seçin."
           },
           "toolbar": {
             "title": "Pano denetimleri",

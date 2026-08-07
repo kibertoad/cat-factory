@@ -6979,7 +6979,7 @@
           },
           "commandBar": {
             "title": "Die Befehlspalette",
-            "body": "Der schnellste Weg zu jeder Aktion: öffnen und lostippen. Von dort kannst du dieses Tutorial jederzeit neu starten."
+            "body": "Der schnellste Weg zu jeder Aktion: öffnen und lostippen. Um dieses Tutorial jederzeit neu zu starten, wähle dort „@:{'nav.tutorials'}“."
           },
           "toolbar": {
             "title": "Board-Steuerung",

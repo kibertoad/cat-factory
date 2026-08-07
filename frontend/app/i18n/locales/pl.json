@@ -6979,7 +6979,7 @@
           },
           "commandBar": {
             "title": "Paleta poleceń",
-            "body": "Najszybsza droga do każdej akcji: otwórz i zacznij pisać. Możesz stamtąd w każdej chwili ponownie uruchomić ten samouczek."
+            "body": "Najszybsza droga do każdej akcji: otwórz i zacznij pisać. Aby w każdej chwili ponownie uruchomić ten samouczek, wybierz tam „@:{'nav.tutorials'}”."
           },
           "toolbar": {
             "title": "Sterowanie tablicą",

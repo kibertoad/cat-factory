@@ -7231,7 +7231,7 @@
           },
           "commandBar": {
             "title": "The command palette",
-            "body": "The fastest way to reach any action: open it and start typing. You can restart this tutorial from there at any time."
+            "body": "The fastest way to reach any action: open it and start typing. To restart this tutorial at any time, pick \"@:{'nav.tutorials'}\" there."
           },
           "toolbar": {
             "title": "Board controls",
