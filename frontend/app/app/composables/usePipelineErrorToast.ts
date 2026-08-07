@@ -92,6 +92,10 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.task_limit_reached',
     descriptionKey: 'errors.conflict.description.task_limit_reached',
   },
+  webhook_limit_reached: {
+    titleKey: 'errors.conflict.title.webhook_limit_reached',
+    descriptionKey: 'errors.conflict.description.webhook_limit_reached',
+  },
   tester_infra_unsupported: {
     titleKey: 'errors.conflict.title.tester_infra_unsupported',
     descriptionKey: 'errors.conflict.description.tester_infra_unsupported',

@@ -62,12 +62,12 @@ existed.
 
 Scopes are an ordered, **inclusive** ladder; each rung can do everything below it:
 
-| Scope    | Adds                                                                                                                                                                                                                            |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, a run's [evidence](#run-evidence-report--artifacts), the whole [`/debug` surface](./debug-api.md).                      |
-| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                                                                                                     |
-| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                           |
-| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**), manage the [outbound webhook](#outbound-webhook-push), and [provision keys](#key-provisioning-apiv1keys). |
+| Scope    | Adds                                                                                                                                                                                                                             |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, a run's [evidence](#run-evidence-report--artifacts), the whole [`/debug` surface](./debug-api.md).                       |
+| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                                                                                                      |
+| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                            |
+| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**), manage the [outbound webhook](#outbound-webhooks-push), and [provision keys](#key-provisioning-apiv1keys). |
 
 Two things to know before minting `decide` or `admin`:
 
@@ -767,7 +767,7 @@ there is **no heartbeat**, so a quiet run produces a quiet stream. Event names:
 | `timeout`  | The stream hit its **5-minute** cap; data `{}`. Nothing is wrong; reconnect to keep watching.                                                                |
 
 A revoked key cuts a live stream within ~5 seconds. Streams are per-run reads bounded by their own
-poll; for push at scale, register the [outbound webhook](#outbound-webhook-push) instead.
+poll; for push at scale, register the [outbound webhook](#outbound-webhooks-push) instead.
 
 ### Pipelines & task types (discovery)
 
@@ -1167,15 +1167,16 @@ keys, `read` scope. Fully documented in [`debug-api.md`](./debug-api.md).
 
 ### Outbound webhook management
 
-`GET|PUT|DELETE /api/v1/notification-webhook`, `admin` scope: register the endpoint this workspace
-pushes to, read what is registered, or unregister. Documented with the delivery contract it
-configures, in [Outbound webhook](#outbound-webhook-push) below.
+`GET|PUT|DELETE /api/v1/notification-webhook` and the
+`GET /api/v1/notification-webhooks` collection beside it, `admin` scope: register the endpoints this
+workspace pushes to, read what is registered, or unregister. Documented with the delivery contract
+they configure, in [Outbound webhooks](#outbound-webhooks-push) below.
 
-## Outbound webhook (push)
+## Outbound webhooks (push)
 
 Polling has no answer for the two cases that matter most: a parked run waits **indefinitely**, and a
-fully-successful run raises no notification at all. A workspace can register **one** outbound HTTPS
-endpoint and subscribe it to any of three delivery families:
+fully-successful run raises no notification at all. A workspace can register outbound HTTPS
+endpoints and subscribe each to any of three delivery families:
 
 - **Notification cards**: the same cards as `GET /api/v1/notifications`, pushed as they are raised
   and again as they are resolved.
@@ -1204,11 +1205,15 @@ curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: appl
   "$BASE/api/v1/notification-webhook"
 ```
 
-| Route                                 | Scope   | Notes                                                          |
-| ------------------------------------- | ------- | -------------------------------------------------------------- |
-| `GET /api/v1/notification-webhook`    | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when none is set. |
-| `PUT /api/v1/notification-webhook`    | `admin` | Register, edit or rotate. Returns the stored config.           |
-| `DELETE /api/v1/notification-webhook` | `admin` | Unregister. Idempotent, `204`.                                 |
+| Route                                             | Scope   | Notes                                                                  |
+| ------------------------------------------------- | ------- | ---------------------------------------------------------------------- |
+| `GET /api/v1/notification-webhook`                | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when none is set.         |
+| `PUT /api/v1/notification-webhook`                | `admin` | Register, edit or rotate. Returns the stored config.                   |
+| `DELETE /api/v1/notification-webhook`             | `admin` | Unregister. Idempotent, `204`.                                         |
+| `GET /api/v1/notification-webhooks`               | `admin` | `{ "webhooks": [ … ] }`, every endpoint, ordered by id. Not paginated. |
+| `GET /api/v1/notification-webhooks/:webhookId`    | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when that id has none.    |
+| `PUT /api/v1/notification-webhooks/:webhookId`    | `admin` | Register, edit or rotate ONE named endpoint.                           |
+| `DELETE /api/v1/notification-webhooks/:webhookId` | `admin` | Unregister one. Idempotent, `204`; siblings untouched.                 |
 
 `GET` returns the config with `hasSecret: true|false`; the secret itself is **write-only**, sealed
 at rest, never readable back. An `admin` key can rotate the signing secret but never learn the
@@ -1256,6 +1261,46 @@ are followed at most 5 times, each hop re-validated; a cross-origin hop drops th
 headers). For local development, a deployment can relax this with
 `NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS` / `NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS`
 ([environment variables](../../docs/environment-variables.md)).
+
+### Several endpoints, one per integration
+
+The routes above address **one** endpoint, the one whose id is `default`. A workspace can register
+up to **10**, each with its own URL, its own signing secret and its own three filters, addressed
+under `/api/v1/notification-webhooks/:webhookId`. That is what lets a second integration enroll
+without displacing the first: before the collection existed, registering a receiver overwrote
+whatever was already there, and the only symptom was that the previous one went quiet.
+
+**You choose the id**, and the route is idempotent by it, so a receiver enrolls itself on every cold
+start without tracking whether it has enrolled before and without a create-or-discover round trip it
+might be racing a second instance on. An id is 1-63 characters of lowercase letters, digits, `-` or
+`_`, starting with a letter or digit; anything else is refused with
+`details.reason: "invalid_webhook_id"`.
+
+```sh
+curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: application/json' \
+  -d '{
+    "url": "https://gatekeeper.example.com/cat-factory",
+    "name": "Cloudflare OS gatekeeper",
+    "secret": "<16-200 chars, THIS endpoint’s own signing secret>",
+    "runEvents": ["run.completed", "run.failed"]
+  }' \
+  "$BASE/api/v1/notification-webhooks/gatekeeper"
+```
+
+Everything else is identical to the singular routes: same `admin` floor, same keep-on-omit rule,
+same write-only secret, same SSRF guard, same `webhook_url_required` refusal. The two extras are
+`id` (which the projection now carries, and which the `default` entry reports like any other) and
+`name`, an operator-facing label that defaults to the id.
+
+A delivery **fans out**: every enabled endpoint subscribed to the family gets its own copy, signed
+with its own secret, and the copies are delivered concurrently so a second receiver costs a run's
+settlement no extra latency. One receiver failing costs only its own delivery. `deliveryId` is
+unchanged and carries no endpoint segment: each receiver sees only its own copy, so the key it
+dedupes on is the same one it always was.
+
+Registering an 11th endpoint is refused with `409` and
+`details.reason: "webhook_limit_reached"` (`details.limit` carries the cap). Editing or removing an
+existing endpoint is admitted regardless, since those are the actions that resolve it.
 
 ### Delivery contract
 

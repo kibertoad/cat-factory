@@ -113,6 +113,10 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.publicNotificationWebhookSchema>
 >()
 expectMutuallyAssignable<
+  sdk.PublicNotificationWebhookList,
+  v.InferOutput<typeof contracts.publicNotificationWebhookListSchema>
+>()
+expectMutuallyAssignable<
   sdk.PutNotificationWebhook,
   v.InferOutput<typeof contracts.putNotificationWebhookSchema>
 >()
@@ -379,6 +383,7 @@ const ASSERTED_COMPONENTS = [
   'PublicNotificationList',
   'NotificationWebhook',
   'PublicNotificationWebhook',
+  'PublicNotificationWebhookList',
   'PutNotificationWebhook',
   'PublicUsageRow',
   'PublicUsageBudget',

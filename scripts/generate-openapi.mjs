@@ -139,7 +139,13 @@ const API_PREFIX = '/api/v1'
 // `x-min-scope` while the branch was in flight: the collision surfaced as a conflict on this
 // comment block only because each version step writes its own paragraph here, never as one on the
 // VERSION line, which auto-merges clean to a number main has already used.
-const API_VERSION = '1.24.0'
+// 1.25.0: the outbound webhook becomes a COLLECTION —
+// `GET /api/v1/notification-webhooks` plus `GET|PUT|DELETE /api/v1/notification-webhooks/:webhookId`
+// — beside the singular routes, which keep working and now address the `default` entry. Additive on
+// every axis: four new operations, and two new fields (`id`, `name`) on a response projection a
+// consumer already tolerates unknown members of. Re-read this line against `origin/main` before
+// merging: the number auto-merges clean when both sides pick it.
+const API_VERSION = '1.25.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -195,6 +201,7 @@ const COMPONENT_SCHEMAS = {
   // wrapper, the projection inside it (also the write's response) and the write body.
   NotificationWebhook: 'notificationWebhookSchema',
   PublicNotificationWebhook: 'publicNotificationWebhookSchema',
+  PublicNotificationWebhookList: 'publicNotificationWebhookListSchema',
   PutNotificationWebhook: 'putNotificationWebhookSchema',
   PublicUsageRow: 'publicUsageRowSchema',
   PublicUsageBudget: 'publicUsageBudgetSchema',
@@ -410,6 +417,30 @@ const OPERATION_DOCS = {
     tag: 'Webhook',
     summary: 'Remove the outbound webhook',
     description: 'Deregister the endpoint; deliveries stop. Idempotent.',
+  },
+  listPublicNotificationWebhooks: {
+    tag: 'Webhook',
+    summary: "List the workspace's outbound webhooks",
+    description:
+      'Every endpoint this workspace delivers to, ordered by id. The endpoint the unnamed routes address appears here under the id `default`. Not paginated: the number of endpoints a workspace may register is capped, so the whole set fits in one response. No signing secret is returned for any of them.',
+  },
+  getPublicNamedNotificationWebhook: {
+    tag: 'Webhook',
+    summary: 'Read one named outbound webhook',
+    description:
+      'The endpoint registered under this id, or `{ "webhook": null }` when there is none — the same shape the unnamed read answers, so an integration\'s startup self-check does not branch on a status code. The signing secret is never returned.',
+  },
+  putPublicNamedNotificationWebhook: {
+    tag: 'Webhook',
+    summary: 'Register or update one named outbound webhook',
+    description:
+      'Register an endpoint under an id YOU choose (1-63 characters of lowercase letters, digits, `-` or `_`), or update the one already there. Idempotent by id, so an integration can enroll its own receiver on every cold start without tracking whether it has enrolled before, and without displacing anything else the workspace registered. Every field follows the same keep-on-omit rule as the unnamed route, `url` being required only when there is nothing under this id to keep, and a supplied `secret` rotating this endpoint\'s own signing secret. Refused with `reason: "invalid_webhook_id"` for an id that is not a slug, and `reason: "webhook_limit_reached"` (409) when registering a NEW id would exceed the per-workspace cap; editing an existing one is admitted either way.',
+  },
+  deletePublicNamedNotificationWebhook: {
+    tag: 'Webhook',
+    summary: 'Remove one named outbound webhook',
+    description:
+      "Deregister this endpoint; its deliveries stop and the workspace's other endpoints are untouched. Idempotent.",
   },
   getPublicUsage: {
     tag: 'Usage',

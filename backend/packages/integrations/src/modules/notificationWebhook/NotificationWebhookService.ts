@@ -1,4 +1,9 @@
-import type { NotificationWebhook, PutNotificationWebhookInput } from '@cat-factory/contracts'
+import {
+  MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE,
+  type NotificationWebhook,
+  notificationWebhookIdSchema,
+  type PutNotificationWebhookInput,
+} from '@cat-factory/contracts'
 import type {
   Clock,
   NotificationWebhookRecord,
@@ -6,12 +11,17 @@ import type {
   SecretCipher,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
-import { ValidationError } from '@cat-factory/kernel'
+import { ConflictError, ValidationError } from '@cat-factory/kernel'
+import * as v from 'valibot'
 import { assertSafeNotificationWebhookUrl } from './webhookUrl.js'
 
-// NotificationWebhookService: the management side of the outbound notification webhook — register
-// / read / remove the one endpoint a workspace delivers its notifications to. The DELIVERY side is
-// `WebhookNotificationChannel`, which reads the same row.
+// NotificationWebhookService: the management side of the outbound notification webhooks — register
+// / read / remove the endpoints a workspace delivers its notifications to. The DELIVERY side is
+// `WebhookNotificationChannel` and the two sinks beside it, which read the same rows.
+//
+// Endpoints are addressed by a CALLER-CHOSEN id. The singular routes address the reserved
+// `default` id, so the collection and the original one-endpoint surface are two views of one
+// store rather than two stores to keep in step.
 //
 // `put` is keep-on-omit in EVERY field, including the url: a body states what changes, and what it
 // leaves out is left alone. That is what lets an integration subscribe to a new event family
@@ -40,14 +50,29 @@ export interface NotificationWebhookServiceDependencies {
 export class NotificationWebhookService {
   constructor(private readonly deps: NotificationWebhookServiceDependencies) {}
 
-  /** The workspace's webhook as exposed to clients, or null when none is registered. */
-  async get(workspaceId: string): Promise<NotificationWebhook | null> {
-    const record = await this.deps.notificationWebhookRepository.get(workspaceId)
+  /** One endpoint as exposed to clients, or null when nothing is registered under that id. */
+  async get(workspaceId: string, id: string): Promise<NotificationWebhook | null> {
+    const record = await this.deps.notificationWebhookRepository.get(workspaceId, id)
     return record ? toWire(record) : null
   }
 
-  /** Register or update the workspace's webhook. */
-  async put(workspaceId: string, input: PutNotificationWebhookInput): Promise<NotificationWebhook> {
+  /** Every endpoint the workspace has registered, ordered by id. */
+  async list(workspaceId: string): Promise<NotificationWebhook[]> {
+    const records = await this.deps.notificationWebhookRepository.list(workspaceId)
+    return records.map(toWire)
+  }
+
+  /** Register or update one endpoint. */
+  async put(
+    workspaceId: string,
+    id: string,
+    input: PutNotificationWebhookInput,
+  ): Promise<NotificationWebhook> {
+    // Validated HERE rather than in the path-param schema, so the two management surfaces and any
+    // later caller share one rule and one machine-readable `reason`. A malformed id on a READ is
+    // left alone: it simply matches nothing, and answering "no such endpoint" is both true and
+    // the answer the caller was going to act on anyway.
+    assertValidWebhookId(id)
     // Reject a private/internal/metadata endpoint HERE, where an operator sees the error, rather
     // than leaving it to fail per-delivery later. The wire schema's `https://` prefix check is the
     // friendly first pass; this is the guard that actually holds (and the same one the delivery
@@ -62,18 +87,37 @@ export class NotificationWebhookService {
     if (input.url !== undefined) {
       assertSafeNotificationWebhookUrl(input.url, this.deps.urlSafetyPolicy)
     }
-    const existing = await this.deps.notificationWebhookRepository.get(workspaceId)
+    // ONE read serves both the keep-on-omit merge and the cap check below. Asking for the
+    // addressed row and then counting the rest would be two queries for one decision, and the
+    // count would be read a moment after the row it is meant to bound.
+    const registered = await this.deps.notificationWebhookRepository.list(workspaceId)
+    const existing = registered.find((record) => record.id === id)
+    // The cap bounds only what CREATES an endpoint: editing one that already exists is admitted
+    // even on a workspace that is at (or, after a lowered cap, over) the limit, because the edits
+    // an operator makes to react to being over the limit are exactly disabling and deleting.
+    if (!existing && registered.length >= MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE) {
+      throw new ConflictError(
+        `This workspace already has ${MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE} notification webhooks registered`,
+        'webhook_limit_reached',
+        { limit: MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE },
+      )
+    }
     // Keep-on-omit needs something to keep. Refusing here is what keeps the rule uniform across
     // every field without letting a body that names no endpoint store a half-registered row.
     const url = input.url ?? existing?.url
     if (url === undefined) {
       throw new ValidationError(
-        'No webhook is registered for this workspace, so `url` is required to register one',
+        `No webhook is registered under \`${id}\` in this workspace, so \`url\` is required to register one`,
         { reason: 'webhook_url_required' },
       )
     }
     const record: NotificationWebhookRecord = {
       workspaceId,
+      id,
+      // A registration that names no label gets the id, which is the only value here that is
+      // already meaningful to whoever chose it. Defaulting to the URL would put a receiver's
+      // address in every operator-facing list, and defaulting to a blank renders as a gap.
+      name: input.name ?? existing?.name ?? id,
       url,
       types: input.types ?? existing?.types ?? [],
       // Omitted `runEvents` KEEPS the current subscription, like every other field here. The
@@ -94,15 +138,32 @@ export class NotificationWebhookService {
     return toWire(record)
   }
 
-  /** Remove the workspace's webhook. Idempotent. */
-  async remove(workspaceId: string): Promise<void> {
-    await this.deps.notificationWebhookRepository.delete(workspaceId)
+  /** Remove one endpoint. Idempotent, and never touches a sibling. */
+  async remove(workspaceId: string, id: string): Promise<void> {
+    await this.deps.notificationWebhookRepository.delete(workspaceId, id)
+  }
+}
+
+/**
+ * Refuse an id that is not a lowercase slug. The id is a path segment on both management surfaces
+ * and an operator reads it beside the endpoint's URL, so the shape is part of the contract rather
+ * than a storage detail. Derived from the contracts' own schema, so the rule the API documents and
+ * the rule the service enforces cannot drift apart.
+ */
+function assertValidWebhookId(id: string): void {
+  const parsed = v.safeParse(notificationWebhookIdSchema, id)
+  if (!parsed.success) {
+    throw new ValidationError(parsed.issues[0]?.message ?? 'Invalid webhook id', {
+      reason: 'invalid_webhook_id',
+    })
   }
 }
 
 /** Project the persisted record onto the wire shape — the sealed secret becomes a boolean. */
 function toWire(record: NotificationWebhookRecord): NotificationWebhook {
   return {
+    id: record.id,
+    name: record.name,
     url: record.url,
     types: record.types,
     runEvents: record.runEvents,

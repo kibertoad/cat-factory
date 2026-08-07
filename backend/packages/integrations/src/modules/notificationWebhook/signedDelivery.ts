@@ -4,12 +4,18 @@ import { DEFAULT_MAX_REDIRECTS, safeFetch } from '../shared/safe-fetch.js'
 import { assertSafeNotificationWebhookUrl } from './webhookUrl.js'
 import { signWebhookDelivery } from './webhookSignature.js'
 
-// The one outbound-delivery core the workspace's registered webhook endpoint is driven through.
-// Both families that POST to it — the notification cards and the run-lifecycle events — share
-// this rather than each carrying its own retry loop, because everything interesting about the
-// delivery (the wall-clock budget, which failures are worth retrying, re-validating the URL on
-// every redirect hop, the signature headers) is a property of the ENDPOINT, not of the payload.
-// A second copy would be a second place to get the SSRF guard subtly wrong.
+// The one outbound-delivery core every registered webhook endpoint is driven through. All three
+// families that POST to one — the notification cards, the run-lifecycle events and the
+// platform-health alerts — share this rather than each carrying its own retry loop, because
+// everything interesting about the delivery (the wall-clock budget, which failures are worth
+// retrying, re-validating the URL on every redirect hop, the signature headers) is a property of
+// the ENDPOINT, not of the payload. A second copy would be a second place to get the SSRF guard
+// subtly wrong.
+//
+// A workspace registers SEVERAL endpoints, so the three families reach this through
+// `fanOutSignedWebhook` rather than calling `postSignedWebhook` per endpoint themselves: the
+// concurrency and the per-endpoint isolation are properties of the fan-out, and three hand-rolled
+// copies of it is exactly the drift this file exists to prevent one layer down.
 
 /** How many attempts one delivery gets, and how long to wait between them (exponential). */
 const MAX_ATTEMPTS = 3
@@ -132,6 +138,54 @@ export async function postSignedWebhook(
     }
   }
   throw lastError ?? new Error('Webhook delivery failed')
+}
+
+/** One subscribed endpoint, as the fan-out needs it: where to POST and what to sign with. */
+export interface SignedDeliveryTarget {
+  id: string
+  url: string
+  secretSealed: string | null
+}
+
+/**
+ * POST one already-composed body to EVERY subscribed endpoint, isolating each.
+ *
+ * Two properties are the whole reason this is a helper rather than a loop at each of the three
+ * call sites:
+ *
+ * - **Concurrent, not sequential.** The caller awaits the fan-out, so its cost is latency on the
+ *   engine step that produced the event — the step that parks or settles a run. Each delivery
+ *   already carries a wall-clock budget chosen against exactly that (`TOTAL_DELIVERY_BUDGET_MS`);
+ *   running them in series would multiply that budget by the number of endpoints, so a workspace
+ *   would pay for enrolling a second integration in the latency of every run.
+ * - **One failing receiver costs only its own delivery.** A rejected `Promise.all` would abandon
+ *   nothing (the others are already in flight) but would report ONE failure for the batch, so a
+ *   permanently broken endpoint would mask the health of every sibling. Each result is settled and
+ *   reported on its own, naming the endpoint.
+ *
+ * Never throws: a delivery that spends its budget is reported through `onEndpointError` and the
+ * fan-out carries on, which is what "best-effort" means for this transport.
+ */
+export async function fanOutSignedWebhook(
+  deps: SignedDeliveryDependencies,
+  targets: readonly SignedDeliveryTarget[],
+  delivery: { payload: string; sentAt: number },
+  onEndpointError: (error: unknown, target: SignedDeliveryTarget) => void,
+): Promise<void> {
+  await Promise.all(
+    targets.map(async (target) => {
+      try {
+        await postSignedWebhook(deps, {
+          url: target.url,
+          secretSealed: target.secretSealed,
+          payload: delivery.payload,
+          sentAt: delivery.sentAt,
+        })
+      } catch (error) {
+        onEndpointError(error, target)
+      }
+    }),
+  )
 }
 
 /** Builds the redirect/size errors `safeFetch` raises, carrying its status for the log line. */

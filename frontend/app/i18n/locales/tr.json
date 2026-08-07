@@ -582,7 +582,8 @@
         "ticket_already_linked": "Bu kayda ait bir görev zaten var",
         "document_already_linked": "Belge zaten ekli",
         "dry_run_not_mergeable": "Prova çalışması birleştirilemez",
-        "submission_not_allowed": "Bu çalışma için birleştirmeye izin verilmiyor"
+        "submission_not_allowed": "Bu çalışma için birleştirmeye izin verilmiyor",
+        "webhook_limit_reached": "Webhook sınırına ulaşıldı"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -620,7 +621,8 @@
         "ticket_already_linked": "Bir kayıt yalnızca tek bir görevi besleyebilir; yeniden bağlamak mevcut görevi oluşturulduğu bağlamdan yoksun bırakır. Bunun yerine o görevi açın ya da önce kaydın bağlantısını kaldırın.",
         "document_already_linked": "Bu belge başka bir göreve ekli. Önce oradan ayırın ya da ayrı bir kopya ekleyin.",
         "dry_run_not_mergeable": "Bu pull request bir prova çalışmasından geliyor, bu yüzden buradan birleştirilemez. Bu çalışma alanının birleştireceği bir pull request üretmek için görevi gerçek çalışma olarak yeniden başlatın.",
-        "submission_not_allowed": "Bu görevin birleştirme politikası, çalışmayı başlatan rolün bu tür bir değişikliği birleştirmesine izin vermiyor. Rolü buna izin veren bir takım arkadaşı birleştirebilir ya da bir yönetici birleştirme ön ayarındaki politikayı genişletebilir."
+        "submission_not_allowed": "Bu görevin birleştirme politikası, çalışmayı başlatan rolün bu tür bir değişikliği birleştirmesine izin vermiyor. Rolü buna izin veren bir takım arkadaşı birleştirebilir ya da bir yönetici birleştirme ön ayarındaki politikayı genişletebilir.",
+        "webhook_limit_reached": "Bu çalışma alanında zaten en fazla sayıda giden webhook kayıtlı. Artık ihtiyaç duymadığınız birini kaldırın ve bunu yeniden kaydedin."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",

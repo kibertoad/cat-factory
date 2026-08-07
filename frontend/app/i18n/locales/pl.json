@@ -582,7 +582,8 @@
         "ticket_already_linked": "To zgłoszenie ma już zadanie",
         "document_already_linked": "Dokument jest już załączony",
         "dry_run_not_mergeable": "Uruchomienia próbnego nie można scalić",
-        "submission_not_allowed": "Scalanie niedozwolone dla tego uruchomienia"
+        "submission_not_allowed": "Scalanie niedozwolone dla tego uruchomienia",
+        "webhook_limit_reached": "Osiągnięto limit webhooków"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -620,7 +621,8 @@
         "ticket_already_linked": "Zgłoszenie może stać za tylko jednym zadaniem, więc ponowne powiązanie pozbawiłoby istniejące zadanie kontekstu, z którym powstało. Otwórz to zadanie albo najpierw odłącz zgłoszenie.",
         "document_already_linked": "Ten dokument jest załączony do innego zadania. Najpierw odłącz go tam albo załącz osobną kopię.",
         "dry_run_not_mergeable": "Ten pull request pochodzi z uruchomienia próbnego, więc nie można go tutaj scalić. Uruchom zadanie ponownie w trybie rzeczywistym, aby powstał pull request, który ta przestrzeń robocza scali.",
-        "submission_not_allowed": "Polityka scalania tego zadania nie pozwala roli, która rozpoczęła to uruchomienie, scalić tego typu zmiany. Może to zrobić osoba o odpowiedniej roli albo administrator może rozszerzyć politykę w ustawieniu scalania."
+        "submission_not_allowed": "Polityka scalania tego zadania nie pozwala roli, która rozpoczęła to uruchomienie, scalić tego typu zmiany. Może to zrobić osoba o odpowiedniej roli albo administrator może rozszerzyć politykę w ustawieniu scalania.",
+        "webhook_limit_reached": "Ta przestrzeń robocza ma już zarejestrowaną maksymalną liczbę wychodzących webhooków. Usuń jeden, którego już nie potrzebujesz, a następnie zarejestruj ten ponownie."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",

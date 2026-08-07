@@ -2,10 +2,10 @@ import type { NotificationType } from '../domain/types.js'
 import type { PlatformAlertEventKind } from './platform-alert.js'
 import type { RunLifecycleEventKind } from './run-lifecycle.js'
 
-// Persistence port for a workspace's outbound notification webhook — the delivery endpoint a
+// Persistence port for a workspace's outbound notification webhooks — the delivery endpoints a
 // HEADLESS integration registers so it learns about parked decisions (and the actionable run
-// tails) by push instead of polling. One endpoint per workspace, keyed by workspace id, exactly
-// like the tracker/Slack settings rows.
+// tails) by push instead of polling. Keyed by (workspace id, endpoint id): a workspace registers
+// SEVERAL, so a second integration enrolling cannot silently unregister the first.
 //
 // The signing secret is stored SEALED (the deployment `SecretCipher`, like every other outbound
 // credential) and never leaves the backend: it is used only to sign an outgoing delivery, and the
@@ -15,6 +15,13 @@ import type { RunLifecycleEventKind } from './run-lifecycle.js'
 /** A workspace's registered notification webhook, as persisted. */
 export interface NotificationWebhookRecord {
   workspaceId: string
+  /**
+   * Which endpoint this is within the workspace, chosen by whoever registered it. The management
+   * service reserves `default` for the singular routes; this layer treats it as an opaque key.
+   */
+  id: string
+  /** An operator-facing label, defaulted to {@link id} by the service when none is supplied. */
+  name: string
   /** The HTTPS endpoint deliveries are POSTed to. */
   url: string
   /**
@@ -53,10 +60,18 @@ export interface NotificationWebhookRecord {
 }
 
 export interface NotificationWebhookRepository {
-  /** The workspace's webhook, or null when none is registered. */
-  get(workspaceId: string): Promise<NotificationWebhookRecord | null>
-  /** Create or replace the workspace's webhook (keyed by workspace id). */
+  /** One endpoint, or null when nothing is registered under that id. */
+  get(workspaceId: string, id: string): Promise<NotificationWebhookRecord | null>
+  /**
+   * Every endpoint the workspace has registered, ordered by id.
+   *
+   * This is what the three delivery paths read: ONE query per raised notification / run edge /
+   * health transition, fanned out in memory. A `get` per subscribed endpoint would be an N+1 on
+   * the run's terminal path, which is the hottest place this store is read from.
+   */
+  list(workspaceId: string): Promise<NotificationWebhookRecord[]>
+  /** Create or replace one endpoint (keyed by workspace id AND endpoint id). */
   put(record: NotificationWebhookRecord): Promise<void>
-  /** Remove the workspace's webhook. Idempotent — deleting an absent row is a no-op. */
-  delete(workspaceId: string): Promise<void>
+  /** Remove one endpoint. Idempotent — deleting an absent row is a no-op. */
+  delete(workspaceId: string, id: string): Promise<void>
 }

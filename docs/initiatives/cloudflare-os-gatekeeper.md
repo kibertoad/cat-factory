@@ -1,6 +1,6 @@
 # Cloudflare OS Gatekeeper integration
 
-Status: in progress. Slice 1 landed with this tracker; slices 2 to 4 are open.
+Status: in progress. Slices 1 and 2 have landed; slices 3 and 4 are open.
 
 ## Goal and rationale
 
@@ -80,15 +80,35 @@ The one piece that must live in core. Three moves, in dependency order:
   so each consumer does not re-derive it and get it backwards. Rides `pnpm gen:sdk` /
   `check:sdk` like every other projection.
 
-### 2. Multiple named outbound webhooks
+### 2. Multiple named outbound webhooks (landed)
 
-`/api/v1/notification-webhook` is one endpoint per workspace, so a Gatekeeper cannot enroll
-without stealing the slot from an existing integration. Additive change: a
-`/api/v1/notification-webhooks` COLLECTION beside the singular resource (which keeps working as
-the default entry), OpenAPI minor bump, mirrored persistence D1 ⇄ Drizzle with a conformance
-assertion, delivery fan-out over the one `signedDelivery.ts` core, `surface.mjs` entries.
-Per-endpoint secrets and event filters; the singular routes project onto the default entry so no
-existing consumer moves.
+`/api/v1/notification-webhook` was one endpoint per workspace, so a Gatekeeper could not enroll
+without stealing the slot from an existing integration. Shipped as an additive
+`/api/v1/notification-webhooks` COLLECTION beside the singular resource, which keeps working and
+projects onto the reserved id `default`: per-endpoint secrets and filters, `notification_webhooks`
+re-keyed to `(workspace_id, id)` on both stores, delivery fan-out over the one `signedDelivery.ts`
+core, OpenAPI 1.25.0, four new `surface.mjs` entries in all four SDKs plus the MCP and gatekeeper
+projections.
+
+Three decisions worth carrying forward:
+
+- **The id is CALLER-CHOSEN, so `PUT` is idempotent by it.** A Gatekeeper Worker booting cold
+  writes its own well-known id and is enrolled, whether or not it has ever run, with no id table of
+  its own and no create-or-discover round trip it might be racing a second instance on. A
+  server-minted id would have forced exactly that state back onto the consumer this slice exists
+  for.
+- **Fan-out is CONCURRENT and per-endpoint isolated.** The caller awaits it on the run's terminal
+  path, so serial delivery would multiply the wall-clock budget by the endpoint count and make
+  enrolling a second integration a latency cost on every run. Isolation is the other half: a
+  rejected `Promise.all` would report one failure for the batch, so a permanently broken endpoint
+  would mask every sibling's health.
+- **`deliveryId` gained no endpoint segment.** Each receiver sees only its own copy, so an
+  endpoint-scoped key would put a value in the dedupe key no receiver can act on, and would break
+  the one case where two subscriptions correctly collapse (the same URL registered twice).
+
+The cap is 10 per workspace (`webhook_limit_reached`, 409), and it bounds only what CREATES an
+endpoint: a workspace at the cap can still disable and delete, which are the actions that resolve
+it.
 
 ### 3. Key provisioning metadata
 
@@ -122,6 +142,46 @@ Three constraints make "in the repo" and "isolated" both true, and they are the 
 - **Not a published package.** `private: true`, no changeset, no npm release. It is read and
   copied, not installed.
 
+#### How it gets tested (decided in slice 2, before the Worker exists)
+
+The obvious ambition is a FULL end-to-end: boot a real Cloudflare OS, point it at a real
+cat-factory, drive a workspace agent, watch a run settle. It is worth stating plainly why that is
+not the plan, because the shape of the answer decides what slice 4 has to build.
+
+**Cloudflare OS cannot be containerized for this.** It ships no image and no compose file; the
+local story is `pnpm run-local`, which is `wrangler` driving `workerd` with state in a `.wrangler`
+directory, and the self-hosted-on-`workerd` path is documented as incomplete. So "spin one up in
+Docker" resolves to "clone a fast-moving partner repo into CI, install its workspace, boot its
+runtime", which is not hermetic, is not pinned to anything this repo controls, and would turn a
+partner-side change into a red build here. That is the same failure the slice's own CI constraint
+already forbids.
+
+**And it would not test the interesting half anyway.** What a full-stack run exercises is mostly
+the OS: its agent loop, its Gadgets, its model calls. What can actually be WRONG on our side of the
+boundary is the Gatekeeper: which bindings it exposes for a given policy, whether it refuses a call
+above the caller's tier, whether it verifies the delivery HMAC, whether it dedupes on `deliveryId`,
+whether an approval answer reaches the right decision route. None of that needs an OS to observe.
+
+So the target is a **real-workerd, real-backend, faked-OS** suite, which is hermetic and pins
+everything we own:
+
+- The Gatekeeper runs in actual `workerd` under `@cloudflare/vitest-pool-workers`, the harness
+  `test-worker` already uses. Not a Node mock of a Worker: the credential-custody story IS "the key
+  is a Worker secret", so a test that never binds one proves nothing about it.
+- The backend on the other side is the REAL Node facade, booted the way
+  `backend/internal/sdk-smoketest` boots it (`@cat-factory/e2e`'s `testServer.ts`, real Postgres,
+  only the LLM/agent side faked). Reusing that boot rather than composing a second wiring is the
+  same reasoning the smoketest gives: a bespoke composition would prove the Gatekeeper works
+  against _that_.
+- The OS side is a **Cap'n Web client** in the test, not an OS. It is the OS's own protocol, so the
+  contract under test is real; what is absent is only the workspace UI around it.
+- Its own `paths-filter` lane, NON-BLOCKING, the shape `test-eks` has.
+
+What that deliberately does not cover is whether a real Cloudflare OS deployment is happy with our
+bindings. The honest place for that is a **manual/nightly** job, opt-in behind a `GATEKEEPER_OS_REF`
+pointing at a partner commit, which may go red without blocking anyone. Do not fold it into the PR
+lane on the grounds that it passed a few times.
+
 **Rejected: shipping it as a Docker image.** Raised because the repo already publishes images, so
 it looks like the established path. It is not, for three separate reasons, any one of which
 settles it. A Cloudflare Worker has no container runtime: it deploys through `wrangler deploy` and
@@ -138,7 +198,7 @@ Do not re-propose without a consumer that pulls rather than copies.
 
 - [x] Slice 1: scope as data, `x-min-scope`, `@cat-factory/gatekeeper-bindings`
       ([#1804](https://github.com/kibertoad/cat-factory/pull/1804))
-- [ ] Slice 2: outbound webhook collection (both runtimes + conformance + SDK surface)
+- [x] Slice 2: outbound webhook collection (both runtimes + conformance + SDK surface)
 - [ ] Slice 3: `externalIdentity` on key provisioning, echoed on run detail
 - [ ] Slice 4: reference Gatekeeper Worker (`deploy/gatekeeper`, own CI lane, unpublished)
 
@@ -168,6 +228,15 @@ Do not re-propose without a consumer that pulls rather than copies.
   `bindingsWithinScope` returns `[]` and a key at the new rung reads as a key with no
   permissions. The published helpers now THROW on a rung they do not carry, for the same reason:
   version skew and "no permissions" must not be the same value.
+- **Re-keying a table is where the two stores stop looking alike, and both generators get it
+  wrong in the same direction.** SQLite cannot re-key in place, so D1 takes the standard
+  create-copy-drop-rename rebuild; Postgres can, so `drizzle-kit generate` emitted a four-statement
+  in-place `ALTER`. Both need HAND-WRITTEN backfill: drizzle's version adds `name` as `NOT NULL`
+  with no default and `id` as nullable and then makes it half of a primary key, which hard-fails on
+  any deployment that ever registered a webhook and passes CI, because CI migrates an EMPTY
+  database. Heal (add nullable, `UPDATE`, `SET NOT NULL`) then constrain, on both sides, and write
+  the conformance case that puts TWO ids in one workspace: every single-endpoint assertion passes
+  against a `put` still keyed on the workspace alone.
 - **`contract.minScope` is enforcement, not just documentation**, wherever a controller
   references it. Lowering an annotation lowers the gate. Treat a `minScope` diff in review
   exactly like a permission change, because it is one.

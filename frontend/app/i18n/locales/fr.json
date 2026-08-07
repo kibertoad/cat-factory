@@ -582,7 +582,8 @@
         "ticket_already_linked": "Ce ticket a déjà une tâche",
         "document_already_linked": "Document déjà joint",
         "dry_run_not_mergeable": "Une exécution à blanc ne peut pas être fusionnée",
-        "submission_not_allowed": "Fusion non autorisée pour cette exécution"
+        "submission_not_allowed": "Fusion non autorisée pour cette exécution",
+        "webhook_limit_reached": "Limite de webhooks atteinte"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -620,7 +621,8 @@
         "ticket_already_linked": "Un ticket ne peut alimenter qu'une seule tâche : le relier à nouveau priverait la tâche existante du contexte avec lequel elle a été créée. Ouvrez plutôt cette tâche, ou dissociez d'abord le ticket.",
         "document_already_linked": "Ce document est joint à une autre tâche. Détachez-le d'abord, ou joignez-en une copie distincte.",
         "dry_run_not_mergeable": "Cette pull request provient d'une exécution à blanc et ne peut pas être fusionnée ici. Relancez la tâche en exécution réelle pour produire une pull request que cet espace de travail fusionnera.",
-        "submission_not_allowed": "La politique de fusion de cette tâche n'autorise pas le rôle qui a lancé cette exécution à fusionner ce type de changement. Un coéquipier dont le rôle le permet peut le faire, ou un admin peut élargir la politique dans le préréglage de fusion."
+        "submission_not_allowed": "La politique de fusion de cette tâche n'autorise pas le rôle qui a lancé cette exécution à fusionner ce type de changement. Un coéquipier dont le rôle le permet peut le faire, ou un admin peut élargir la politique dans le préréglage de fusion.",
+        "webhook_limit_reached": "Cet espace de travail a déjà enregistré le nombre maximal de webhooks sortants. Supprimez-en un dont vous n’avez plus besoin, puis enregistrez celui-ci à nouveau."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",

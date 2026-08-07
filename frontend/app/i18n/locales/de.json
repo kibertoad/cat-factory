@@ -5482,7 +5482,8 @@
         "ticket_already_linked": "Dieses Ticket hat bereits eine Aufgabe",
         "document_already_linked": "Dokument bereits angehängt",
         "dry_run_not_mergeable": "Probelauf kann nicht zusammengeführt werden",
-        "submission_not_allowed": "Zusammenführen für diesen Lauf nicht erlaubt"
+        "submission_not_allowed": "Zusammenführen für diesen Lauf nicht erlaubt",
+        "webhook_limit_reached": "Webhook-Limit erreicht"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -5520,7 +5521,8 @@
         "ticket_already_linked": "Ein Ticket kann nur eine Aufgabe stützen. Es erneut zu verknüpfen würde der bestehenden Aufgabe genau den Kontext entziehen, mit dem sie angelegt wurde. Öffne stattdessen diese Aufgabe oder hebe die Verknüpfung des Tickets zuerst auf.",
         "document_already_linked": "Dieses Dokument ist an eine andere Aufgabe angehängt. Lösen Sie es dort zuerst, oder hängen Sie eine separate Kopie an.",
         "dry_run_not_mergeable": "Dieser Pull Request stammt aus einem Probelauf und kann hier nicht zusammengeführt werden. Starte die Aufgabe erneut als echten Lauf, um einen Pull Request zu erzeugen, den dieser Arbeitsbereich zusammenführt.",
-        "submission_not_allowed": "Die Merge-Richtlinie dieser Aufgabe erlaubt der Rolle, die diesen Lauf gestartet hat, diese Änderungsart nicht zusammenzuführen. Jemand mit einer passenden Rolle kann es tun, oder ein Admin erweitert die Richtlinie in der Merge-Vorlage."
+        "submission_not_allowed": "Die Merge-Richtlinie dieser Aufgabe erlaubt der Rolle, die diesen Lauf gestartet hat, diese Änderungsart nicht zusammenzuführen. Jemand mit einer passenden Rolle kann es tun, oder ein Admin erweitert die Richtlinie in der Merge-Vorlage.",
+        "webhook_limit_reached": "Für diesen Workspace ist bereits die maximale Anzahl ausgehender Webhooks registriert. Entfernen Sie einen nicht mehr benötigten und registrieren Sie diesen erneut."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

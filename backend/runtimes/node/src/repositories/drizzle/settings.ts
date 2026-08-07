@@ -355,33 +355,35 @@ export class DrizzleTrackerSettingsRepository implements TrackerSettingsReposito
 }
 
 /**
- * A workspace's outbound notification webhook — one row per workspace in `notification_webhooks`
- * (mirror of the D1 `D1NotificationWebhookRepository`). The `types` filter is a JSON array decoded
- * through the SHARED parsers both runtimes use, so the columns can't drift.
+ * A workspace's outbound notification webhooks — keyed by (workspace, endpoint id) in
+ * `notification_webhooks` (mirror of the D1 `D1NotificationWebhookRepository`). The filters are
+ * JSON arrays decoded through the SHARED parsers both runtimes use, so the columns can't drift.
  */
 export class DrizzleNotificationWebhookRepository implements NotificationWebhookRepository {
   constructor(private readonly db: DrizzleDb) {}
 
-  async get(workspaceId: string): Promise<NotificationWebhookRecord | null> {
+  async get(workspaceId: string, id: string): Promise<NotificationWebhookRecord | null> {
     const [row] = await this.db
       .select()
       .from(notificationWebhooks)
+      .where(
+        and(eq(notificationWebhooks.workspace_id, workspaceId), eq(notificationWebhooks.id, id)),
+      )
+    return row ? rowToNotificationWebhook(row) : null
+  }
+
+  async list(workspaceId: string): Promise<NotificationWebhookRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(notificationWebhooks)
       .where(eq(notificationWebhooks.workspace_id, workspaceId))
-    if (!row) return null
-    return {
-      workspaceId: row.workspace_id,
-      url: row.url,
-      types: parseNotificationWebhookTypes(row.types),
-      runEvents: parseRunLifecycleEvents(row.run_events),
-      alertEvents: parsePlatformAlertEvents(row.alert_events),
-      enabled: row.enabled === 1,
-      secretSealed: row.secret_sealed,
-      updatedAt: row.updated_at,
-    }
+      .orderBy(notificationWebhooks.id)
+    return rows.map(rowToNotificationWebhook)
   }
 
   async put(record: NotificationWebhookRecord): Promise<void> {
     const values = {
+      name: record.name,
       url: record.url,
       types: JSON.stringify(record.types),
       run_events: JSON.stringify(record.runEvents),
@@ -392,14 +394,36 @@ export class DrizzleNotificationWebhookRepository implements NotificationWebhook
     }
     await this.db
       .insert(notificationWebhooks)
-      .values({ workspace_id: record.workspaceId, ...values })
-      .onConflictDoUpdate({ target: notificationWebhooks.workspace_id, set: values })
+      .values({ workspace_id: record.workspaceId, id: record.id, ...values })
+      .onConflictDoUpdate({
+        target: [notificationWebhooks.workspace_id, notificationWebhooks.id],
+        set: values,
+      })
   }
 
-  async delete(workspaceId: string): Promise<void> {
+  async delete(workspaceId: string, id: string): Promise<void> {
     await this.db
       .delete(notificationWebhooks)
-      .where(eq(notificationWebhooks.workspace_id, workspaceId))
+      .where(
+        and(eq(notificationWebhooks.workspace_id, workspaceId), eq(notificationWebhooks.id, id)),
+      )
+  }
+}
+
+function rowToNotificationWebhook(
+  row: typeof notificationWebhooks.$inferSelect,
+): NotificationWebhookRecord {
+  return {
+    workspaceId: row.workspace_id,
+    id: row.id,
+    name: row.name,
+    url: row.url,
+    types: parseNotificationWebhookTypes(row.types),
+    runEvents: parseRunLifecycleEvents(row.run_events),
+    alertEvents: parsePlatformAlertEvents(row.alert_events),
+    enabled: row.enabled === 1,
+    secretSealed: row.secret_sealed,
+    updatedAt: row.updated_at,
   }
 }
 
