@@ -43,7 +43,7 @@ import type {
   WorkspaceRepository,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
-import type { StepToolServers } from '@cat-factory/contracts'
+import type { DispatchToolServers } from '@cat-factory/contracts'
 import { boardChangeSubject } from '@cat-factory/kernel'
 import type { FakeAgentOptions } from './FakeAgentExecutor.js'
 import type { OnboardingProbe } from './onboarding.js'
@@ -422,7 +422,7 @@ export interface ToolServerDispatchResult {
    * The non-secret projection the RUN records on its step, which the SPA renders as chips. Carries
    * no credential by construction, which is half of what the suite asserts.
    */
-  record: StepToolServers
+  record: DispatchToolServers
   /**
    * The job-body `mcpServers` field, credentials included. The only place the resolved VALUES are
    * observable, which is what lets the suite assert that a workspace's stored credential reaches a

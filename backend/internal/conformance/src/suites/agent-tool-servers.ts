@@ -159,6 +159,10 @@ export function defineToolServerConformance(harness: ConformanceHarness): void {
       expect(step?.toolServers?.unavailable).toEqual([
         { id: 'docs', label: 'Docs', reason: 'missing_secret' },
       ])
+      // The kind is stamped by the ENGINE as it folds, from the same parameter that feeds
+      // `step.dispatches` — so a helper re-dispatch cannot leave the lists reading under the
+      // step's own kind. It round-trips through each store beside the lists it describes.
+      expect(step?.toolServers?.agentKind).toBe('conformance-tooled-auditor')
     })
   })
 }

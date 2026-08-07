@@ -36,8 +36,8 @@ import type { ContainerEvictionKind } from './runner-transport.js'
 import type { HarnessFailureCause } from '../domain/harness-failure.js'
 import type {
   AgentEffortReport,
+  DispatchToolServers,
   InitiativePresetPhaseTemplate,
-  StepToolServers,
 } from '@cat-factory/contracts'
 
 // Port for "an agent doing its work". The execution engine calls this to perform
@@ -942,8 +942,12 @@ export interface AgentJobHandle {
    * harness and on the facade-wired secret/OAuth resolvers at that moment, and a workspace that
    * fills in a missing credential an hour later would make a step that ran without the tool read
    * as one that had it. Absent for executors that wire no tool servers (inline agents, tests).
+   *
+   * Carries no agent kind: `recordDispatchAttribution` stamps the DISPATCHED kind on it as it
+   * folds, from the same parameter that feeds `step.dispatches`, so an executor cannot label a
+   * resolution with a kind other than the one the engine dispatched.
    */
-  toolServers?: StepToolServers
+  toolServers?: DispatchToolServers
 }
 
 /** The outcome of polling an {@link AgentJobHandle}. */

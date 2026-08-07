@@ -1,18 +1,48 @@
 <script setup lang="ts">
 // The tool servers (MCP) one dispatch gave its agent, and the ones it declared and dropped.
-// Recorded on the step at dispatch (`step.toolServers`); rendered only when a container dispatch
-// recorded something, so an inline step shows nothing.
+// Recorded on the step at dispatch (`step.toolServers`).
 //
 // The unavailable half is the reason this exists. A dropped server was, until now, stated in the
 // agent's own prompt and in one backend warn line, and nowhere a person looks: a run that quietly
 // went without its issue tracker read as a run whose agent simply did not use it. So an
 // unavailable server is a chip of its own with its own translated reason, never a shorter list of
 // the wired ones: "absent" and "zero" must not render the same.
+//
+// SELF-HIDING when the record holds nothing, like the sibling panels around it. The record is
+// written on EVERY container dispatch, so both lists empty is the state of every step on every
+// deployment that registers no tool servers at all — the overwhelming default. That state is a
+// fact about the DECLARATION rather than about this run (the dispatched kind declares none), and
+// the Infrastructure window is where declarations are read; rendering it here would put an empty
+// section on every step of every run to say nothing happened. The distinction absent-vs-empty is
+// still carried on the wire and answered by the debug API, which is where a reader asking it looks.
 import type { StepToolServers, ToolServerUnavailableReason } from '~/types/toolServers'
 import { reasonText } from '~/components/panels/StepToolServers.logic'
+import { agentKindMeta } from '~/utils/catalog'
 
-defineProps<{ toolServers: StepToolServers }>()
+const props = defineProps<{
+  toolServers: StepToolServers
+  /**
+   * The kind the STEP is named for. The record carries the kind that was DISPATCHED, and the two
+   * differ whenever a helper ran on this step (a gate escalating to `ci-fixer`, the tester handing
+   * off to `fixer`, a fork's second phase). Each of those resolves its own kind's declarations and
+   * overwrites the record, so the surface names whose capabilities these are instead of letting
+   * them read as the step's.
+   */
+  stepAgentKind: string
+}>()
+
 const { t } = useI18n()
+
+const hasAny = computed(
+  () => props.toolServers.wired.length > 0 || props.toolServers.unavailable.length > 0,
+)
+
+/** Set only when a helper re-dispatch owns this record, so the ordinary case renders no extra line. */
+const dispatchedAs = computed(() =>
+  props.toolServers.agentKind && props.toolServers.agentKind !== props.stepAgentKind
+    ? agentKindMeta(props.toolServers.agentKind).label
+    : null,
+)
 
 /** Bind this component's i18n instance onto the pure mapping (see `StepToolServers.logic.ts`). */
 const describeReason = (reason: ToolServerUnavailableReason) =>
@@ -21,6 +51,7 @@ const describeReason = (reason: ToolServerUnavailableReason) =>
 
 <template>
   <section
+    v-if="hasAny"
     data-testid="step-tool-servers"
     class="scroll-mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4"
   >
@@ -32,10 +63,11 @@ const describeReason = (reason: ToolServerUnavailableReason) =>
     </div>
 
     <p
-      v-if="!toolServers.wired.length && !toolServers.unavailable.length"
-      class="text-[12px] text-slate-400"
+      v-if="dispatchedAs"
+      data-testid="step-tool-servers-dispatched-as"
+      class="mb-2 text-[12px] text-slate-400"
     >
-      {{ t('panels.stepDetail.toolServers.none') }}
+      {{ t('panels.stepDetail.toolServers.dispatchedAs', { agent: dispatchedAs }) }}
     </p>
 
     <ul v-if="toolServers.wired.length" class="flex flex-wrap gap-1.5">

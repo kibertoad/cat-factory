@@ -1985,7 +1985,7 @@
       },
       "toolServers": {
         "heading": "Tool-Server (MCP)",
-        "none": "Dieser Agent hat keine Tool-Server erhalten.",
+        "dispatchedAs": "Ermittelt für den Agenten {agent}, den dieser Schritt gestartet hat.",
         "allTools": "Alle Tools, die dieser Server bereitstellt.",
         "narrowed": "Eingeschränkt auf: {tools}",
         "reason": {

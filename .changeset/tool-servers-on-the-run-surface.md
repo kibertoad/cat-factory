@@ -7,6 +7,8 @@
 '@cat-factory/worker': patch
 '@cat-factory/node-server': patch
 '@cat-factory/local-server': patch
+'@cat-factory/sdk': minor
+'@cat-factory/mcp-server': minor
 ---
 
 Say which tool servers a step actually had, on the step
@@ -18,17 +20,31 @@ issue tracker was indistinguishable from a run whose agent simply chose not to u
 question an adopting deployment asks first and the platform could not answer.
 
 **A dispatch now records what it decided on the step** (`PipelineStep.toolServers`): the servers it
-wired (id, label, transport, and the narrowed `allowedTools` where the definition set one) and the
-ones it dropped, each with its reason. The step detail renders them as chips, with translated copy
-per reason in every locale.
+wired (id, label, transport, and the narrowed `allowedTools` where the definition set one), the ones
+it dropped each with its reason, and the agent kind those lists belong to. The step detail renders
+them as chips, with translated copy per reason in every locale, and hides itself when the record
+holds nothing (a kind that declares no tool servers, which is every step on a deployment that
+registers none).
+
+The kind is stamped by the engine as it folds, from the same parameter that feeds `step.dispatches`,
+because a step's own kind is routinely not what ran: a `ci` gate escalates to `ci-fixer`, a tester
+hands off to `fixer`, a two-phase coder dispatches twice. Each of those resolves its own
+declarations and overwrites the record, so without the stamp the chips would credit one agent's
+capabilities to another. The step detail names whose they are whenever the two differ.
 
 **Recorded on the STEP rather than on the agent-context telemetry snapshot**, which is where the
-same facts used to sit inside an untyped `extras` bag (now deleted, so there is one authority). The
-snapshot is double-gated behind `LLM_RECORD_PROMPTS` and the per-workspace `storeAgentContext`, and
-pruned on the telemetry retention window, so a surface reading it would be blank on any deployment
-that simply has prompt recording off. "Which tools did this step have" is an ordinary question about
-a run, not an opt-in debugging artifact. It also costs no telemetry migration: the run row already
-carries its steps as JSON.
+same facts sat inside an untyped `extras` bag. The snapshot is double-gated behind
+`LLM_RECORD_PROMPTS` and the per-workspace `storeAgentContext`, and pruned on the telemetry
+retention window, so a surface reading it would be blank on any deployment that simply has prompt
+recording off. "Which tools did this step have" is an ordinary question about a run, not an opt-in
+debugging artifact. It also costs no telemetry migration: the run row already carries its steps as
+JSON.
+
+**Public API (additive, `info.version` 1.21.0):** each step of `GET /api/v1/debug/runs/:runId` now
+carries the same record, so a diagnosing reader can tell "the agent never had the tool" from "the
+agent had it and did not call it", which the tool-call trajectory alone cannot show. The snapshot's
+`extras.toolServers` / `extras.unavailableToolServers` keep being served, deprecated, projected from
+the step's own record so the two cannot disagree; the removal window is in `backend/docs/public-api.md`.
 
 It is written at dispatch and never re-derived, for the same reason the model and the leased
 subscription token are: the poll site rebuilds the job handle from the step alone, and whether a

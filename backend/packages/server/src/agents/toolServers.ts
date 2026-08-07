@@ -18,7 +18,7 @@ import {
   noopLogger,
   runBestEffort,
 } from '@cat-factory/kernel'
-import type { StepToolServers } from '@cat-factory/contracts'
+import type { DispatchToolServers } from '@cat-factory/contracts'
 import {
   isReservedPlatformEnvKey,
   isToolchainEnvName,
@@ -613,8 +613,11 @@ export function createEnvToolSecretResolver(
  * That is a real answer and a different one from absent, which means no container dispatch
  * recorded here at all: collapsing them would make a step whose servers were every one of them
  * dropped read exactly like an inline step that could never have had any.
+ *
+ * Carries no agent kind: the engine stamps the DISPATCHED kind on it in
+ * `recordDispatchAttribution`, so this cannot name a kind other than the one that ran.
  */
-export function stepToolServerRecord(resolved: ResolvedToolServers): StepToolServers {
+export function stepToolServerRecord(resolved: ResolvedToolServers): DispatchToolServers {
   return {
     wired: resolved.toolServers.map((server) => ({
       id: server.id,

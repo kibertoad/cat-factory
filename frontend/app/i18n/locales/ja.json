@@ -1416,7 +1416,7 @@
       },
       "toolServers": {
         "heading": "ツールサーバー（MCP）",
-        "none": "このエージェントにはツールサーバーが渡されていません。",
+        "dispatchedAs": "このステップが起動した {agent} エージェント向けに解決されました。",
         "allTools": "このサーバーが公開するすべてのツール。",
         "narrowed": "次に限定: {tools}",
         "reason": {

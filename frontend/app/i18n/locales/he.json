@@ -1416,7 +1416,7 @@
       },
       "toolServers": {
         "heading": "שרתי כלים (MCP)",
-        "none": "הסוכן הזה לא קיבל שרתי כלים.",
+        "dispatchedAs": "נקבע עבור סוכן {agent} שהופעל בשלב הזה.",
         "allTools": "כל הכלים שהשרת הזה חושף.",
         "narrowed": "מוגבל אל: {tools}",
         "reason": {

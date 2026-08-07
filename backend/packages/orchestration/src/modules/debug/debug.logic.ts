@@ -178,6 +178,11 @@ export function toDebugRunStep(step: PipelineStep, index: number): DebugRunStep 
     hasStructuredResult: step.custom != null,
     evictionRecoveries: step.evictionRecoveries ?? 0,
     firstEvictionDetail: detail ? sliceText(detail, MAX_EVICTION_DETAIL_CHARS) : null,
+    // Carried through on PRESENCE, never normalised to an empty record: absent means no container
+    // dispatch recorded one, and both lists empty means a dispatch ran under a kind that declares
+    // no tool servers. Collapsing them would tell a diagnosing reader that a step which lost every
+    // server it declared simply never had any.
+    ...(step.toolServers ? { toolServers: step.toolServers } : {}),
   }
 }
 

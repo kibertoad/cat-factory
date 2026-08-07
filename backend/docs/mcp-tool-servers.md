@@ -116,25 +116,35 @@ SPA maps each reason through an exhaustive `Record` over
 `@cat-factory/contracts`'s `toolServerUnavailableReasonSchema`, and a member it does not recognise
 renders as unknown NAMING the raw code rather than disappearing.
 
-Three properties of that record are load-bearing:
+Four properties of that record are load-bearing:
 
 - **It is recorded at DISPATCH and never re-derived.** The poll site rebuilds the job handle from
   the step alone, and whether a server was servable depended on the resolved harness plus the
   facade's secret and OAuth resolvers AT THAT MOMENT. A workspace that fills in a missing
   credential an hour later must not make a step that ran without the tool read as one that had it.
+- **It names the kind that was DISPATCHED**, which is routinely not the kind the step is named
+  for: a `ci` gate escalates to `ci-fixer`, a tester hands off to `fixer`, a two-phase coder
+  dispatches twice. Each of those resolves its OWN declarations and overwrites the record, so
+  `recordDispatchAttribution` stamps `agentKind` on it from the same parameter that feeds
+  `step.dispatches`. Without it the lists would be read under the step's kind and credit one
+  agent's capabilities to another. The step detail says whose they are whenever the two differ.
 - **Absent and both-empty are different states.** Absent means no container dispatch recorded here
   (an inline step, or a run predating the field); `{ wired: [], unavailable: [] }` means a dispatch
-  ran and its kind declared no tool servers at all.
+  ran and its kind declared no tool servers at all. The step detail hides itself on the empty
+  record, since that is every step on a deployment that registers no tool servers and it is a fact
+  about the DECLARATION rather than about the run; the distinction survives on the wire and the
+  debug API answers it.
 - **It carries no credential**, by construction rather than by field-skipping: the projection is
   built from the prompt-facing half of the resolution and `mcpServers` (where every resolved value
   lives) has no projection into it. The step is persisted and rendered in a browser.
 
-This is deliberately NOT the agent-context telemetry snapshot, which used to carry the same facts
-in its untyped `extras` bag and no longer does. That snapshot is double-gated (`LLM_RECORD_PROMPTS`
-plus the per-workspace `storeAgentContext`) and pruned on the telemetry retention window, so a
-surface reading it would be blank on a deployment that simply has prompt recording off, while
-"which tools did this step have" is an ordinary question about a run rather than an opt-in
-debugging artifact.
+This is deliberately not the agent-context telemetry snapshot, which carried the same facts in its
+untyped `extras` bag. That snapshot is double-gated (`LLM_RECORD_PROMPTS` plus the per-workspace
+`storeAgentContext`) and pruned on the telemetry retention window, so a surface reading it would be
+blank on a deployment that simply has prompt recording off, while "which tools did this step have"
+is an ordinary question about a run rather than an opt-in debugging artifact. Its copy is
+DEPRECATED and still served, projected from the step's own record so the two cannot disagree; the
+removal window is in [`public-api.md`](./public-api.md).
 
 **A dispatch carries at most `TOOL_SERVER_BUDGET.maxServers` servers**, plus a total byte cap on
 the job-body field. Past either the excess is dropped under `over_budget`, and **both dimensions

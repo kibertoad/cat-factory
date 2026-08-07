@@ -25,17 +25,36 @@ describe('tool-server unavailability reasons', () => {
   it('renders a retired reason as unknown, naming the raw code', () => {
     // The vocabulary is persisted on a run, so a step recorded under a member since retired reads
     // back with that member. Dropping it would report a withheld tool as one never declared.
-    const seen: { key: string; params?: Record<string, unknown> }[] = []
-    const t = (key: string, params?: Record<string, unknown>) => {
-      seen.push({ key, ...(params ? { params } : {}) })
-      return key
-    }
-    reasonText('legacy_reason' as ToolServerUnavailableReason, t)
-    expect(seen).toEqual([
+    expect(render('legacy_reason')).toEqual([
       {
         key: 'panels.stepDetail.toolServers.reason.unknown',
         params: { reason: 'legacy_reason' },
       },
     ])
   })
+
+  it('takes the same path for a reason that names an Object.prototype member', () => {
+    // The mapping is an ordinary object literal, so `REASON_KEY['constructor']` reads back a
+    // truthy inherited function. A truthiness check on the lookup would hand THAT to `t` as a
+    // translation key, taking the retired-member path away from the one input shape most likely
+    // to reach it from a hand-edited or corrupted row.
+    for (const inherited of ['constructor', 'toString', 'hasOwnProperty', '__proto__']) {
+      expect(render(inherited)).toEqual([
+        {
+          key: 'panels.stepDetail.toolServers.reason.unknown',
+          params: { reason: inherited },
+        },
+      ])
+    }
+  })
 })
+
+/** Every `t` call `reasonText` made, so the assertion is about the key it CHOSE, not the copy. */
+function render(reason: string): { key: string; params?: Record<string, unknown> }[] {
+  const seen: { key: string; params?: Record<string, unknown> }[] = []
+  reasonText(reason as ToolServerUnavailableReason, (key, params) => {
+    seen.push({ key, ...(params ? { params } : {}) })
+    return key
+  })
+  return seen
+}

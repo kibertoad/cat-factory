@@ -615,9 +615,14 @@ async function copyOutput() {
               <StepEffortReport v-if="step.effortReport" :report="step.effortReport" />
 
               <!-- the tool servers (MCP) this dispatch wired, and the ones it dropped with the
-                   reason. Only on a container step: absent means no container dispatch recorded
-                   here, while a recorded pair of empty lists is a kind that declared none. -->
-              <StepToolServers v-if="step.toolServers" :tool-servers="step.toolServers" />
+                   reason. Only on a container step, and self-hiding when the record holds
+                   nothing: a recorded pair of empty lists is a kind that declared none, which is
+                   every step on a deployment that registers no tool servers at all. -->
+              <StepToolServers
+                v-if="step.toolServers"
+                :tool-servers="step.toolServers"
+                :step-agent-kind="step.agentKind"
+              />
 
               <!-- the bugfix REPRODUCTION PROOF: the declared reproducing check run against the
                    pre-fix tree and the final one, with both captured outputs, or the agent's

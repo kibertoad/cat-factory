@@ -1507,7 +1507,7 @@
       },
       "toolServers": {
         "heading": "Tool servers (MCP)",
-        "none": "This agent was given no tool servers.",
+        "dispatchedAs": "Resolved for the {agent} agent this step dispatched.",
         "allTools": "Every tool this server exposes.",
         "narrowed": "Narrowed to: {tools}",
         "reason": {

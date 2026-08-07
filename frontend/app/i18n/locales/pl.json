@@ -1416,7 +1416,7 @@
       },
       "toolServers": {
         "heading": "Serwery narzędzi (MCP)",
-        "none": "Ten agent nie otrzymał żadnych serwerów narzędzi.",
+        "dispatchedAs": "Ustalone dla agenta {agent} uruchomionego przez ten krok.",
         "allTools": "Wszystkie narzędzia udostępniane przez ten serwer.",
         "narrowed": "Ograniczone do: {tools}",
         "reason": {

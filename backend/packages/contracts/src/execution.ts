@@ -998,16 +998,17 @@ export const pipelineStepSchema = v.object({
    * The tool servers (MCP) this dispatch wired for the agent, and the ones it declared and
    * dropped. The sibling of {@link skillVersions}, for the other half of the capability model.
    *
-   * Recorded HERE rather than only in the agent-context telemetry snapshot, which already carried
-   * the same facts in its untyped `extras` bag. Two reasons, and the first is the deciding one:
-   * the snapshot is DOUBLE-GATED (`LLM_RECORD_PROMPTS` plus the per-workspace `storeAgentContext`),
-   * so a surface reading it would be blank on a deployment that simply has prompt recording off,
-   * while "which tools did this step actually have" is an ordinary question about a run, not an
-   * opt-in debugging artifact. And a step outlives a snapshot, which is pruned on the telemetry
-   * retention window.
+   * The AUTHORITY, rather than the agent-context telemetry snapshot, which carried the same facts
+   * in its untyped `extras` bag and keeps serving them deprecated (projected from this, so the two
+   * cannot disagree; the removal window is in `backend/docs/public-api.md`). Two reasons, and the
+   * first is the deciding one: the snapshot is DOUBLE-GATED (`LLM_RECORD_PROMPTS` plus the
+   * per-workspace `storeAgentContext`), so a surface reading it would be blank on a deployment that
+   * simply has prompt recording off, while "which tools did this step actually have" is an ordinary
+   * question about a run, not an opt-in debugging artifact. And a step outlives a snapshot, which is
+   * pruned on the telemetry retention window.
    *
    * Absent for every non-container step. See {@link stepToolServersSchema} for why the two lists
-   * are separate and why both-empty is its own state.
+   * are separate, why both-empty is its own state, and why the record names the DISPATCHED kind.
    */
   toolServers: v.optional(stepToolServersSchema),
   /**

@@ -1416,7 +1416,7 @@
       },
       "toolServers": {
         "heading": "Serveurs d'outils (MCP)",
-        "none": "Cet agent n'a reçu aucun serveur d'outils.",
+        "dispatchedAs": "Résolu pour l’agent {agent} lancé par cette étape.",
         "allTools": "Tous les outils exposés par ce serveur.",
         "narrowed": "Limité à : {tools}",
         "reason": {

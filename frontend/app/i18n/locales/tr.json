@@ -1416,7 +1416,7 @@
       },
       "toolServers": {
         "heading": "Araç sunucuları (MCP)",
-        "none": "Bu ajana hiçbir araç sunucusu verilmedi.",
+        "dispatchedAs": "Bu adımın çalıştırdığı {agent} ajanı için çözümlendi.",
         "allTools": "Bu sunucunun sunduğu tüm araçlar.",
         "narrowed": "Şunlarla sınırlandı: {tools}",
         "reason": {

@@ -95,7 +95,7 @@ export type ToolServerUnavailableReason = v.InferOutput<typeof toolServerUnavail
  * by status would get the same answer; a reader who forgot to filter would report a dropped server
  * as a working one, which is the exact failure the unavailability vocabulary exists to prevent.
  *
- * Recorded at DISPATCH, not read back from the container: the harness materialises what this
+ * Composed at DISPATCH, not read back from the container: the harness materialises what this
  * decided, and the poll site rebuilds the job handle from the step alone, so nothing downstream
  * can re-derive it (see `recordDispatchAttribution`).
  *
@@ -126,8 +126,30 @@ export const stepToolServersSchema = v.object({
       reason: toolServerUnavailableReasonSchema,
     }),
   ),
+  /**
+   * The agent kind whose declarations these two lists describe: the kind that was DISPATCHED, not
+   * necessarily the kind the step is named for.
+   *
+   * Required, because a step's own `agentKind` is routinely not what ran: a `ci` gate escalates to
+   * `ci-fixer`, a tester hands off to `fixer`, a two-phase coder dispatches twice. Each of those
+   * re-dispatches resolves its OWN kind's declarations and overwrites this record, so without the
+   * kind stamped on it the lists would be read under the step's kind and describe a different
+   * agent's capabilities. The engine stamps it from the same `dispatchedKind` that feeds
+   * `step.dispatches`, so an executor cannot mislabel it.
+   */
+  agentKind: v.string(),
 })
 export type StepToolServers = v.InferOutput<typeof stepToolServersSchema>
+
+/**
+ * What a dispatch RESOLVED, before the engine attributes it to the kind that ran.
+ *
+ * A type rather than a schema of its own: it never crosses a wire, so there is nothing to
+ * validate. It is what an executor puts on its job handle and what
+ * `recordDispatchAttribution` stamps the kind onto, and deriving it from {@link StepToolServers}
+ * keeps the two structurally impossible to drift.
+ */
+export type DispatchToolServers = Omit<StepToolServers, 'agentKind'>
 
 /**
  * One credential a declaration asks for, by NAME.

@@ -29,6 +29,20 @@ export const REASON_KEY: Record<ToolServerUnavailableReason, string> = {
 export const KNOWN_REASONS = toolServerUnavailableReasonSchema.options
 
 /**
+ * Whether a persisted reason is a member THIS build knows, derived from the picklist's own options
+ * rather than from a list retyped here.
+ *
+ * A predicate rather than a truthiness check on the lookup, because `REASON_KEY` is an ordinary
+ * object literal: a persisted value that happens to name an inherited `Object.prototype` member
+ * (`constructor`, `toString`) reads back as a truthy non-key and would be handed to `t` as though
+ * it were a translation key, taking the retired-member path away from exactly the case it exists
+ * for. Narrowing at the boundary keeps the exhaustive `Record` compile-time guard intact.
+ */
+export function isKnownReason(reason: string): reason is ToolServerUnavailableReason {
+  return (KNOWN_REASONS as readonly string[]).includes(reason)
+}
+
+/**
  * Render one reason, falling back to the retired-member line that names the raw code.
  *
  * `t` is passed in rather than composed here so this stays a pure function: the component owns the
@@ -38,6 +52,7 @@ export function reasonText(
   reason: ToolServerUnavailableReason,
   t: (key: string, params?: Record<string, unknown>) => string,
 ): string {
-  const key = REASON_KEY[reason]
-  return key ? t(key) : t('panels.stepDetail.toolServers.reason.unknown', { reason })
+  return isKnownReason(reason)
+    ? t(REASON_KEY[reason])
+    : t('panels.stepDetail.toolServers.reason.unknown', { reason })
 }
