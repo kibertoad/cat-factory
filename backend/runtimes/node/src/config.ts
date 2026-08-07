@@ -712,6 +712,7 @@ function buildExecutionConfig(env: NodeJS.ProcessEnv): AppConfig['execution'] {
     jobPollFailureTolerance: num('JOB_POLL_FAILURE_TOLERANCE', env.JOB_POLL_FAILURE_TOLERANCE) ?? 6,
     ciPollInterval: env.CI_POLL_INTERVAL?.trim() || '30 seconds',
     ciMaxPolls: num('CI_MAX_POLLS', env.CI_MAX_POLLS) ?? 120,
+    advanceTimeout: env.ADVANCE_TIMEOUT?.trim() || '5 minutes',
     containerMaxAgeMs:
       Math.max(75, num('CONTAINER_MAX_AGE_MINUTES', env.CONTAINER_MAX_AGE_MINUTES) ?? 90) * 60_000,
   }

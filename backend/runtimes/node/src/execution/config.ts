@@ -57,6 +57,9 @@ export function executionRuntime(config: AppConfig, env: NodeJS.ProcessEnv): Exe
     jobPollFailureTolerance: exec.jobPollFailureTolerance,
     ciPollIntervalMs,
     ciMaxPolls: exec.ciMaxPolls,
+    // The hang bound on one advance. Same config value the Worker hands to `step.do`, so a
+    // deployment that widens it widens both facades (stuck-run audit F9).
+    advanceTimeoutMs: durationMs(exec.advanceTimeout, 300_000),
   }
 
   // One step's worst-case poll budget (a container-job poll loop + a CI poll loop)...

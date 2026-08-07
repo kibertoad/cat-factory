@@ -168,6 +168,13 @@ export interface Env {
    */
   CI_MAX_POLLS?: string
   /**
+   * Ceiling on ONE pipeline-step advance, applied as the durable driver's `step.do` timeout
+   * here and raced in `driveExecution` on Node: the engine's hang bound, kept as one knob so
+   * a wedged advance is waited out for the same length of time on both facades. A Workflows
+   * duration string ("5 minutes", the default).
+   */
+  ADVANCE_TIMEOUT?: string
+  /**
    * Per-workspace WebSocket fan-out hub (Durable Object). Pushes execution/board
    * changes to subscribed browsers in real time. When absent, the engine pushes
    * nothing (clients still get state on connect / refresh).

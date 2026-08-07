@@ -19,6 +19,10 @@ export function loadExecutionConfig(env: Env): ExecutionConfig {
     jobPollFailureTolerance: intEnv(env.JOB_POLL_FAILURE_TOLERANCE, 6),
     ciPollInterval: env.CI_POLL_INTERVAL?.trim() || '30 seconds',
     ciMaxPolls: intEnv(env.CI_MAX_POLLS, 120),
+    // The per-durable-step ceiling the Workflows driver wraps each advance/poll in. Kept as a
+    // Workflows duration string (it is passed straight to `WorkflowStepConfig.timeout`); Node
+    // parses the same value to ms for its own race.
+    advanceTimeout: env.ADVANCE_TIMEOUT?.trim() || '5 minutes',
     // Hard floor of 75 min: a misconfigured low value must never reap live work
     // (the longest legitimate container lifetime is ≈70 min of driver polling).
     containerMaxAgeMs: Math.max(75, intEnv(env.CONTAINER_MAX_AGE_MINUTES, 90)) * 60_000,

@@ -34,9 +34,8 @@ bootstrap instances show up named `boot_<…>`.)
 
 ## Layer 1: idle auto-sleep (`sleepAfter`)
 
-`ExecutionContainer.sleepAfter = '10m'`
-(`ExecutionContainer.ts:21`). Cloudflare stops an instance after 10 minutes
-with **no inbound requests**.
+`RunContainer.sleepAfter = '10m'`, inherited by both per-run container classes.
+Cloudflare stops an instance after 10 minutes with **no inbound requests**.
 
 - While a run is active the durable driver polls it every ~15s, which keeps the
   instance warm; the 10-minute idle window only starts counting **once polling
@@ -44,11 +43,15 @@ with **no inbound requests**.
 - The success path now also reclaims explicitly (Layer 2), so this idle window is
   a fallback (e.g. when no async container executor is wired), not the primary
   success-path reaper.
+- When it fires while the driver still believes the job is running (a poll gap
+  longer than the window), `onActivityExpired` records the reclaim in DO storage,
+  so the resulting 404 poll is classified as `transient` churn on the larger
+  recovery budget instead of reading as a crash. See
+  [`stuck-run-audit.md`](../../docs/initiatives/stuck-run-audit.md) F12.
 
 ## Layer 2: explicit reclaim (`shutdown()` RPC → SIGKILL)
 
-`ExecutionContainer.shutdown()` (`ExecutionContainer.ts:30`) calls the
-base `Container.destroy()` (SIGKILL): idempotent, swallows "already gone". It is
+`RunContainer.shutdown()` calls the base `Container.destroy()` (SIGKILL): idempotent, swallows "already gone". It is
 reached over RPC, keyed by job/execution id. **Both flows now funnel through the
 one `RunnerTransport.release` seam** (`CloudflareContainerTransport.release`),
 which goes through the `ContainerInstanceRegistry`'s single kill path

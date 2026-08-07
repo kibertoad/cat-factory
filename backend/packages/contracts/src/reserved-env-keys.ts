@@ -68,6 +68,7 @@
  * either.
  */
 export const PLATFORM_RESERVED_ENV_PREFIXES: readonly string[] = [
+  'ADVANCE_',
   'AGENT_',
   'AUTH_',
   'AWS_',

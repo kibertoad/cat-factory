@@ -11,17 +11,44 @@ import {
 } from '@cat-factory/kernel'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { DeployContainer } from './DeployContainer'
-import { type ExecutionContainer, isRolloutSignal } from './ExecutionContainer'
+import type { ExecutionContainer } from './ExecutionContainer'
+import { type ContainerStopCause, isRolloutSignal } from './stopCause'
 import type { ContainerInstanceRegistry } from './ContainerInstanceRegistry'
 
 // The human-readable message for a failed poll the transport maps to a container eviction. The
 // eviction verdict the engine acts on rides the STRUCTURED `RunnerJobView.evicted` field
-// (`crash` / `transient`) minted alongside it — the "(container evicted or crashed)" /
-// "(transient infrastructure eviction)" wording is now DESCRIPTIVE context only, no longer
-// regex-classified by any consumer (error-message coverage I5). The Cloudflare-specific
-// "rollout ⇒ transient" mapping lives here, in the facade; the engine stays runtime-neutral.
+// (`crash` / `transient`) minted alongside it. The "(container evicted or crashed)" wording and
+// the parenthetical each cause adds are DESCRIPTIVE context only, no longer regex-classified by
+// any consumer (error-message coverage I5). Which Cloudflare events count as transient churn is
+// decided HERE, in the facade; the engine stays runtime-neutral.
 const EVICTION_ERROR = CONTAINER_EVICTION_ERROR
 const ROLLOUT_EVICTION_ERROR = `${EVICTION_ERROR} (transient infrastructure eviction)`
+// An idle reclaim is churn too, but a DIFFERENT operator's problem from a release draining a
+// container: it says the driver stopped polling for longer than the container's idle window,
+// so the remedy is the poll scheduling, not the deploy. Both recover on the transient budget;
+// only the wording tells them apart, and a shared one would hide a recurring hiccup behind
+// "there must have been a deploy" (stuck-run audit F12).
+const IDLE_EVICTION_ERROR = `${EVICTION_ERROR} (idle container reclaimed between polls)`
+
+/**
+ * Every cause a container can OBSERVE about its own reclaim is infrastructure churn, so the
+ * table maps each to its wording and the verdict is `transient` for all of them. Exhaustive by
+ * type, so a new cause cannot ship without deciding what the operator is told about it.
+ */
+const TRANSIENT_EVICTION_ERROR: Record<ContainerStopCause, string> = {
+  rollout: ROLLOUT_EVICTION_ERROR,
+  idle: IDLE_EVICTION_ERROR,
+}
+
+/**
+ * The failed view for a 404 poll, given what the container itself observed about its reclaim.
+ * No observed cause ⇒ the container is simply gone with nothing to explain it, which is a
+ * `crash` (an OOM, a genuine fault) and recovers on the small budget.
+ */
+function evictionView(cause: ContainerStopCause | undefined): RunnerJobView {
+  if (!cause) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
+  return { state: 'failed', error: TRANSIENT_EVICTION_ERROR[cause], evicted: 'transient' }
+}
 
 // The default runner transport: a per-RUN Cloudflare Container. One Durable Object
 // instance per run id (`ref.runId`) hosts that run's whole sequence of step jobs; the
@@ -62,7 +89,7 @@ export class CloudflareContainerTransport implements RunnerTransport {
   constructor(
     // Either per-run container class: `ExecutionContainer` (the agent harness, bound as
     // `EXEC_CONTAINER`) or `DeployContainer` (the deploy harness, bound as `DEPLOY_CONTAINER`).
-    // Both expose the same `/jobs` HTTP contract on 8080 plus `recentlyRolledOut`/`shutdown`,
+    // Both expose the same `/jobs` HTTP contract on 8080 plus `recentEvictionCause`/`shutdown`,
     // so this transport drives either unchanged — a deploy-dedicated instance simply gets the
     // deploy namespace.
     private readonly namespace:
@@ -147,9 +174,7 @@ export class CloudflareContainerTransport implements RunnerTransport {
       // "new version rollout" signal (exit 143) rather than returning a 404. Report it
       // as a transient rollout eviction so the engine recovers it on the larger
       // rollout budget instead of failing the run.
-      if (isRolloutSignal(err)) {
-        return { state: 'failed', error: ROLLOUT_EVICTION_ERROR, evicted: 'transient' }
-      }
+      if (isRolloutSignal(err)) return evictionView('rollout')
       throw err
     }
     if (res.status === 404) {
@@ -157,13 +182,13 @@ export class CloudflareContainerTransport implements RunnerTransport {
       // stops (the run-sweeper may then re-drive it from durable state). The eviction
       // verdict rides the STRUCTURED `evicted` field the caller reads directly (the
       // "(container evicted or crashed)" string is descriptive context only — no consumer
-      // regex-matches it any more, see I5). Ask the DO whether it was just drained by a
-      // new-version rollout (a deploy) — if so, tag it so the engine treats it as
-      // transient infra churn rather than a crash/OOM.
-      const rolledOut = await stub.recentlyRolledOut().catch(() => false)
-      return rolledOut
-        ? { state: 'failed', error: ROLLOUT_EVICTION_ERROR, evicted: 'transient' }
-        : { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
+      // regex-matches it any more, see I5). Ask the DO what it observed about its own reclaim
+      // (a new-version rollout, or its idle window elapsing between polls). Either is infra
+      // churn the engine should ride out on the larger transient budget rather than spend the
+      // crash budget on. An unreachable DO answers nothing, which reads as the crash it may
+      // well have been.
+      const cause = await stub.recentEvictionCause().catch(() => undefined)
+      return evictionView(cause)
     }
     if (!res.ok) {
       throw new Error(`Container job poll failed (HTTP ${res.status}): ${await safeText(res)}`)

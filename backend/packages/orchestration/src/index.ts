@@ -66,6 +66,7 @@ export {
 } from '@cat-factory/kernel'
 export {
   driveExecution,
+  type AdvanceOutcome,
   type DriveConfig,
   type DriveOptions,
   type DriveOutcome,

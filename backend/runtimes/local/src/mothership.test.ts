@@ -447,6 +447,7 @@ const DRIVE_CFG: DriveConfig = {
   jobPollFailureTolerance: 1,
   ciPollIntervalMs: 1,
   ciMaxPolls: 1,
+  advanceTimeoutMs: 0,
 }
 
 // Large lease / backoff / sweep so timing never interferes with the synchronous assertions; the

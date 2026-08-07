@@ -1,7 +1,9 @@
 # Initiative: stuck-run audit (agent / step / container wedge cases)
 
-**Status:** Groups A (F1/F2/F5) + B (F3/F7/F10) + C (F4/F11/F8) + the harness half of D
-(F6/F13) landed; D's engine half (F9, F12) todo ·
+**Status:** every audited finding is fixed (Groups A–D). The one structural item the audit
+DEFERRED rather than fixed (attempt-suffixed Workflows instance ids, which is what F5's
+complete fix and F2's option (a) both need) is still open, and is why this tracker is not yet
+an ADR ·
 **Owner:** core · **Started:** 2026-07-02
 **Audited at:** `main` @ `fc8df61` (original file:line references are against that commit; the
 line numbers in individual findings have since drifted: the anchoring file + symbol names are
@@ -186,16 +188,17 @@ bootstrap call site already had it in scope. Covered by a real-git test PAIR (`g
 the abort case only proves anything because the control case shows the same call pushes for
 real when nothing aborts it.
 
-**F9: Node has no per-advance timeout; a hung advance wedges the run for hours.**
-`backend/packages/orchestration/src/modules/execution/drive.ts:113`: `await
-exec.advanceInstance(...)` has no ceiling. pg-boss heartbeats the active job independently of
+**F9: Node has no per-advance timeout; a hung advance wedges the run for hours.** ✅ FIXED (this PR)
+`backend/packages/orchestration/src/modules/execution/drive.ts`: `await
+exec.advanceInstance(...)` had no ceiling. pg-boss heartbeats the active job independently of
 handler progress, so `classifyAdvanceJob` reports `live` and the sweeper skips it while
-`updated_at` is frozen; a hung HTTP call inside an advance wedges the run until
-`queue.expireInSeconds` (up to 24h). CF bounds the same call at 5 min
-(`ExecutionWorkflow.ts:17-20` `STEP_CONFIG.timeout`).
-**Fix:** wrap the Node advance in a timeout (`Promise.race` / `AbortSignal.timeout`) matching
-CF's 5-min ceiling, funnelling to the same retry/fail path: restoring runtime symmetry on the
-hang bound.
+`updated_at` is frozen; a hung HTTP call inside an advance wedged the run until
+`queue.expireInSeconds` (up to 24h). CF has always bounded the same call at 5 min
+(`ExecutionWorkflow`'s `STEP_CONFIG.timeout`).
+**Fix (landed):** the ceiling became ONE shared knob (`ExecutionConfig.advanceTimeout`,
+`ADVANCE_TIMEOUT`, default `5 minutes`) that the Worker hands to `step.do` and Node races in
+`driveExecution`. See the Group D engine notes for the seam and for why the timeout does NOT
+retry in-process the way the Workflows step does.
 
 **F10: Recurring pipeline fire clobbers a human-parked (`blocked`) prior run.** ✅ FIXED (this PR)
 `RecurringPipelineService.fire`'s active-run guard (now at
@@ -220,13 +223,14 @@ ordering swap costs nothing and makes the surviving failure the honest one (run 
 unchanged, visible on the board) instead of a task dressed up as PR-ready. Unit-tested on both
 sites: ordering AND "a failed raise leaves the block alone".
 
-**F12: A >10-min poll gap sleeps the CF container and burns the single eviction recovery.**
-`backend/runtimes/cloudflare/src/infrastructure/.../ExecutionContainer.ts:43-48`
-(`sleepAfter '10m'`) + `job.logic.ts:11` (`MAX_EVICTION_RECOVERIES = 1`). The DO is kept warm
-only by polling; two backend poll-scheduling hiccups in one step fail a healthy run `evicted`
-(rollout evictions get a budget of 5; ordinary sleep-eviction gets 1).
-**Fix:** consider a larger recovery budget for sleep-evictions, or a keep-warm ping decoupled
-from the poll cadence.
+**F12: A >10-min poll gap sleeps the CF container and burns the single eviction recovery.** ✅ FIXED (this PR)
+`ExecutionContainer`'s `sleepAfter '10m'` + `job.logic.ts`'s `MAX_EVICTION_RECOVERIES = 1`. The
+DO is kept warm only by polling; two backend poll-scheduling hiccups in one step failed a healthy
+run `evicted` (rollout evictions get a budget of 5; ordinary sleep-eviction got 1).
+**Fix (landed):** the container now OBSERVES its own reclaim and records the cause, so an idle
+reclaim is classified `transient` (budget 5) with its own wording rather than reading as a crash.
+See the Group D engine notes for why the budget was not simply widened and why the keep-warm ping
+was rejected.
 
 **F13: Pi "chatty hang" (streaming output, zero tool calls) runs the full 60 min.** ✅ FIXED (this PR)
 `executor-harness/src/pi.ts`'s `onChunk` resets inactivity on **any** stdout/stderr chunk; the
@@ -303,8 +307,8 @@ of each PR.
 | F8  | `reinitAndPush` not abort-aware                     | harness (image bump)   | C (harness slice)       | ✅ done    | this PR |
 | F6  | Harness event-loop starvation vs watchdogs          | harness (image bump)   | D; hang ceilings        | ✅ done    | this PR |
 | F13 | Chatty-hang runs full 60 min                        | harness (image bump)   | D                       | ✅ done    | this PR |
-| F9  | Node advance has no timeout                         | node driver            | D                       | ⬜ todo    |         |
-| F12 | Sleep-eviction burns the single recovery            | CF container           | D                       | ⬜ todo    |         |
+| F9  | Node advance has no timeout                         | node driver            | D                       | ✅ done    | this PR |
+| F12 | Sleep-eviction burns the single recovery            | CF container           | D                       | ✅ done    | this PR |
 | F14 | Resumed empty branch fails 422 vs no-op             | harness + engine       | (fixed inline)          | ✅ done    | this PR |
 
 Suggested order: A (guaranteed wrong-kill on common operational events), then B (parks with
@@ -313,16 +317,13 @@ findings (F4, F11); F8 was split off because a harness change is image-bumping a
 conventions below keep those out of a non-harness slice, then landed with F6 + F13 as the one
 harness/image slice.
 
-**Next up: the rest of D, which is entirely non-harness** and so is a single engine slice:
-F9 (bound the Node advance at CF's 5-minute ceiling, restoring runtime symmetry on the hang
-bound) and F12 (a larger recovery budget for a sleep-eviction, or a keep-warm ping decoupled
-from the poll cadence). Both were re-verified as live at `74ea2bc`: `drive.ts`'s
-`await exec.advanceInstance(...)` still has no ceiling, and `ExecutionContainer`'s
-`sleepAfter = '10m'` still meets `MAX_EVICTION_RECOVERIES = 1`.
-
-After that, the one structural item the audit deferred rather than fixed: **attempt-suffixed
+**Next up: the one structural item the audit deferred rather than fixed, attempt-suffixed
 Workflows instance ids** (see the F5 note in the Group A section), which is what F5's complete
-fix, F2's option (a), and any future "let the sweeper re-drive a terminal instance" all need.
+fix, F2's option (a), and any future "let the sweeper re-drive a terminal instance" all need. It
+is a cross-workflow refactor (execution + bootstrap + env-config-repair, plus tracking the
+current attempt for `signal`/`cancel`), which is why it was carved out of D rather than bolted
+onto it. **When it lands, this tracker's scope is complete: convert it to an ADR and `git rm` it**
+per the CLAUDE.md rule.
 
 ### Group A implementation notes (landed)
 
@@ -537,6 +538,73 @@ covers all three. Runner image `1.97.0`.
 - **F8**: `signal` threaded through all six commands. Tested as a PAIR against a local bare repo:
   the aborted case only proves anything because the control case shows the same call pushes for
   real when nothing aborts it.
+
+### Group D engine-slice implementation notes (landed)
+
+D's two non-harness findings, landed together as the engine slice the harness slice left behind.
+
+- **F9**: the hang bound became ONE config value, `ExecutionConfig.advanceTimeout`
+  (`ADVANCE_TIMEOUT`, default `5 minutes`), because a Node-only knob beside Cloudflare's
+  hard-coded `STEP_CONFIG.timeout` is the same drift the finding is about, one release later.
+  The Worker builds its per-durable-step config from it; Node races it in `driveExecution`.
+  - **The clock is an injected SEAM with an inert default** (`DriveOptions.withAdvanceCeiling`),
+    exactly like the existing `sleep` and for the same reason: orchestration owns no timers.
+    Both Node-side callers (the pg-boss worker and the mothership in-process runner) import
+    `driveExecution` from the Node `drive.ts` wrapper, so wiring it there covers both.
+  - **`advanceTimeoutMs: 0` is the explicit opt-out, and it wins over a wired seam.** The
+    conformance harness and the unit fakes settle synchronously and own no clock; without an
+    opt-out that reads as a ZERO-length ceiling, every advance in the suite would fail on the
+    first tick. Resolving the default from the config (rather than checking the number at the
+    call site) is what makes the two states one decision instead of two agreeing ones.
+  - **The timeout does NOT retry in-process**, though the Workflows twin retries a timed-out
+    step three times. A Workflows retry runs in a fresh isolate with the previous attempt
+    discarded; Node cannot cancel a promise, so a second concurrent advance would double-drive
+    the same run: the failure mode the `exclusive` queue and the sweeper's lease exist to
+    prevent. The run is failed instead, which is also what the finding asks for: a bound, not a
+    recovery.
+  - **A `timeout` kind, not the `agent` one a thrown advance records.** Nothing reached an
+    agent, so `agent` would send a reader looking for a transcript that does not exist: the
+    same taxonomy argument `failureFromAdvanceError` already makes for `preflight`.
+  - The abandoned advance may still land a write. That is safe only because every run write goes
+    through the rev-guarded `casPersist`; it is stated at the seam rather than left implicit.
+
+- **F12**: the container now OBSERVES its own reclaim. `onActivityExpired` (the base class's
+  idle-window hook) records `idle` in DO storage before delegating, `onError`/`onStop` record
+  `rollout` as before, and the transport's 404 poll reads the cause back over one RPC.
+  - **Classify the reclaim; do not widen the crash budget.** The audit offered "a larger
+    recovery budget for sleep-evictions", but the budget is keyed on the VERDICT, and there is
+    no verdict to key on until the reclaim is told apart from a crash, and widening
+    `MAX_EVICTION_RECOVERIES` would have widened it for the OOM the small budget exists to catch.
+    With the cause recorded, an idle reclaim is `transient` and rides the budget that already
+    exists for churn, and no engine-side constant moves at all.
+  - **The keep-warm ping was rejected.** Nothing outside the container can ping it on a schedule
+    the poll cadence does not already own, and making the container refuse to expire while a job
+    is outstanding needs it to know when the job ENDED, which only the harness knows, so it
+    would be an image bump for a finding that touches no harness file. Raising `sleepAfter`
+    instead was rejected too: it is the same trade with no knowledge added, and it bills every
+    LEAKED container (a backend that died before `release`) for the extra window, which is
+    precisely the case the 10-minute reclaim is right about.
+  - **A recorded cause is CONSUMED on read.** The engine answers an eviction by re-dispatching
+    onto a fresh container under the SAME DO id, so a record left behind would still be sitting
+    there to excuse that container's death too.
+  - **The two causes get different windows and different wording**, because they are found at
+    different distances from the poll. A rollout drain interrupts an in-flight poll (seconds);
+    an idle reclaim is discovered only when polling resumes, however long the gap outran the
+    window (minutes). A single rollout-sized window would have read every real idle reclaim as
+    a crash, which is the finding itself. Distinct wording because the remedies differ: one says "a
+    deploy drained it", the other says "the driver stopped polling".
+  - **An unknown persisted cause attributes nothing**, deliberately falling back to `crash`:
+    the vocabulary is closed and the record is persisted, so retiring a member leaves rows
+    naming it, and the conservative reading costs a run one restart rather than wrongly granting
+    it four.
+  - **`ExecutionContainer` and `DeployContainer` collapsed into one `RunContainer` base.** They
+    were byte-identical but for their doc comments, and the deploy class already imported the
+    execution class's storage key to stay in step by hand, and a third copy of this bookkeeping was
+    the alternative. They remain two classes only because a Cloudflare Container's image is
+    pinned per container CLASS by the wrangler `[[containers]]` block.
+  - **Internal break, flagged rather than migrated**: the old `rolledOutAt` DO-storage key is
+    gone. A rollout in flight across the deploy that ships this loses its attribution and reads
+    as a crash: one eviction, on the smaller budget, during a release.
 
 ## Conventions & gotchas for implementers
 

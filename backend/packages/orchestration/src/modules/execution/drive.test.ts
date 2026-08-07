@@ -13,6 +13,9 @@ const CFG: DriveConfig = {
   jobPollFailureTolerance: 3,
   ciPollIntervalMs: 30_000,
   ciMaxPolls: 5,
+  // Unbounded by default: the scripted fakes settle synchronously, so the ceiling only
+  // matters in the tests that opt into it with their own clock.
+  advanceTimeoutMs: 0,
 }
 
 const AWAITING_JOB: AdvanceResult = { kind: 'awaiting_job', jobId: 'j1', stepIndex: 0 }
@@ -176,5 +179,79 @@ describe('driveExecution failure identity', () => {
     const h = harness({ advance: [new Error('the container exploded')] })
     await driveExecution(h.exec, 'ws', 'ex', CFG, { sleep: h.sleep })
     expect(h.events.at(-1)).toBe('fail:agent:the container exploded')
+  })
+})
+
+describe('driveExecution advance ceiling', () => {
+  /** An `ExecutionService` whose advance never settles, the wedged HTTP call F9 is about. */
+  function hangingExec(events: string[]): Exec {
+    return {
+      advanceInstance: () => {
+        events.push('advance')
+        return new Promise<AdvanceResult>(() => {})
+      },
+      pollAgentJob: async () => {
+        events.push('pollJob')
+        return DONE
+      },
+      failRun: async (_ws: string, _id: string, message: string, kind: string) => {
+        events.push(`fail:${kind}:${message}`)
+      },
+    } as unknown as Exec
+  }
+
+  it('fails a wedged advance at the ceiling instead of waiting on it forever', async () => {
+    // pg-boss heartbeats an ACTIVE job regardless of handler progress, so the sweeper reads a
+    // hung advance as `live` and skips it: without this bound the run sits until the queue's
+    // expire cap (up to 24h). Cloudflare has always capped the same call at its `step.do`
+    // timeout.
+    const events: string[] = []
+    const log = createRecordingLogger()
+    await driveExecution(
+      hangingExec(events),
+      'ws',
+      'ex',
+      { ...CFG, advanceTimeoutMs: 300_000 },
+      {
+        sleep: async () => {},
+        log,
+        // The facade's clock, stubbed to expire at once: what is under test is the driver's
+        // reaction to the ceiling, not the timer that measures it.
+        withAdvanceCeiling: async () => ({ timedOut: true }),
+      },
+    )
+
+    // `timeout`, not the `agent` kind a thrown advance records: nothing reached an agent.
+    expect(events).toEqual([
+      'advance',
+      'fail:timeout:Step advance did not complete within 5 minutes',
+    ])
+    expect(log.lines.filter((l) => l.level === 'warn')).toMatchObject([
+      { msg: 'advance exceeded its ceiling; failing the run', fields: { ceilingMs: 300_000 } },
+    ])
+  })
+
+  it('never consults the facade clock when the ceiling is disabled', async () => {
+    // `advanceTimeoutMs: 0` is the conformance/unit opt-out. A facade wires its real clock
+    // unconditionally, so the opt-out has to win HERE, or a zero-length ceiling would
+    // fail every advance on the first tick.
+    const events: string[] = []
+    const h = harness({ advance: [DONE] })
+    await driveExecution(
+      h.exec,
+      'ws',
+      'ex',
+      { ...CFG, advanceTimeoutMs: 0 },
+      {
+        sleep: h.sleep,
+        withAdvanceCeiling: async () => {
+          events.push('ceiling')
+          return { timedOut: true }
+        },
+      },
+    )
+
+    expect(events).toEqual([])
+    expect(h.events).toEqual(['advance'])
   })
 })

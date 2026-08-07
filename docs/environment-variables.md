@@ -185,14 +185,15 @@ UI (Workspace settings -> Budget) and defaults to about 100 EUR/month.
 
 ## Execution tuning
 
-| Variable                                                                                                                 | Modes    | Default  | Description                                     |
-| ------------------------------------------------------------------------------------------------------------------------ | -------- | -------- | ----------------------------------------------- |
-| `DECISION_TIMEOUT`                                                                                                       | CF, Node | default  | Human-decision wait timeout.                    |
-| `JOB_POLL_INTERVAL` / `JOB_MAX_POLLS` / `JOB_POLL_FAILURE_TOLERANCE`                                                     | Node     | defaults | Container job polling cadence + limits.         |
-| `CI_POLL_INTERVAL` / `CI_MAX_POLLS`                                                                                      | Node     | defaults | CI gate polling cadence + limits.               |
-| `CONTAINER_MAX_AGE_MINUTES`                                                                                              | Node     | `90`     | Max age of a per-run container before eviction. |
-| `EXECUTION_CONCURRENCY` / `EXECUTION_HEARTBEAT_SECONDS` / `EXECUTION_MAX_DRIVE_STEPS` / `EXECUTION_DRIVE_EXPIRE_MINUTES` | Node     | defaults | pg-boss execution worker tuning.                |
-| `STALE_RUN_SWEEP_MINUTES` / `STALE_RUN_LEASE_MINUTES`                                                                    | Node     | defaults | Stale-run sweeper cadence + lease.              |
+| Variable                                                                                                                 | Modes    | Default     | Description                                     |
+| ------------------------------------------------------------------------------------------------------------------------ | -------- | ----------- | ----------------------------------------------- |
+| `DECISION_TIMEOUT`                                                                                                       | CF, Node | default     | Human-decision wait timeout.                    |
+| `JOB_POLL_INTERVAL` / `JOB_MAX_POLLS` / `JOB_POLL_FAILURE_TOLERANCE`                                                     | Node     | defaults    | Container job polling cadence + limits.         |
+| `CI_POLL_INTERVAL` / `CI_MAX_POLLS`                                                                                      | Node     | defaults    | CI gate polling cadence + limits.               |
+| `ADVANCE_TIMEOUT`                                                                                                        | CF, Node | `5 minutes` | Hang ceiling on one pipeline-step advance.      |
+| `CONTAINER_MAX_AGE_MINUTES`                                                                                              | Node     | `90`        | Max age of a per-run container before eviction. |
+| `EXECUTION_CONCURRENCY` / `EXECUTION_HEARTBEAT_SECONDS` / `EXECUTION_MAX_DRIVE_STEPS` / `EXECUTION_DRIVE_EXPIRE_MINUTES` | Node     | defaults    | pg-boss execution worker tuning.                |
+| `STALE_RUN_SWEEP_MINUTES` / `STALE_RUN_LEASE_MINUTES`                                                                    | Node     | defaults    | Stale-run sweeper cadence + lease.              |
 
 ## Storage & retention
 
