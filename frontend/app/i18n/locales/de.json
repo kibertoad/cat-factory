@@ -2010,11 +2010,11 @@
           "unknown": "war nicht verfügbar ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Führen Sie den Schritt auf einer Agenten-CLI mit MCP aus, oder erweitern Sie die Harness-Liste des Servers.",
+          "harnessUnsupported": "Führen Sie den Schritt auf einer Agenten-CLI mit MCP aus, oder erweitern Sie die Harness-Liste des Servers. Ein Codex-Lauf mit Ihrer eigenen CLI-Anmeldung hat keinen laufspezifischen Ablageort für den Server; verwenden Sie stattdessen Zugangsdaten der Plattform.",
           "transportUnsupported": "Deklarieren Sie dafür einen stdio-Server, oder führen Sie den Schritt auf einer Agenten-CLI aus, die HTTP-Server erreicht.",
-          "missingSecret": "Hinterlegen Sie die genannte Zugangsinformation im Infrastruktur-Fenster unter den Capability-Zugangsdaten.",
+          "missingSecret": "Hinterlegen Sie die genannte Zugangsinformation entweder als Umgebungsvariable des Deployments oder im Infrastruktur-Fenster unter den Capability-Zugangsdaten.",
           "reservedSecret": "Ändern Sie die Deklaration auf einen anderen Schlüssel; das Setzen dieser Variablen hilft gerade nicht.",
-          "oauthNotConnected": "Verbinden Sie dieses Board im Infrastruktur-Fenster damit.",
+          "oauthNotConnected": "Verbinden Sie dieses Board im Infrastruktur-Fenster damit. Ein Deployment ohne ENCRYPTION_KEY hat keinen Ort für eine Berechtigung, das muss ein Betreiber also zuerst setzen.",
           "oauthTokenFailed": "Verbinden Sie es im Infrastruktur-Fenster neu, oder warten Sie die Störung des Anbieters ab.",
           "overBudget": "Kürzen Sie, was der Agent deklariert, damit ein Lauf alles mitführen kann."
         }

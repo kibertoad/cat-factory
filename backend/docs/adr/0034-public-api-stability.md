@@ -29,9 +29,9 @@ Three warts were known, each documented at the time rather than fixed:
    two names for one id.
 3. **`POST /api/v1/tasks/:taskId/start` applied no pipeline admission**, so a plain `write` key
    could start a board pipeline that parks on a human decision: exactly the situation the `decide`
-   scope exists to gate on the jobs surface. `docs/initiatives/public-api-additions.md` recorded
-   tightening it as an open question and noted it was "exactly the kind of change ADR 0030 says to
-   flag prominently".
+   scope exists to gate on the jobs surface. The decision-surface investigation that became
+   [ADR 0043](./0043-public-decision-surface.md) recorded tightening it as an open question and
+   noted it was "exactly the kind of change ADR 0030 says to flag prominently".
 
 ## Decision
 
@@ -100,7 +100,7 @@ on every future change to `/api/v1`, the SDKs, or the webhook delivery contract:
   agent-raised decision, a judge `park` disposition) is not statically knowable at start time and
   is deliberately out of the admission rule. Widening the enumeration later only refuses more,
   which is the direction the commitment permits at a scope boundary only with a migration path;
-  prefer closing the answerability gap (`docs/initiatives/public-api-additions.md` A1..A6) instead.
+  prefer closing the answerability gap ([ADR 0043](./0043-public-decision-surface.md)) instead.
   That is precisely why the `human-review` gate had to be swept in NOW rather than tracked: every
   member the enumeration is missing on the day the door closes is a member that gets expensive to
   add.

@@ -1,5 +1,128 @@
 # @cat-factory/orchestration
 
+## 0.229.0
+
+### Minor Changes
+
+- aabfb4d: Worker cache-coherency pilot on layered-loader 16.1: caches of our own mutable state can
+  now hold a real TTL on Cloudflare, with cross-isolate staleness bounded by a pull
+  generation probe instead of being indefinite.
+
+  - `@cat-factory/caching`: new `CacheGenerationStore` seam + `coherencyWindowMsecs` profile
+    field (a probe of a shared per-(cache, group) generation directory before serving, with
+    layered-loader 16.1's fencing `applyRemoteInvalidation*` applied on a moved counter, and
+    a bump after every local invalidation; reads fail closed to pass-through, bumps fail
+    open onto the TTL backstop). New `ISOLATE_COHERENT_APP_CACHES_PROFILE` flips
+    `workspaceSettings` as the pilot. `scheduleBackgroundWork` is threaded to every loader.
+    layered-loader bumped to ^16.1.0 (ESM package; also bumped in the Node facade).
+  - `@cat-factory/caching`: a coherent cache declares `cacheWideInvalidation` when its
+    service calls `invalidateAll`; only those probe the reserved `'*'` epoch shard (one
+    globally placed Durable Object), and an undeclared `invalidateAll` on a coherent cache
+    throws rather than dropping entries locally while peers serve them to the TTL.
+  - `@cat-factory/caching`: new `currentInvocation` option for ISOLATE runtimes. Where it is
+    supplied, a cache MISS (and a coherency probe) never joins an in-flight promise created
+    by a different invocation, because Cloudflare destroys the joining invocation with an
+    uncatchable "Cannot perform I/O on behalf of a different request"; coalescing within one
+    invocation is unchanged, as is Node, which supplies nothing.
+  - `@cat-factory/worker`: new `CacheGenerationDirectory` sqlite Durable Object (migration
+    tag v5) behind the OPTIONAL `CACHE_GENERATIONS` binding; the app-cache bag is now one
+    per isolate (module scope) instead of one per invocation, with loader background work
+    adopted onto the current invocation's `ctx.waitUntil` and per-invocation load scoping
+    (above) via an ambient ExecutionContext.
+    Deployers: add the binding + v5 migration (see `deploy/backend/wrangler.toml`) to turn
+    the coherent profile on; without the wrangler edit the Worker keeps the previous
+    pass-through behaviour.
+  - `@cat-factory/kernel` + `@cat-factory/observability-otel`: four new operational
+    counters (`cache.coherency_probe`, `cache.coherency_invalidation`,
+    `cache.coherency_probe_failure`, `cache.coherency_bump_failure`) with their OTel names
+    and units.
+
+  Behaviour changes worth calling out beyond the Worker:
+
+  - `WorkspaceSettingsService.update` now reads its merge base from the repository instead of
+    through the cache. It is a read-modify-write of the whole settings row, so a base stale by
+    even one bounded-staleness window silently reverted a field a peer had committed inside it.
+  - On the ISOLATE profiles, `repoFiles` and `fragmentDocumentBody` widen their preemptive
+    refresh window to cover the whole TTL. Their entries now live that full TTL across requests
+    (the bag used to be rebuilt per invocation), and the claim that keeps them enabled on the
+    Worker at all is that their probe bounds staleness, so the window has to be the lifetime.
+  - The coherent `workspaceSettings` entry carries a 60s TTL rather than the Node profile's five
+    minutes: with bumps failing open, the TTL is the real bound when a bump fails, and that row
+    carries `allowInitiatorPat`, `storeAgentContext` and the spend caps.
+
+### Patch Changes
+
+- f7882cf: Stop the run-debug surface and the decision-list description from telling callers things that are
+  no longer true.
+
+  The `tool_retry_loop` signal handed the reader `?ok=false`, a tool-call filter replaced by
+  `?outcome=error`. An unknown query param is ignored rather than refused, so the link answered with
+  the run's WHOLE trajectory and a follower reading it as the failing subset saw every call as a
+  failure. Now pinned by a test, which is what was missing when the param was renamed.
+
+  `listPublicRunDecisions` described two decision kinds out of the thirteen the response can carry,
+  and claimed `parked` gates the list. It does not: a `follow-ups` entry is answerable while the run
+  is still working, so a caller that polls only when `parked` waits for a stop that never comes. The
+  regenerated description names every kind and points an empty `decisions` at `unanswerable`. It
+  reaches the spec, the four SDK clients and the MCP tool descriptions, which is the surface LLM
+  callers read instead of the docs.
+
+- e6aa37d: Say what to change for every cause a dropped tool server's reason covers, and state what an absent
+  tool-server record now means.
+
+  Three remedy lines named one cause of several, which costs an operator the attempt as well as the
+  answer. `harness_unsupported` also fires for an ambient-auth Codex run, reached only after the
+  harness-allow-list and transport checks have both passed, so "run it on a CLI that speaks MCP" and
+  "widen the harness list" are already satisfied there and only a leased credential helps.
+  `missing_secret` is one answer from a COMPOSED resolver whose default half both facades wire is a
+  deployment environment variable, so copy naming only the workspace credential store points a
+  store-less deployment at a surface it does not have. `oauth_not_connected` also fires where no
+  grant store is wired at all, where connecting cannot work until an operator sets `ENCRYPTION_KEY`.
+  All three are restated across ten locales.
+
+  Every one of those gaps came from writing operator copy off a member's NAME, so the multi-cause
+  members are now enumerated on kernel's `UnavailableToolServer`, where the per-member reasoning
+  already lived, and the SPA's remedy mapping points at it.
+
+  Dropping `step.toolServers` on a re-run reset also widened what an ABSENT record means, and the
+  rule was documented in four places that did not move with it. Absent now means the step's CURRENT
+  attempt holds no resolution: an inline step, a run predating the field, or a step re-armed and not
+  yet re-dispatched. The distinction the rule exists for is untouched (a step that lost every server
+  it declared still never reads as one that declared none), but absent no longer implies the step
+  never ran, and `attempts`/`dispatches` outlive the reset precisely so that question keeps an
+  answer. The field was already optional on the wire and on `/api/v1/debug/*`, so no consumer sees a
+  shape it was not already required to tolerate.
+
+  Outside the SPA copy and that documented rule, the kernel, contracts and orchestration changes are
+  comments and one test.
+
+- Updated dependencies [f7882cf]
+- Updated dependencies [e6aa37d]
+- Updated dependencies [aabfb4d]
+  - @cat-factory/contracts@0.261.1
+  - @cat-factory/kernel@0.261.0
+  - @cat-factory/caching@0.18.0
+  - @cat-factory/agents@0.116.8
+  - @cat-factory/integrations@0.140.2
+  - @cat-factory/prompt-fragments@1.0.9
+  - @cat-factory/sandbox@0.11.86
+  - @cat-factory/spend@0.15.27
+  - @cat-factory/workspaces@0.25.2
+
+## 0.228.1
+
+### Patch Changes
+
+- Updated dependencies [9d6bce0]
+  - @cat-factory/kernel@0.260.0
+  - @cat-factory/agents@0.116.7
+  - @cat-factory/caching@0.17.1
+  - @cat-factory/integrations@0.140.1
+  - @cat-factory/prompt-fragments@1.0.8
+  - @cat-factory/sandbox@0.11.85
+  - @cat-factory/spend@0.15.26
+  - @cat-factory/workspaces@0.25.1
+
 ## 0.228.0
 
 ### Minor Changes

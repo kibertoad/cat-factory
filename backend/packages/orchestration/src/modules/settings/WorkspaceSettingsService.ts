@@ -74,7 +74,14 @@ export class WorkspaceSettingsService {
     patch: UpdateWorkspaceSettingsInput,
   ): Promise<WorkspaceSettings> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
-    const current = await this.get(workspaceId)
+    // The merge base is read from the REPOSITORY, never through the cache, even though `get`
+    // is right there. This is a read-modify-write of the WHOLE row: `upsert` writes back every
+    // field, so a base that is stale by even one bounded-staleness window silently REVERTS
+    // whatever a peer committed inside it. The cache's contract is that a read may lag by its
+    // window; a write base is precisely the read that may not. (The window is ~5s on the
+    // Worker's coherent profile and the peer-invalidation latency on Node, but the argument
+    // does not depend on the number.)
+    const current = (await this.settings.get(workspaceId)) ?? { ...DEFAULT_WORKSPACE_SETTINGS }
     const next = mergeWorkspaceSettings(current, patch)
     // Keep the limit fields consistent with the mode so the enforcement logic + UI never
     // read a stale cap from an inactive mode.

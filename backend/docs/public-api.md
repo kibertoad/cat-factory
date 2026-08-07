@@ -15,8 +15,8 @@ This is the **how-to and reference**. Its siblings each own a different slice:
   current.
 - [`debug-api.md`](./debug-api.md): the read-only `/api/v1/debug/*` diagnostic surface (same keys,
   `read` scope), for walking a run's telemetry from outside the browser.
-- [`public-api-additions.md`](../../docs/initiatives/public-api-additions.md): the live tracker of
-  what the decision surface **cannot** answer yet. Read it before building on parked decisions.
+- [ADR 0043](./adr/0043-public-decision-surface.md): why the decision surface answers what it
+  answers, and what it deliberately cannot. Read it before building on parked decisions.
 - [`sdk/README.md`](../../sdk/README.md): the **official SDK clients** (TypeScript, Python, Go,
   Java+Kotlin), generated from the spec below. Reach for one before hand-rolling HTTP: see
   [Client SDKs](#client-sdks).
@@ -172,8 +172,8 @@ integration starts runs that can park, it must either answer them (a `decide` ke
 [decisions surface](#parked-decisions-apiv1runsruniddecisions)) or free them:
 `POST /api/v1/jobs/:id/cancel` (initiative jobs) and `POST /api/v1/tasks/:id/stop` (board tasks)
 both clear a park at the cost of the run's work. This matters doubly because the decision surface
-does not yet answer every park type the engine has; the
-[additions tracker](../../docs/initiatives/public-api-additions.md) is the authoritative list.
+does not answer every park type the engine has; the run's own `unanswerable[]` names each one it
+cannot, and [ADR 0043](./adr/0043-public-decision-surface.md) explains why.
 
 ### Versioning & stability
 
@@ -663,9 +663,8 @@ imported pages, and a human can detach or re-attach them there.
 
 The inline-only rule stays jobs-only: a `decide` key may start container pipelines on board tasks.
 Parks raised dynamically mid-run (an agent-raised decision, a judge park) are not statically
-knowable, so they do not gate the start; see the
-[additions tracker](../../docs/initiatives/public-api-additions.md) for which parks the decision
-surface can answer.
+knowable, so they do not gate the start; see
+[ADR 0043](./adr/0043-public-decision-surface.md) for which parks the decision surface can answer.
 
 ### Task runs & streaming
 
@@ -1263,9 +1262,8 @@ otherwise authenticated.
 ## Extending the surface
 
 For contributors adding or changing `/api/v1` endpoints, the short version, with the full rules in
-[ADR 0030](./adr/0030-public-api-surface.md) (shape, paging, scoping) and the
-[additions tracker](../../docs/initiatives/public-api-additions.md) (decision-surface slices and
-their gotchas):
+[ADR 0030](./adr/0030-public-api-surface.md) (shape, paging, scoping) and
+[ADR 0043](./adr/0043-public-decision-surface.md) (the decision surface and its gotchas):
 
 - Contract first in `@cat-factory/contracts` (`src/routes/public-api.ts` /
   `src/routes/public-decisions.ts`), handled in

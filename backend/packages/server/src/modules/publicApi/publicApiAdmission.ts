@@ -119,8 +119,9 @@ export const INTERVIEW_PARK_SURFACE = 'interview'
  * {@link parkSurfacesOf}), both of which a deployment's own registrations flow through, so a custom
  * interviewer is seen here and a custom wait gate is not. Closing the gap means a gate declaring
  * `pollExhaustion` at REGISTRATION time rather than only on the built definition; that is a change
- * to the registry seam, ranked in `docs/initiatives/public-api-additions.md` rather than smuggled
- * in behind a park-surface slice.
+ * to the registry seam, and its shape is recorded in
+ * `backend/docs/adr/0043-public-decision-surface.md` rather than smuggled in behind a park-surface
+ * slice.
  */
 export { HUMAN_WAIT_GATE_KINDS }
 
@@ -149,7 +150,7 @@ export const PUBLIC_TASK_STOP_PATH = 'POST /api/v1/tasks/:taskId/stop'
  * slice waiting to be built. Its answer is a person approving the pull request on the VCS host,
  * not an API call this surface could offer, so a run parked there is honestly reported as
  * `parked: true` with nothing to answer and the refusal says as much. See
- * `docs/initiatives/public-api-additions.md`.
+ * `backend/docs/adr/0043-public-decision-surface.md`.
  */
 export const PUBLICLY_ANSWERABLE_PARK_SURFACES = new Set<string>([
   REQUIREMENTS_REVIEW_AGENT_KIND,
@@ -241,8 +242,8 @@ export function canParkOnHuman(
  *    the one this rule exists to prevent: the park HAS a public answer path now
  *    (`…/decisions/follow-ups/items/:itemId/*`), so a run that stops there is recoverable with a
  *    `decide` key instead of being app-only. Reconsider if the companion's default ever flips off.
- *    Recorded in `docs/initiatives/public-api-additions.md` so it is not re-proposed as an
- *    oversight.
+ *    Recorded in `backend/docs/adr/0043-public-decision-surface.md` so it is not re-proposed as
+ *    an oversight.
  */
 export function parkSurfacesOf(
   pipeline: AdmissiblePipelineShape,
