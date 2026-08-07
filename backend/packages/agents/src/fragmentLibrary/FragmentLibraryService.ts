@@ -2,6 +2,7 @@ import type { PromptFragment } from '@cat-factory/contracts'
 import type {
   CreateDocumentFragmentInput,
   CreatePromptFragmentInput,
+  DeploymentDocumentResolver,
   DocumentContent,
   DocumentContentResolver,
   DocumentSourceKind,
@@ -9,7 +10,12 @@ import type {
   ResolvedFragment,
   UpdatePromptFragmentInput,
 } from '@cat-factory/kernel'
-import { ValidationError, buildExcerpt } from '@cat-factory/kernel'
+import {
+  DEPLOYMENT_DOCUMENT_CACHE_GROUP,
+  ValidationError,
+  buildExcerpt,
+  describeError,
+} from '@cat-factory/kernel'
 import type {
   Clock,
   GroupCacheHandle,
@@ -106,6 +112,17 @@ export interface FragmentLibraryServiceDependencies {
    */
   documentContentResolver?: DocumentContentResolver
   /**
+   * Live document reader for the DEPLOYMENT's own documents: what makes a code-registered
+   * (`builtin`-tier) fragment's `documentRef` resolve, using credentials the deployment configured
+   * centrally rather than any tenant's connection.
+   *
+   * Absent means this deployment configured no document source of its own, so a `builtin` entry's
+   * `documentRef` serves its registered `body` unchanged. Boot validation refuses such a
+   * registration before it can reach a run, so the absence here is the second door rather than the
+   * first.
+   */
+  deploymentDocumentResolver?: DeploymentDocumentResolver
+  /**
    * Read-through cache for the merged tenant catalog (`AppCaches.fragmentCatalog`,
    * docs/initiatives/caching-layer.md slice 1), grouped by workspace id. This
    * service owns its coherence: every fragment write below invalidates through
@@ -153,6 +170,7 @@ export class FragmentLibraryService implements FragmentResolver {
   private readonly log: Logger
   private readonly metrics: OperationalMetrics
   private readonly documentResolver?: DocumentContentResolver
+  private readonly deploymentDocuments?: DeploymentDocumentResolver
   private readonly catalogCache?: GroupCacheHandle<ResolvedCatalogEntry[]>
   private readonly documentBodyCache?: GroupCacheHandle<DocumentContent>
   private readonly briefs?: FragmentBriefService
@@ -167,6 +185,7 @@ export class FragmentLibraryService implements FragmentResolver {
     this.log = deps.logger ?? noopLogger
     this.metrics = deps.operationalMetrics ?? noopOperationalMetrics
     this.documentResolver = deps.documentContentResolver
+    this.deploymentDocuments = deps.deploymentDocumentResolver
     this.catalogCache = deps.catalogCache
     this.documentBodyCache = deps.documentBodyCache
     this.briefs = deps.briefService
@@ -645,34 +664,90 @@ export class FragmentLibraryService implements FragmentResolver {
     entry: ResolvedCatalogEntry,
   ): Promise<string> {
     const ref = entry.documentRef
-    if (!ref || !this.documentResolver || entry.tier === 'builtin') return entry.body
-    if (!this.documentBodyCache) return entry.body
+    if (!ref || !this.documentBodyCache) return entry.body
+    const read = this.documentReadFor(workspaceId, entry, ref)
+    if (!read) return entry.body
+    try {
+      const content = await this.documentBodyCache.get(
+        documentBodyKey(ref.source, ref.externalId),
+        read.group,
+        () => read.fetch(),
+        async (cached) => {
+          // An empty version token means the source exposes no version to compare, so the
+          // probe can't confirm freshness — treat it as stale so the entry falls through
+          // to a real reload (bounded by the TTL) instead of being pinned forever.
+          if (!cached.version) return false
+          return (await read.probeVersion()) === cached.version
+        },
+      )
+      return content.body
+    } catch (error) {
+      // Degrading to the last-resolved body is right (an unreachable source must not wedge a run),
+      // but doing it SILENTLY is what made a stale standard indistinguishable from a current one:
+      // the prompt is byte-identical either way, so nothing downstream can tell. One warn naming
+      // the fragment and the source is the only thing that can.
+      this.log.warn(
+        'A document-backed fragment could not be re-resolved from its source; the run folds the ' +
+          'last-resolved body instead, which may be stale',
+        {
+          workspaceId,
+          fragmentId: entry.id,
+          tier: entry.tier,
+          source: ref.source,
+          ...describeError(error),
+        },
+      )
+      return entry.body
+    }
+  }
+
+  /**
+   * How one document-backed entry is READ: the cache group it belongs to, and the two calls that
+   * fetch and probe it. `null` when this deployment cannot resolve it and must serve the persisted
+   * body.
+   *
+   * One place rather than a branch inside the ladder above, because the two scopes differ in
+   * exactly these three things and in nothing else: the freshness mechanism, the degrade and the
+   * cache-key are shared, and a second copy of that ladder is how one scope would quietly stop
+   * probing.
+   */
+  private documentReadFor(
+    workspaceId: string,
+    entry: ResolvedCatalogEntry,
+    ref: { source: DocumentSourceKind; externalId: string },
+  ): {
+    group: string
+    fetch: () => Promise<DocumentContent>
+    probeVersion: () => Promise<string>
+  } | null {
+    // A code-registered fragment is DEPLOYMENT-owned, so it is read with the deployment's own
+    // credentials and cached under ONE deployment-wide group. Keying it per workspace would fetch
+    // the same document N times and leave a later edit unable to invalidate all of them, which is
+    // exactly the fan-out the account tier's `docViaWorkspaceId` rule exists to prevent.
+    if (entry.tier === 'builtin') {
+      const deployment = this.deploymentDocuments
+      if (!deployment || !deployment.configured(ref.source)) return null
+      return {
+        group: DEPLOYMENT_DOCUMENT_CACHE_GROUP,
+        fetch: () => deployment.fetch(ref.source, ref.externalId),
+        probeVersion: () => deployment.probeVersion(ref.source, ref.externalId),
+      }
+    }
     const resolver = this.documentResolver
+    if (!resolver) return null
     // The connection workspace the body is cached + invalidated under. For a
     // workspace-tier fragment that is its owning workspace (== the run's own). For an
     // account-tier fragment it MUST be the recorded connection workspace, NOT the run's:
     // the run can be any of the account's workspaces, so keying on it would fan the same
     // document across N groups a later edit could never all invalidate. A legacy account
     // row with none recorded can't be keyed stably, so it serves the durable persisted
-    // body — matching `invalidateDocumentBody`, which also skips it (best-effort).
+    // body, matching `invalidateDocumentBody`, which also skips it (best-effort).
     const via = entry.docViaWorkspaceId ?? (entry.tier === 'account' ? null : workspaceId)
-    if (!via) return entry.body
-    try {
-      const content = await this.documentBodyCache.get(
-        documentBodyKey(ref.source, ref.externalId),
-        via,
-        () => resolver.fetch(via, ref.source, ref.externalId),
-        async (cached) => {
-          // An empty version token means the source exposes no version to compare, so the
-          // probe can't confirm freshness — treat it as stale so the entry falls through
-          // to a real reload (bounded by the TTL) instead of being pinned forever.
-          if (!cached.version) return false
-          return (await resolver.probeVersion(via, ref.source, ref.externalId)) === cached.version
-        },
-      )
-      return content.body
-    } catch {
-      return entry.body // source unreachable → last-resolved body keeps the run going
+    if (!via) return null
+    return {
+      group: via,
+      fetch: () => resolver.fetch(via, ref.source, ref.externalId),
+      probeVersion: () => resolver.probeVersion(via, ref.source, ref.externalId),
     }
   }
 

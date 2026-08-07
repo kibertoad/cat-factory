@@ -205,6 +205,11 @@ export function createFragmentLibraryModule(
     // An explicitly-injected resolver (tests/conformance) wins; otherwise use the
     // one the document-source module built from this deployment's providers.
     documentContentResolver: deps.documentContentResolver ?? documentContentResolver,
+    // The DEPLOYMENT's own document reader, which is what makes a code-registered fragment's
+    // `documentRef` resolve. No local fallback to build here: unlike its workspace-scoped sibling
+    // there is nothing to derive it from, since the credential home is deployment CONFIG and (in
+    // mothership mode) another process entirely.
+    deploymentDocumentResolver: deps.deploymentDocumentResolver,
     catalogCache: caches.fragmentCatalog,
     documentBodyCache: caches.fragmentDocumentBody,
   })

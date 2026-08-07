@@ -194,7 +194,7 @@ export class FigmaProvider implements DocumentSourceProvider {
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
-    _workspaceId: string,
+    _workspaceId: string | null,
   ): Promise<DocumentContent> {
     const { fileKey, nodeId } = figmaLogic.splitFigmaExternalId(externalId)
     if (!fileKey) {
@@ -244,7 +244,7 @@ export class FigmaProvider implements DocumentSourceProvider {
   async probeVersion(
     credentials: DocumentCredentials,
     externalId: string,
-    _workspaceId: string,
+    _workspaceId: string | null,
   ): Promise<string> {
     const { fileKey } = figmaLogic.splitFigmaExternalId(externalId)
     if (!fileKey) {

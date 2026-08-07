@@ -37,7 +37,7 @@ import {
   type ToolSecretResolver,
   type VcsProviderRegistry,
 } from '@cat-factory/kernel'
-import { validateRegistrationsOnce } from '@cat-factory/orchestration'
+import { type RegistrationProblem, validateRegistrationsOnce } from '@cat-factory/orchestration'
 import { FRAGMENTS_BY_ID } from '@cat-factory/prompt-fragments'
 import type { BackendRegistries, RegisterHandlerInput } from '@cat-factory/integrations'
 import { applyLocalDefaults, withLocalEnvCliAdvice } from './config.js'
@@ -158,6 +158,20 @@ export interface StartLocalOptions {
    * {@link binaryGeneratorRegistry}.
    */
   promptFragmentRegistry?: PromptFragmentRegistry
+  /**
+   * Raise selected boot-validation WARNINGS to errors, failing boot instead of logging (parity with
+   * the Node facade's `start()`).
+   *
+   * The severities are set by what the PLATFORM can know, and for one warning the DEPLOYMENT knows
+   * more: `task_type_unknown_fragment` cannot separate a typo in a code-owned fragment id from a
+   * legitimate account/workspace-tier id that only merges per workspace at run time. A deployment
+   * whose operations reference only fragments it registers itself has no second cause, and for it
+   * the warning names an operation silently running short of its own standing guidance.
+   *
+   * A laptop is the cheapest place to learn about such a typo, so escalating here and on `start()`
+   * from one shared predicate is the intended shape.
+   */
+  escalateRegistrationWarning?: (problem: RegistrationProblem) => boolean
   /**
    * Build the resolver that supplies a registered capability's CREDENTIALS at dispatch. A tool
    * server's (MCP) and a generative binary integration's alike. Threaded through to
@@ -369,6 +383,7 @@ async function bootLocal(
     stepResolverRegistry: options.stepResolverRegistry,
     vcsRegistry: options.vcsRegistry,
     promptFragmentRegistry: options.promptFragmentRegistry,
+    escalateRegistrationWarning: options.escalateRegistrationWarning,
     createToolSecretResolver: options.createToolSecretResolver,
     capabilityCredentialEnvironmentFallback: options.capabilityCredentialEnvironmentFallback,
     // A mandatory value missing from the reused Node boot (DATABASE_URL) is caught inside `start()`,
@@ -503,6 +518,10 @@ async function startLocalMothership(
     // Postgres path. There is now nothing here to fall behind.
     registries: container,
     onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
+    // Same deployment policy the Postgres path applies, threaded here too: a boot that validates
+    // the same registrations must reach the same verdict about them, or a laptop is the one place
+    // an escalated defect stays quiet.
+    escalateWarning: extensions.escalateRegistrationWarning,
   })
 
   // In mothership mode the catalog's `builtin` tier comes from the MOTHERSHIP, so anything this

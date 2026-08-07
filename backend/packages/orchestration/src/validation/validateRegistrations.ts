@@ -3,6 +3,7 @@ import { INLINE_ENGINE_SYSTEM_PROMPTS, runsInContainer } from '@cat-factory/agen
 import type {
   AgentKind,
   BinaryGeneratorRegistry,
+  DeploymentDocumentResolver,
   FoundationalServiceRegistry,
   GateRegistry,
   InitiativePresetRegistry,
@@ -38,6 +39,7 @@ import {
   binaryGeneratorDefinitionIssues,
   descriptorConditionHasPredicate,
   duplicatedDescriptorSectionCaptions,
+  isDeploymentScopedSource,
   foundationalServiceDefinitionIssues,
   isEnvVariableName,
   isNamespacedId,
@@ -163,6 +165,15 @@ export interface ValidatedRegistries {
    * never arrives.
    */
   promptFragments?: PromptFragmentSource
+  /**
+   * How this deployment reads its OWN documents, or absent when it configured none.
+   *
+   * What turns the `documentRef` check below from a blanket refusal into a real one: a
+   * code-registered fragment may name a living document exactly when the deployment can resolve
+   * it, and only this can say whether it can. Named as the CONTAINER names it, like every other
+   * member here.
+   */
+  deploymentDocumentResolver?: DeploymentDocumentResolver
 }
 
 /** Options for {@link collectRegistrationProblems} / {@link validateRegistrations}. */
@@ -186,6 +197,30 @@ export interface ValidateRegistrationsOptions {
    * (errors still throw).
    */
   onWarn?: (problem: RegistrationProblem) => void
+  /**
+   * Raise a `warn` to an ERROR: return `true` and the problem joins the aggregated boot failure
+   * instead of the log.
+   *
+   * The severities here are set by ONE bar: boot ERRORS on what is fully knowable from a
+   * registration and WARNS only where it structurally cannot see the answer (ADR 0040). That bar is
+   * about what the PLATFORM can know, and for one warn in particular the DEPLOYMENT knows more.
+   * `task_type_unknown_fragment` fires for two causes it cannot separate: a typo in a code-owned id,
+   * and an account/workspace-tier id that merges per workspace at run time and is invisible at boot.
+   * A deployment whose operations reference only fragments it registers itself knows the second
+   * cause cannot apply to it, and for that deployment the warn names a real defect: part of an
+   * operation's standing guidance silently never enters a run, and for a `conditionalFragmentIds`
+   * entry it goes missing only for the cases matching the condition.
+   *
+   * So the SEVERITY is platform judgement and the DISPOSITION is deployment policy, which is the
+   * split this hook exists to express. It takes the whole problem rather than a list of codes on
+   * purpose: a deployment can escalate one code, a prefix, or everything, and a warn added later is
+   * covered by a predicate that never mentioned it.
+   *
+   * Escalated problems are collected and thrown TOGETHER with the genuine errors, so a boot failure
+   * still names every problem at once. A predicate that throws is a bug in the predicate and
+   * propagates unchanged, rather than being swallowed into a warn about warnings.
+   */
+  escalateWarning?: (problem: RegistrationProblem) => boolean
 }
 
 /**
@@ -289,48 +324,66 @@ export function collectRegistrationProblems(
 }
 
 /**
- * Section 10 of {@link collectRegistrationProblems}: a code-registered prompt fragment that carries
- * a `documentRef`.
+ * Section 10 of {@link collectRegistrationProblems}: a code-registered prompt fragment whose
+ * `documentRef` THIS deployment cannot resolve.
  *
- * The registration is ACCEPTED today, faithfully carried through the catalog merge with
- * `docViaWorkspaceId: null`, put on the wire, and rendered by the library UI with a
- * `fragments.catalog.live` badge NAMING the source. And then `resolveDocumentBody` refuses it:
- * `entry.tier === 'builtin'` short-circuits before any resolution. Every code-registered fragment
- * lands on that tier, so the reference is preserved everywhere it is visible and honoured nowhere,
- * and the surface most confident about it is the one telling a human the body is live.
+ * A code registration lands on the `builtin` tier, whose documents are read with credentials the
+ * DEPLOYMENT configures (`DOC_SOURCE_<SOURCE>_*`), not with any tenant's connection. So the
+ * question boot has to answer is not "is a builtin documentRef allowed" but "can this deployment
+ * serve it", and there are exactly two ways it cannot:
  *
- * An ERROR rather than a warning, because it is a dead seam rather than a degraded one: there is no
- * deployment state in which the reference starts resolving, and the failure it produces is a lie
- * rather than an omission.
+ * - **The source can never be deployment-scoped.** `github` docs authenticate with a WORKSPACE's
+ *   App installation, so there is no deployment-wide credential to configure and picking a
+ *   tenant's would be the cross-tenant fetch the trait refuses. No configuration fixes it.
+ * - **The deployment configured nothing for that source.** Fixable, and the message says how.
  *
- * The refusal is deliberately NOT "honour it at builtin tier", which is what the report that
- * surfaced this asked for. `resolveDocumentBody` needs a connection WORKSPACE to fetch through, and
- * a deployment-wide registration has none: resolving through an arbitrary tenant's stored
- * credential would fetch text into every other workspace's prompts on one workspace's connection,
- * and would key ONE deployment-wide document under N per-workspace cache groups. That is the exact
- * fan-out the existing guard refuses for the account tier, and it is not an oversight. A living
- * deployment-wide document needs a DEPLOYMENT-scoped document source (an owner-scope change, a
- * credential home and a mothership routing decision), which is its own initiative rather than a
- * field on a registration.
+ * An ERROR in both cases rather than a warning, and the reason has not changed: the ref is carried
+ * through the catalog merge, put on the wire, and rendered by the library UI with a
+ * `fragments.catalog.live` badge NAMING the source, while `resolveDocumentBody` serves the
+ * registered body. Accepted everywhere it is visible and honoured nowhere, with the surface most
+ * confident about it telling a human the body is live. Unlike an unresolvable fragment ID this is
+ * FULLY knowable from the registration plus this process's own configuration, which is the bar
+ * every severity here is set by.
+ *
+ * A MOTHERSHIP-mode node is judged the same way and correctly: its resolver is the remote one,
+ * whose `configured` answers for the mothership's environment rather than the laptop's.
  */
 function checkPromptFragments(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
   const registry = opts.registries.promptFragmentRegistry
   if (!registry) return []
-  return registry
-    .all()
-    .filter((fragment) => fragment.documentRef)
-    .map((fragment) => ({
-      severity: 'error' as const,
+  const resolver = opts.registries.deploymentDocumentResolver
+  const problems: RegistrationProblem[] = []
+  for (const fragment of registry.all()) {
+    const ref = fragment.documentRef
+    if (!ref) continue
+    // The TRAIT is asked first and independently of the resolver, because the two answer different
+    // questions: whether this source CAN be deployment-scoped is a fact about the source, and
+    // whether it IS configured is a fact about this process. Asking the resolver first would let a
+    // resolver that answers `configured` too generously admit a registration no configuration can
+    // make work, and the trait is the only thing that can refuse it.
+    const scopable = isDeploymentScopedSource(ref.source)
+    if (scopable && resolver?.configured(ref.source)) continue
+    // Two causes, two remedies, so two messages. Reporting them as one would send an operator who
+    // chose an impossible source hunting for a variable that does not exist.
+    const cause = scopable
+      ? `this deployment has configured no ${ref.source} credentials, so it cannot read the ` +
+        `document. Set the DOC_SOURCE_${ref.source.toUpperCase()}_* variables ` +
+        `(docs/environment-variables.md)`
+      : `document source "${ref.source}" cannot be configured deployment-wide at all: its ` +
+        `credential is a WORKSPACE's, not the deployment's, so serving one document to every ` +
+        `workspace would mean spending one tenant's credential on all of them`
+    problems.push({
+      severity: 'error',
       code: 'fragment_document_ref_unsupported',
       message:
-        `Prompt fragment "${fragment.id}" is registered in code with a documentRef, which is ` +
-        `carried through the catalog and rendered as a live source but is never resolved: a ` +
-        `code-registered fragment lands on the "builtin" tier, and live resolution needs a ` +
-        `connection workspace a deployment-wide registration cannot name. Register the body ` +
-        `inline instead, or create the fragment at the ACCOUNT tier (POST the fragment with its ` +
-        `documentRef and a fetch-via workspace), which is the supported path to an org-wide ` +
-        `living document.`,
-    }))
+        `Prompt fragment "${fragment.id}" is registered in code with a documentRef, but ${cause}. ` +
+        `Left as is the reference is carried through the catalog and rendered as a live source ` +
+        `while every run folds the registered body instead. Fix the configuration, register the ` +
+        `body inline, or create the fragment at the ACCOUNT tier (POST it with its documentRef and ` +
+        `a fetch-via workspace).`,
+    })
+  }
+  return problems
 }
 
 /**
@@ -1375,13 +1428,28 @@ function checkCustomTaskTypes(opts: ValidateRegistrationsOptions): RegistrationP
  * Validate the registered extensions, throwing an aggregated error on any `error`-severity
  * problem and logging `warn`-severity ones. Call once at facade boot, after every `register*`
  * import side effect + provider wiring, before serving requests.
+ *
+ * A deployment may raise selected warnings to errors with
+ * {@link ValidateRegistrationsOptions.escalateWarning}; an escalated problem is thrown with the
+ * errors and is NOT also logged, so one problem produces one report.
  */
 export function validateRegistrations(opts: ValidateRegistrationsOptions): void {
   const problems = collectRegistrationProblems(opts)
-  if (opts.onWarn) {
-    for (const w of problems.filter((p) => p.severity === 'warn')) opts.onWarn(w)
+  const escalate = opts.escalateWarning
+  // Partition in ONE pass, before either half acts, so an escalated warn is reported exactly once
+  // and lands in the same aggregated failure as the genuine errors rather than a second one after
+  // them. The predicate is called once per warning for the same reason: it is deployment code, and
+  // calling it twice would make an impure one disagree with itself between the log and the throw.
+  const errors: RegistrationProblem[] = []
+  const warnings: RegistrationProblem[] = []
+  for (const problem of problems) {
+    if (problem.severity === 'error') errors.push(problem)
+    else if (escalate?.(problem)) errors.push(problem)
+    else warnings.push(problem)
   }
-  const errors = problems.filter((p) => p.severity === 'error')
+  if (opts.onWarn) {
+    for (const warning of warnings) opts.onWarn(warning)
+  }
   if (errors.length > 0) {
     throw new Error(
       `Invalid extension registrations (${errors.length}):\n` +

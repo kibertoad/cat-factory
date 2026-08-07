@@ -1,5 +1,11 @@
 import type {} from '@cat-factory/kernel'
-import type { AppCaches, AuditLogReader, Logger, OperationalMetrics } from '@cat-factory/kernel'
+import type {
+  AppCaches,
+  AuditLogReader,
+  DeploymentDocumentResolver,
+  Logger,
+  OperationalMetrics,
+} from '@cat-factory/kernel'
 import { ModuleRegistry } from './container/module-registry.js'
 import {
   createSlackModule,
@@ -380,6 +386,16 @@ export interface CoreSpine {
    * this, and offering ids from a different set than a run folds is the drift the seam removes.
    */
   promptFragments: PromptFragmentSource
+  /**
+   * How this process reads the DEPLOYMENT's own documents (the living standard a code-registered
+   * fragment names), or `undefined` when it configured none.
+   *
+   * Re-exposed for two readers that are not the engine: boot validation, which refuses a
+   * `documentRef` this deployment could never resolve, and `/internal/prompt-fragments/
+   * document-bodies`, which serves resolved bodies to a mothership-mode node whose own
+   * environment holds no such credential.
+   */
+  deploymentDocumentResolver?: DeploymentDocumentResolver
   /**
    * The app-owned initiative-preset registry the engine resolved (the facade's injected instance,
    * else the built-ins-only default). Re-exposed so the HTTP layer's workspace-snapshot descriptors
@@ -843,6 +859,7 @@ export function createCore(injected: CoreDependencies): Core {
     binaryGeneratorRegistry,
     promptFragmentRegistry,
     promptFragments,
+    deploymentDocumentResolver: injected.deploymentDocumentResolver,
     binaryGenerators,
     initiativePresetRegistry,
     executionEventPublisher,

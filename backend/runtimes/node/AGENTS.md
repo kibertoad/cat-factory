@@ -68,6 +68,27 @@ Container steps dispatch to a workspace's self-hosted runner pool, which runs th
 image and therefore serves EVERY dispatch kind with no opt-in allow-list; unconfigured, the
 composite serves inline kinds and fails container kinds loudly.
 
+## The deployment extension surface
+
+`src/index.ts` is the WHOLE surface a deployment package needs: every app-owned registry's
+constructor beside the option that takes it, plus the authoring types, the descriptor helpers and
+the `*_PIPELINE_ID` constants. A deployment's only cat-factory runtime dependency is this facade,
+because every `@cat-factory/*` package publishes at an EXACT version and reaching below the facade
+for a builder re-creates the two-physical-copies failure the registry seams exist to remove
+([ADR 0044](../../docs/adr/0044-facade-extension-surface.md)).
+
+`test/registry-seams.spec.ts` owns the authoritative classification for ALL THREE facades and holds
+three separate rules: a seam is an option on `NodeContainerOptions`, an option on `StartOptions`
+(the door a deployment actually calls), and CONSTRUCTIBLE from this module's own exports. They fail
+independently and have each failed alone. Adding a registry to `CoreDependencies` stops the file
+compiling until all three are answered; the local and Worker facades assert they publish the same
+constructors.
+
+`start({ escalateRegistrationWarning })` lets a deployment raise selected boot-validation warnings
+to errors. Severity is platform judgement (boot warns only where it structurally cannot see the
+answer); the disposition belongs to the deployment, which may know the cause the platform cannot
+rule out does not apply to it.
+
 ## Resolving conflicting Drizzle migrations (post-merge)
 
 Node's Postgres migrations (`drizzle/`) use drizzle-kit 1.x snapshot v8: a content-addressed DAG
