@@ -3,20 +3,60 @@ import { notificationSchema, notificationTypeSchema } from './notifications.js'
 import { platformFailingRunSchema } from './observability.js'
 
 // ---------------------------------------------------------------------------
-// Notification-webhook wire contracts. A workspace can register ONE outbound HTTPS endpoint that
-// receives its notifications as they are raised — the delivery channel a HEADLESS integration
+// Notification-webhook wire contracts. A workspace registers outbound HTTPS endpoints that
+// receive its notifications as they are raised — the delivery channel a HEADLESS integration
 // needs, since it has no in-app inbox to watch and no browser to hold a WebSocket open.
 //
 // This is a `NotificationChannel` like the in-app and Slack channels, composed into the same
 // `CompositeNotificationChannel`, so nothing about how notifications are RAISED changes. The
 // motivating case is the parked-decision loop: a public-API run that parks on a requirements
 // review should reach its caller by push rather than by polling (see
-// `docs/initiatives/headless-clarification-loop.md`, D3).
+// `backend/docs/adr/0047-headless-clarification-loop.md`, D3).
 //
 // The endpoint's `secret` is write-only on the wire: it is stored encrypted and never read back,
 // exactly like the other outbound credentials. Deliveries are signed with it so a receiver can
 // verify the payload really came from this deployment.
+//
+// A workspace may register SEVERAL named endpoints, each with its own secret and its own filters,
+// addressed by a caller-chosen {@link notificationWebhookIdSchema}. The original singular routes
+// (`/api/v1/notification-webhook`) are a projection onto the one id
+// {@link DEFAULT_NOTIFICATION_WEBHOOK_ID}, so a consumer written before the collection existed
+// keeps addressing exactly the endpoint it always did.
 // ---------------------------------------------------------------------------
+
+/**
+ * The id of the endpoint the SINGULAR routes address. Registering through
+ * `PUT /api/v1/notification-webhook` writes this id, and it appears in the collection like any
+ * other entry, so the two surfaces describe one store rather than two.
+ */
+export const DEFAULT_NOTIFICATION_WEBHOOK_ID = 'default'
+
+/**
+ * How many endpoints one workspace may register. Every delivery fans out to every subscribed
+ * endpoint on a run's terminal path, so the set has to be bounded by something other than an
+ * operator's patience; ten is well above the "one receiver per integration" the collection exists
+ * to serve. Exceeding it is a 409 with `reason: 'webhook_limit_reached'`.
+ */
+export const MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE = 10
+
+/**
+ * A webhook's id: CALLER-CHOSEN, not server-minted, which is what makes enrolment idempotent for
+ * the consumer that needs it most. A gatekeeper Worker booting cold can `PUT` its own well-known
+ * id and be enrolled whether or not it has ever run before, with no id table of its own and no
+ * create-or-discover dance against a surface it may be racing another instance on.
+ *
+ * Constrained to a lowercase slug because it is a path segment on both management surfaces and an
+ * operator reads it in a log line beside the endpoint's URL.
+ */
+export const notificationWebhookIdSchema = v.pipe(
+  v.string(),
+  // Deliberately NOT trimmed, unlike the body strings beside it. Trimming would admit `" ci "` and
+  // then store `ci`, so the id a caller PUT and the id it must address afterwards would differ.
+  v.regex(
+    /^[a-z0-9][a-z0-9_-]{0,62}$/u,
+    'A webhook id must be 1-63 characters of lowercase letters, digits, `-` or `_`, starting with a letter or digit',
+  ),
+)
 
 /**
  * The RUN-LIFECYCLE events the same endpoint can subscribe to: the ordinary lifecycle of work an
@@ -52,6 +92,13 @@ export type PlatformAlertEventName = v.InferOutput<typeof platformAlertEventSche
 
 /** A workspace's registered notification webhook, as exposed to clients (never the secret). */
 export const notificationWebhookSchema = v.object({
+  /**
+   * Which endpoint this is, within the workspace. `default` is the one the singular
+   * `/api/v1/notification-webhook` routes address.
+   */
+  id: v.string(),
+  /** An operator-facing label. Defaults to the id when a registration supplies none. */
+  name: v.string(),
   /** The HTTPS endpoint deliveries are POSTed to. */
   url: v.string(),
   /**
@@ -107,6 +154,8 @@ export const putNotificationWebhookSchema = v.object({
       v.maxLength(2000),
     ),
   ),
+  /** Omit ⇒ keep the stored label (the endpoint's id, for a registration that named none). */
+  name: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(100))),
   /** Omit ⇒ deliver the default parking types. */
   types: v.optional(v.array(notificationTypeSchema)),
   /** Omit ⇒ keep the current run-event subscription (none, for an endpoint that never set one). */
@@ -120,8 +169,13 @@ export const putNotificationWebhookSchema = v.object({
 export type PutNotificationWebhookInput = v.InferOutput<typeof putNotificationWebhookSchema>
 
 /**
- * What `GET /api/v1/notification-webhook` answers: the registered endpoint, or `null` when the
- * workspace has none. Both the session surface and the public one project the SAME
+ * What `GET /api/v1/notification-webhook` and `GET /api/v1/notification-webhooks/:webhookId`
+ * answer: the addressed endpoint, or `null` when none is registered under that id. A 404 would be
+ * the conventional answer for the second one and is deliberately not used: "am I already wired
+ * up?" is the call an integration makes at startup, and it should read one response shape rather
+ * than branch on a status this surface also uses for a mistyped path.
+ *
+ * Both the session surface and the public one project the SAME
  * {@link notificationWebhookSchema}, because the projection is already the client-facing shape
  * with the secret reduced to a boolean, and a second near-identical DTO would be one more thing
  * to keep in step for no caller-visible gain.
@@ -138,6 +192,23 @@ export const publicNotificationWebhookSchema = v.object({
   webhook: v.nullable(notificationWebhookSchema),
 })
 export type PublicNotificationWebhook = v.InferOutput<typeof publicNotificationWebhookSchema>
+
+/**
+ * What `GET /api/v1/notification-webhooks` answers: every endpoint the workspace has registered,
+ * ordered by id so two reads of an unchanged workspace agree.
+ *
+ * Deliberately NOT paginated, unlike every other public list. Paging exists to bound a set the
+ * platform cannot bound itself, and this one is bounded at
+ * {@link MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE} by the write path: a cursor here would hand
+ * every client a loop to write for a set that fits in one response by construction, and would
+ * quietly become the reason nobody noticed the cap had been raised.
+ */
+export const publicNotificationWebhookListSchema = v.object({
+  webhooks: v.array(notificationWebhookSchema),
+})
+export type PublicNotificationWebhookList = v.InferOutput<
+  typeof publicNotificationWebhookListSchema
+>
 
 /**
  * The JSON body of one webhook delivery. Deliberately a thin envelope over the SAME

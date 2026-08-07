@@ -796,8 +796,10 @@ func (s *NotificationsService) List(ctx context.Context) (*PublicNotificationLis
 	return &out, nil
 }
 
-// WebhookService the workspace's one outbound endpoint: register, inspect or remove the receiver that
-// notifications, run-lifecycle events and health alerts are pushed to.
+// WebhookService the workspace's outbound endpoints: register, inspect or remove the receivers that
+// notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address
+// the `default` endpoint; the named ones let an integration enroll its own receiver, with its own
+// signing secret and filters, beside whatever else is registered.
 type WebhookService struct {
 	client *Client
 }
@@ -809,6 +811,19 @@ func (s *WebhookService) Delete(ctx context.Context) error {
 	req := requestSpec{
 		Method: "DELETE",
 		Path:   "/api/v1/notification-webhook",
+	}
+	return s.client.requestNoContent(ctx, req)
+}
+
+// DeleteNamed remove one named outbound webhook
+// Deregister this endpoint; its deliveries stop and the workspace's other endpoints are
+// untouched. Idempotent.
+// DELETE /api/v1/notification-webhooks/{webhookId} (operation
+// deletePublicNamedNotificationWebhook).
+func (s *WebhookService) DeleteNamed(ctx context.Context, webhookID string) error {
+	req := requestSpec{
+		Method: "DELETE",
+		Path:   fmt.Sprintf("/api/v1/notification-webhooks/%s", pathEscape(webhookID)),
 	}
 	return s.client.requestNoContent(ctx, req)
 }
@@ -830,6 +845,41 @@ func (s *WebhookService) Get(ctx context.Context) (*PublicNotificationWebhook, e
 	return &out, nil
 }
 
+// GetNamed read one named outbound webhook
+// The endpoint registered under this id, or `{ "webhook": null }` when there is none — the same
+// shape the unnamed read answers, so an integration's startup self-check does not branch on a
+// status code. The signing secret is never returned.
+// GET /api/v1/notification-webhooks/{webhookId} (operation getPublicNamedNotificationWebhook).
+func (s *WebhookService) GetNamed(ctx context.Context, webhookID string) (*PublicNotificationWebhook, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/notification-webhooks/%s", pathEscape(webhookID)),
+	}
+	var out PublicNotificationWebhook
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// List list the workspace's outbound webhooks
+// Every endpoint this workspace delivers to, ordered by id. The endpoint the unnamed routes
+// address appears here under the id `default`. Not paginated: the number of endpoints a workspace
+// may register is capped, so the whole set fits in one response. No signing secret is returned
+// for any of them.
+// GET /api/v1/notification-webhooks (operation listPublicNotificationWebhooks).
+func (s *WebhookService) List(ctx context.Context) (*PublicNotificationWebhookList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/notification-webhooks",
+	}
+	var out PublicNotificationWebhookList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // Set register or update the outbound webhook
 // Register the HTTPS endpoint deliveries are POSTed to, or update the one already registered.
 // Every omitted field keeps its stored value, so subscribing to run events is a one-field call
@@ -842,6 +892,30 @@ func (s *WebhookService) Set(ctx context.Context, body PutNotificationWebhook) (
 	req := requestSpec{
 		Method: "PUT",
 		Path:   "/api/v1/notification-webhook",
+		Body:   body,
+	}
+	var out NotificationWebhook
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SetNamed register or update one named outbound webhook
+// Register an endpoint under an id YOU choose (1-63 characters of lowercase letters, digits, `-`
+// or `_`), or update the one already there. Idempotent by id, so an integration can enroll its
+// own receiver on every cold start without tracking whether it has enrolled before, and without
+// displacing anything else the workspace registered. Every field follows the same keep-on-omit
+// rule as the unnamed route, `url` being required only when there is nothing under this id to
+// keep, and a supplied `secret` rotating this endpoint's own signing secret. Refused with
+// `reason: "invalid_webhook_id"` for an id that is not a slug, and `reason:
+// "webhook_limit_reached"` (409) when registering a NEW id would exceed the per-workspace cap;
+// editing an existing one is admitted either way.
+// PUT /api/v1/notification-webhooks/{webhookId} (operation putPublicNamedNotificationWebhook).
+func (s *WebhookService) SetNamed(ctx context.Context, webhookID string, body PutNotificationWebhook) (*NotificationWebhook, error) {
+	req := requestSpec{
+		Method: "PUT",
+		Path:   fmt.Sprintf("/api/v1/notification-webhooks/%s", pathEscape(webhookID)),
 		Body:   body,
 	}
 	var out NotificationWebhook

@@ -54,10 +54,16 @@ export const issueIntakeConfigSchema = v.object({
     /** GitHub repository as `owner/name`. */
     githubRepo: v.optional(intakePredicateStringSchema),
     /**
+     * GitLab project as its full path with namespace, e.g. `group/project` or
+     * `group/sub/project`. Its own leg rather than a reuse of `githubRepo`: a GitLab namespace
+     * NESTS, so the two are not the same shape, and the two providers read different fields.
+     */
+    gitlabProject: v.optional(intakePredicateStringSchema),
+    /**
      * A DEPLOYMENT-REGISTERED source's board scope, held opaquely: only that provider knows what
      * its board id means, so the platform carries the string and never interprets it.
      *
-     * Its own field rather than reusing a built-in's. The three above are named for the vendor
+     * Its own field rather than reusing a built-in's. The legs above are each named for the vendor
      * whose provider reads them, so putting a registered source's id on one of them would hand a
      * provider a scope belonging to a different tracker — silently, since every one of them is a
      * plain string. A built-in source never sets this and a registered one never sets the others.

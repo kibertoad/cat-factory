@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 // Cross-runtime parity for the headless clarification loop's question-writeback markers — the
 // rows that keep a REPLAYING durable driver from re-posting a parked review's findings onto the
-// tracker issue a human is reading (docs/initiatives/headless-clarification-loop.md, D8).
+// tracker issue a human is reading (backend/docs/adr/0047-headless-clarification-loop.md, D8).
 //
 // The contract this pins is `claim`, and it is the whole reason the suite exists: it must be ONE
 // atomic statement whose insert-or-conditional-update reports whether the caller now owns the

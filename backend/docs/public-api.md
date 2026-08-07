@@ -62,12 +62,12 @@ existed.
 
 Scopes are an ordered, **inclusive** ladder; each rung can do everything below it:
 
-| Scope    | Adds                                                                                                                                                                                                                            |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, a run's [evidence](#run-evidence-report--artifacts), the whole [`/debug` surface](./debug-api.md).                      |
-| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                                                                                                     |
-| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                           |
-| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**), manage the [outbound webhook](#outbound-webhook-push), and [provision keys](#key-provisioning-apiv1keys). |
+| Scope    | Adds                                                                                                                                                                                                                             |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, a run's [evidence](#run-evidence-report--artifacts), the whole [`/debug` surface](./debug-api.md).                       |
+| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                                                                                                      |
+| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                            |
+| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**), manage the [outbound webhook](#outbound-webhooks-push), and [provision keys](#key-provisioning-apiv1keys). |
 
 Two things to know before minting `decide` or `admin`:
 
@@ -391,7 +391,7 @@ surface only ever sees runs it created, never the workspace's ordinary board run
 | ------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /api/v1/jobs`            | `write`¹ | Start a run. Body `{ pipelineId, input (≤50k chars), title? (≤200) }` → `202 { jobId, status, links: { self, events } }`. Capped at **5 in-flight** runs per workspace (`429 too_many_active_runs`). |
 | `GET /api/v1/jobs`             | `read`   | List this surface's jobs, newest first. `?limit=`, `?cursor=`, `?status=running\|succeeded\|failed`, `?since=<epoch-ms>`.                                                                            |
-| `GET /api/v1/jobs/:id`         | `read`   | One job: `{ jobId, status, pipelineId, createdAt, result, error }`. `result.output` is the final agent reply, `result.data` its structured output (when produced).                                   |
+| `GET /api/v1/jobs/:id`         | `read`   | One job: `{ jobId, status, pipelineId, createdAt, externalIdentity, result, error }`. `result.output` is the final agent reply, `result.data` its structured output (when produced).                 |
 | `POST /api/v1/jobs/:id/cancel` | `write`  | Cancel (idempotent; a terminal job comes back as-is). The escape hatch for a parked run.                                                                                                             |
 | `GET /api/v1/jobs/:id/events`  | `read`   | SSE stream; see [Streaming](#streaming-sse).                                                                                                                                                         |
 
@@ -747,10 +747,10 @@ knowable, so they do not gate the start; see
 
 ### Task runs & streaming
 
-| Method / path                      | Scope  | Behaviour                                                                                                                                       |
-| ---------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/tasks/:taskId/run`    | `read` | The rich run projection: `{ runId, taskId, status, createdAt, currentStep, steps[], pullRequest, error }`. `404 no_run` before the first start. |
-| `GET /api/v1/tasks/:taskId/events` | `read` | SSE stream of that projection; see [Streaming](#streaming-sse).                                                                                 |
+| Method / path                      | Scope  | Behaviour                                                                                                                                                         |
+| ---------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/tasks/:taskId/run`    | `read` | The rich run projection: `{ runId, taskId, status, createdAt, currentStep, steps[], externalIdentity, pullRequest, error }`. `404 no_run` before the first start. |
+| `GET /api/v1/tasks/:taskId/events` | `read` | SSE stream of that projection; see [Streaming](#streaming-sse).                                                                                                   |
 
 Run `status` distinguishes the states a caller reacts to: `running`, `blocked` (parked on a human;
 go read `/runs/:runId/decisions`), `paused` (spend-gated), `done`, `failed`. Each step reports
@@ -772,7 +772,7 @@ there is **no heartbeat**, so a quiet run produces a quiet stream. Event names:
 | `timeout`  | The stream hit its **5-minute** cap; data `{}`. Nothing is wrong; reconnect to keep watching.                                                                |
 
 A revoked key cuts a live stream within ~5 seconds. Streams are per-run reads bounded by their own
-poll; for push at scale, register the [outbound webhook](#outbound-webhook-push) instead.
+poll; for push at scale, register the [outbound webhook](#outbound-webhooks-push) instead.
 
 ### Pipelines & task types (discovery)
 
@@ -982,12 +982,15 @@ itself need a wider key.
 | `GET /api/v1/me`           | `read` | What the calling key is and what it may do.                  |
 | `GET /api/v1/openapi.json` | `read` | **This deployment's** OpenAPI 3.1 document, served verbatim. |
 
-`GET /api/v1/me` answers `{ keyId, accountId, workspaceId, scope, label, createdAt }`. Before it,
+`GET /api/v1/me` answers
+`{ keyId, accountId, workspaceId, scope, label, externalIdentity, createdAt }`. Before it,
 "can this key do X" was answerable only by attempting X and reading the `403`, which for a
 destructive operation is not a check at all. Two things to hold on to when you read `scope`: the
 ladder is **inclusive** (`read` ⊂ `write` ⊂ `decide` ⊂ `admin`), so compare against the rung an
 action needs rather than for equality; and `workspaceId` is the ONE workspace every call under this
 key acts within, which is what a multi-tenant integration should log alongside its own tenant id.
+`externalIdentity` is who whoever provisioned this key said it acts for, or `null`
+([key provisioning](#key-provisioning-apiv1keys)).
 
 `GET /api/v1/openapi.json` serves the same bytes as the committed
 [`docs/openapi.json`](../../docs/openapi.json), generated from the route contracts by
@@ -1172,6 +1175,51 @@ Create body: `{ "label": "tenant-42 reader", "scope": "read" }`; omitting `scope
 same safe middle rung the app defaults to. Everything else comes from the calling key: the mint
 lands in **its** workspace, and this surface has no vocabulary for another one.
 
+#### Mapping a run back to a person (`externalIdentity`)
+
+The create body also takes an optional `externalIdentity`: an opaque string naming who, on **your**
+side, this key acts for (an OS user id, a tenant slug, a service-account name). Up to 200
+characters, no control characters. It is stored verbatim and never parsed, resolved against a user,
+or used to decide anything: what a key may do is its `scope`, and what a run may do is the policy
+the workspace authored.
+
+It is echoed in three places, which together are the whole feature:
+
+- on the key resource (`POST`/`GET /api/v1/keys`, and the app's key list),
+- on `GET /api/v1/me`, so a subsystem handed a credential can discover which identity it holds
+  rather than being told twice,
+- on **every run that key starts**: `externalIdentity` on the run resource
+  (`GET /api/v1/tasks/:taskId/run`) and on the job resource (`GET /api/v1/jobs`,
+  `GET /api/v1/jobs/:id`, `POST /api/v1/jobs/:id/cancel`, and the two SSE run streams), `null` for
+  a run started from the app, by a schedule, or by a key with no identity. The 202 that
+  `POST /api/v1/jobs` answers with is the accepted-job envelope (`jobId`, `status`, `links`) and
+  carries no run fields at all, identity included: follow `links.self` for the resource.
+
+So an integration that mints one key per person gets real per-person attribution without keeping a
+keyId table of its own. Three properties are worth relying on:
+
+- **The run's copy is pinned when it starts, not looked up when you read it.** Revoking the key
+  (what you do when someone leaves) does not erase who a finished run was for, and reading a page
+  of runs costs no key reads.
+- **A retry keeps it.** A re-drive is the same work for the same requester, whoever pressed retry.
+- **A key that has an identity of its own only sees runs started for THAT identity.** Every run
+  projection carries `externalIdentityWithheld` beside the value, and `true` there means the run
+  does have an identity your key may not read. It is never `true` for a run that simply names
+  nobody, so the two stay distinguishable: a withheld attribution is one the platform is holding,
+  not one it never had. A key minted with no identity (your provisioning key, or one a member
+  minted in the app) reads every run's, which is the mapping this feature exists to give you, so
+  do the mapping from the provisioner rather than from the per-person keys. Your own key's
+  identity is on `GET /api/v1/me`.
+
+  The rule is what keeps one-key-per-person from handing each person the roster of everyone else:
+  the identity is often an email, and workspace reach is otherwise shared. It compares the stored
+  bytes exactly, with no case folding or trimming, because the value is opaque everywhere else
+  too.
+
+For attribution that actually _governs_ a run (role-scoped merge policy, submission allow-lists),
+mint per-user keys and keep them per-user: `externalIdentity` is provenance you supplied, not an
+authorization input the platform verified.
+
 Two bounds are what make this safe to offer, and both are enforced, not advisory:
 
 - **`admin` cannot be minted here** (`400 validation`). A key provisioned over the API can never
@@ -1182,7 +1230,9 @@ Two bounds are what make this safe to offer, and both are enforced, not advisory
   the credential they can see and the ones an attacker made keep working.
 
 A provisioned key records `createdByKeyId` (and no `createdByUserId`, since no person minted it), which
-is what the app's key list shows and what the cascade follows. Revoking the **calling** key is
+is what the app's key list shows and what the cascade follows. `externalIdentity` is never inherited
+from the provisioning key: a provisioner mints for many identities, so defaulting to its own would
+name the integration on every run it starts for anyone. Revoking the **calling** key is
 allowed: a harness handing back a scratch credential is the case it exists for.
 
 ### Run debugging (`/api/v1/debug/*`)
@@ -1194,15 +1244,16 @@ keys, `read` scope. Fully documented in [`debug-api.md`](./debug-api.md).
 
 ### Outbound webhook management
 
-`GET|PUT|DELETE /api/v1/notification-webhook`, `admin` scope: register the endpoint this workspace
-pushes to, read what is registered, or unregister. Documented with the delivery contract it
-configures, in [Outbound webhook](#outbound-webhook-push) below.
+`GET|PUT|DELETE /api/v1/notification-webhook` and the
+`GET /api/v1/notification-webhooks` collection beside it, `admin` scope: register the endpoints this
+workspace pushes to, read what is registered, or unregister. Documented with the delivery contract
+they configure, in [Outbound webhooks](#outbound-webhooks-push) below.
 
-## Outbound webhook (push)
+## Outbound webhooks (push)
 
 Polling has no answer for the two cases that matter most: a parked run waits **indefinitely**, and a
-fully-successful run raises no notification at all. A workspace can register **one** outbound HTTPS
-endpoint and subscribe it to any of three delivery families:
+fully-successful run raises no notification at all. A workspace can register outbound HTTPS
+endpoints and subscribe each to any of three delivery families:
 
 - **Notification cards**: the same cards as `GET /api/v1/notifications`, pushed as they are raised
   and again as they are resolved.
@@ -1231,11 +1282,15 @@ curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: appl
   "$BASE/api/v1/notification-webhook"
 ```
 
-| Route                                 | Scope   | Notes                                                          |
-| ------------------------------------- | ------- | -------------------------------------------------------------- |
-| `GET /api/v1/notification-webhook`    | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when none is set. |
-| `PUT /api/v1/notification-webhook`    | `admin` | Register, edit or rotate. Returns the stored config.           |
-| `DELETE /api/v1/notification-webhook` | `admin` | Unregister. Idempotent, `204`.                                 |
+| Route                                             | Scope   | Notes                                                                  |
+| ------------------------------------------------- | ------- | ---------------------------------------------------------------------- |
+| `GET /api/v1/notification-webhook`                | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when none is set.         |
+| `PUT /api/v1/notification-webhook`                | `admin` | Register, edit or rotate. Returns the stored config.                   |
+| `DELETE /api/v1/notification-webhook`             | `admin` | Unregister. Idempotent, `204`.                                         |
+| `GET /api/v1/notification-webhooks`               | `admin` | `{ "webhooks": [ … ] }`, every endpoint, ordered by id. Not paginated. |
+| `GET /api/v1/notification-webhooks/:webhookId`    | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when that id has none.    |
+| `PUT /api/v1/notification-webhooks/:webhookId`    | `admin` | Register, edit or rotate ONE named endpoint.                           |
+| `DELETE /api/v1/notification-webhooks/:webhookId` | `admin` | Unregister one. Idempotent, `204`; siblings untouched.                 |
 
 `GET` returns the config with `hasSecret: true|false`; the secret itself is **write-only**, sealed
 at rest, never readable back. An `admin` key can rotate the signing secret but never learn the
@@ -1283,6 +1338,52 @@ are followed at most 5 times, each hop re-validated; a cross-origin hop drops th
 headers). For local development, a deployment can relax this with
 `NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS` / `NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS`
 ([environment variables](../../docs/environment-variables.md)).
+
+### Several endpoints, one per integration
+
+The routes above address **one** endpoint, the one whose id is `default`. A workspace can register
+up to **10**, each with its own URL, its own signing secret and its own three filters, addressed
+under `/api/v1/notification-webhooks/:webhookId`. That is what lets a second integration enroll
+without displacing the first: before the collection existed, registering a receiver overwrote
+whatever was already there, and the only symptom was that the previous one went quiet.
+
+**You choose the id**, and the route is idempotent by it, so a receiver enrolls itself on every cold
+start without tracking whether it has enrolled before and without a create-or-discover round trip it
+might be racing a second instance on. An id is 1-63 characters of lowercase letters, digits, `-` or
+`_`, starting with a letter or digit; anything else is refused with
+`details.reason: "invalid_webhook_id"`.
+
+```sh
+curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: application/json' \
+  -d '{
+    "url": "https://gatekeeper.example.com/cat-factory",
+    "name": "Cloudflare OS gatekeeper",
+    "secret": "<16-200 chars, THIS endpoint’s own signing secret>",
+    "runEvents": ["run.completed", "run.failed"]
+  }' \
+  "$BASE/api/v1/notification-webhooks/gatekeeper"
+```
+
+Everything else is identical to the singular routes: same `admin` floor, same keep-on-omit rule,
+same write-only secret, same SSRF guard, same `webhook_url_required` refusal. The two extras are
+`id` (which the projection now carries, and which the `default` entry reports like any other) and
+`name`, an operator-facing label that defaults to the id.
+
+A delivery **fans out**: every enabled endpoint subscribed to the family gets its own copy, signed
+with its own secret, delivered concurrently (up to six at a time) so a second receiver costs a run's
+settlement no extra latency. One receiver failing costs only its own delivery. `deliveryId` is
+unchanged and carries no endpoint segment: each receiver sees only its own copy, so the key it
+dedupes on is the same one it always was.
+
+The whole fan-out shares ONE retry budget rather than giving each endpoint its own, because the
+budget exists to bound what a run's settlement waits for. Delivery stays best-effort, as it always
+was: if enough subscribed receivers are slow enough to spend that budget between them, the endpoints
+behind them are logged as not attempted rather than delivered late. A receiver that needs a
+guarantee should treat the push as a prompt and reconcile over the polling endpoints.
+
+Registering an 11th endpoint is refused with `409` and
+`details.reason: "webhook_limit_reached"` (`details.limit` carries the cap). Editing or removing an
+existing endpoint is admitted regardless, since those are the actions that resolve it.
 
 ### Delivery contract
 

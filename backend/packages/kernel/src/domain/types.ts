@@ -165,6 +165,7 @@ export type {
   TaskDependencyLink,
   SourceTask,
   TaskSearchResult,
+  IssueIntakePredicate,
   // Bug hunt: the interactive dual of the recurring `bug-intake` step.
   TrackerBoard,
   BugCandidate,

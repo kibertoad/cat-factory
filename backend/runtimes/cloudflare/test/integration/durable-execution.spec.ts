@@ -121,6 +121,29 @@ describe('durable execution: agent failure handling', () => {
     ).rejects.toThrow('boom')
   })
 
+  it("PERSISTS an inline step's diagnostics before the call that can throw past them", async () => {
+    // The failure the block exists to explain is the one that never returns: under
+    // `rethrowAgentErrors` (both durable drivers) the inline throw propagates out of the
+    // dispatch and `failRun` re-reads the run from STORAGE, so a block that only ever reached
+    // the in-memory instance is gone. `ThrowingAgentExecutor` previews no model, which used to
+    // be the exact condition under which the pre-dispatch persist was skipped.
+    const { wsId, pipelineId } = await seedWorkspaceWithCompanionFreePipeline()
+    const c = buildContainer(env, {
+      agentExecutor: new ThrowingAgentExecutor(),
+      workRunner: new FakeWorkRunner(),
+    })
+    const instance = await c.executionService.start(wsId, 'task_login', pipelineId)
+
+    await expect(
+      advanceUntilHalt(c, wsId, instance.id, { rethrowAgentErrors: true }),
+    ).rejects.toThrow('boom')
+
+    const reloaded = await new D1ExecutionRepository({ db: env.DB, clock }).get(wsId, instance.id)
+    const dispatch = reloaded!.diagnostics?.lastDispatch
+    expect(dispatch?.executionBackend).toBe('inline')
+    expect(dispatch?.agentKind).toBeTruthy()
+  })
+
   it('swallows the error into step output by default', async () => {
     const { wsId, pipelineId } = await seedWorkspaceWithCompanionFreePipeline()
     const c = buildContainer(env, {
@@ -218,7 +241,7 @@ describe('durable execution: sweeper', () => {
     const result = await sweepStuckRuns({
       agentRunRepository,
       // `missing` => the instance was lost, so it is safe to (re-)create.
-      instanceState: async () => 'missing',
+      instanceState: async () => ({ state: 'missing' }),
       redrive: async (ref) => {
         redrove.push(ref)
       },
@@ -247,7 +270,7 @@ describe('durable execution: sweeper', () => {
     const finalized: AgentRunRef[] = []
     const result = await sweepStuckRuns({
       agentRunRepository,
-      instanceState: async () => 'alive',
+      instanceState: async () => ({ state: 'alive' }),
       redrive: async (ref) => {
         redrove.push(ref)
       },
@@ -282,7 +305,7 @@ describe('durable execution: sweeper', () => {
       agentRunRepository,
       // `terminal` => the instance ran and ended; it can't be recreated under the
       // same id, so the sweeper must finalize (not re-drive) the orphaned run.
-      instanceState: async () => 'terminal',
+      instanceState: async () => ({ state: 'terminal' }),
       redrive: async (ref) => {
         redrove.push(ref)
       },
@@ -316,7 +339,7 @@ describe('durable execution: sweeper', () => {
     const redrove: AgentRunRef[] = []
     const result = await sweepStuckRuns({
       agentRunRepository,
-      instanceState: async () => 'missing',
+      instanceState: async () => ({ state: 'missing' }),
       redrive: async (ref) => {
         redrove.push(ref)
       },
@@ -346,7 +369,7 @@ describe('durable execution: sweeper', () => {
     const result = await sweepStuckRuns({
       agentRunRepository,
       // Instance never came back; recovery would just re-create-and-lose it forever.
-      instanceState: async () => 'missing',
+      instanceState: async () => ({ state: 'missing' }),
       redrive: async (ref) => {
         redrove.push(ref)
       },
@@ -403,7 +426,7 @@ describe('durable execution: sweeper', () => {
     const sweep = () =>
       sweepStuckRuns({
         agentRunRepository,
-        instanceState: async () => 'missing',
+        instanceState: async () => ({ state: 'missing' }),
         redrive: async (ref) => {
           redrove.push(ref)
         },
@@ -459,12 +482,116 @@ describe('durable execution: sweeper', () => {
     }
 
     // Tick 1: missing → clock started.
-    await sweepStuckRuns({ ...base, instanceState: async () => 'missing' })
+    await sweepStuckRuns({ ...base, instanceState: async () => ({ state: 'missing' }) })
     expect(orphanedSince.has(instance.id)).toBe(true)
 
     // Tick 2: instance came back alive → clock forgotten.
-    await sweepStuckRuns({ ...base, instanceState: async () => 'alive' })
+    await sweepStuckRuns({ ...base, instanceState: async () => ({ state: 'alive' }) })
     expect(orphanedSince.has(instance.id)).toBe(false)
+  })
+
+  it('takes no action on a run whose instance it could not classify', async () => {
+    const wsId = await seedWorkspace()
+    const starter = buildContainer(env, {
+      agentExecutor: new FakeAgentExecutor(),
+      workRunner: new FakeWorkRunner(),
+    })
+    await starter.executionService.start(wsId, 'task_login', 'pl_simple')
+
+    const redrove: AgentRunRef[] = []
+    const finalized: AgentRunRef[] = []
+    const result = await sweepStuckRuns({
+      agentRunRepository: new D1AgentRunRepository({ db: env.DB }),
+      // The shape a Workflows outage produces: the probe answered nothing about the run.
+      // Both of the dispositions available here act destructively on a run that may be fine,
+      // so the pass must leave it and say so.
+      instanceState: async () => ({ state: 'unknown', detail: 'lookup refused' }),
+      redrive: async (ref) => {
+        redrove.push(ref)
+      },
+      finalizeOrphan: async (ref) => {
+        finalized.push(ref)
+      },
+      failStalled: async () => {},
+      clock,
+      leaseMs: -60_000,
+      hardStallMs: 60 * 60 * 1000,
+    })
+
+    expect(result.unknown).toBeGreaterThanOrEqual(1)
+    expect(result.redriven).toBe(0)
+    expect(result.finalized).toBe(0)
+    expect(result.stalled).toBe(0)
+    expect(redrove.length).toBe(0)
+    expect(finalized.length).toBe(0)
+  })
+
+  it('does not let an unclassifiable tick age the hard-stall deadline', async () => {
+    const wsId = await seedWorkspace()
+    const starter = buildContainer(env, {
+      agentExecutor: new FakeAgentExecutor(),
+      workRunner: new FakeWorkRunner(),
+    })
+    const instance = await starter.executionService.start(wsId, 'task_login', 'pl_simple')
+
+    const orphanedSince = new Map<string, number>()
+    const stalledRuns: AgentRunRef[] = []
+    const base = {
+      agentRunRepository: new D1AgentRunRepository({ db: env.DB }),
+      redrive: async () => {},
+      finalizeOrphan: async () => {},
+      failStalled: async (ref: AgentRunRef) => {
+        stalledRuns.push(ref)
+      },
+      clock,
+      leaseMs: -60_000,
+      hardStallMs: 60 * 60 * 1000,
+      orphanedSince,
+    }
+
+    // Tick 1: observed orphaned, and the clock is already past the deadline.
+    await sweepStuckRuns({ ...base, instanceState: async () => ({ state: 'missing' }) })
+    orphanedSince.set(instance.id, Date.now() - 2 * 60 * 60 * 1000)
+
+    // Tick 2 during an outage: the run was NOT observed orphaned, so the deadline it had
+    // accumulated is dropped rather than cashed in. Carrying it instead is how a Workflows
+    // incident would come out the far side as a batch of `stalled` runs nobody re-drove.
+    await sweepStuckRuns({ ...base, instanceState: async () => ({ state: 'unknown' }) })
+    expect(orphanedSince.has(instance.id)).toBe(false)
+    expect(stalledRuns.length).toBe(0)
+
+    // Tick 3, recovered: the run is re-driven again before it can be given up on.
+    const third = await sweepStuckRuns({
+      ...base,
+      instanceState: async () => ({ state: 'missing' }),
+    })
+    expect(third.stalled).toBe(0)
+    expect(third.redriven).toBeGreaterThanOrEqual(1)
+  })
+
+  it('carries a terminal instance error into the finalize reason', async () => {
+    const wsId = await seedWorkspace()
+    const starter = buildContainer(env, {
+      agentExecutor: new FakeAgentExecutor(),
+      workRunner: new FakeWorkRunner(),
+    })
+    const instance = await starter.executionService.start(wsId, 'task_login', 'pl_simple')
+
+    const causes: (string | undefined)[] = []
+    await sweepStuckRuns({
+      agentRunRepository: new D1AgentRunRepository({ db: env.DB }),
+      instanceState: async () => ({ state: 'terminal', detail: 'Error: step exceeded retries' }),
+      redrive: async () => {},
+      finalizeOrphan: async (ref, cause) => {
+        if (ref.id === instance.id) causes.push(cause)
+      },
+      failStalled: async () => {},
+      clock,
+      leaseMs: -60_000,
+      hardStallMs: 60 * 60 * 1000,
+    })
+
+    expect(causes).toContain('Error: step exceeded retries')
   })
 })
 

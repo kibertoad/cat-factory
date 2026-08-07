@@ -14,7 +14,7 @@ import type { ConformanceHarness } from '../harness.js'
 // controller wiring. A facade that mounts the decision routes but forgets the review store — or
 // persists `intakeOrigin` on one runtime only — fails here instead of shipping divergent behaviour.
 //
-// See docs/initiatives/headless-clarification-loop.md.
+// See backend/docs/adr/0047-headless-clarification-loop.md.
 
 /** Mint a public-API key of the given scope and return its bearer header. */
 async function mintKey(

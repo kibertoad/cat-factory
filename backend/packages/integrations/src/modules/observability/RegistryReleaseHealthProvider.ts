@@ -1,5 +1,7 @@
+import { createOrgSecretCipher } from '@cat-factory/kernel'
 import type {
   BlockRepository,
+  OrgSecretCipher,
   ObservabilityConnectionRepository,
   ReleaseEvidence,
   ReleaseHealthConfigRecord,
@@ -8,6 +10,7 @@ import type {
   ReleaseHealthReport,
   ReleaseSignal,
   SecretCipher,
+  SecretDelegate,
 } from '@cat-factory/kernel'
 import type { ObservabilityProviderRegistry } from './registry.js'
 
@@ -35,6 +38,12 @@ export interface RegistryReleaseHealthProviderDependencies {
   blockRepository: BlockRepository
   /** Decrypts the workspace's sealed credentials blob at call time. */
   secretCipher: SecretCipher
+  /**
+   * Present ONLY on a mothership-mode node, where the connection row was sealed under the
+   * MOTHERSHIP's key and this process holds none. The gate probe runs wherever the RUN runs, so
+   * without it a mothership-mode deployment could save a connection and never probe with it.
+   */
+  secretDelegate?: SecretDelegate
   /** The provider adapters this facade can build. */
   registry: ObservabilityProviderRegistry
   /** Override fetch (tests). */
@@ -50,7 +59,14 @@ export interface RegistryReleaseHealthProviderDependencies {
  * a `healthy`/empty report when nothing is configured (the gate passes through).
  */
 export class RegistryReleaseHealthProvider implements ReleaseHealthProvider {
-  constructor(private readonly deps: RegistryReleaseHealthProviderDependencies) {}
+  private readonly orgSecrets: OrgSecretCipher
+
+  constructor(private readonly deps: RegistryReleaseHealthProviderDependencies) {
+    this.orgSecrets = createOrgSecretCipher({
+      cipher: deps.secretCipher,
+      ...(deps.secretDelegate ? { delegate: deps.secretDelegate } : {}),
+    })
+  }
 
   async probe(workspaceId: string, blockId: string, since: number): Promise<ReleaseHealthReport> {
     const resolved = await this.resolve(workspaceId, blockId)
@@ -98,7 +114,10 @@ export class RegistryReleaseHealthProvider implements ReleaseHealthProvider {
     if (!factory) return null
 
     const credentials: unknown = JSON.parse(
-      await this.deps.secretCipher.decrypt(connection.credentials),
+      await this.orgSecrets.decryptFor(
+        { source: 'observability_connection', workspaceId },
+        connection.credentials,
+      ),
     )
     const adapter = factory(credentials, { fetchImpl: this.deps.fetchImpl })
     return { adapter, config }

@@ -347,6 +347,8 @@
       "intakeNoSources": "課題を取り込むには、まずタスクソースを接続してください。",
       "intakeNoIntakeSources": "タスクソースは接続されていますが、接続済みのソースはいずれもまだ定期的な課題検索を実行できません。",
       "intakeGithubRepo": "リポジトリ",
+      "intakeGitlabProject": "プロジェクト",
+      "intakeGitlabProjectHelp": "GitLab プロジェクトのフルパス。サブグループを含みます (例: group/sub/project)。",
       "intakeBoardId": "ボード ID",
       "intakeBoardIdHelp": "このトラッカーが取り込み対象とするボード、プロジェクト、またはキュー。形式はトラッカーが定めます。",
       "trackerTrigger": "トラッカーの Webhook から実行を開始",
@@ -358,6 +360,7 @@
       "intakeLabels": "ラベル",
       "intakeLabelsPlaceholder": "カンマ区切り",
       "intakeIssueType": "課題タイプ",
+      "intakeIssueTypeUnsupported": "{tracker} には「bug」を意味する課題タイプがないため、このスケジュールでは適用されません。代わりにラベルで取得対象を絞り込んでください。",
       "intakeInProgressLabel": "進行中ラベル",
       "refusalPerTicketRequiresOnDemand": "トラッカー起動のスケジュールはオンデマンドである必要があります。定期実行のタイミングには、割り当てるチケットがありません。",
       "refusalPerTicketConflictsWithBugIntake": "このパイプラインはボードから自分で課題を選ぶため、送信されたチケットで駆動することはできません。bug-intake ステップのないパイプラインを選んでください。"
@@ -588,7 +591,8 @@
         "ticket_already_linked": "この課題にはすでにタスクがあります",
         "document_already_linked": "ドキュメントは既に添付されています",
         "dry_run_not_mergeable": "ドライランはマージできません",
-        "submission_not_allowed": "この実行ではマージできません"
+        "submission_not_allowed": "この実行ではマージできません",
+        "webhook_limit_reached": "Webhook の上限に達しました"
       },
       "description": {
         "dependencies_unmet": "このタスクは、まだ完了していない他のタスクに依存しています。それらを完了または解除してから、もう一度開始してください。",
@@ -626,7 +630,8 @@
         "ticket_already_linked": "1 つの課題が支えられるタスクは 1 つだけです。もう一度リンクすると、既存のタスクは作成時の文脈を失います。代わりにそのタスクを開くか、先に課題のリンクを解除してください。",
         "document_already_linked": "そのドキュメントは別のタスクに添付されています。先にそちらで添付を解除するか、別のコピーを添付してください。",
         "dry_run_not_mergeable": "このプルリクエストはドライランによるものなので、ここからはマージできません。このワークスペースがマージするプルリクエストを作るには、タスクを通常の実行として開始し直してください。",
-        "submission_not_allowed": "このタスクのマージポリシーでは、実行を開始したロールがこの種類の変更をマージすることを許可していません。マージできるロールのメンバーが対応するか、管理者がマージプリセットでポリシーを広げてください。"
+        "submission_not_allowed": "このタスクのマージポリシーでは、実行を開始したロールがこの種類の変更をマージすることを許可していません。マージできるロールのメンバーが対応するか、管理者がマージプリセットでポリシーを広げてください。",
+        "webhook_limit_reached": "このワークスペースには送信 Webhook がすでに上限数まで登録されています。不要なものを削除してから、もう一度登録してください。"
       },
       "action": {
         "connectGitHub": "GitHub に接続",
@@ -4495,6 +4500,7 @@
     "boardsFailed": "ボードを読み込めませんでした: {reason}",
     "issueType": "課題タイプ",
     "issueTypeHelp": "既定は bug です。課題タイプを持たないトラッカーでは無視されます。",
+    "issueTypeUnsupported": "{tracker} には「bug」を意味する課題タイプがないため、このフィルターは適用されません。代わりにラベルでスキャンを絞り込んでください。",
     "labels": "ラベル",
     "labelsHelp": "カンマ区切り。すべて付いている必要があります。",
     "adoptInto": "選んだバグの追加先",

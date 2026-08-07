@@ -38,6 +38,13 @@ export interface NodeAccountDepsInput {
   providerRegistry: ProviderRegistry
   /** The package-registry cipher built by {@link buildNodeRunServices} (management-API side). */
   packageRegistrySecretCipher: CoreDependencies['packageRegistrySecretCipher']
+  /**
+   * Mothership-mode secret delegation. The two gate providers below open a SEALED connection row
+   * at PROBE time, and in mothership mode that row was sealed under the mothership's key, so
+   * without this a mothership-mode node saves a release-health connection it can never probe with
+   * and an incident enrichment that silently no-ops.
+   */
+  secretDelegate?: CoreDependencies['secretDelegate']
   contentStorageDefaultBackend?: ContentStorageBackend
   caches?: AppCaches
 }
@@ -120,6 +127,7 @@ export function buildNodeAccountDeps(input: NodeAccountDepsInput) {
         releaseHealthConfigRepository: repos.releaseHealthConfigRepository,
         blockRepository: repos.blockRepository,
         secretCipher: observabilitySecretCipher,
+        ...(input.secretDelegate ? { secretDelegate: input.secretDelegate } : {}),
         registry: defaultObservabilityRegistry(),
       }),
     )
@@ -154,6 +162,8 @@ export function buildNodeAccountDeps(input: NodeAccountDepsInput) {
       new WorkspaceIncidentEnrichmentProvider({
         incidentEnrichmentConnectionRepository: repos.incidentEnrichmentConnectionRepository,
         secretCipher: incidentEnrichmentSecretCipher,
+        ...(input.secretDelegate ? { secretDelegate: input.secretDelegate } : {}),
+        logger,
       }),
     )
   }

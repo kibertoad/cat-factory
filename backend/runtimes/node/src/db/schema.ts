@@ -862,20 +862,31 @@ export const initiatives = pgTable(
 // its caller by push. `secret_sealed` is the signing secret encrypted with the deployment
 // SecretCipher (never read back over the API); `types` is a JSON array of notification types where
 // EMPTY means "the defaults", not "everything".
-export const notificationWebhooks = pgTable('notification_webhooks', {
-  workspace_id: text('workspace_id').primaryKey(),
-  url: text('url').notNull(),
-  types: text('types').notNull().default('[]'),
-  // The run-lifecycle subscription (D1 migration 0072). EMPTY means NONE, unlike `types` above:
-  // an endpoint registered before run events existed must not start receiving a new family.
-  run_events: text('run_events').notNull().default('[]'),
-  // The platform-health subscription (D1 migration 0080) — the family an ON-CALL system is paged
-  // by. EMPTY means NONE, like `run_events` and for the sharper version of the same reason.
-  alert_events: text('alert_events').notNull().default('[]'),
-  enabled: integer('enabled').notNull().default(1),
-  secret_sealed: text('secret_sealed'),
-  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-})
+export const notificationWebhooks = pgTable(
+  'notification_webhooks',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    // The caller-chosen endpoint id (D1 migration 0085). `default` is the one the singular
+    // `/api/v1/notification-webhook` routes address, so an endpoint registered before the
+    // collection existed keeps its route.
+    id: text('id').notNull(),
+    name: text('name').notNull(),
+    url: text('url').notNull(),
+    types: text('types').notNull().default('[]'),
+    // The run-lifecycle subscription (D1 migration 0072). EMPTY means NONE, unlike `types` above:
+    // an endpoint registered before run events existed must not start receiving a new family.
+    run_events: text('run_events').notNull().default('[]'),
+    // The platform-health subscription (D1 migration 0080) — the family an ON-CALL system is paged
+    // by. EMPTY means NONE, like `run_events` and for the sharper version of the same reason.
+    alert_events: text('alert_events').notNull().default('[]'),
+    enabled: integer('enabled').notNull().default(1),
+    secret_sealed: text('secret_sealed'),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  // No separate `workspace_id` index: it leads the composite key, so the per-workspace list every
+  // delivery reads is already served.
+  (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
+)
 
 // A workspace's binding to a self-hosted runner pool (mirror of D1 migration 0013):
 // the validated manifest + the encrypted scheduler-API secret bundle. The container
@@ -1305,6 +1316,11 @@ export const publicApiKeys = pgTable(
     // minted, which is what the `idx_public_api_keys_minter` index below serves. Not a FK, for
     // the same reason `created_by_user_id` is not: the row must survive its minter's removal.
     created_by_key_id: text('created_by_key_id'),
+    // Who the key acts for on the PROVISIONER's side, supplied at a headless mint (D1 migration
+    // 0086). Opaque: never parsed, never resolved, never an authorization input — so it carries no
+    // index and no constraint beyond nullability. Written once; a run pins its own copy at
+    // admission rather than joining back to here.
+    external_identity: text('external_identity'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     last_used_at: bigint('last_used_at', { mode: 'number' }),
     revoked_at: bigint('revoked_at', { mode: 'number' }),

@@ -95,7 +95,7 @@ export interface MergeTrackRecordServiceDependencies {
  * classification or persistence fault must NEVER block or fail a merge. The read paths
  * (`rollups`, `tag`) are ordinary request-scoped operations and do throw.
  *
- * Full design: `docs/initiatives/merge-track-record.md`.
+ * Full design: `backend/docs/adr/0046-merge-track-record.md`.
  */
 export class MergeTrackRecordService {
   private readonly log: Logger

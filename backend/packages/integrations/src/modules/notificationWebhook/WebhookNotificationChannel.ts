@@ -13,7 +13,7 @@ import type {
   SecretCipher,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
-import { postSignedWebhook } from './signedDelivery.js'
+import { fanOutSignedWebhook } from './signedDelivery.js'
 import { WEBHOOK_SIGNATURE_HEADERS } from './webhookSignature.js'
 
 // WebhookNotificationChannel: an outbound HTTP delivery transport for the existing notification
@@ -25,11 +25,12 @@ import { WEBHOOK_SIGNATURE_HEADERS } from './webhookSignature.js'
 // watch and no browser to hold a WebSocket open, so without a push it can only learn that its run
 // parked by polling. That matters most for the clarification loop: a parked run waits for a human
 // INDEFINITELY, so "the caller will notice eventually" is not a design (see
-// `docs/initiatives/headless-clarification-loop.md`, D3).
+// `backend/docs/adr/0047-headless-clarification-loop.md`, D3).
 //
-// The retry/SSRF/signing machinery lives in `signedDelivery.ts`, shared with the run-lifecycle
-// sink that POSTs to the SAME registered endpoint — those are properties of the endpoint, not of
-// the payload.
+// The retry/SSRF/signing machinery lives in `signedDelivery.ts`, shared with the two sinks that
+// POST to the SAME registered endpoints — those are properties of the endpoint, not of the
+// payload. A workspace can register several, so a card fans out to every endpoint whose `types`
+// filter admits it, isolated per endpoint.
 //
 // Runtime-neutral (fetch + decrypt + one DB read), so it lives here in @cat-factory/integrations
 // and serves BOTH runtime facades unchanged.
@@ -57,7 +58,7 @@ export interface WebhookNotificationChannelDependencies {
    */
   onError?: (
     error: unknown,
-    context: { workspaceId: string; notificationId: string; type: string },
+    context: { workspaceId: string; notificationId: string; type: string; webhookId?: string },
   ) => void
   /**
    * Where a spent delivery is COUNTED, beside the per-failure report `onError` makes. The
@@ -78,30 +79,29 @@ export class WebhookNotificationChannel implements NotificationChannel {
       // Best-effort: never let a receiver outage/misconfig break the notification lifecycle
       // (CompositeNotificationChannel also isolates us, belt-and-braces). Surface it through the
       // optional observability hook so the failure is diagnosable instead of silently dropped.
-      this.deps.onError?.(error, {
-        workspaceId,
-        notificationId: notification.id,
-        type: notification.type,
-      })
-      // The notification TYPE is a bounded enum, so it is safe as a dimension and is the one
-      // split worth having: an endpoint that only fails on a particular card is a receiver
-      // bug, where a flat failure across types is an outage.
-      this.deps.operationalMetrics?.increment('notification.delivery_failed', {
-        channel: 'webhook',
-        type: notification.type,
-      })
+      //
+      // With the fan-out below reporting each endpoint's own failure, what reaches HERE is the
+      // read or the compose failing — a fault of the workspace's configuration rather than of any
+      // one receiver, which is why this report names no `webhookId`.
+      this.reportFailure(error, workspaceId, notification)
     }
   }
 
   private async post(workspaceId: string, notification: Notification): Promise<void> {
-    const webhook = await this.deps.notificationWebhookRepository.get(workspaceId)
-    if (!webhook || !webhook.enabled) return
-    if (!deliversType(webhook, notification.type)) return
+    const endpoints = (await this.deps.notificationWebhookRepository.list(workspaceId)).filter(
+      (webhook) => webhook.enabled && deliversType(webhook, notification.type),
+    )
+    if (endpoints.length === 0) return
 
     const body: NotificationWebhookDelivery = {
       // Stable per notification-and-status: a retried attempt repeats it, so a receiver dedupes on
       // it. The status suffix keeps the delivery of a RESOLVED card (channels are re-delivered on
       // resolve) distinct from the original open one, which is a genuinely different event.
+      //
+      // Deliberately NOT scoped by endpoint: each receiver only ever sees its own copy, so an
+      // endpoint segment would put a value in the dedupe key that no receiver can act on, and
+      // would break the one case where two subscriptions DO collapse correctly (the same URL
+      // registered twice, which should deliver one card once).
       deliveryId: `${notification.id}-${notification.status}`,
       sentAt: this.deps.clock.now(),
       workspaceId,
@@ -109,11 +109,33 @@ export class WebhookNotificationChannel implements NotificationChannel {
       taskId: notification.blockId,
       notification,
     }
-    await postSignedWebhook(this.deps, {
-      url: webhook.url,
-      secretSealed: webhook.secretSealed,
-      payload: JSON.stringify(body),
-      sentAt: body.sentAt,
+    await fanOutSignedWebhook(
+      this.deps,
+      endpoints,
+      { payload: JSON.stringify(body), sentAt: body.sentAt },
+      (error, target) => this.reportFailure(error, workspaceId, notification, target.id),
+    )
+  }
+
+  private reportFailure(
+    error: unknown,
+    workspaceId: string,
+    notification: Notification,
+    webhookId?: string,
+  ): void {
+    this.deps.onError?.(error, {
+      workspaceId,
+      notificationId: notification.id,
+      type: notification.type,
+      ...(webhookId === undefined ? {} : { webhookId }),
+    })
+    // The notification TYPE is a bounded enum, so it is safe as a dimension and is the one
+    // split worth having: an endpoint that only fails on a particular card is a receiver
+    // bug, where a flat failure across types is an outage. The webhook ID is deliberately NOT a
+    // dimension: it is operator-chosen, so every workspace's naming would mint its own series.
+    this.deps.operationalMetrics?.increment('notification.delivery_failed', {
+      channel: 'webhook',
+      type: notification.type,
     })
   }
 }

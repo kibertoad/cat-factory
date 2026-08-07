@@ -1325,6 +1325,21 @@ export const executionInstanceSchema = v.object({
    */
   initiatedByRole: v.optional(v.nullable(workspaceRoleSchema)),
   /**
+   * Who the run was started FOR, on the CALLER's side: the `externalIdentity` of the public-API
+   * key that admitted it, as that key's provisioner named it. Absent for every run the public API
+   * did not start, and for one started by a key minted without an identity.
+   *
+   * Pinned at admission for the same reason {@link executionInstanceSchema.entries.initiatedByRole}
+   * is, plus one of its own. A key can be revoked (which is exactly what an integration does when
+   * a person leaves) and revocation must not erase who a finished run was for; re-reading the key
+   * per run would also put a credential lookup on every run projection, including paged ones.
+   *
+   * Provenance only, never an authorization input: it names an identity the platform cannot
+   * resolve and deliberately does not try to. What the run may do is its `initiatedByRole` and
+   * its {@link executionInstanceSchema.entries.mode}.
+   */
+  initiatedByExternalIdentity: v.optional(v.nullable(v.string())),
+  /**
    * Whether this run may land its work ({@link runModeSchema}). Absent on legacy runs ⇒ `live`,
    * which is what they were. Carried forward across retry/restart: a dry run stays a dry run, or
    * the sandbox would be one retry deep.
@@ -1366,9 +1381,10 @@ export const executionInstanceSchema = v.object({
    */
   rev: v.optional(v.number()),
   /**
-   * After-the-fact investigation context — where/what the run's most recent container step
-   * executed on (backend, model, repo) plus the control-plane host. Rides in the `detail` JSON
-   * (see {@link runDiagnosticsSchema}); absent on legacy runs and pure inline pipelines.
+   * After-the-fact investigation context: where/what the run's most recent step dispatched
+   * to (backend, model, repo), how that dispatch ended if it never reached a running job, plus
+   * the control-plane host. Rides in the `detail` JSON (see {@link runDiagnosticsSchema});
+   * absent on legacy runs and on a run that has not dispatched a step yet.
    */
   diagnostics: v.optional(runDiagnosticsSchema),
   /**

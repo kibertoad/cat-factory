@@ -132,6 +132,7 @@ function configuredBoard(config: IntakeConfig): string | undefined {
     board.jiraProjectKey?.trim() ||
     board.linearTeamId?.trim() ||
     board.githubRepo?.trim() ||
+    board.gitlabProject?.trim() ||
     board.boardId?.trim() ||
     undefined
   )
@@ -141,6 +142,12 @@ function configuredBoard(config: IntakeConfig): string | undefined {
  * Case-insensitive comparison, because the two sides are typed by different hands: a Jira project
  * key and a GitHub `owner/repo` are both case-insensitive at the vendor, and the operator typed
  * one of them into a form. A Linear team UUID is unaffected by folding case.
+ *
+ * A GitLab project path is the one member the vendor treats as case-SENSITIVE, so this fold is
+ * more forgiving than GitLab itself would be. It is unreachable today (GitLab has no webhook
+ * adapter, so no delivery ever gets here) and belongs to the slice that adds one, which is where
+ * a per-source comparison could be threaded through from the provider's own `repoScope` rules
+ * rather than guessed at here.
  */
 function sameBoard(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase()

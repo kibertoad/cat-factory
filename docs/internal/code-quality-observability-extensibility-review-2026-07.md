@@ -41,7 +41,7 @@ Companion documents this review builds on (rather than re-deriving):
 [`race-condition-audit-2026-07.md`](./race-condition-audit-2026-07.md),
 [ADR 0028](../../backend/docs/adr/0028-registry-di.md) (which the `registry-di-migration`
 tracker became),
-[`initiatives/platform-operator-observability.md`](../initiatives/platform-operator-observability.md),
+[ADR 0048](../../backend/docs/adr/0048-platform-operator-observability.md),
 and [`initiatives/system-audit-improvements.md`](../initiatives/system-audit-improvements.md).
 
 **Repo size as of `0c08604`:** ~261,500 lines of non-test TypeScript + ~96,900 lines of
@@ -259,11 +259,11 @@ graph; worth a deliberate pin-audit per bump.
 The story is still **richest at the single-run level**, but that level has moved from
 "excellent drill-down" to near-exemplary since the last revision, while the platform-level
 gaps (tracing, metrics surface, client error reporting) re-verify as unchanged. The
-project's own diagnosis in `initiatives/platform-operator-observability.md` has landed
-rollups, an operator dashboard, threshold alerting, and OTLP gauge export; still open there:
-per-step/gate attempt stats (needs a queryable gate-attempt projection), the per-deployment
-threshold settings UI, and the optional daily rollup table for trends past the telemetry
-retention window.
+project's own diagnosis, now [ADR 0048](../../backend/docs/adr/0048-platform-operator-observability.md), has landed
+rollups, an operator dashboard, threshold alerting, and OTLP gauge export. The three items open
+at the time of this review (per-step/gate attempt stats, the per-deployment threshold settings
+UI, and the daily rollup table for trends past the telemetry retention window) have since
+landed too, which is what closed that initiative.
 
 **Strong:**
 

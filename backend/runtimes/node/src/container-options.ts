@@ -130,6 +130,15 @@ export interface NodeContainerOptions {
    */
   providerApiKeyRepository?: ProviderApiKeyRepository
   /**
+   * Mothership-mode SECRET DELEGATION: opens (and seals) the ORG-owned credentials a laptop holds
+   * no key for, over the mothership's `/internal/secrets/{unseal,seal}`. The mirror image of the
+   * credential overrides above: those keep a LAPTOP's own secrets off the mothership; this makes
+   * the ORG's secrets usable on the laptop without ever moving the key. Threaded onto
+   * `CoreDependencies.secretDelegate` and into the two gate providers the composition root wires
+   * directly. Undefined (every hosted deployment) ⇒ the local cipher, unchanged.
+   */
+  secretDelegate?: CoreDependencies['secretDelegate']
+  /**
    * Override the per-user locally-run model-endpoint repository (the symmetric local-sqlite
    * credential seam to {@link providerApiKeyRepository}). Undefined → the Drizzle repo over
    * {@link db}.

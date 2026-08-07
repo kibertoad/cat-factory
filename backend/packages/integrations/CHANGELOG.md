@@ -1,5 +1,234 @@
 # @cat-factory/integrations
 
+## 0.146.0
+
+### Minor Changes
+
+- 17687a1: Let a headless provisioner say who a key acts for, and carry that onto the runs the key starts
+
+  `POST /api/v1/keys` accepts an optional `externalIdentity`: an opaque string naming who, on the
+  CALLER's side, the key acts for. An integration that mints one key per person (the Cloudflare OS
+  gatekeeper of `docs/initiatives/cloudflare-os-gatekeeper.md` is the motivating consumer) could
+  already get real per-user attribution, but only by keeping its own keyId-to-person table and
+  joining it against every run it read. The field removes that table: the identity is echoed on the
+  key resource, on `GET /api/v1/me`, and on both run projections (`publicRun`, `publicJob`) as the
+  identity the run was started for.
+
+  It is opaque in the strongest sense: stored verbatim, never parsed, never resolved against a user,
+  never an authorization input. What a key may do is still its `scope`; what a run may do is still
+  its pinned role and mode. Bounded at 200 characters and refused if it carries control characters,
+  because it is echoed onto surfaces that later render it.
+
+  The run's copy is PINNED at admission rather than resolved from the key on read, which is the
+  decision worth reviewing. Revoking a per-user key is exactly what an integration does when someone
+  leaves, and that must not erase who a finished run was for; pinning also keeps a page of runs from
+  becoming a page of credential reads, and matches what the run already does with `initiatedByRole`
+  and `mode`. It rides `agent_runs.detail` through the shared mappers, so a retry carries it forward
+  (same work, same requester, whoever pressed retry) and the conformance case asserts it survives
+  both the store round-trip and the key's revocation on each facade.
+
+  A run's identity is not readable by every key. A key that carries an `externalIdentity` of its own
+  sees the value only on the runs started for that identity; a key with none (the provisioner, or
+  one a member minted in the app) sees every run's. Without the rule, the one-key-per-person
+  deployment this feature is built for would hand each person's key the roster of everyone else, and
+  the value is routinely an email. The run projections carry `externalIdentityWithheld` beside the
+  value so a withholding is STATED: `null` already means "this run names nobody", and reporting a
+  mapping the platform holds as one it never had is the failure the flag exists to prevent.
+
+  Two smaller calls: the identity is never inherited from the provisioning key, since a provisioner
+  mints for many identities and naming itself would attribute every run to the integration; and the
+  field is offered on the headless mint only, because the session-authed create already records
+  `createdByUserId`, an account the platform can resolve.
+
+  The validation splits along what can be PUBLISHED. The shipped `pattern` refuses the C0 controls,
+  DEL and the C1 controls, spelled with `\xHH` escapes because that is the one syntax ECMA-262, RE2,
+  PCRE, Python and Java all read: the `\uHHHH` spelling this started with is a parse error in RE2 and
+  PCRE, so it would have broken the Go client outright rather than rejected a value. U+2028 and
+  U+2029 have no portable spelling at all and are refused off the schema, which makes the published
+  pattern a necessary condition rather than a sufficient one.
+
+  Additive on the public surface: one optional request field, one nullable field plus its
+  withheld flag on the run projections, `null` being the correct answer for every key and run that
+  predates it. New nullable `external_identity` column on both stores (D1 0086, Drizzle). OpenAPI
+  `info.version` goes to 1.30.0 (1.29.0 was published by the dispatch-diagnostics change while this
+  branch was in flight).
+
+### Patch Changes
+
+- Updated dependencies [17687a1]
+  - @cat-factory/contracts@0.270.0
+  - @cat-factory/kernel@0.268.0
+
+## 0.145.0
+
+### Minor Changes
+
+- f0154ce: Let a GitLab-only deployment run the recurring bug-intake schedule and the interactive bug hunt.
+
+  The GitLab task source could import an issue you pointed at and search the project a service frame
+  was linked to, but neither of the two paths that PICK work by predicate: the recurring `bug-intake`
+  schedule and the bug hunt. So a shop running GitLab for both code and issues could have its agents
+  work in its repositories and still had to connect a second tracker to schedule anything.
+
+  `GitLabIssuesProvider` now implements `searchIssues`, `listBoards` and `listBugCandidates`, all
+  three riding the project-scoped issue read the earlier slice added: the scope is an ARGUMENT of the
+  request rather than a qualifier in a query string, and GitLab returns the description, labels, age
+  and note count in the same response, so a whole hunt scan is one call per page and never a
+  per-candidate fetch. A schedule scopes itself with a new `gitlabProject` board field (its own leg,
+  because a GitLab namespace nests and `owner/name` cannot express it) which the recurring-pipeline
+  modal now renders.
+
+  Two provider differences are stated rather than smoothed over. GitLab's issue search covers the
+  description as well as the title, so a title-fragment predicate now rides a new `textIn: 'title'`
+  narrowing: without it a schedule configured on a fragment would have started a pipeline on an issue
+  that merely mentions it in its body. And `issueType` is ignored, as it already is on Linear:
+  GitLab's own type vocabulary is `issue` / `incident` / `test_case` / `task`, which has no member
+  meaning "bug", and `bug` is exactly what intake defaults the predicate to, so a GitLab intake
+  narrows to bugs through a label instead.
+
+  This also fixes a live mis-routing the previous slice opened: the bug hunt mapped a caller's board
+  id onto the leg its provider reads with an `if`-chain that fell through to the opaque
+  deployment-registered leg, so every GitLab hunt handed its project path to a field no built-in
+  provider reads and reported an empty board. It is now an exhaustive record over the built-in
+  vocabulary, so a fifth built-in source fails to compile until it names its leg.
+
+  A predicate a source cannot evaluate is now declared rather than dropped in silence. GitLab and
+  Linear both ignore `issueType`, and both intake forms rendered the field anyway, so an operator
+  configuring a schedule saw a filter that was never applied: on an unattended `bug-intake` schedule,
+  whose default is `bug`, that starts the bugfix pipeline on whatever is oldest and open. A provider
+  now states its gaps on `TaskSourceProvider.ignoredIntakePredicates`, `TaskSourceState` carries them
+  to the SPA, and the recurring-schedule and bug-hunt modals replace the field with what to narrow
+  with instead. `intakePredicateSupport.test.ts` keeps a declaration honest by compiling each source's
+  query with and without each predicate, so the answer is read off the compiler rather than restated
+  beside it.
+
+  Two GitLab-specific corrections ride along. The intake walk now pages on GitLab's own
+  `Link: rel="next"` (carried out on the new `ProjectIssuePage`) instead of treating a short page as
+  the last one: `max_page_size` is an instance setting an administrator can lower below the overscan
+  size, and on such an instance every page is short, so the walk stopped after page 1 and reported a
+  board it never finished as exhausted. And a walk whose workspace has no GitLab connection now
+  refuses instead of returning an empty list, which the intake step renders as the cause of a
+  no-pickup fire rather than as "no matching open issues".
+
+  `ProjectIssuePage` replaces the bare hit array `VcsClient.searchProjectIssues` /
+  `GitHubClient.searchProjectIssues` returned. Both are internal ports with one implementation.
+
+- 2b74bd0: Let a mothership open the org credentials a mothership-mode node holds no key for
+
+  Mothership mode splits the encryption keys on purpose: a laptop seals its own agent and model
+  credentials under a local key, and the mothership's `ENCRYPTION_KEY` never travels. That split is
+  what made every sealed-blob repository safe to serve over the persistence RPC, and it is also what
+  left those blobs unreadable on the node. A row a hosted teammate wrote is sealed under the
+  mothership's key, so a mothership-mode node could save an infrastructure connection and never
+  provision with it, save a Datadog connection and never probe with it, and four earlier slices parked
+  a surface rather than ship it broken.
+
+  `POST /internal/secrets/unseal` and `POST /internal/secrets/seal` close that. The node names the
+  ROW, never the ciphertext: it posts a source from a closed table plus the row's identifiers, and the
+  mothership re-reads the authoritative row from its own store, binds the workspace to an account
+  exactly as the persistence RPC does, and decrypts under its own key. A compromised node token can
+  therefore only ask for a value it could already have read had it held the key, in an account it can
+  already reach, which is what keeps this from being a decryption oracle. The seal direction matters
+  just as much: a mothership-mode node provisions environments, and a row it sealed locally would be
+  unopenable by the mothership's own teardown with nothing saying so until a reclaim failed.
+
+  Consumers reach it through one kernel seam, `createOrgSecretCipher`. With no delegate wired (every
+  hosted deployment, and local mode over its own Postgres) it is a pass-through to the facade's own
+  cipher, so nothing changes there.
+
+  With provisioning writes now safe to persist, `environmentRegistryRepository.insert`/`update` join
+  the persistence allow-list, and so does `softDelete`, the tombstone half every re-provision and
+  every reclaim runs. A mothership-mode node therefore provisions, polls and tears down environments
+  for real, and the ephemeral-environment self-test runs end to end. Provisioning and teardown take
+  the delegate together rather than separately: teardown opens the very provision fields provisioning
+  sealed, so a node holding one and not the other could stand infrastructure up and never reclaim it.
+
+  A mothership-mode node may not itself answer the delegation endpoints. They are wired only where a
+  facade holds its own main database, because a node's `ENCRYPTION_KEY` is the local key that seals
+  its own agent credentials, and sealing an org row under it is the split this change removes.
+
+  Behaviour change worth knowing about on an existing mothership-mode node: rows it previously sealed
+  under its LOCAL key are no longer opened locally. Pre-1.0 internals break rather than grow a
+  compatibility path, so re-save an affected environment or observability connection; the key-drift
+  sweep reports them.
+
+  Deliberately still off, and stated in the tracker: the document/task source connections (their
+  repositories decrypt inside, so there is no sealed field for a row-addressed unseal to name), the
+  mothership-side Slack residual, and the sealed-blob consumers a mothership-mode node does not
+  currently drive. Each is a table entry plus service threading on the same pattern, not a new
+  mechanism.
+
+### Patch Changes
+
+- Updated dependencies [01bb6d2]
+- Updated dependencies [f0154ce]
+- Updated dependencies [eac67c5]
+- Updated dependencies [2b74bd0]
+  - @cat-factory/contracts@0.269.0
+  - @cat-factory/kernel@0.267.0
+
+## 0.144.0
+
+### Minor Changes
+
+- eaab22a: Register several NAMED outbound webhooks per workspace, instead of one that each integration overwrites
+
+  `/api/v1/notification-webhook` was one endpoint per workspace, which made a second integration's
+  enrolment a destructive act: registering it replaced whatever was already there, and the only symptom
+  was that the previous receiver went quiet. `GET /api/v1/notification-webhooks` plus
+  `GET|PUT|DELETE /api/v1/notification-webhooks/:webhookId` are the additive fix. The singular routes
+  keep working unchanged and now address the reserved id `default`, which appears in the collection
+  like any other entry, so the two surfaces are two views of one store rather than two stores.
+
+  The endpoint id is CALLER-CHOSEN and `PUT` is idempotent by it. That is what the motivating consumer
+  needs (a credential-holding front-end, the Cloudflare OS gatekeeper of
+  `docs/initiatives/cloudflare-os-gatekeeper.md`): a Worker booting cold writes its own well-known id
+  and is enrolled, whether or not it has ever run, with no id table of its own and no
+  create-or-discover round trip it might be racing a second instance on. A server-minted id would have
+  pushed exactly that state back onto the caller.
+
+  Each endpoint carries its own sealed signing secret and its own three filters, and every rule the
+  singular routes enforce holds identically: the `admin` floor, keep-on-omit in every field, the
+  write-only secret, the SSRF guard at the write boundary and per redirect hop. Deliveries FAN OUT to
+  every subscribed endpoint, concurrently but BOUNDED at six in flight, isolated per endpoint, and
+  sharing ONE wall-clock budget. All three are deliberate: the caller awaits the fan-out on a run's
+  terminal path, so serial delivery would make enrolling a second integration a latency cost on every
+  run; six is the Workers ceiling on simultaneous connections, past which a `fetch` queues invisibly
+  while the delivery's clock runs, so an unbounded fan-out reports failures it never attempted; and a
+  shared failure path would let one permanently broken receiver mask every sibling's health. An
+  endpoint the budget never reached is reported as not attempted rather than as a delivery failure.
+  `deliveryId` is unchanged and carries no endpoint segment, because each receiver only ever sees its
+  own copy.
+
+  Watch for two things in review. `notification_webhooks` is re-keyed to `(workspace_id, id)` on both
+  stores, and neither generator produces a migration that survives existing rows: the D1 side is the
+  usual SQLite rebuild, and drizzle-kit's in-place `ALTER` adds `name` as `NOT NULL` with no default,
+  so both are hand-healed (add nullable, backfill to `default` / `Default`, then constrain). And the
+  per-workspace cap of 10 is a 409 `webhook_limit_reached` that bounds only what CREATES an endpoint,
+  since disabling and deleting are the actions an operator at the cap needs. The cap is enforced in
+  the STORE, because counting in the service and writing a statement later admits two racing
+  enrolments, which is the access pattern this exists for: D1 gets it from one conditional upsert,
+  Postgres from a transaction-scoped advisory lock per workspace.
+
+  Additive on the public surface throughout: four new operations, and two new response fields (`id`,
+  `name`) on a projection consumers already tolerate unknown members of. OpenAPI `info.version` goes to
+  1.25.0 and all four SDK clients, the MCP facade and the gatekeeper bindings pick the operations up
+  from the same generation pass.
+
+### Patch Changes
+
+- Updated dependencies [eaab22a]
+  - @cat-factory/contracts@0.268.0
+  - @cat-factory/kernel@0.266.0
+
+## 0.143.1
+
+### Patch Changes
+
+- Updated dependencies [74ea2bc]
+  - @cat-factory/contracts@0.267.0
+  - @cat-factory/kernel@0.265.0
+
 ## 0.143.0
 
 ### Minor Changes

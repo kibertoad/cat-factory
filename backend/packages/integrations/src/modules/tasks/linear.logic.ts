@@ -7,6 +7,7 @@ import type {
   TaskSearchResult,
   TaskSourceDescriptor,
 } from '@cat-factory/kernel'
+import { MAX_CANDIDATE_DESCRIPTION_CHARS } from './tasks.logic.js'
 
 // Linear-specific pure logic, kept out of the provider so it is unit-testable
 // without a live API: the connect-form descriptor, parsing an issue identifier out
@@ -452,9 +453,6 @@ export interface LinearCandidateNode {
 export interface LinearCandidatePage {
   issues?: { nodes?: LinearCandidateNode[]; pageInfo?: LinearPageInfo | null }
 }
-
-/** Cap on a candidate's rendered body; the ranking judges actionability, not the full trace. */
-const MAX_CANDIDATE_DESCRIPTION_CHARS = 1_200
 
 /**
  * Map a candidate `issues` payload onto {@link BugCandidate} rows: drop the excluded (already

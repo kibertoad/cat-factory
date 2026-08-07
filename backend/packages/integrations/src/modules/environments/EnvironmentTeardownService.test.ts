@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import type {
+  DelegatedSecretRef,
   EnvironmentProvider,
   EnvironmentRecord,
   EnvironmentRegistryRepository,
   ProvisioningOutcome,
   SecretCipher,
+  SecretDelegate,
   TeardownProbe,
 } from '@cat-factory/kernel'
 import { EnvironmentTeardownService } from './EnvironmentTeardownService.js'
@@ -337,5 +339,99 @@ describe('EnvironmentTeardownService teardown confirmation', () => {
 
     expect(result.confirmation).toBe('unconfirmed')
     expect(result.reason).toContain('does not recognise')
+  })
+})
+
+describe('EnvironmentTeardownService org-secret delegation', () => {
+  // The provisioning service seals `provisionFieldsCipher` through the SAME `OrgSecretCipher`
+  // seam, so a node holding a delegate for one half and not the other is the specific breakage
+  // this pins: it stands infrastructure up under the mothership's key and then cannot open the
+  // fields its own teardown needs, failing before `provider.teardown` on every mothership-sealed
+  // row. A local-cipher fallback would be worse than the failure, so the assertion is that the
+  // delegate is used EXCLUSIVELY, and addressed by ROW.
+  const SEALED: EnvironmentRecord = {
+    ...RECORD,
+    provisionFieldsCipher: 'sealed-by-the-mothership',
+  }
+
+  function delegatingService(delegate: SecretDelegate, provider: EnvironmentProvider) {
+    const connectionService = {
+      resolveProviderForRecord: async () => ({
+        provider,
+        manifest: MANIFEST,
+        resolveSecret: () => undefined,
+      }),
+    } as unknown as EnvironmentConnectionService
+    return new EnvironmentTeardownService({
+      connectionService,
+      environmentRegistryRepository: fakeRegistry(SEALED),
+      // The LOCAL key, which on a mothership-mode node cannot open this row at all. Present so a
+      // fallback would show up as a pass rather than as the throw below.
+      secretCipher: {
+        encrypt: async () => 'local',
+        decrypt: async () => {
+          throw new Error('local key cannot open a mothership-sealed row')
+        },
+      },
+      secretDelegate: delegate,
+      clock: { now: () => 2_000 },
+      provisioningLog: fakeLog().log,
+    })
+  }
+
+  it('opens the provision fields through the mothership, addressed by row', async () => {
+    const refs: DelegatedSecretRef[] = []
+    const delegate: SecretDelegate = {
+      async unseal(ref) {
+        refs.push(ref)
+        return JSON.stringify({ stackId: 'stk_9' })
+      },
+      async seal() {
+        throw new Error('teardown never seals')
+      },
+    }
+    let sawFields: unknown
+    const provider = {
+      async teardown(request: { provisionFields: unknown }) {
+        sawFields = request.provisionFields
+        return { status: 'torn_down' }
+      },
+    } as unknown as EnvironmentProvider
+
+    await delegatingService(delegate, provider).teardown('ws_1', 'env_1')
+
+    // The ROW, never the envelope: the mothership re-reads it under the node's account scope, so
+    // the ref has to carry the workspace and the environment id in the source's declared arity.
+    expect(refs).toEqual([
+      {
+        source: 'environment_provision_fields',
+        workspaceId: 'ws_1',
+        key: ['env_1'],
+      },
+    ])
+    expect(sawFields).toEqual({ stackId: 'stk_9' })
+  })
+
+  it('fails the teardown when the mothership cannot answer, rather than tearing down blind', async () => {
+    // An unreachable mothership and a row holding no provision fields are opposite facts. Calling
+    // `provider.teardown` with `{}` would ask the provider to reclaim an environment described by
+    // nothing, and a provider that shrugged at that would have the record tombstoned behind it.
+    const delegate: SecretDelegate = {
+      async unseal(): Promise<never> {
+        throw new Error('mothership unreachable')
+      },
+      async seal(): Promise<never> {
+        throw new Error('teardown never seals')
+      },
+    }
+    const provider = {
+      async teardown(): Promise<never> {
+        throw new Error('provider must never be reached')
+      },
+    } as unknown as EnvironmentProvider
+
+    await expect(delegatingService(delegate, provider).teardown('ws_1', 'env_1')).rejects.toThrow(
+      'mothership unreachable',
+    )
   })
 })

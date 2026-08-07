@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
+import type { GitHubIssueSearchHit, IssueIntakeQuery } from '@cat-factory/kernel'
 import {
+  buildGitLabIntakeSearch,
   buildGitLabIssueSearchQuery,
   detectExactGitLabIssueRef,
   gitlabIssueExternalId,
   gitlabIssueInRepoScope,
+  gitlabHitToBugCandidate,
   gitlabIssueUrl,
+  gitlabProjectsToBoards,
   gitlabWebBaseFromApiBase,
   parseGitLabIssueExternalId,
   parseGitLabIssueRef,
@@ -150,5 +154,134 @@ describe('gitlabIssueInRepoScope', () => {
     expect(gitlabIssueInRepoScope('not-an-id', { owner: 'acme', repo: 'web' })).toBe(false)
     // A single-segment path names no project, so it names no scope either.
     expect(gitlabIssueInRepoScope('web#42', { owner: 'acme', repo: 'web' })).toBe(false)
+  })
+})
+
+describe('buildGitLabIntakeSearch', () => {
+  const base: IssueIntakeQuery = { board: { gitlabProject: 'group/sub/web' }, limit: 1 }
+
+  it('splits a nested project path at its last slash, the way the client folds a web URL', () => {
+    expect(buildGitLabIntakeSearch(base, { limit: 5, page: 1 }).ref).toEqual({
+      owner: 'group/sub',
+      repo: 'web',
+    })
+    expect(
+      buildGitLabIntakeSearch(
+        { ...base, board: { gitlabProject: 'acme/web' } },
+        { limit: 5, page: 1 },
+      ).ref,
+    ).toEqual({ owner: 'acme', repo: 'web' })
+  })
+
+  it('pushes every expressible predicate into the request, open and oldest-first', () => {
+    const search = buildGitLabIntakeSearch(
+      { ...base, labels: ['bug', 'needs triage'], unassignedOnly: true },
+      { limit: 20, page: 3 },
+    )
+    expect(search.query).toEqual({
+      openOnly: true,
+      order: 'created-asc',
+      limit: 20,
+      page: 3,
+      labels: ['bug', 'needs triage'],
+      unassignedOnly: true,
+    })
+  })
+
+  // GitLab's `search` covers the description too, so an intake configured on a title fragment
+  // would otherwise start a pipeline on an issue that merely mentions it in its body.
+  it('narrows a title fragment to the title rather than searching the body as well', () => {
+    const search = buildGitLabIntakeSearch(
+      { ...base, titleFragment: 'crash on save' },
+      { limit: 5, page: 1 },
+    )
+    expect(search.query.text).toBe('crash on save')
+    expect(search.query.textIn).toBe('title')
+  })
+
+  // GitLab's own issue-type vocabulary has no member meaning "bug", and the intake default IS
+  // `bug`; sending it would be rejected by the API outright.
+  it('ignores an issue type rather than sending one GitLab cannot express', () => {
+    const search = buildGitLabIntakeSearch({ ...base, issueType: 'bug' }, { limit: 5, page: 1 })
+    expect(search.query).not.toHaveProperty('issueType')
+    expect(search.query).not.toHaveProperty('text')
+  })
+
+  it('omits the page parameter on the first page', () => {
+    expect(buildGitLabIntakeSearch(base, { limit: 5, page: 1 }).query).not.toHaveProperty('page')
+  })
+
+  // A board that names no project must refuse, not reach GitLab and come back as an empty board.
+  it('refuses a missing board and one that does not name a project', () => {
+    expect(() => buildGitLabIntakeSearch({ board: {}, limit: 1 }, { limit: 5, page: 1 })).toThrow(
+      /no project configured/i,
+    )
+    for (const board of ['web', 'group/', '/web', 'group/we b']) {
+      expect(() =>
+        buildGitLabIntakeSearch(
+          { board: { gitlabProject: board }, limit: 1 },
+          { limit: 5, page: 1 },
+        ),
+      ).toThrow(/not a GitLab project scope/i)
+    }
+  })
+})
+
+describe('gitlabHitToBugCandidate', () => {
+  const hit: GitHubIssueSearchHit = {
+    owner: 'group/sub',
+    repo: 'web',
+    number: 9,
+    title: 'Crash',
+    state: 'open',
+    url: 'https://git.acme.io/group/sub/web/-/issues/9',
+    body: '  steps to reproduce  ',
+    labels: ['bug'],
+    createdAt: '2026-01-02T03:04:05Z',
+    commentCount: 4,
+  }
+
+  it('reads every field off the SAME response, so a scan needs no per-candidate fetch', () => {
+    expect(gitlabHitToBugCandidate(hit)).toEqual({
+      source: 'gitlab',
+      externalId: 'group/sub/web#9',
+      title: 'Crash',
+      url: 'https://git.acme.io/group/sub/web/-/issues/9',
+      status: 'open',
+      type: '',
+      priority: null,
+      labels: ['bug'],
+      description: 'steps to reproduce',
+      createdAt: '2026-01-02T03:04:05Z',
+      commentCount: 4,
+    })
+  })
+
+  // Priority and type are per-instance label conventions on GitLab; reading one instance's onto
+  // every deployment would report a priority nobody set.
+  it('states an absent body/labels/age as empty rather than guessing a priority or type', () => {
+    const bare = gitlabHitToBugCandidate({ ...hit, body: undefined, labels: undefined })
+    expect(bare.description).toBe('')
+    expect(bare.labels).toEqual([])
+    expect(bare.priority).toBeNull()
+    expect(bare.type).toBe('')
+  })
+})
+
+describe('gitlabProjectsToBoards', () => {
+  it('carries the namespace in the id AND the key, because a project name repeats across groups', () => {
+    expect(
+      gitlabProjectsToBoards([
+        { owner: 'group/sub', name: 'web' },
+        { owner: 'other', name: 'web' },
+      ]),
+    ).toEqual([
+      { id: 'group/sub/web', name: 'web', key: 'group/sub/web' },
+      { id: 'other/web', name: 'web', key: 'other/web' },
+    ])
+  })
+
+  it('drops a project the projection could not name', () => {
+    expect(gitlabProjectsToBoards([{ owner: '', name: 'web' }])).toEqual([])
   })
 })

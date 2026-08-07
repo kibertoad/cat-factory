@@ -167,10 +167,38 @@ const API_PREFIX = '/api/v1'
 // already reads is byte-for-byte unchanged. `PR_VERIFICATION_REPORT_VERSION` steps to 9 and
 // `RUN_OUTCOME_VERSION` to 2 with it.
 //
-// SIXTH number for this one too, displaced by the same five as the paragraph above plus its own
-// `toolServers` CLI record. Two long-lived branches losing this race independently is the case
-// for reading the note at the top of the block rather than treating it as history.
-const API_VERSION = '1.27.0'
+// 1.28.0, not 1.26.0: the outbound webhook becomes a COLLECTION,
+// `GET /api/v1/notification-webhooks` plus `GET|PUT|DELETE /api/v1/notification-webhooks/:webhookId`,
+// beside the singular routes, which keep working and now address the `default` entry. Additive on
+// every axis: four new operations, and two new fields (`id`, `name`) on a response projection a
+// consumer already tolerates unknown members of. FOURTH number this one has held: it claimed
+// 1.25.0, then 1.26.0, then 1.27.0, each published by main while the branch was in flight, and not
+// one of them announced itself on the VERSION line, which auto-merged clean to a number main had
+// already used every time. Re-read this line here, not there, after every merge.
+//
+// 1.29.0, not 1.28.0: a run's `diagnostics.lastDispatch` gains a `failure` object, and is now
+// stamped for INLINE steps as well as container ones. Additive on the wire: the new object is
+// present only on a dispatch that never reached a running job, `executionBackend` gains one
+// further value (`inline`) in a field already documented as free-form, and every existing field
+// is byte-for-byte unchanged. What DOES change for a consumer is the population: a pure-inline run
+// used to answer `diagnostics: null` on the debug overview and now answers a block, so a client
+// treating "no diagnostics" as "no agent work happened" reads differently. That is the point of
+// the change, and it is stated here rather than left for a reader to discover.
+//
+// SEVENTH number for this one, displaced by the same five as the `observed` paragraph above plus
+// its own `toolServers` CLI record and the webhook collection. Two long-lived branches losing this
+// race independently is the case for reading the note at the top of the block rather than treating
+// it as history.
+//
+// 1.30.0, not 1.29.0: `POST /api/v1/keys` accepts an opaque `externalIdentity`, the identity a
+// provisioner is minting a key FOR, echoed on the key resource, on `GET /api/v1/me`, and on the
+// run projections as the identity the run was started for. Additive on every axis: one optional
+// request field, one nullable response field, and `null` is what every run and key that predates
+// it correctly reports. This branch first claimed 1.29.0, which main then published for the
+// dispatch-`failure` diagnostics above while the branch was in flight: the SECOND number this one
+// has held, and it surfaced here rather than on the VERSION line, which auto-merged clean to the
+// number main had just used. Re-read this line after any merge rather than trusting that.
+const API_VERSION = '1.30.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -226,6 +254,7 @@ const COMPONENT_SCHEMAS = {
   // wrapper, the projection inside it (also the write's response) and the write body.
   NotificationWebhook: 'notificationWebhookSchema',
   PublicNotificationWebhook: 'publicNotificationWebhookSchema',
+  PublicNotificationWebhookList: 'publicNotificationWebhookListSchema',
   PutNotificationWebhook: 'putNotificationWebhookSchema',
   PublicUsageRow: 'publicUsageRowSchema',
   PublicUsageBudget: 'publicUsageBudgetSchema',
@@ -454,6 +483,30 @@ const OPERATION_DOCS = {
     tag: 'Webhook',
     summary: 'Remove the outbound webhook',
     description: 'Deregister the endpoint; deliveries stop. Idempotent.',
+  },
+  listPublicNotificationWebhooks: {
+    tag: 'Webhook',
+    summary: "List the workspace's outbound webhooks",
+    description:
+      'Every endpoint this workspace delivers to, ordered by id. The endpoint the unnamed routes address appears here under the id `default`. Not paginated: the number of endpoints a workspace may register is capped, so the whole set fits in one response. No signing secret is returned for any of them.',
+  },
+  getPublicNamedNotificationWebhook: {
+    tag: 'Webhook',
+    summary: 'Read one named outbound webhook',
+    description:
+      'The endpoint registered under this id, or `{ "webhook": null }` when there is none — the same shape the unnamed read answers, so an integration\'s startup self-check does not branch on a status code. The signing secret is never returned.',
+  },
+  putPublicNamedNotificationWebhook: {
+    tag: 'Webhook',
+    summary: 'Register or update one named outbound webhook',
+    description:
+      'Register an endpoint under an id YOU choose (1-63 characters of lowercase letters, digits, `-` or `_`), or update the one already there. Idempotent by id, so an integration can enroll its own receiver on every cold start without tracking whether it has enrolled before, and without displacing anything else the workspace registered. Every field follows the same keep-on-omit rule as the unnamed route, `url` being required only when there is nothing under this id to keep, and a supplied `secret` rotating this endpoint\'s own signing secret. Refused with `reason: "invalid_webhook_id"` for an id that is not a slug, and `reason: "webhook_limit_reached"` (409) when registering a NEW id would exceed the per-workspace cap; editing an existing one is admitted either way.',
+  },
+  deletePublicNamedNotificationWebhook: {
+    tag: 'Webhook',
+    summary: 'Remove one named outbound webhook',
+    description:
+      "Deregister this endpoint; its deliveries stop and the workspace's other endpoints are untouched. Idempotent.",
   },
   getPublicUsage: {
     tag: 'Usage',

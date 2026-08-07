@@ -2932,6 +2932,8 @@
       "intakeNoSources": "Verbinden Sie zuerst eine Task-Quelle, um Issues daraus zu ziehen.",
       "intakeNoIntakeSources": "Eine Task-Quelle ist verbunden, aber keine der verbundenen Quellen kann bereits eine geplante Issue-Suche ausführen.",
       "intakeGithubRepo": "Repository",
+      "intakeGitlabProject": "Projekt",
+      "intakeGitlabProjectHelp": "Der vollständige Pfad des GitLab-Projekts, einschließlich aller Untergruppen, z. B. gruppe/untergruppe/projekt.",
       "intakeBoardId": "Board-ID",
       "intakeBoardIdHelp": "Das Board, Projekt oder die Warteschlange, auf die dieser Tracker die Aufnahme eingrenzt. Das Format gibt der Tracker vor.",
       "trackerTrigger": "Läufe durch Tracker-Webhooks starten",
@@ -2943,6 +2945,7 @@
       "intakeLabels": "Labels",
       "intakeLabelsPlaceholder": "durch Komma getrennt",
       "intakeIssueType": "Issue-Typ",
+      "intakeIssueTypeUnsupported": "{tracker} kennt keinen Ticket-Typ mit der Bedeutung „Bug“, daher wendet dieser Zeitplan ihn nicht an. Grenzen Sie die Auswahl stattdessen mit einem Label ein.",
       "intakeInProgressLabel": "In-Bearbeitung-Label",
       "refusalPerTicketRequiresOnDemand": "Ein per Tracker ausgelöster Zeitplan muss bedarfsgesteuert sein. Ein Rhythmus-Tick enthält kein Ticket, das übergeben werden könnte.",
       "refusalPerTicketConflictsWithBugIntake": "Diese Pipeline wählt ihr Issue selbst vom Board und kann daher nicht zusätzlich von einem eingehenden Ticket gesteuert werden. Wählen Sie eine Pipeline ohne Bug-Intake-Schritt."
@@ -4112,6 +4115,7 @@
     "boardsFailed": "Boards konnten nicht geladen werden: {reason}",
     "issueType": "Vorgangstyp",
     "issueTypeHelp": "Standard ist bug. Wird von Trackern ohne Vorgangstypen ignoriert.",
+    "issueTypeUnsupported": "{tracker} kennt keinen Ticket-Typ mit der Bedeutung „Bug“, daher wird dieser Filter nicht angewendet. Grenzen Sie den Scan stattdessen mit einem Label ein.",
     "labels": "Labels",
     "labelsHelp": "Durch Komma getrennt. Alle müssen vorhanden sein.",
     "adoptInto": "Ausgewählten Fehler hinzufügen zu",
@@ -5531,7 +5535,8 @@
         "ticket_already_linked": "Dieses Ticket hat bereits eine Aufgabe",
         "document_already_linked": "Dokument bereits angehängt",
         "dry_run_not_mergeable": "Probelauf kann nicht zusammengeführt werden",
-        "submission_not_allowed": "Zusammenführen für diesen Lauf nicht erlaubt"
+        "submission_not_allowed": "Zusammenführen für diesen Lauf nicht erlaubt",
+        "webhook_limit_reached": "Webhook-Limit erreicht"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -5569,7 +5574,8 @@
         "ticket_already_linked": "Ein Ticket kann nur eine Aufgabe stützen. Es erneut zu verknüpfen würde der bestehenden Aufgabe genau den Kontext entziehen, mit dem sie angelegt wurde. Öffne stattdessen diese Aufgabe oder hebe die Verknüpfung des Tickets zuerst auf.",
         "document_already_linked": "Dieses Dokument ist an eine andere Aufgabe angehängt. Lösen Sie es dort zuerst, oder hängen Sie eine separate Kopie an.",
         "dry_run_not_mergeable": "Dieser Pull Request stammt aus einem Probelauf und kann hier nicht zusammengeführt werden. Starte die Aufgabe erneut als echten Lauf, um einen Pull Request zu erzeugen, den dieser Arbeitsbereich zusammenführt.",
-        "submission_not_allowed": "Die Merge-Richtlinie dieser Aufgabe erlaubt der Rolle, die diesen Lauf gestartet hat, diese Änderungsart nicht zusammenzuführen. Jemand mit einer passenden Rolle kann es tun, oder ein Admin erweitert die Richtlinie in der Merge-Vorlage."
+        "submission_not_allowed": "Die Merge-Richtlinie dieser Aufgabe erlaubt der Rolle, die diesen Lauf gestartet hat, diese Änderungsart nicht zusammenzuführen. Jemand mit einer passenden Rolle kann es tun, oder ein Admin erweitert die Richtlinie in der Merge-Vorlage.",
+        "webhook_limit_reached": "Für diesen Workspace ist bereits die maximale Anzahl ausgehender Webhooks registriert. Entfernen Sie einen nicht mehr benötigten und registrieren Sie diesen erneut."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

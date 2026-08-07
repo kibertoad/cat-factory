@@ -3,9 +3,17 @@ import type {
   IncidentEnrichmentProvider,
   IncidentMatchQuery,
   IncidentUpdate,
+  Logger,
+  OrgSecretCipher,
   SecretCipher,
+  SecretDelegate,
 } from '@cat-factory/kernel'
-import { CompositeIncidentEnrichmentProvider } from '@cat-factory/kernel'
+import {
+  CompositeIncidentEnrichmentProvider,
+  createOrgSecretCipher,
+  describeError,
+  noopLogger,
+} from '@cat-factory/kernel'
 import { parseIncidentEnrichmentCredentials } from '@cat-factory/contracts'
 import { PagerDutyEnrichmentProvider } from '../pagerduty/PagerDutyEnrichmentProvider.js'
 import { IncidentIoEnrichmentProvider } from '../incidentio/IncidentIoEnrichmentProvider.js'
@@ -17,6 +25,17 @@ export interface WorkspaceIncidentEnrichmentProviderDependencies {
   incidentEnrichmentConnectionRepository: IncidentEnrichmentConnectionRepository
   /** Seals/opens the per-workspace credentials (domain tag 'cat-factory:incident-enrichment'). */
   secretCipher: SecretCipher
+  /**
+   * Present ONLY on a mothership-mode node, where the row was sealed under the MOTHERSHIP's key.
+   * The on-call escalation runs wherever the RUN runs, so without it the enrichment no-ops there
+   * (reported through {@link logger}, never silently: see the catch in `resolve`).
+   */
+  secretDelegate?: SecretDelegate
+  /**
+   * Where a dropped enrichment is reported. Absent ⇒ `noopLogger`, so the provider stays
+   * unit-testable standalone; every composition root wires the real one.
+   */
+  logger?: Logger
 }
 
 /**
@@ -28,11 +47,16 @@ export interface WorkspaceIncidentEnrichmentProviderDependencies {
  */
 export class WorkspaceIncidentEnrichmentProvider implements IncidentEnrichmentProvider {
   private readonly connections: IncidentEnrichmentConnectionRepository
-  private readonly cipher: SecretCipher
+  private readonly orgSecrets: OrgSecretCipher
+  private readonly log: Logger
 
   constructor(deps: WorkspaceIncidentEnrichmentProviderDependencies) {
     this.connections = deps.incidentEnrichmentConnectionRepository
-    this.cipher = deps.secretCipher
+    this.log = deps.logger ?? noopLogger
+    this.orgSecrets = createOrgSecretCipher({
+      cipher: deps.secretCipher,
+      ...(deps.secretDelegate ? { delegate: deps.secretDelegate } : {}),
+    })
   }
 
   async enrich(query: IncidentMatchQuery, update: IncidentUpdate): Promise<void> {
@@ -47,10 +71,25 @@ export class WorkspaceIncidentEnrichmentProvider implements IncidentEnrichmentPr
     let credentials
     try {
       credentials = parseIncidentEnrichmentCredentials(
-        JSON.parse(await this.cipher.decrypt(record.credentials)),
+        JSON.parse(
+          await this.orgSecrets.decryptFor(
+            { source: 'incident_enrichment_connection', workspaceId },
+            record.credentials,
+          ),
+        ),
       )
-    } catch {
-      // A drifted/corrupted row must never break a best-effort enrichment.
+    } catch (error) {
+      // A drifted/corrupted row must never break a best-effort enrichment, so the swallow stays.
+      // What does NOT stay is its silence. Since the secrets-delegation slice this open can also
+      // fail because the MOTHERSHIP is unreachable or refused the row, and a dropped enrichment is
+      // indistinguishable, to everyone downstream, from a workspace that configured none: the
+      // on-call escalation just never annotates the incident. That is exactly the disposition the
+      // `SecretDelegate` port forbids its callers from inventing, so the drop is stated here
+      // instead, with the cause attached.
+      this.log.warn('incident enrichment: could not open the connection credentials', {
+        workspaceId,
+        ...describeError(error),
+      })
       return null
     }
     const providers: IncidentEnrichmentProvider[] = []

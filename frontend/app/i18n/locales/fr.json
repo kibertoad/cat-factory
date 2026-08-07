@@ -347,6 +347,8 @@
       "intakeNoSources": "Connectez d'abord une source de tâches pour en extraire des tickets.",
       "intakeNoIntakeSources": "Une source de tâches est connectée, mais aucune des sources connectées ne peut encore exécuter une recherche de tickets planifiée.",
       "intakeGithubRepo": "Dépôt",
+      "intakeGitlabProject": "Projet",
+      "intakeGitlabProjectHelp": "Le chemin complet du projet GitLab, sous-groupes compris, par exemple groupe/sous-groupe/projet.",
       "intakeBoardId": "ID du tableau",
       "intakeBoardIdHelp": "Le tableau, projet ou file d’attente auquel ce traqueur limite la prise en charge. Son format est défini par le traqueur.",
       "trackerTrigger": "Lancer des exécutions depuis les webhooks du traqueur",
@@ -358,6 +360,7 @@
       "intakeLabels": "Étiquettes",
       "intakeLabelsPlaceholder": "séparées par des virgules",
       "intakeIssueType": "Type de ticket",
+      "intakeIssueTypeUnsupported": "{tracker} n’a aucun type de ticket signifiant « bug », cette planification ne l’appliquera donc pas. Restreignez plutôt la sélection avec une étiquette.",
       "intakeInProgressLabel": "Étiquette en cours",
       "refusalPerTicketRequiresOnDemand": "Une planification déclenchée par le traqueur doit être à la demande. Un cycle de cadence ne porte aucun ticket à répartir.",
       "refusalPerTicketConflictsWithBugIntake": "Ce pipeline choisit lui-même son ticket sur le tableau : il ne peut pas être piloté en plus par un ticket entrant. Choisissez un pipeline sans étape de collecte de bogues."
@@ -588,7 +591,8 @@
         "ticket_already_linked": "Ce ticket a déjà une tâche",
         "document_already_linked": "Document déjà joint",
         "dry_run_not_mergeable": "Une exécution à blanc ne peut pas être fusionnée",
-        "submission_not_allowed": "Fusion non autorisée pour cette exécution"
+        "submission_not_allowed": "Fusion non autorisée pour cette exécution",
+        "webhook_limit_reached": "Limite de webhooks atteinte"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -626,7 +630,8 @@
         "ticket_already_linked": "Un ticket ne peut alimenter qu'une seule tâche : le relier à nouveau priverait la tâche existante du contexte avec lequel elle a été créée. Ouvrez plutôt cette tâche, ou dissociez d'abord le ticket.",
         "document_already_linked": "Ce document est joint à une autre tâche. Détachez-le d'abord, ou joignez-en une copie distincte.",
         "dry_run_not_mergeable": "Cette pull request provient d'une exécution à blanc et ne peut pas être fusionnée ici. Relancez la tâche en exécution réelle pour produire une pull request que cet espace de travail fusionnera.",
-        "submission_not_allowed": "La politique de fusion de cette tâche n'autorise pas le rôle qui a lancé cette exécution à fusionner ce type de changement. Un coéquipier dont le rôle le permet peut le faire, ou un admin peut élargir la politique dans le préréglage de fusion."
+        "submission_not_allowed": "La politique de fusion de cette tâche n'autorise pas le rôle qui a lancé cette exécution à fusionner ce type de changement. Un coéquipier dont le rôle le permet peut le faire, ou un admin peut élargir la politique dans le préréglage de fusion.",
+        "webhook_limit_reached": "Cet espace de travail a déjà enregistré le nombre maximal de webhooks sortants. Supprimez-en un dont vous n’avez plus besoin, puis enregistrez celui-ci à nouveau."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -4495,6 +4500,7 @@
     "boardsFailed": "Impossible de charger les tableaux : {reason}",
     "issueType": "Type de ticket",
     "issueTypeHelp": "Par défaut bug. Ignoré par les gestionnaires sans types de tickets.",
+    "issueTypeUnsupported": "{tracker} n’a aucun type de ticket signifiant « bug », ce filtre n’est donc pas appliqué. Restreignez plutôt l’analyse avec une étiquette.",
     "labels": "Étiquettes",
     "labelsHelp": "Séparées par des virgules. Toutes doivent être présentes.",
     "adoptInto": "Ajouter le bug retenu à",

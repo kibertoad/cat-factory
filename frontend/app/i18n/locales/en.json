@@ -386,6 +386,8 @@
       "intakeNoSources": "Connect a task source first to pull issues from it.",
       "intakeNoIntakeSources": "A task source is connected, but none of the connected sources can run a scheduled issue search yet.",
       "intakeGithubRepo": "Repository",
+      "intakeGitlabProject": "Project",
+      "intakeGitlabProjectHelp": "The GitLab project's full path, including any subgroups, e.g. group/sub/project.",
       "intakeBoardId": "Board id",
       "intakeBoardIdHelp": "The board, project or queue this tracker scopes intake to. Its format is defined by the tracker.",
       "trackerTrigger": "Start runs from tracker webhooks",
@@ -397,6 +399,7 @@
       "intakeLabels": "Labels",
       "intakeLabelsPlaceholder": "comma-separated",
       "intakeIssueType": "Issue type",
+      "intakeIssueTypeUnsupported": "{tracker} has no issue type that means \"bug\", so this schedule will not apply it. Narrow the pickup with a label instead.",
       "intakeInProgressLabel": "In-progress label",
       "refusalPerTicketRequiresOnDemand": "A tracker-triggered schedule must be on-demand. A cadence tick carries no ticket to dispatch.",
       "refusalPerTicketConflictsWithBugIntake": "This pipeline picks its own issue from the board, so it cannot also be driven by a pushed ticket. Choose a pipeline without a bug-intake step."
@@ -657,7 +660,8 @@
         "ticket_already_linked": "This issue already has a task",
         "document_already_linked": "Document already attached",
         "dry_run_not_mergeable": "Dry run cannot be merged",
-        "submission_not_allowed": "Merge not allowed for this run"
+        "submission_not_allowed": "Merge not allowed for this run",
+        "webhook_limit_reached": "Webhook limit reached"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -698,7 +702,8 @@
         "ticket_already_linked": "An issue can back only one task, so linking it again would strip the existing task of the context it was created with. Open that task instead, or unlink the issue first.",
         "document_already_linked": "That document is attached to another task. Detach it there first, or attach a separate copy.",
         "dry_run_not_mergeable": "This pull request came from a dry run, so it can't be merged from here. Start the task again as a live run to produce a pull request this workspace will merge.",
-        "submission_not_allowed": "This task's merge policy doesn't let the role that started this run merge this kind of change. Somebody whose role may merge it can do so, or an admin can widen the policy in the merge preset."
+        "submission_not_allowed": "This task's merge policy doesn't let the role that started this run merge this kind of change. Somebody whose role may merge it can do so, or an admin can widen the policy in the merge preset.",
+        "webhook_limit_reached": "This workspace already has the maximum number of outbound webhooks registered. Remove one you no longer need, then register this again."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -4635,6 +4640,7 @@
     "boardsFailed": "Boards could not be loaded: {reason}",
     "issueType": "Issue type",
     "issueTypeHelp": "Defaults to bug. Ignored by trackers with no issue types.",
+    "issueTypeUnsupported": "{tracker} has no issue type that means \"bug\", so this filter is not applied. Narrow the scan with a label instead.",
     "labels": "Labels",
     "labelsHelp": "Comma separated. All of them must be present.",
     "adoptInto": "Add the picked bug to",

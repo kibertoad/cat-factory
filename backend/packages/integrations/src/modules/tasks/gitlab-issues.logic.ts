@@ -1,8 +1,12 @@
-import type {
-  ProjectIssueQuery,
-  TaskSearchRepoScope,
-  TaskSourceDescriptor,
+import {
+  ValidationError,
+  type IssueIntakeQuery,
+  type ProjectIssueQuery,
+  type TaskSearchRepoScope,
+  type TaskSourceDescriptor,
 } from '@cat-factory/kernel'
+import type { TaskSourceReadReason } from '@cat-factory/contracts'
+import { repoIssueBugCandidateMapper, repoRefsToBoards } from './repo-issues.logic.js'
 
 // GitLab-issues task-source pure logic, the sibling of `github-issues.logic.ts`: the
 // descriptor, the external-id grammar and its round-trip, the ref parser, and the
@@ -167,6 +171,90 @@ export function buildGitLabIssueSearchQuery(query: string, limit: number): Proje
   const text = query.trim()
   return { limit, ...(text ? { text } : {}) }
 }
+
+/** The project a predicate search runs against, plus the vendor query to run on it. */
+export interface GitLabIntakeSearch {
+  /** The scoped project, split the way `searchProjectIssues` takes it. */
+  ref: { owner: string; repo: string }
+  query: ProjectIssueQuery
+}
+
+/**
+ * Compile an issue-intake query (the recurring `bug-intake` schedule and the interactive bug
+ * hunt share one vocabulary) onto a project-scoped GitLab issue search.
+ *
+ * The whole point of the shape is that the project is an ARGUMENT: GitLab's project-issues
+ * endpoint takes the path in the URL and every predicate as a request parameter, so nothing
+ * here is interpolated into a query grammar the way GitHub's `repo:`/`label:` qualifiers are.
+ * The board is still SHAPE-VALIDATED, because a value that does not name a project would
+ * otherwise reach the vendor as a 404 the caller reports as "no matching issues", i.e. as an
+ * empty board rather than as the misconfiguration it is.
+ *
+ * Two predicates are handled differently from the GitHub twin, each for a stated reason:
+ *
+ *  - `titleFragment` rides `text` + `textIn: 'title'`. GitLab's `search` covers title AND
+ *    description by default, so without the narrowing an intake configured on a title fragment
+ *    would pick up (and start a pipeline on) an issue that merely mentions it in its body.
+ *  - `issueType` is IGNORED, as it is on Linear and for the same reason: GitLab's own issue-type
+ *    vocabulary is the closed set `issue` / `incident` / `test_case` / `task`, which has no
+ *    member meaning "bug", and GitLab shops mark bugs with a label. Sending the intake default
+ *    (`bug`) as `issue_type` would be rejected by the API outright. Callers that want the
+ *    predicate to bite express it through `labels`.
+ *
+ * `excludeExternalIds` is not expressible on this endpoint either, so the caller overscans and
+ * pages, exactly as the GitHub provider does.
+ */
+export function buildGitLabIntakeSearch(
+  intake: IssueIntakeQuery,
+  opts: { limit: number; page: number },
+): GitLabIntakeSearch {
+  const board = intake.board.gitlabProject?.trim()
+  if (!board) {
+    throw new ValidationError(
+      'This GitLab issue search has no project configured. Set the intake board to the ' +
+        'group/project path it should scan.',
+      { reason: 'missing_board' satisfies TaskSourceReadReason },
+    )
+  }
+  const ref = splitProjectPath(board)
+  if (!ref || !new RegExp(`^${PROJECT_PATH}$`).test(board)) {
+    throw new ValidationError(
+      `'${board}' is not a GitLab project scope; expected a group/project path.`,
+      { reason: 'invalid_board' satisfies TaskSourceReadReason },
+    )
+  }
+  const labels = intake.labels ?? []
+  return {
+    ref,
+    query: {
+      openOnly: true,
+      order: 'created-asc',
+      limit: opts.limit,
+      ...(opts.page > 1 ? { page: opts.page } : {}),
+      ...(intake.titleFragment ? { text: intake.titleFragment, textIn: 'title' as const } : {}),
+      ...(labels.length ? { labels } : {}),
+      ...(intake.unassignedOnly ? { unassignedOnly: true } : {}),
+    },
+  }
+}
+
+/**
+ * Project a project-scoped search hit onto a {@link BugCandidate}: the shared repo-backed
+ * projection, over GitLab's own external-id grammar. GitLab's project-issues response carries the
+ * description, labels, creation time and note count in the SAME payload as the title, so a whole
+ * hunt scan is one request per page and never a per-candidate detail read.
+ *
+ * See {@link repoIssueBugCandidateMapper} for why `priority` and `type` stay empty; on GitLab the
+ * conventions it declines to guess at are the scoped labels `priority::high` and `type::bug`.
+ */
+export const gitlabHitToBugCandidate = repoIssueBugCandidateMapper('gitlab', gitlabIssueExternalId)
+
+/**
+ * Map the projects a connection can reach onto hunt boards: the shared repo-backed projection,
+ * since a GitLab board scope is the full path with namespace that {@link buildGitLabIntakeSearch}
+ * splits back into a ref.
+ */
+export const gitlabProjectsToBoards = repoRefsToBoards
 
 /**
  * Resolve raw search input that names ONE specific issue in the SCOPED project (rather than

@@ -151,6 +151,7 @@ import type {
   SandboxPromptVersionRepository,
   SandboxRunRepository,
   SecretCipher,
+  SecretDelegate,
   ServiceFragmentDefaultsRepository,
   ServiceRepository,
   SharedStackRepository,
@@ -757,6 +758,14 @@ export interface CoreDependencies {
   /** The app-owned registry of code-defined custom manifest types (merged into the catalog). */
   customManifestTypeRegistry?: CustomManifestTypeRegistry
   secretCipher?: SecretCipher
+  /**
+   * Present ONLY on a mothership-mode node: opens (and seals) the ORG-owned credentials this
+   * process holds no key for, by asking the mothership over `/internal/secrets/{unseal,seal}`.
+   * Threaded into every service that handles one of kernel's `OrgSecretSource` rows, where
+   * `createOrgSecretCipher` composes it with {@link secretCipher}. Absent (every hosted
+   * deployment, and local mode over its own Postgres) ⇒ byte-for-byte the local cipher.
+   */
+  secretDelegate?: SecretDelegate
   /**
    * INTERNAL override: when set, this provider is used for every env operation instead of
    * the kind registry. NOT a public facade seam (a native backend registers into the

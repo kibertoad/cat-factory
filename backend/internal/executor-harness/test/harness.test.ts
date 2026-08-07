@@ -7,16 +7,18 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import {
   classifyLlmUpstreamError,
-  parsePiOutput,
   parseTodoProgress,
-  runDiagnostics,
-  summarizePiRun,
-  terminalRunError,
   webSearchConfigFromEnv,
   webSearchProxyEnv,
   writeAgentsContext,
   writeWebToolsConfig,
 } from '../src/pi.js'
+import {
+  parsePiOutput,
+  runDiagnostics,
+  summarizePiRun,
+  terminalRunError,
+} from '../src/pi-reduction.js'
 import {
   DEFAULT_PROGRESS_GUARD_LIMITS,
   ProgressGuard,

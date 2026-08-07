@@ -13,6 +13,8 @@ import org.jspecify.annotations.Nullable;
  * @param alertEvents the {@code alertEvents} field.
  * @param enabled the {@code enabled} field.
  * @param hasSecret the {@code hasSecret} field.
+ * @param id the {@code id} field.
+ * @param name the {@code name} field.
  * @param runEvents the {@code runEvents} field.
  * @param types the {@code types} field.
  * @param updatedAt the {@code updatedAt} field.
@@ -25,6 +27,10 @@ public record NotificationWebhook(
     @JsonProperty("enabled") Boolean enabled,
 
     @JsonProperty("hasSecret") Boolean hasSecret,
+
+    @JsonProperty("id") String id,
+
+    @JsonProperty("name") String name,
 
     @JsonProperty("runEvents") List<NotificationWebhookRunEvent> runEvents,
 
@@ -50,6 +56,8 @@ public record NotificationWebhook(
         private @Nullable List<NotificationWebhookAlertEvent> alertEvents;
         private @Nullable Boolean enabled;
         private @Nullable Boolean hasSecret;
+        private @Nullable String id;
+        private @Nullable String name;
         private @Nullable List<NotificationWebhookRunEvent> runEvents;
         private @Nullable List<NotificationType> types;
         private @Nullable Double updatedAt;
@@ -70,6 +78,18 @@ public record NotificationWebhook(
         /** Set {@code hasSecret}. */
         public Builder hasSecret(@Nullable Boolean hasSecret) {
             this.hasSecret = hasSecret;
+            return this;
+        }
+
+        /** Set {@code id}. */
+        public Builder id(@Nullable String id) {
+            this.id = id;
+            return this;
+        }
+
+        /** Set {@code name}. */
+        public Builder name(@Nullable String name) {
+            this.name = name;
             return this;
         }
 
@@ -99,7 +119,7 @@ public record NotificationWebhook(
 
         /** Build the {@link NotificationWebhook}. */
         public NotificationWebhook build() {
-            return new NotificationWebhook(alertEvents, enabled, hasSecret, runEvents, types, updatedAt, url);
+            return new NotificationWebhook(alertEvents, enabled, hasSecret, id, name, runEvents, types, updatedAt, url);
         }
     }
 }

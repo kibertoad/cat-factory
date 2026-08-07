@@ -17,6 +17,13 @@ export class MapTaskSourceRegistry
   extends MapSourceRegistry<TaskSourceKind, TaskSourceProvider>
   implements TaskSourceRegistry {}
 
+/**
+ * Cap on a bug-hunt candidate's rendered body, shared by EVERY source's candidate mapper: the
+ * ranking judges actionability rather than the full trace, and a per-source cap would silently
+ * hand the model more of one tracker's bugs than another's to reason about.
+ */
+export const MAX_CANDIDATE_DESCRIPTION_CHARS = 1_200
+
 /** A short plain-text excerpt of an issue: its summary + the start of its description. */
 export function buildTaskExcerpt(content: TaskContent | TaskRecord, max = 280): string {
   const description = markdownToText(content.description)

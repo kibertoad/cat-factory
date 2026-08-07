@@ -841,12 +841,27 @@ describe('FetchGitLabClient — project-scoped issue search', () => {
     expect(calls[0]!.url).toContain('/projects/7/issues?')
   })
 
+  // GitLab's `search` covers the description as well as the title, so an intake configured on a
+  // title fragment would otherwise pick up an issue that merely mentions it in its body.
+  it('narrows the text to the title when the caller asked for that, and not otherwise', async () => {
+    const { c, calls } = client({
+      'GET /projects/7/issues?per_page=20&search=crash&in=title': { body: [] },
+      'GET /projects/7/issues?per_page=20&search=crash': { body: [] },
+    })
+
+    await c.searchProjectIssues(connection, ref, { text: 'crash', textIn: 'title', limit: 20 })
+    await c.searchProjectIssues(connection, ref, { text: 'crash', limit: 20 })
+
+    expect(calls[0]!.url).toContain('in=title')
+    expect(calls[1]!.url).not.toContain('in=title')
+  })
+
   it('projects the whole candidate shape from that ONE response', async () => {
     const { c } = client({ 'GET /projects/7/issues?per_page=20': { body: [hit] } })
 
-    const hits = await c.searchProjectIssues(connection, ref, { limit: 20 })
+    const page = await c.searchProjectIssues(connection, ref, { limit: 20 })
 
-    expect(hits).toEqual([
+    expect(page.hits).toEqual([
       {
         // Read back off the issue's own web_url, so a subgroup path round-trips as GitLab
         // spells it rather than as the ref the caller happened to pass.
@@ -869,7 +884,36 @@ describe('FetchGitLabClient — project-scoped issue search', () => {
     const { c } = client({
       'GET /projects/7/issues?per_page=20': { body: [{ ...hit, web_url: 'nonsense' }] },
     })
-    await expect(c.searchProjectIssues(connection, ref, { limit: 20 })).resolves.toEqual([])
+    await expect(c.searchProjectIssues(connection, ref, { limit: 20 })).resolves.toEqual({
+      hits: [],
+      hasMore: false,
+    })
+  })
+
+  // The fact a caller cannot re-derive: on an instance whose `max_page_size` is below the
+  // requested `per_page`, EVERY page is short, so "fewer than I asked for" is not the end of the
+  // board. GitLab's own `Link` header is, and the intake walk pages on it.
+  it("reports GitLab's own next-page link rather than leaving it to a short-page guess", async () => {
+    const { c } = client({
+      'GET /projects/7/issues?per_page=20': {
+        body: [hit],
+        headers: { link: '<https://gitlab.com/api/v4/projects/7/issues?page=2>; rel="next"' },
+      },
+    })
+    await expect(c.searchProjectIssues(connection, ref, { limit: 20 })).resolves.toMatchObject({
+      hasMore: true,
+    })
+  })
+
+  // The other way there is more: GitLab filled the page past what the caller asked for, so the
+  // slice back down to `limit` is itself dropping a tail.
+  it('reports more when the response overfills the requested limit', async () => {
+    const { c } = client({
+      'GET /projects/7/issues?per_page=1': { body: [hit, { ...hit, iid: 13 }] },
+    })
+    const page = await c.searchProjectIssues(connection, ref, { limit: 1 })
+    expect(page.hits).toHaveLength(1)
+    expect(page.hasMore).toBe(true)
   })
 })
 

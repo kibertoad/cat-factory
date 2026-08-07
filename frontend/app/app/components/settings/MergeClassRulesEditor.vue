@@ -6,7 +6,7 @@
 //
 // `unknown` is deliberately not listed: no rule may ever match it (an unclassifiable diff must
 // fall back to the score ceilings), so offering one would be a lie. See
-// docs/initiatives/merge-track-record.md.
+// backend/docs/adr/0046-merge-track-record.md.
 import { computed } from 'vue'
 import { autoMergeShare, frictionlessShare, RULEABLE_CHANGE_CLASSES } from '@cat-factory/contracts'
 import type { MergeClassRule, MergeClassRules } from '~/types/merge'

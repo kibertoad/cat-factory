@@ -891,6 +891,11 @@ interface ExecutionDetail {
   intakeOrigin?: IntakeOrigin
   /** The role the initiator held at admission (see {@link ExecutionInstance.initiatedByRole}). */
   initiatedByRole?: WorkspaceRole
+  /**
+   * Who the run was started for on the caller's side (see
+   * {@link ExecutionInstance.initiatedByExternalIdentity}).
+   */
+  initiatedByExternalIdentity?: string
   /** Whether the run may land its work (see {@link ExecutionInstance.mode}). */
   mode?: RunMode
   /** Failures from prior attempts, oldest→newest (see {@link ExecutionInstance.failureHistory}). */
@@ -1029,6 +1034,15 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     ...(is(workspaceRoleSchema, detail.initiatedByRole)
       ? { initiatedByRole: detail.initiatedByRole }
       : {}),
+    // Who the run was started FOR, as the starting key's provisioner named them. Opaque, so the
+    // only decode rule is that it be a non-empty string; anything else is dropped onto the same
+    // reading as absent, which is honest here in a way it would not be for a policy field: the
+    // platform never resolves this value, so an unreadable one names nobody rather than hiding a
+    // decision that was made.
+    ...(typeof detail.initiatedByExternalIdentity === 'string' &&
+    detail.initiatedByExternalIdentity !== ''
+      ? { initiatedByExternalIdentity: detail.initiatedByExternalIdentity }
+      : {}),
     // Whether the run may land its work. This one FAILS CLOSED, and the asymmetry with every
     // other tolerant decode here is the point: absent means `live` because that is what every
     // run predating the mode actually was, but a value that is PRESENT and unreadable means a
@@ -1093,6 +1107,9 @@ export function executionToDetail(instance: ExecutionInstance): string {
     // once at start and read back on the DURABLE path, which rebuilds the run from this JSON and
     // nothing else — so a field missing here is a merge policy that silently never applies.
     initiatedByRole: instance.initiatedByRole ?? undefined,
+    // Only a public-API start has one, so an ordinary board run stores nothing extra
+    // (JSON.stringify omits the undefined key).
+    initiatedByExternalIdentity: instance.initiatedByExternalIdentity ?? undefined,
     // Stored only when sandboxed: `live` is the read-time default and every run that predates the
     // mode is exactly that, so persisting it would put a redundant key on every ordinary run.
     mode: instance.mode === 'dry_run' ? 'dry_run' : undefined,

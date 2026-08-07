@@ -377,7 +377,7 @@ and rendered read-only by the shared `generic-structured` result view: a custom 
 usable result window with **no bespoke UI**. A `resultView` id may be a built-in
 (`generic-structured`, …) or a consumer-namespaced id (`<ns>:<name>`) that a deployment pairs
 with its own frontend component contributed to the `resultViews` slot via `registerAppModule`
-(see the modular-vue adoption, `docs/initiatives/modular-vue-adoption.md`). The full
+(see [ADR 0049](./adr/0049-modular-vue-adoption.md), the modular-vue adoption). The full
 consumer-side extension surface (custom task types, interactive phases for consumer
 agents, overlays, notification kinds) is designed in
 `docs/initiatives/frontend-extension-mechanism.md`.

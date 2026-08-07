@@ -30,6 +30,18 @@ export type OperationalCounter =
   | 'sweep.run_finalized'
   /** A run failed `stalled`: re-driving never resurrected it past the hard deadline. */
   | 'sweep.run_stalled'
+  /**
+   * A stale run whose durable instance the sweeper could NOT classify, so it took no action:
+   * the durable-execution API refused the lookup, the binding for that run kind is
+   * unconfigured, or the platform answered that it does not know. Dimensioned by `kind`, the
+   * same bounded run-kind enum as its three siblings.
+   *
+   * It is counted, and counted APART from them, because a blind sweeper looks exactly like a
+   * healthy one from every other signal: nothing is re-driven, nothing is finalized, nothing
+   * is stalled, and the stale runs simply sit there. This is the only number that says the
+   * backstop stopped backstopping, which matters more than any single run it did not recover.
+   */
+  | 'sweep.run_state_unknown'
   /** A sweeper pass threw. Dimensioned by `sweep`, so one sick sweeper is identifiable. */
   | 'sweep.failed'
   /** A container job dispatch threw — the job never existed, so no poll can report it. */

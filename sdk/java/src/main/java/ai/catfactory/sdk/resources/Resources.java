@@ -74,7 +74,7 @@ public abstract class Resources {
         return notifications;
     }
 
-    /** The workspace's one outbound endpoint: register, inspect or remove the receiver that notifications, run-lifecycle events and health alerts are pushed to. */
+    /** The workspace's outbound endpoints: register, inspect or remove the receivers that notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address the `default` endpoint; the named ones let an integration enroll its own receiver, with its own signing secret and filters, beside whatever else is registered. */
     public WebhookClient webhook() {
         return webhook;
     }

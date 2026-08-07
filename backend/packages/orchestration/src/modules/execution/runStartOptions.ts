@@ -24,6 +24,16 @@ export interface RunStartOptions {
    */
   initiatedByRole?: WorkspaceRole | null
   /**
+   * Who the run is being started FOR on the CALLER's side: the `externalIdentity` of the
+   * public-API key that authenticated the start, opaque to the platform. Supplied by the HTTP
+   * layer, which is the only layer that sees the key, and pinned onto the run so a later read
+   * still names the identity that started it after the key is revoked. Absent for every start
+   * that is not a public-API one, and for a key minted without an identity.
+   *
+   * Provenance, never authorization: see {@link ExecutionInstance.initiatedByExternalIdentity}.
+   */
+  initiatedByExternalIdentity?: string | null
+  /**
    * The run mode the caller ASKED for ({@link RunMode}); absent ⇒ `live`. The task's merge preset
    * can still force a sandboxed role's run to `dry_run` regardless of what was asked, so this is
    * an input to the decision rather than the decision itself.

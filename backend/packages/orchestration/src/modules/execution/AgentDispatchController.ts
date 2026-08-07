@@ -15,7 +15,7 @@ import type {
 import { getErrorMessage, isAsyncAgentExecutor, parseLocalModelId } from '@cat-factory/kernel'
 import { PR_REVIEWER_KIND, resolvePrNumber } from '@cat-factory/agents'
 import { recordDispatchAttribution } from './step-fold.logic.js'
-import { classifyDispatchFailure } from './job.logic.js'
+import { classifyDispatchFailure, type DispatchFailureClassification } from './job.logic.js'
 import { initialPrReviewState } from './prReview.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { DeployerStepController } from './DeployerStepController.js'
@@ -151,6 +151,12 @@ export class AgentDispatchController {
         // Surface the block's ephemeral environment (if any) alongside the cold-boot
         // phase, so a run's details show the env spinning up next to the container.
         await this.deps.deployer.attachEnvironmentProjection(workspaceId, instance.blockId, step)
+        // Stamp the investigation diagnostics BEFORE contacting anything, so the failures that
+        // need them most still carry them: a container that never accepts the job and a
+        // preflight rejection both leave `startJob` with no handle to read them off. The
+        // handle refines this block below with what only the dispatch knows (the repo it
+        // resolved, the model it confirmed).
+        this.beginDispatchDiagnostics(instance, context, step.model ?? null)
         await this.deps.runStateMachine.casPersist(workspaceId, instance)
         await this.deps.runStateMachine.emitInstance(workspaceId, instance)
 
@@ -166,21 +172,23 @@ export class AgentDispatchController {
           // rejection that surfaces its own actionable message + machine-readable reason
           // instead of the misleading container framing.
           step.container = { status: 'errored' }
-          await this.deps.runStateMachine.casPersist(workspaceId, instance)
-          await this.deps.runStateMachine.emitInstance(workspaceId, instance)
           // Hand the classifier the step's run history so a container lost AFTER work began (a
           // failed eviction-recovery re-dispatch, `evictionRecoveries > 0`) is reported as an
           // unrecoverable eviction — with elapsed minutes + any partial slice count — rather than
           // the misleading "container failed to start". See ADR 0026 D1.
-          return {
-            kind: 'job_failed',
-            ...classifyDispatchFailure(error, {
-              evictionRecoveries: step.evictionRecoveries,
-              transientEvictionRecoveries: step.transientEvictionRecoveries,
-              startedAt: step.startedAt,
-              sliceCount: step.prReview?.slices?.length,
-            }),
-          }
+          const classified = classifyDispatchFailure(error, {
+            evictionRecoveries: step.evictionRecoveries,
+            transientEvictionRecoveries: step.transientEvictionRecoveries,
+            startedAt: step.startedAt,
+            sliceCount: step.prReview?.slices?.length,
+          })
+          // Fold the SAME classification onto the diagnostics block, before the persist below
+          // carries it. The step's own failure fields are overwritten by a later retry of the
+          // step; this survives as the record of what the run's last dispatch attempted.
+          this.recordDispatchFailure(instance, classified)
+          await this.deps.runStateMachine.casPersist(workspaceId, instance)
+          await this.deps.runStateMachine.emitInstance(workspaceId, instance)
+          return { kind: 'job_failed', ...classified }
         }
         step.jobId = handle.jobId
         // Record the model at dispatch — the poll site can't resolve it later.
@@ -188,12 +196,11 @@ export class AgentDispatchController {
         // Surface web-search availability + provider on the step (run details), resolved
         // backend-side at dispatch. A static per-run fact, not gated by prompt telemetry.
         if (handle.search) step.search = handle.search
-        // Stamp after-the-fact investigation diagnostics for this dispatch: the step's
-        // agent kind, resolved model, and repo — the facts a failure post-mortem needs but
-        // that are otherwise spread across DB joins / the harness transcript. The execution
-        // backend (native vs. container) is unknown until the transport reports it on the
-        // first poll, so `pollAgentJob` fills it in then.
-        this.recordDispatchDiagnostics(instance, context, handle)
+        // Refine the pre-dispatch block with what only the accepted dispatch knows: the repo
+        // it resolved and the model it confirmed. The execution backend (native vs. container)
+        // is unknown until the transport reports it on the first poll, so `pollAgentJob`
+        // fills that in then.
+        this.recordAcceptedDispatch(instance, handle)
         // The dispatch returned, so the container is up and the job is accepted; the
         // live phase + the container id/url arrive on the first poll.
         step.container = { status: 'up' }
@@ -207,27 +214,41 @@ export class AgentDispatchController {
     // it now — the board names the model while the step is querying instead of only
     // once the result lands. recordStepResult re-asserts it from the result.
     const previewModel = await this.previewStepModel(context)
-    if (previewModel && previewModel !== step.model) {
-      step.model = previewModel
-      await this.deps.runStateMachine.casPersist(workspaceId, instance)
-      await this.deps.runStateMachine.emitInstance(workspaceId, instance)
-    }
+    if (previewModel && previewModel !== step.model) step.model = previewModel
+    // An inline step dispatches nowhere, which is exactly why it used to stamp nothing and
+    // left a run whose last step was inline reporting whatever CONTAINER step ran before it
+    // (or nothing at all, on a pure inline pipeline) as where the run was when it died. It
+    // names its backend as `inline` rather than leaving it for a poll that never comes.
+    this.beginDispatchDiagnostics(instance, context, step.model ?? null, 'inline')
+    // Persist UNCONDITIONALLY, exactly as the container path above does. The block is opened on
+    // every dispatch, so there is always something new to write, and the inline call below runs
+    // under `rethrowAgentErrors` on both durable drivers: its throw propagates past here and
+    // `failRun` re-reads the instance from storage. Gating this on the model having changed left
+    // the failure this block exists to explain with no diagnostics whenever the preview resolved
+    // nothing or resolved what the step already carried.
+    await this.deps.runStateMachine.casPersist(workspaceId, instance)
+    await this.deps.runStateMachine.emitInstance(workspaceId, instance)
 
     const result = await this.runAgent(context, options)
     return this.deps.recordStepResult(workspaceId, instance, step, isFinalStep, result)
   }
 
   /**
-   * Stamp the run's investigation diagnostics from a container dispatch (the `lastDispatch`
-   * block + the control-plane host). Mutates `instance` in place; the caller upserts. Reflects
-   * the MOST RECENT dispatch — a run's failure is almost always in its latest step, and keeping
-   * one block (not a per-step history) keeps the record small. `executionBackend` is left for the
-   * first poll to fill (the transport reports it). Never carries a token/secret.
+   * Open the run's investigation diagnostics for a dispatch: the `lastDispatch` block with
+   * everything known BEFORE the work is handed off (which step, which kind, the model its ref
+   * resolved to) plus the control-plane host. Mutates `instance` in place; the caller upserts.
+   *
+   * REPLACES any previous block rather than merging into it, which is what keeps the record
+   * honest across a re-dispatch: the facts of the last attempt (including whether it failed)
+   * must not survive into the next one. Reflects the MOST RECENT dispatch only, because a run's
+   * failure is almost always in its latest step, and one block instead of a per-step history
+   * keeps the record small. Never carries a token/secret.
    */
-  private recordDispatchDiagnostics(
+  private beginDispatchDiagnostics(
     instance: ExecutionInstance,
     context: AgentRunContext,
-    handle: AgentJobHandle,
+    model: string | null,
+    executionBackend?: string,
   ): void {
     // Orchestration is runtime-neutral (no @types/node), so read `process.platform` off globalThis
     // with a guard rather than the bare global — undefined on a runtime that doesn't expose it
@@ -238,11 +259,55 @@ export class AgentDispatchController {
       lastDispatch: {
         stepIndex: instance.currentStep,
         agentKind: context.agentKind,
-        ...(handle.model ? { model: handle.model } : {}),
-        ...(handle.repo ? { repo: handle.repo } : {}),
+        ...(model ? { model } : {}),
+        ...(executionBackend ? { executionBackend } : {}),
         at: this.deps.clock.now(),
       },
       ...(platform ? { host: { platform } } : {}),
+    }
+  }
+
+  /**
+   * Fold what an ACCEPTED dispatch resolved onto the block {@link beginDispatchDiagnostics}
+   * opened: the repo the job operates on, and the model the executor confirmed (which is the
+   * authority when the pre-dispatch preview could not resolve one). A no-op if no block is
+   * open, which cannot happen on the dispatch path and keeps this safe to call anyway.
+   */
+  private recordAcceptedDispatch(instance: ExecutionInstance, handle: AgentJobHandle): void {
+    const dispatch = instance.diagnostics?.lastDispatch
+    if (!dispatch) return
+    instance.diagnostics = {
+      ...instance.diagnostics,
+      lastDispatch: {
+        ...dispatch,
+        ...(handle.model ? { model: handle.model } : {}),
+        ...(handle.repo ? { repo: handle.repo } : {}),
+      },
+    }
+  }
+
+  /**
+   * Record that the open dispatch never reached a running job, in the engine's own dispatch
+   * failure vocabulary. The step carries the same verdict, but a retry of the step overwrites
+   * it, so this is what a later investigation reads for what the run's last attempt was doing
+   * when it died.
+   */
+  private recordDispatchFailure(
+    instance: ExecutionInstance,
+    classified: DispatchFailureClassification,
+  ): void {
+    const dispatch = instance.diagnostics?.lastDispatch
+    if (!dispatch) return
+    instance.diagnostics = {
+      ...instance.diagnostics,
+      lastDispatch: {
+        ...dispatch,
+        failure: {
+          kind: classified.failureKind,
+          ...(classified.reason ? { reason: classified.reason } : {}),
+          at: this.deps.clock.now(),
+        },
+      },
     }
   }
 

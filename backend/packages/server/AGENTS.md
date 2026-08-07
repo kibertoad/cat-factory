@@ -46,12 +46,18 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   read as such inlined between route registrations: `ticketLinkage.ts` (file a task FROM a tracker
   ticket: resolve and refuse before the block exists, claim after) and `documentAttachment.ts`
   (attach the requirements documents a task is built against, imported from a connected source or
-  uploaded whole, with the task rolled back if an attachment does not land). `taskTypeFields.ts`
+  uploaded whole, with the task rolled back if an attachment does not land). `keyProjection.ts` holds the ONE
+  record-to-wire projection of a public-API key, shared by the session-authed management routes and
+  the headless provisioning ones (they had a copy each, which is how a field lands on one surface
+  and silently not the other), and `runIdentityVisibility.ts` decides who may read the
+  `externalIdentity` a run was pinned with: an identity-bearing key sees only its own runs', and a
+  withheld one is FLAGGED rather than blanked, since `null` already means "this run names nobody".
+  `taskTypeFields.ts`
   serves the task-type CATALOG and maps a caller's `fields` bag onto the internal shape at both
   doors; the PATCH half MERGES over what the task already carries where creation takes the bag
   whole, because the surface never serves that bag back, so a replacing patch would ask a caller
   to restate values it cannot read. See
-  `docs/initiatives/headless-clarification-loop.md`,
+  [ADR 0047](../../docs/adr/0047-headless-clarification-loop.md),
   `backend/docs/adr/0030-public-api-surface.md` and
   `backend/docs/adr/0043-public-decision-surface.md`.
 - `modules/toolServers/`: the tool-server (MCP) **operability** surface, `secrets.manage`-gated
@@ -192,6 +198,11 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
 - The **mothership-mode machine API** (`/internal/*`, machine-token authed, mounted on both
   facades: see `docs/initiatives/mothership-mode.md`): `persistence/rpc.ts` +
   `modules/persistence/` (the repository RPC + GitHub installation-token delegation),
+  `secrets/sealedSecretSources.ts` + `persistence/secretDelegation.ts` +
+  `modules/persistence/SecretDelegationController.ts` (SECRET delegation: the mothership opens,
+  and seals, an ORG credential a node holds no key for. The one machine surface answering with a
+  PLAINTEXT credential, which is why the request names a ROW rather than an envelope and the
+  readable sources are a CLOSED table),
   `events/machineEvents.ts` + `events/machineSubscribe.ts` +
   `modules/events/EventsRelayController.ts` (real-time in BOTH directions; the upstream publish
   and the node's inbound per-workspace subscription, whose handshake is handed to the SAME

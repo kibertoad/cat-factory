@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { noopLogger } from '@cat-factory/kernel'
 import { MachineTokenUnavailableError } from '@cat-factory/server'
-import { type DriveConfig, NodeRealtimeHub } from '@cat-factory/node-server'
+import { type DriveConfig, NodeRealtimeHub, createDbClient } from '@cat-factory/node-server'
 import { buildLocalContainer } from './container.js'
 import {
   SqliteWorkRunner,
@@ -902,6 +902,169 @@ describe('composeMothership telemetry ingest delegation', () => {
   })
 })
 
+describe('composeMothership secret delegation', () => {
+  it('names the ROW, with the machine token, never the ciphertext', async () => {
+    const seen: { url: string; auth: string | null; body: unknown }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      seen.push({
+        url: String(url),
+        auth: new Headers(init.headers).get('authorization'),
+        body: JSON.parse(String(init.body)),
+      })
+      return new Response(JSON.stringify({ ok: true, plaintext: '{"url":"https://env.test"}' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const composed = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
+    )
+    try {
+      await expect(
+        composed.secretDelegate.unseal({
+          source: 'environment_access',
+          workspaceId: 'ws_1',
+          key: ['env_1'],
+        }),
+      ).resolves.toBe('{"url":"https://env.test"}')
+      expect(seen).toHaveLength(1)
+      expect(seen[0]!.url).toBe('https://m.test/internal/secrets/unseal')
+      expect(seen[0]!.auth).toBe('Bearer env-tok')
+      expect(seen[0]!.body).toEqual({
+        source: 'environment_access',
+        workspaceId: 'ws_1',
+        key: ['env_1'],
+      })
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('seals upstream so a row this node provisions stays readable by the org', async () => {
+    const bodies: unknown[] = []
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)))
+      return new Response(JSON.stringify({ ok: true, envelope: 'v1.org.sealed' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const composed = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
+    )
+    try {
+      await expect(
+        composed.secretDelegate.seal(
+          { source: 'environment_access', workspaceId: 'ws_1' },
+          '{"url":"https://env.test"}',
+        ),
+      ).resolves.toBe('v1.org.sealed')
+      expect(bodies).toEqual([
+        {
+          source: 'environment_access',
+          workspaceId: 'ws_1',
+          plaintext: '{"url":"https://env.test"}',
+        },
+      ])
+    } finally {
+      composed.close()
+    }
+  })
+
+  it('threads the delegate into the container built with no Postgres, end to end', async () => {
+    // The wiring guard for `buildLocalContainer` → `buildNodeContainer`'s `secretDelegate` seam,
+    // asserted through the SERVICE rather than by reading the option back: a node with no `db`
+    // reads the environment row over the persistence RPC and then has to OPEN its access cipher,
+    // which is precisely the step that used to fail. The local cipher here could never open
+    // `v1.mothership.sealed`, so a passing assertion is the delegation having been threaded all
+    // the way to `EnvironmentProvisioningService`.
+    const posted: string[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      const target = String(url)
+      posted.push(target)
+      const json = (value: unknown) =>
+        new Response(JSON.stringify(value), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      if (target.endsWith('/internal/secrets/unseal')) {
+        return json({
+          ok: true,
+          plaintext: JSON.stringify({ kind: 'url', url: 'https://env.test' }),
+        })
+      }
+      if (target.endsWith('/internal/persistence')) {
+        const body = JSON.parse(String(init.body)) as { repo: string; method: string }
+        if (body.repo === 'environmentRegistryRepository' && body.method === 'get') {
+          return json({
+            ok: true,
+            value: {
+              id: 'env_1',
+              workspaceId: 'ws_1',
+              blockId: 'blk_1',
+              frameId: null,
+              executionId: null,
+              providerId: 'compose',
+              externalId: 'ext_1',
+              url: 'https://env.test',
+              status: 'ready',
+              accessCipher: 'v1.mothership.sealed',
+              provisionFieldsCipher: null,
+              provisionType: 'docker-compose',
+              engine: 'local-docker',
+              createdAt: 1,
+              expiresAt: null,
+              lastError: null,
+              deletedAt: null,
+            },
+          })
+        }
+        return json({ ok: true, value: null })
+      }
+      return json({ ok: true })
+    })
+    const container = buildLocalContainer({
+      env: BASE_ENV({
+        ENVIRONMENT: 'test',
+        AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
+        ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+        HARNESS_SHARED_SECRET: 'mothership-test-harness-secret',
+        LOCAL_MOTHERSHIP_URL: 'https://m.test',
+        LOCAL_MOTHERSHIP_TOKEN: 'env-tok',
+      }),
+    })
+    try {
+      const provisioning = container.environments?.provisioningService
+      expect(provisioning).toBeDefined()
+      const handle = await provisioning!.getHandleWithAccess('ws_1', 'env_1')
+      expect(handle?.access).toEqual({ kind: 'url', url: 'https://env.test' })
+      expect(posted).toContain('https://m.test/internal/secrets/unseal')
+    } finally {
+      await container.onShutdown?.()
+    }
+  })
+
+  it('THROWS on a node that has not logged in yet, never an empty credential', async () => {
+    // The opposite disposition from the notification channel above, and deliberately so: a
+    // delivery that silently doesn't happen costs a Slack message, while a credential that
+    // silently reads as empty provisions infrastructure against nothing.
+    let calls = 0
+    vi.stubGlobal('fetch', async () => {
+      calls++
+      return new Response('{}')
+    })
+    const composed = composeMothership(BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test' }))
+    try {
+      await expect(
+        composed.secretDelegate.unseal({ source: 'observability_connection', workspaceId: 'ws_1' }),
+      ).rejects.toThrow(/machine token/i)
+      expect(calls).toBe(0)
+    } finally {
+      composed.close()
+    }
+  })
+})
+
 describe('composeMothership notification delivery delegation', () => {
   const notification = { id: 'ntf_1', workspaceId: 'ws_1', title: 'Merge review' } as never
 
@@ -997,6 +1160,61 @@ describe('composeMothership notification delivery delegation', () => {
       await container.machineNotificationDelivery!.deliver('ws_1', notification)
       // Containment, not equality: booting the container also fires background persistence RPCs.
       expect(posted).toContain('https://m.test/internal/notifications/deliver')
+    } finally {
+      await container.onShutdown?.()
+    }
+  })
+})
+
+describe('mothership-mode node as a secret-delegation SERVER', () => {
+  // The inverse of every test above: not "can this node ask a mothership", but "may this node be
+  // asked". It may not, and the reason is the key split itself. Its `ENCRYPTION_KEY` seals its own
+  // agent/model credentials under a LOCAL key, which is a different key from the one the org's
+  // rows carry, so answering `/internal/secrets/seal` here would store a row the org can never
+  // open: the silent split the whole delegation exists to remove, one write later.
+  //
+  // `repositories` cannot be the thing that stops it, which is why this is asserted on the
+  // CAPABILITY. A mothership-mode node populates that registry too (with the RPC-backed remote
+  // repos), so it is present on precisely the deployment it would need to exclude. `secretCipherFor`
+  // is the seam only a deployment authoritative for the rows wires, and the controller 503s without
+  // it.
+  const DELEGATION_ENV = (over: Record<string, string | undefined> = {}) =>
+    BASE_ENV({
+      ENVIRONMENT: 'test',
+      AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
+      ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+      HARNESS_SHARED_SECRET: 'mothership-test-harness-secret',
+      ...over,
+    })
+
+  it('wires no sealed-secret cipher when it holds no database of its own', async () => {
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ ok: true, value: null })))
+    const container = buildLocalContainer({
+      env: DELEGATION_ENV({
+        LOCAL_MOTHERSHIP_URL: 'https://m.test',
+        LOCAL_MOTHERSHIP_TOKEN: 'env-tok',
+      }),
+    })
+    try {
+      // Present, and deliberately not the discriminator: this is the remote registry.
+      expect(container.repositories).toBeDefined()
+      expect(container.secretCipherFor).toBeUndefined()
+      // The drift sweep's inventory has nothing local to enumerate either, for the same reason.
+      expect(container.sealedSecretInventory).toBeUndefined()
+    } finally {
+      await container.onShutdown?.()
+    }
+  })
+
+  it('wires it when the node holds its own database, so an ordinary deployment can still be a mothership', async () => {
+    // The half that makes the assertion above a GATE rather than a feature nobody wired: gating on
+    // `db` must not turn the delegation off everywhere. No query is issued during construction, so
+    // the pool never has to be reachable.
+    const { db } = createDbClient('postgres://unused:unused@127.0.0.1:5432/unused')
+    const container = buildLocalContainer({ db, env: DELEGATION_ENV() })
+    try {
+      expect(container.secretCipherFor).toBeDefined()
+      expect(container.sealedSecretInventory).toBeDefined()
     } finally {
       await container.onShutdown?.()
     }

@@ -22,7 +22,7 @@ The sinks:
 
 The deployment-level projections (`gate_outcomes`, `platform_run_days`) deliberately live in the
 MAIN store, not here; their rules are in
-[`platform-operator-observability.md`](../../docs/initiatives/platform-operator-observability.md).
+[ADR 0048](./adr/0048-platform-operator-observability.md).
 
 ## Three producers converge on the ONE `LlmObservabilityService`, and a new one must too
 
@@ -281,4 +281,4 @@ the trace-side counterpart of the bounded-dimension rule for metrics: free text 
 name rides an attribute, or a tenant mints unbounded series on the operator's backend by renaming
 things. Deployment-level metrics are the dual, swept per account and opt-in on top of the base
 exporter:
-[`platform-operator-observability.md`](../../docs/initiatives/platform-operator-observability.md).
+[ADR 0048](./adr/0048-platform-operator-observability.md).
