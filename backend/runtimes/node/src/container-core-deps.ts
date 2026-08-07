@@ -227,6 +227,9 @@ function selectNodeObservabilityDeps(args: {
     reportsRepository: repos.reportsRepository,
     // The durable cost-attribution rollup the same view's long (TCO) windows read.
     spendRollupRepository: repos.spendRollupRepository,
+    // The same ledger window the retention sweep prunes on, so a board delete's final fold into
+    // the rollup above walks back exactly as far as a sweep pass would.
+    tokenUsageRetentionMs: config.retention.tokenUsageMs,
     // Unified provisioning event log (its own Postgres schema). Threads the recorder
     // into the env services and exposes the read service for the logs controller.
     provisioningLogRepository: repos.provisioningLogRepository,

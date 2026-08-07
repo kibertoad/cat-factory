@@ -190,6 +190,58 @@ export function defineSpendRollupSuite(
       }
     })
 
+    it('folds ONE board on its way out, without speaking for any other board', async () => {
+      // The mirror image of the freeze above, and the half a sweep structurally cannot do. The
+      // sweep reaches only boards that still exist, so a board's spend since the last completed
+      // rollup day has never been folded when its delete begins, and `token_usage` IS in the
+      // cascade, so those rows go before any later pass could see them. The delete therefore
+      // folds them itself, while they are still there.
+      const { reports, rollup } = makeRepos()
+      const seed = makeSeed()
+      const { account, ws, wsB } = await seedFixture(seed)
+      // Deliberately no sweep pass first: this IS the un-rolled state a delete starts from.
+      const watermarkBefore = await rollup.spendRollupWatermark()
+      await rollup.rollupWorkspaceSpendDays(ws, dayRange.since, dayRange.until)
+
+      for (const dimension of DIMENSIONS) {
+        expectSameBreakdown(
+          await rollup.spendByDimension(scopeOf(account, ws), dimension, dayRange),
+          await reports.spendByDimension(scopeOf(account, ws), dimension, dayRange),
+        )
+      }
+      // …and only that board. A fold that leaked into its neighbours would write buckets from a
+      // window no sweep pass has covered, which the next rewrite would then silently correct on
+      // one board and not on the deleted one.
+      expect(
+        (await rollup.spendByDimension(scopeOf(account), 'workspace', dayRange)).map((r) => r.key),
+      ).toEqual([ws])
+      expect(await rollup.spendByDimension(scopeOf(account, wsB), 'model', dayRange)).toEqual([])
+      // The coverage marker is deployment-scoped and answers "how far has the SWEEP got". One
+      // board's final fold covers no other board's days, and the marker only moves FORWARD, so
+      // advancing it here would present days nothing folded as covered, permanently.
+      expect(await rollup.spendRollupWatermark()).toBe(watermarkBefore)
+    })
+
+    it('refuses to rewrite a board that is already gone, whatever the caller does', async () => {
+      // The ordering (fold, THEN cascade) is enforced by the query and not only by the call
+      // site. Run out of order, the fold would read nothing and its window DELETE would reclaim
+      // the very rows the cascade exclusion exists to keep, the same erasure the sweep is
+      // bounded against, arriving through the other door.
+      const { rollup } = makeRepos()
+      const seed = makeSeed()
+      const { account, ws, wsB } = await seedFixture(seed)
+      await rollup.rollupWorkspaceSpendDays(ws, dayRange.since, dayRange.until)
+      const before = await rollup.spendByDimension(scopeOf(account, ws), 'model', dayRange)
+      expect(before.length).toBeGreaterThan(0)
+
+      await seed.forgetBoards([ws, wsB])
+      expect(await rollup.rollupWorkspaceSpendDays(ws, dayRange.since, dayRange.until)).toBe(0)
+      expectSameBreakdown(
+        await rollup.spendByDimension(scopeOf(account, ws), 'model', dayRange),
+        before,
+      )
+    })
+
     it('keeps a deleted board in the account scope, which no `workspaces` join could', async () => {
       // The scope rides the row's OWN frozen `account_id`. That is a different code path from
       // the ledger's `workspaces` sub-select, and the difference is only observable once the

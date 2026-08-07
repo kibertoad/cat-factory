@@ -383,6 +383,9 @@ Partial<CoreDependencies> & Pick<CoreDependencies, 'gateOutcomeRepository'> {
     reportsRepository: new D1ReportsRepository({ db }),
     // The durable cost-attribution rollup the same view's long (TCO) windows read.
     spendRollupRepository: new D1SpendRollupRepository({ db }),
+    // The same ledger window the retention cron prunes on, so a board delete's final fold into
+    // the rollup above walks back exactly as far as a sweep pass would.
+    tokenUsageRetentionMs: config.retention.tokenUsageMs,
     // Unified provisioning event log (separate D1 binding). Threads the recorder into
     // the env services and exposes the read service for the logs controller; undefined
     // when PROVISIONING_DB isn't bound.

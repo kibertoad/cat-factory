@@ -64,6 +64,87 @@ function keyAndLabel(dimension: ReportSpendDimension): {
 const meteredCost = sql<number>`coalesce(sum(${spendDays.metered_cost}), 0)::float8`
 const subscriptionCost = sql<number>`coalesce(sum(${spendDays.subscription_cost}), 0)::float8`
 
+/**
+ * The fold itself: `token_usage` for `[from, to)` aggregated per bucket with the run's board
+ * shape frozen onto it, optionally narrowed to ONE workspace (the board-delete fold).
+ *
+ * Every join is provably 1:1 with a ledger row: `workspaces`, `services`, `blocks` and
+ * `github_repos` on their primary keys, and the two sub-selects pre-aggregated to one row per
+ * service / per `(workspace, block)` for the same fan-out reason the ledger-side repository
+ * documents. That is what keeps `count(*)` and the sums exact across seven tables. The ticket
+ * pick (`min(source:externalId)`) matches the ledger-side dimension exactly: the two sources
+ * must not attribute one block to different tickets, or they would disagree across the window
+ * boundary that routes between them.
+ *
+ * One statement for both callers so the sweep's fold and the delete's cannot drift into
+ * attributing the same spend differently, which would be visible only as a board's last days
+ * disagreeing with every day before them.
+ */
+function foldSelect(from: number, to: number, workspaceId?: string) {
+  return sql`
+    INSERT INTO spend_days (
+      workspace_id, day_start, execution_id, agent_kind, provider, model, billing, vendor,
+      account_id, workspace_name, block_id, block_title, service_id, service_name,
+      repo_id, repo_name, task_type, ticket_ref,
+      calls, input_tokens, output_tokens, metered_cost, subscription_cost)
+    SELECT tu.workspace_id,
+           (tu.created_at / ${DAY_MS}::bigint) * ${DAY_MS}::bigint AS day_start,
+           coalesce(tu.execution_id, '') AS execution_id,
+           tu.agent_kind,
+           tu.provider,
+           tu.model,
+           tu.billing,
+           coalesce(tu.vendor, '') AS vendor,
+           -- The ledger's own denormalized account wins; the board's is the fallback for a
+           -- row recorded before it was resolved.
+           max(coalesce(tu.account_id, w.account_id, '')) AS account_id,
+           max(w.name) AS workspace_name,
+           max(coalesce(ar.block_id, '')) AS block_id,
+           max(b.title) AS block_title,
+           max(coalesce(ar.service_id, '')) AS service_id,
+           max(sl.title) AS service_name,
+           max(coalesce(s.repo_github_id::text, '')) AS repo_id,
+           max(gr.owner || '/' || gr.name) AS repo_name,
+           max(coalesce(b.task_type, '')) AS task_type,
+           max(coalesce(tk.ticket_key, '')) AS ticket_ref,
+           count(*)::int AS calls,
+           coalesce(sum(tu.input_tokens), 0)::bigint AS input_tokens,
+           coalesce(sum(tu.output_tokens), 0)::bigint AS output_tokens,
+           coalesce(sum(case when tu.billing = 'subscription'
+                             then 0 else tu.cost_estimate end), 0)::float8 AS metered_cost,
+           coalesce(sum(case when tu.billing = 'subscription'
+                             then tu.cost_estimate else 0 end), 0)::float8
+             AS subscription_cost
+    FROM token_usage tu
+    LEFT JOIN workspaces w ON w.id = tu.workspace_id
+    LEFT JOIN agent_runs ar ON ar.workspace_id = tu.workspace_id AND ar.id = tu.execution_id
+    LEFT JOIN blocks b ON b.workspace_id = ar.workspace_id AND b.id = ar.block_id
+    LEFT JOIN services s ON s.id = ar.service_id
+    LEFT JOIN (SELECT s2.id AS service_id, min(b2.title) AS title
+               FROM services s2
+               LEFT JOIN blocks b2 ON b2.id = s2.frame_block_id
+               GROUP BY s2.id) sl ON sl.service_id = ar.service_id
+    LEFT JOIN github_repos gr ON gr.workspace_id = tu.workspace_id
+                             AND gr.github_id = s.repo_github_id
+    LEFT JOIN (SELECT workspace_id, linked_block_id,
+                      min(source || ':' || external_id) AS ticket_key
+               FROM tasks
+               WHERE linked_block_id IS NOT NULL AND deleted_at IS NULL
+               GROUP BY workspace_id, linked_block_id) tk
+           ON tk.workspace_id = ar.workspace_id AND tk.linked_block_id = ar.block_id
+    WHERE tu.created_at >= ${from} AND tu.created_at < ${to}
+      ${workspaceId === undefined ? sql`` : sql`AND tu.workspace_id = ${workspaceId}`}
+    GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+    ON CONFLICT (workspace_id, day_start, execution_id, agent_kind, provider, model,
+                 billing, vendor)
+      DO UPDATE SET calls = excluded.calls,
+                    input_tokens = excluded.input_tokens,
+                    output_tokens = excluded.output_tokens,
+                    metered_cost = excluded.metered_cost,
+                    subscription_cost = excluded.subscription_cost
+  `
+}
+
 export class DrizzleSpendRollupRepository implements SpendRollupRepository {
   constructor(private readonly db: DrizzleDb) {}
 
@@ -89,14 +170,6 @@ export class DrizzleSpendRollupRepository implements SpendRollupRepository {
     // the exclusion exists to keep: every day of it still inside the trailing rewrite window
     // at the moment the board went. Once the board is gone the ledger can never speak for
     // those buckets again, which is exactly what makes them final.
-    //
-    // Every join below is provably 1:1 with a ledger row: `workspaces`, `services`, `blocks`
-    // and `github_repos` on their primary keys, and the two sub-selects pre-aggregated to one
-    // row per service / per `(workspace, block)` for the same fan-out reason the ledger-side
-    // repository documents. That is what keeps `count(*)` and the sums exact across seven
-    // tables. The ticket pick (`min(source:externalId)`) matches the ledger-side dimension
-    // exactly: the two sources must not attribute one block to different tickets, or they
-    // would disagree across the window boundary that routes between them.
     return await this.db.transaction(async (tx) => {
       await tx
         .delete(spendDays)
@@ -107,67 +180,7 @@ export class DrizzleSpendRollupRepository implements SpendRollupRepository {
             inArray(spendDays.workspace_id, tx.select({ id: workspaces.id }).from(workspaces)),
           ),
         )
-      const res = await tx.execute(sql`
-        INSERT INTO spend_days (
-          workspace_id, day_start, execution_id, agent_kind, provider, model, billing, vendor,
-          account_id, workspace_name, block_id, block_title, service_id, service_name,
-          repo_id, repo_name, task_type, ticket_ref,
-          calls, input_tokens, output_tokens, metered_cost, subscription_cost)
-        SELECT tu.workspace_id,
-               (tu.created_at / ${DAY_MS}::bigint) * ${DAY_MS}::bigint AS day_start,
-               coalesce(tu.execution_id, '') AS execution_id,
-               tu.agent_kind,
-               tu.provider,
-               tu.model,
-               tu.billing,
-               coalesce(tu.vendor, '') AS vendor,
-               -- The ledger's own denormalized account wins; the board's is the fallback for a
-               -- row recorded before it was resolved.
-               max(coalesce(tu.account_id, w.account_id, '')) AS account_id,
-               max(w.name) AS workspace_name,
-               max(coalesce(ar.block_id, '')) AS block_id,
-               max(b.title) AS block_title,
-               max(coalesce(ar.service_id, '')) AS service_id,
-               max(sl.title) AS service_name,
-               max(coalesce(s.repo_github_id::text, '')) AS repo_id,
-               max(gr.owner || '/' || gr.name) AS repo_name,
-               max(coalesce(b.task_type, '')) AS task_type,
-               max(coalesce(tk.ticket_key, '')) AS ticket_ref,
-               count(*)::int AS calls,
-               coalesce(sum(tu.input_tokens), 0)::bigint AS input_tokens,
-               coalesce(sum(tu.output_tokens), 0)::bigint AS output_tokens,
-               coalesce(sum(case when tu.billing = 'subscription'
-                                 then 0 else tu.cost_estimate end), 0)::float8 AS metered_cost,
-               coalesce(sum(case when tu.billing = 'subscription'
-                                 then tu.cost_estimate else 0 end), 0)::float8
-                 AS subscription_cost
-        FROM token_usage tu
-        LEFT JOIN workspaces w ON w.id = tu.workspace_id
-        LEFT JOIN agent_runs ar ON ar.workspace_id = tu.workspace_id AND ar.id = tu.execution_id
-        LEFT JOIN blocks b ON b.workspace_id = ar.workspace_id AND b.id = ar.block_id
-        LEFT JOIN services s ON s.id = ar.service_id
-        LEFT JOIN (SELECT s2.id AS service_id, min(b2.title) AS title
-                   FROM services s2
-                   LEFT JOIN blocks b2 ON b2.id = s2.frame_block_id
-                   GROUP BY s2.id) sl ON sl.service_id = ar.service_id
-        LEFT JOIN github_repos gr ON gr.workspace_id = tu.workspace_id
-                                 AND gr.github_id = s.repo_github_id
-        LEFT JOIN (SELECT workspace_id, linked_block_id,
-                          min(source || ':' || external_id) AS ticket_key
-                   FROM tasks
-                   WHERE linked_block_id IS NOT NULL AND deleted_at IS NULL
-                   GROUP BY workspace_id, linked_block_id) tk
-               ON tk.workspace_id = ar.workspace_id AND tk.linked_block_id = ar.block_id
-        WHERE tu.created_at >= ${from} AND tu.created_at < ${to}
-        GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
-        ON CONFLICT (workspace_id, day_start, execution_id, agent_kind, provider, model,
-                     billing, vendor)
-          DO UPDATE SET calls = excluded.calls,
-                        input_tokens = excluded.input_tokens,
-                        output_tokens = excluded.output_tokens,
-                        metered_cost = excluded.metered_cost,
-                        subscription_cost = excluded.subscription_cost
-      `)
+      const res = await tx.execute(foldSelect(from, to))
       // The sweep's coverage, recorded INSIDE the same transaction as the rewrite it
       // describes, and forward-only so a catch-up pass over an older window cannot present a
       // current rollup as a stalled one.
@@ -189,6 +202,42 @@ export class DrizzleSpendRollupRepository implements SpendRollupRepository {
             updated_at: sql`greatest(${platformRollupState.updated_at}, ${toEpochMs})`,
           },
         })
+      return Number(res.rowCount ?? 0)
+    })
+  }
+
+  async rollupWorkspaceSpendDays(
+    workspaceId: string,
+    fromEpochMs: number,
+    toEpochMs: number,
+  ): Promise<number> {
+    const from = Math.floor(fromEpochMs / DAY_MS) * DAY_MS
+    const to = Math.ceil(toEpochMs / DAY_MS) * DAY_MS
+    if (to <= from) return 0
+    // The board's LAST fold, run inside its own deletion so the spend it made since the last
+    // rolled-up day is frozen before `token_usage` goes with the cascade. Same rewrite shape as
+    // the sweep's, narrowed to one board, and with the two differences the port documents:
+    //
+    // - The existence guard STAYS. This is called before the cascade, but the guard is what
+    //   makes that ordering enforced by the query rather than remembered at the call site:
+    //   after the cascade the fold reads nothing, and an unguarded DELETE would reclaim the
+    //   frozen rows this whole table exists to keep.
+    // - `platform_rollup_state` is NOT touched. That marker is deployment-scoped and says how
+    //   far the SWEEP has covered every board; one board's final fold covers no other board's
+    //   days, and the marker only moves forward, so advancing it here would permanently
+    //   present days nothing folded as covered.
+    return await this.db.transaction(async (tx) => {
+      await tx
+        .delete(spendDays)
+        .where(
+          and(
+            eq(spendDays.workspace_id, workspaceId),
+            gte(spendDays.day_start, from),
+            lt(spendDays.day_start, to),
+            inArray(spendDays.workspace_id, tx.select({ id: workspaces.id }).from(workspaces)),
+          ),
+        )
+      const res = await tx.execute(foldSelect(from, to, workspaceId))
       return Number(res.rowCount ?? 0)
     })
   }
