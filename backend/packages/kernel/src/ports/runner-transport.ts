@@ -411,6 +411,34 @@ export interface RunnerJobView {
    * that dispatched no subagents (and on an older harness image).
    */
   sliceReviews?: RunnerSliceReview[]
+  /**
+   * What the agent's CLI reported about the tool servers (MCP) it loaded, republished whole on
+   * every poll once the CLI has announced its session. Latest-wins like the reports above, and
+   * republished rather than drained for a reason specific to it: the CLI announces its servers
+   * ONCE, near the start of the run, so a drain would put the whole fact on one poll response and
+   * lose it if that response were dropped.
+   *
+   * The observed complement of what the dispatch DECIDED (`AgentJobHandle.toolServers`): that
+   * says why the platform withheld a tool, this says a server it wired failed to start anyway.
+   * Absent for a job that wired none, for a harness whose CLI publishes no such report (codex),
+   * and on an older image — which is why the engine records absence as "not observed" rather than
+   * as a failure.
+   */
+  toolServers?: RunnerObservedToolServer[]
+}
+
+/**
+ * One tool server's line in the agent CLI's startup report. Mirrors the contracts
+ * `observedToolServerSchema` structurally (the kernel stays free of the contracts dependency for
+ * transport shapes). See {@link RunnerJobView.toolServers}.
+ */
+export interface RunnerObservedToolServer {
+  /** The server id the CLI named — the id the backend declared. */
+  id: string
+  /** The CLI's state for it, normalised by the harness onto a closed vocabulary. */
+  status: 'ready' | 'failed' | 'needs_auth' | 'unknown'
+  /** Tools the CLI exposed for it. ABSENT (nothing counted) and `0` (counted none) differ. */
+  toolCount?: number
 }
 
 /**

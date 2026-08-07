@@ -113,6 +113,68 @@ export type ToolServerUnavailableReason = v.InferOutput<typeof toolServerUnavail
  * deployment now wires, so a reader asking what the step HAS is asking about the live attempt, and
  * a re-armed step holding the previous round's answer would name servers nothing will ask for.
  */
+/**
+ * The state the agent's CLI gave one tool server when it started up.
+ *
+ * A CLOSED vocabulary normalised by the harness from the CLI's OWN open one, which is why
+ * `unknown` is a member rather than a dropped row: the CLI's status words belong to a third party
+ * that may add to them, and a server whose state this platform cannot name is still a server the
+ * CLI knew about. Reporting it as `ready` would dress a dead tool up as a live one, and dropping
+ * it reads as a server the CLI never loaded — a different fact with a different fix.
+ *
+ * - `ready` — loaded and connected. Its tools were available to the agent.
+ * - `failed` — the CLI could not bring it up. The prompt promised its tools and they never existed.
+ * - `needs_auth` — the server answered, and refused the credential (or asked for one that never
+ *   arrived). Separate from `failed` because the fix is a credential or an OAuth reconnect rather
+ *   than the endpoint or the package.
+ * - `unknown` — the CLI named a state this platform's mapping does not cover.
+ *
+ * PERSISTED and closed, so a member retired later must be RENDERED as retired rather than dropped
+ * (the same rule the unavailability vocabulary above carries, for the same reason).
+ */
+export const toolServerObservedStatusSchema = v.picklist([
+  'ready',
+  'failed',
+  'needs_auth',
+  'unknown',
+])
+export type ToolServerObservedStatus = v.InferOutput<typeof toolServerObservedStatusSchema>
+
+/**
+ * Whether a reported status is a member of the vocabulary — DERIVED from the picklist's own
+ * options, so it cannot drift from it the way a hand-written second list would.
+ *
+ * The narrowing every producer of this field needs: the value arrives from an agent CLI, through
+ * the harness's normalisation, over a job-view hop, and the engine has to place it in a closed
+ * union without either trusting it or reaching for valibot in a package that does not depend on
+ * it. The negative case is `unknown`, which the vocabulary carries precisely so this narrowing
+ * has an honest answer to give.
+ */
+export function isToolServerObservedStatus(value: unknown): value is ToolServerObservedStatus {
+  return typeof value === 'string' && TOOL_SERVER_OBSERVED_STATUS_SET.has(value)
+}
+
+const TOOL_SERVER_OBSERVED_STATUS_SET: ReadonlySet<string> = new Set(
+  toolServerObservedStatusSchema.options,
+)
+
+/** One server's line in the CLI's own startup report. See {@link stepToolServersSchema}'s `observed`. */
+export const observedToolServerSchema = v.object({
+  id: v.string(),
+  status: toolServerObservedStatusSchema,
+  /**
+   * How many tools the CLI exposed for this server.
+   *
+   * ABSENT and `0` are different facts, and conflating them is the mistake this field exists to
+   * avoid: absent means the CLI listed no tools at all so nothing was counted, while `0` means it
+   * listed its tools and this server contributed none — a server that connected and offers
+   * nothing, which reaches the agent exactly like one that was never wired and is otherwise
+   * indistinguishable from a healthy connection.
+   */
+  toolCount: v.optional(v.number()),
+})
+export type ObservedToolServer = v.InferOutput<typeof observedToolServerSchema>
+
 export const stepToolServersSchema = v.object({
   /** The servers whose transport, harness and credentials all resolved, so the agent could call them. */
   wired: v.array(
@@ -148,6 +210,27 @@ export const stepToolServersSchema = v.object({
    * `step.dispatches`, so an executor cannot mislabel it.
    */
   agentKind: v.string(),
+  /**
+   * What the agent's CLI reported about the servers it actually loaded, folded from the run's
+   * polls beside what the platform decided above.
+   *
+   * The two halves answer different questions and neither substitutes for the other: `wired` and
+   * `unavailable` are the PLATFORM's account of what it promised the agent and what it withheld,
+   * decided before the container started; this is the CLI's account of what it managed to start.
+   * A vendor endpoint that 500s, a pinned `npx` package that no longer resolves, a token the
+   * vendor revoked between dispatch and launch — all of them leave a server in `wired` and a
+   * prompt promising a tool nothing can call, and this is the only place that shows up.
+   *
+   * ABSENT means no observation was made, NOT that nothing was observed: the run's harness never
+   * reported (codex's CLI publishes no such report, and neither does any image older than the one
+   * that introduced this), or the step is inline, or it has been re-armed for a re-run. So a
+   * reader may never conclude from an absent field that a wired server failed. Never persisted
+   * empty for the same reason — the producer omits it rather than sending `[]`.
+   *
+   * A `wired` id MISSING from a present list is meaningful in the other direction: the CLI
+   * announced its servers and did not name this one, so it was never loaded at all.
+   */
+  observed: v.optional(v.array(observedToolServerSchema)),
 })
 export type StepToolServers = v.InferOutput<typeof stepToolServersSchema>
 

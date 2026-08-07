@@ -143,12 +143,23 @@ const API_PREFIX = '/api/v1'
 // tolerate: they map an unknown enum member through rather than refusing it, so a client compiled
 // against 1.24.0 keeps parsing every response it already understood and simply never asks for the
 // new source. No existing member changes meaning and no persisted `source` value moves.
+// 1.26.0, not 1.22.0: a step's `toolServers` on `GET /api/v1/debug/runs/:runId` gains an optional
+// `observed`, the agent CLI's own account of the servers it managed to load beside the `wired` /
+// `unavailable` account of what the platform decided. Additive: a consumer written against 1.21.0
+// reads both existing lists unchanged, and an ABSENT `observed` is not an empty one: it means no
+// observation was made (a harness whose CLI publishes no such report, an older runner image, an
+// unmapped runner pool), which is a distinction a consumer has to keep or it will report working
+// servers as dead.
 //
-// This branch has now lost that race TWICE (it claimed 1.22.0, then 1.23.0, then 1.24.0, each
-// published by main while the branch was in flight), which is the paragraph above's point made
-// again: the VERSION line auto-merges clean to a number main has already used, and only this
-// comment block conflicts. Re-read it after every merge.
-const API_VERSION = '1.25.0'
+// FIFTH number this one addition has held: written against 1.21.0 (the number the `toolServers`
+// record itself took), then displaced in turn by the run outcome endpoint, `x-min-scope`, the
+// task-`fields` patch and the GitLab source above, each published by main while this branch was in
+// flight. Not one of the five announced itself on the VERSION line, which auto-merged clean every
+// time to the number main had just used; every one surfaced as a conflict in THIS comment block,
+// only because each version step writes its own paragraph here. That is the whole reason the
+// paragraphs exist, and it is why the note at the top of the block says to re-read this line after
+// every merge rather than trust a clean one.
+const API_VERSION = '1.26.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

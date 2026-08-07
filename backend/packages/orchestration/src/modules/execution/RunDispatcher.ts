@@ -38,7 +38,8 @@ import {
 } from '@cat-factory/kernel'
 import { buildStepApproval } from './stepApproval.js'
 import { parseBlueprintService, parseSpecDoc } from '@cat-factory/contracts'
-import { applyContainerRunning, applySubtaskProgress } from './step-fold.logic.js'
+import { applyContainerRunning, applySubtaskProgress, pollHandleFor } from './step-fold.logic.js'
+import { applyObservedToolServers } from './toolServers.logic.js'
 import { FORK_PROPOSER_KIND } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { isDeployStep } from '@cat-factory/integrations'
@@ -564,32 +565,10 @@ export class RunDispatcher {
     const executor = this.agentExecutor
     if (!isAsyncAgentExecutor(executor)) return { kind: 'noop' }
 
-    // Re-supply the run id alongside the per-step job id so the executor can address
-    // the same per-run container at the poll site (it only stored the per-step jobId).
-    // The agent kind is supplied too: the container executor maps a migrated
-    // `merger`/`on-call`'s structured result into `mergeAssessment`/`onCallAssessment`
-    // KIND-AWARE in `toRunResult`, so without it that coercion no-ops and the merge gate /
-    // post-release-health gate would see no assessment.
-    const update = await executor.pollJob({
-      jobId: step.jobId,
-      runId: executionId,
-      workspaceId,
-      agentKind: step.agentKind,
-      // Re-supply the whole attribution set captured at dispatch (`recordDispatchAttribution`).
-      // The poll site can resolve NONE of it — it rebuilds the handle from the step alone — and
-      // the container executor reads all three off the handle:
-      //  - `model`: without it `recordStepResult` records 'unknown', which
-      //    `SpendService.parseModel` splits into provider "unknown" / model "" — corrupting the
-      //    token_usage row for EVERY subscription-harness (container) step.
-      //  - `subscriptionTokenId`: gates the pooled-token usage feedback that drives usage-aware
-      //    rotation; absent, it is skipped outright.
-      //  - `initiatedByUserId`: the quota-cycle counters' fallback target for a PERSONAL
-      //    (individual-usage) run, which leases no pooled token; absent, the target is null.
-      // The sync `run()` path already carried the rich handle; this fixes the durable poll path.
-      model: step.model,
-      subscriptionTokenId: step.subscriptionTokenId,
-      initiatedByUserId: step.initiatedByUserId,
-    })
+    // The handle is rebuilt from the STEP — the poll site has no dispatch in scope — so every
+    // field the executor reads off it has to have been persisted at dispatch. What each one is
+    // for, and what silently breaks without it, lives with its counterpart in `step-fold.logic`.
+    const update = await executor.pollJob(pollHandleFor(step, workspaceId, executionId))
     if (update.state === 'running') {
       return this.pollRunning.handleRunningPoll(
         workspaceId,
@@ -599,6 +578,11 @@ export class RunDispatcher {
         step.jobId,
       )
     }
+
+    // The CLI's own tool-server startup report, for every SETTLED disposition — folded once ahead
+    // of the branch tree below rather than inside each of its five persisting arms (see
+    // `toolServers.logic.ts`). Mutation only; whichever arm runs owns the persist.
+    applyObservedToolServers(step, update.toolServers)
 
     // A gate whose helper INVESTIGATES instead of fixing (post-release-health → on-call)
     // declares a `resolveHelperCompletion` hook on its definition. When such a helper's job

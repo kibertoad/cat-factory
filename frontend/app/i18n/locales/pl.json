@@ -1444,6 +1444,16 @@
           "oauthNotConnected": "Połącz tę tablicę z serwerem w oknie Infrastruktura. Wdrożenie bez ENCRYPTION_KEY nie ma gdzie przechować zgody, więc operator musi ją najpierw ustawić.",
           "oauthTokenFailed": "Połącz go ponownie w oknie Infrastruktura albo przeczekaj awarię dostawcy.",
           "overBudget": "Skróć to, co deklaruje agent, aby jedno uruchomienie uniosło całość."
+        },
+        "observed": {
+          "ready": "uruchomiony",
+          "readyTools": "narzędzia: {count}",
+          "readyNoTools": "uruchomiony, bez narzędzi",
+          "failed": "nie wystartował",
+          "needsAuth": "wymaga autoryzacji",
+          "unknown": "stan nieustalony",
+          "notLoaded": "nigdy nie wczytany",
+          "unattributed": "CLI agenta zgłosiło serwer, którego ten krok nie podłączył: {id}."
         }
       },
       "adherence": {

@@ -6,11 +6,13 @@
 // member added on one side only renders as a blank chip rather than failing to compile.
 
 export type {
+  ObservedToolServer,
   StepToolServers,
   ToolServerUnavailableReason,
   ToolServerAllowedToolsCheck,
   ToolServerCredential,
   ToolServerNotProbeableReason,
+  ToolServerObservedStatus,
   ToolServerOAuthGrant,
   ToolServerOAuthStatus,
   ToolServerProbeResult,

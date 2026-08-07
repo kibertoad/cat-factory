@@ -499,6 +499,18 @@ manifest.
   manual resume to work from: it can only be re-run from zero, discarding every slice that had
   already been reviewed. It is a latest-value publish, not a drain buffer, so re-reading it on every
   poll is free and a dropped poll response costs nothing.
+- **Set `toolServersPath` too** (it is `toolServers` on the harness view). It carries what the
+  agent's own CLI said about the tool servers (MCP) it loaded: one row per server with a status and
+  the number of tools it exposed. The backend already records what IT wired and what it withheld and
+  why; this is the only evidence of the other failure, a server that passed every check and then
+  failed to come up in the runner (a vendor endpoint that 500s, a pinned package that no longer
+  resolves, a token revoked between dispatch and launch). The prompt has already promised the agent
+  those tools, so without this the run just reads as an agent that underperformed. Leave it unset and
+  the step reports NO observation rather than a false one: absent is rendered as "not observed", never
+  as "nothing loaded", which is why an unmapped path costs the diagnostic and accuses nobody. Like
+  `sliceReviews` it is a latest-value publish rather than a drain buffer, and it matters that it is:
+  the CLI announces its servers ONCE near the start of the run, so a channel that could be drained
+  would put the whole fact on a single poll response and lose it if that one were dropped.
 - **Set `dispatchCapabilitiesPath` if your DISPATCH response proxies the harness's acceptance
   body** (it is `capabilities` there, and this is the one mapping read off the dispatch response
   rather than the poll one). It is what lets the backend refuse a BLIND run: a runner image older
@@ -679,3 +691,5 @@ Job`, `poll → read Job + harness status`, `release → delete Job`. Use
 - [Ephemeral environment provider](./environments-integration.md): the sibling
   manifest integration (same auth schemes, dot-path mapping, SSRF guard, encryption),
   used when a `tester` agent needs a live preview environment to run against.
+- [Tool servers (MCP)](./mcp-tool-servers.md): what `response.toolServersPath` carries and the
+  absent-vs-empty rule that makes leaving it unmapped safe.

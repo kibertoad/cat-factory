@@ -2001,6 +2001,16 @@
           "oauthNotConnected": "Collega questa lavagna al server dalla finestra Infrastruttura. Un deployment senza ENCRYPTION_KEY non ha dove conservare una concessione, quindi un operatore deve impostarla prima.",
           "oauthTokenFailed": "Ricollegalo dalla finestra Infrastruttura, oppure attendi la fine del disservizio del fornitore.",
           "overBudget": "Riduci ciò che l'agente dichiara, così una singola esecuzione può portarlo tutto."
+        },
+        "observed": {
+          "ready": "avviato",
+          "readyTools": "{count} strumenti",
+          "readyNoTools": "avviato, nessuno strumento",
+          "failed": "non si è avviato",
+          "needsAuth": "richiede autorizzazione",
+          "unknown": "stato non determinato",
+          "notLoaded": "mai caricato",
+          "unattributed": "La CLI dell'agente ha segnalato un server che questo passo non ha collegato: {id}."
         }
       },
       "adherence": {

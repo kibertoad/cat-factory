@@ -1,6 +1,6 @@
 # MCP support maturation
 
-Status: **in progress; slices 1, 2, 3, 4, slice 5's HANDSHAKE and RUN-RECORD halves and slice 7's CONSUMING half landed.** Sources: the 2026-08-04 review of both MCP
+Status: **in progress; slices 1, 2, 3, 4, 5 and slice 7's CONSUMING half landed.** Sources: the 2026-08-04 review of both MCP
 surfaces, and the 2026-08-05 follow-up review of one question through the same material: how well
 a deployment can add EXTERNAL tool servers programmatically, without forking. That review's
 verdict and its new findings are folded in below (the inventory rows marked 2026-08-05, slice 8,
@@ -116,8 +116,7 @@ dump and never uses the word MCP).
       declared in kernel and populated into the checklist the contract already had a field for; the
       Test button and the inventory rendered above the credential checklist; and the operator docs
       (the Slack runbook, the `MCP_*` convention). Its four decisions are below.
-- [ ] **5. Run-surface observability for tool servers. The HANDSHAKE and RUN-RECORD halves have
-      landed; the CLI-OBSERVED half has not.**
+- [x] **5. Run-surface observability for tool servers.** All three halves have landed.
       **Handshake (done):** the harness reports the job-body capability field names it parses
       (`mcpServers`, `skills`) on `/health` and on the `POST /jobs` acceptance; `RunnerTransport`
       gained a `RunnerDispatchAck` return every harness-speaking transport forwards; and the
@@ -140,13 +139,14 @@ dump and never uses the word MCP).
       `toolServerDispatch()` harness probe over each facade's OWN composed credential chain,
       giving tool servers and capability credentials their first cross-runtime assertions. Its
       decisions are below.
-      **CLI-observed (open):** what the agent's CLI actually reached (server started, N tools),
-      read off the CLI's own startup report and folded onto the same record beside what the
-      platform decided. Split from the record half because it is a HARNESS change and therefore an
-      image bump, and because the two answer different questions: the record says why the platform
-      withheld a tool, while this says a wired server failed to start anyway. Nothing blocks it:
-      the record is the field it extends, and the probe already diagnoses the same condition
-      interactively, which is why it ranked below the two halves that shipped.
+      **CLI-observed (done):** what the agent's CLI actually reached, read off its own startup
+      announcement (`system`/`init`: the servers it loaded with a status each, plus the flat tool
+      list) and folded onto the same record as `step.toolServers.observed`, rendered on the
+      existing chips. It answers the question the record's other half structurally cannot: not why
+      the platform withheld a tool, but that a server it WIRED failed to start anyway. Landed as a
+      harness change plus a pure engine fold, with an `unknown` status member and an absent-means-
+      not-observed rule carrying the honesty; a runner pool maps `response.toolServersPath` to
+      forward it. Its decisions and the gotchas it surfaced are below. Image bumped to 1.95.0.
       Ordering note: the handshake went first because the 2026-08-05 review rated the blind run the
       likeliest failure an adopting deployment actually hits, and unlike the chips it needed no wire
       vocabulary; the chips came second because slice 4 is where that vocabulary now exists
@@ -289,7 +289,8 @@ Recorded so the next iteration does not re-propose them.
 
 - **Any harness-side change is an image bump** (`@cat-factory/executor-harness` version + the
   three pinned tags + `RECOMMENDED_HARNESS_IMAGE`), and a reused tag does not deploy. Slice 1
-  bundled its harness edits into one bump (1.89.0); slice 5's handshake is the second (1.93.0).
+  bundled its harness edits into one bump (1.89.0); slice 5's handshake was the second (1.93.0)
+  and its CLI-observed half the third (1.95.0).
 - **The kernel/harness copies are pinned by conformity tests.** The id pattern, the tool-name
   pattern and the URL rule exist twice on purpose; a validation addition must extend both sides and
   the pinning test, not just kernel.
@@ -380,6 +381,67 @@ Recorded so the next iteration does not re-propose them.
   guessing at an arbitrary JSON document manufactures one. Nothing in the response can tell the two
   apart, and the operator can, in one line. Unmapped now means `unknown`, which is the truth about a
   control plane this backend knows nothing about.
+
+## Slice 5 (CLI-observed): its three decisions
+
+- **ABSENT is a first-class answer, and it is what makes the field usable.** The cheap version
+  writes an empty list whenever nothing was reported and lets a reader infer. It is a false
+  accusation on three whole populations at once: codex's CLI publishes no startup report, every
+  image older than 1.95.0 publishes none, and a runner pool that has not mapped
+  `response.toolServersPath` forwards none. All three would have rendered as "the CLI loaded none
+  of the servers you wired" on runs whose servers were fine. So the harness omits rather than
+  sending `[]`, the fold REFUSES an empty payload rather than writing it through, and the surface
+  renders nothing at all. The mirror case is kept sharp on purpose: a `wired` id missing from a
+  report that IS present is positive evidence, and the SPA models the two as different values
+  (`null` versus `not_loaded`) rather than as one nullable.
+- **`unknown` is a status member rather than a dropped row.** The CLI's status vocabulary is a
+  third party's and it has already spelled the same state more than one way across versions. A
+  build that dropped what it could not map would report a server the CLI knew about as one it
+  never loaded, which is a different fault with a different fix, and a build that guessed `ready`
+  would dress a dead tool as a live one. `unknown` is also deliberately NOT rendered as a fault:
+  it is a fact about this build, and painting it red would send an operator to debug a working
+  integration every time a CLI adds a word. It carries the CLI's own `pending` for the same
+  reason: a server still handshaking when the session was announced has no resolved state, and the
+  nearest fault member (`needs_auth`) would tell an operator to re-issue a working credential for
+  a server that came up a moment later.
+- **`toolCount: 0` is recorded and rendered as its own sentence.** A server that connected and
+  exposes nothing reaches the agent exactly like one that was never wired, while every other
+  signal about it says healthy (the likely causes: an `allowedTools` list matching nothing, a
+  vendor that authenticated and served an empty catalog). It is the single most diagnostic value
+  on the field and the one a truthiness guard silently erases, so the count is guarded on the
+  NUMBER at all four hops and stays ABSENT when the CLI listed no tools at all.
+
+## Gotchas slice 5 (CLI-observed) surfaced
+
+- **The tool namespace is not parseable, only MATCHABLE.** The CLI publishes one flat tool list
+  namespaced `mcp__<id>__<tool>`, and the obvious read splits on the first separator after the
+  prefix. The id vocabulary permits `_`, so `code__search` is a legal server id: the split files
+  its tools under a server called `code` that nothing declared and leaves the real one reporting
+  `toolCount: 0`, which is precisely the value the decision above calls the most diagnostic on the
+  field. So each name is matched against the ids the SAME report declared, and where two of them
+  could both own a name (`code` and `code__search` both could own `mcp__code__search__query`),
+  neither is counted and both counts stay absent. That widened `toolCount`'s absent case from one
+  cause to two, which the field's own doc now names: absent is "this image counted nothing", never
+  "the server has no tools".
+- **The report has to ride all THREE poll dispositions, not just `running`.** The CLI announces its
+  servers ONCE, near the start, so the obvious "fold it on the live poll" loses it entirely for a
+  job short enough to settle between two polls — and the FAILED disposition is the one whose
+  post-mortem needs it most, since a prompt that promised tools the CLI never started is a prime
+  suspect for whatever killed the run. Latest-wins republishing on the view (never a drain buffer)
+  is what makes forwarding it on every poll safe.
+- **A settled poll reaches FIVE persisting arms, so the fold goes ahead of the branch tree.** A
+  gate's helper re-probe, a phased helper's completion, an investigate-helper's resolution, the
+  failed path and the normal completion all write the same `step`; a fold per arm is one forgotten
+  arm away from a helper round silently reporting no observation. One mutation before the tree,
+  and whichever arm runs owns the persist.
+- **The fold must never CREATE the record.** `step.toolServers` is written at dispatch and carries
+  the `agentKind` its lists belong to, which is routinely not the step's own kind. A record minted
+  at poll time would have no kind to stamp, so its servers would be read under the wrong agent.
+- **Two files were at their size ratchet and this pushed both over.** The extractions are the
+  fix and both are cohesion improvements in their own right: `pollHandleFor` moved next to
+  `recordDispatchAttribution` in `step-fold.logic.ts` (it is the exact counterpart — the poll site
+  rebuilding from the step what the dispatch persisted), and `buildDoneUpdate` joined its
+  `running`/`failed` siblings in `containerAgentResult.ts`, which already owned terminal shaping.
 
 ## Slice 5 (run record): its four decisions
 

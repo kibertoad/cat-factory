@@ -208,7 +208,12 @@ The replacement is not a rename. An agent-context snapshot exists only where the
 prompt recording on, and is pruned on the telemetry retention window, so the copy on the snapshot
 was blank or gone for most readers of it; the step carries the same facts unconditionally and for
 as long as the run exists. Both are projected from the same value at dispatch, so they cannot
-disagree while both are served.
+disagree about what the platform decided while both are served.
+
+The step's copy is also the only one that grows. It gained `observed` in spec `1.24.0`, the agent
+CLI's own account of the servers it managed to load, which is not a dispatch-time fact and so has
+no place on the snapshot to project onto. A reader still on the deprecated copy is not seeing a
+smaller version of the same answer; it is missing the half that says a wired server never came up.
 
 ## Quick start
 

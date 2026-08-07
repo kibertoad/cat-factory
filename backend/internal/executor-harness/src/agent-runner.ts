@@ -24,8 +24,10 @@ import {
   claudeAllowedToolPatterns,
   codexMcpConfigToml,
   mcpServerSecretValues,
+  observeClaudeMcpInit,
   writeClaudeMcpConfig,
   type McpServerSpec,
+  type ObservedMcpServer,
   type SkillSpec,
 } from './agent-capabilities.js'
 import { ProgressGuard, type ProgressGuardLimits } from './progress-guard.js'
@@ -149,6 +151,21 @@ export interface SubscriptionRunOptions {
    * same row still rides the result, so a lost poll response costs nothing.
    */
   onCallMetric?: (call: HarnessCallMetric) => void
+  /**
+   * Called once with what the CLI reported about the tool servers it loaded, the moment it
+   * announces its resolved session (see {@link observeClaudeMcpInit}).
+   *
+   * The one thing the backend's own dispatch record cannot answer: it knows why it WITHHELD a
+   * tool, and this says a server it wired failed to start anyway. Reported even when every server
+   * came up, because "observed, all healthy" and "this image observed nothing" are different
+   * facts about a run and only the first one clears a wired server of suspicion.
+   *
+   * Whole-value latest-wins, not a delta — the CLI announces its session once, so a second call
+   * would only ever be a re-announcement of the same set. A harness whose CLI reports nothing
+   * (codex today) never calls this, which is what leaves the backend's record honestly empty
+   * rather than claiming every server failed.
+   */
+  onToolServers?: (observed: ObservedMcpServer[]) => void
   /**
    * The per-job child logger (jobId/repo/branch correlation). Threaded so the retained
    * session-transcript path is logged for the run when the isolated config home is torn down.
@@ -502,6 +519,67 @@ async function setUpClaudeMcp(
 }
 
 /**
+ * The LIVE publishers of a claude-code run: everything the stream has revealed so far that the
+ * backend should see before the run ends, rather than only in its terminal result.
+ *
+ * They are grouped because they share one rule and differ on everything else. The rule: each
+ * publishes a WHOLE current value (never a delta), so a dropped poll response costs nothing and
+ * the caller may fire them as often as it likes. What differs is what is at stake — progress is a
+ * disposable count the UI renders, while the slice reviews carry the slices' actual review WORK
+ * and are the only thing a resume of a wedged review can be rebuilt from, which is why they are
+ * published on the turn a slice lands rather than on the next progress tick.
+ *
+ * `lastTodo` is a GETTER because the event handler assigns it as the stream goes; taking the value
+ * would freeze the plan at construction time.
+ *
+ * Split out of {@link runClaudeCode} for the per-function line budget.
+ */
+function createClaudeLivePublishers(deps: {
+  opts: SubscriptionRunOptions
+  planTracker: ReturnType<typeof createTaskPlanTracker>
+  sliceTracker: ReturnType<typeof createSliceTracker>
+  lastTodo: () => TodoProgress | undefined
+}): { emitProgress: () => void; emitSliceReviews: () => void } {
+  const { opts, planTracker, sliceTracker } = deps
+  return {
+    emitProgress: () => {
+      if (!opts.onProgress) return
+      const progress = mergeProgress(
+        pickProgress(deps.lastTodo(), planTracker.progress()),
+        sliceTracker.progress(),
+      )
+      if (progress) opts.onProgress(progress)
+    },
+    emitSliceReviews: () => {
+      if (!opts.onSliceReviews) return
+      const reviews = sliceTracker.sliceReviews()
+      if (reviews.length > 0) opts.onSliceReviews(reviews)
+    },
+  }
+}
+
+/**
+ * Publish the CLI's own startup report about the tool servers it loaded — the OBSERVED half of the
+ * run's tool-server record.
+ *
+ * Handed every event because it is the one thing `runClaudeCode` reads that is neither a turn nor
+ * a result: it arrives once, ahead of the first model call, and says whether the servers the
+ * backend wired actually came up. {@link observeClaudeMcpInit} answers `undefined` for every other
+ * event and for a run that wired none, so a server-less run reports nothing and the caller's
+ * record stays honestly absent rather than empty.
+ *
+ * Split out of {@link runClaudeCode} for the per-function line budget.
+ */
+function reportToolServerStartup(
+  event: Record<string, unknown>,
+  onToolServers: ((observed: ObservedMcpServer[]) => void) | undefined,
+): void {
+  if (!onToolServers) return
+  const observed = observeClaudeMcpInit(event)
+  if (observed) onToolServers(observed)
+}
+
+/**
  * No-progress guard on the CLI's own tool stream — the claude-code analogue of runPi's guard,
  * which cannot see the CLI's internal turns. The caller remembers each `tool_use` id's name off
  * the assistant turn (`rememberTool`) and hands the following user turn's content to `feedGuard`,
@@ -645,23 +723,12 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   const sliceTracker = createSliceTracker(secrets)
   const planTracker = createTaskPlanTracker()
   let lastTodo: TodoProgress | undefined
-  const emitProgress = (): void => {
-    if (!opts.onProgress) return
-    const progress = mergeProgress(
-      pickProgress(lastTodo, planTracker.progress()),
-      sliceTracker.progress(),
-    )
-    if (progress) opts.onProgress(progress)
-  }
-  // Publish the per-slice reviews the tracker has captured. Separate from `emitProgress` because
-  // the two answer different questions and have different lifetimes: progress is a disposable
-  // count the UI renders, while these carry the slices' actual review WORK and are persisted so a
-  // run that dies before its aggregation can be resumed from them.
-  const emitSliceReviews = (): void => {
-    if (!opts.onSliceReviews) return
-    const reviews = sliceTracker.sliceReviews()
-    if (reviews.length > 0) opts.onSliceReviews(reviews)
-  }
+  const { emitProgress, emitSliceReviews } = createClaudeLivePublishers({
+    opts,
+    planTracker,
+    sliceTracker,
+    lastTodo: () => lastTodo,
+  })
 
   // No-progress guard on the CLI's own tool stream — the claude-code analogue of runPi's guard,
   // absent on this path until now. Claude Code reports a tool CALL (its name) on the `assistant`
@@ -675,6 +742,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
 
   const onEvent = (event: Record<string, unknown>, meta?: { final?: boolean }): void => {
     const type = event.type
+    reportToolServerStartup(event, opts.onToolServers)
     // A subagent's turns ride the parent's stdout tagged with the dispatch that spawned them;
     // `telemetry` routes them off the parent's chain (and decides who bills them). Progress, slice
     // tracking, the guard and `stats` below deliberately see EVERY event: a subagent grinding on
