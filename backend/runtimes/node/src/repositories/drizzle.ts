@@ -50,6 +50,7 @@ import type {
   RiskPolicyRepository,
   ServiceFragmentDefaultsRepository,
   ServiceRepository,
+  SpendRollupRepository,
   SharedStackRepository,
   SubscriptionQuotaCycleRepository,
   TestSecretsRepository,
@@ -88,6 +89,7 @@ import {
 } from './drizzle/execution.js'
 
 import { DrizzleReportsRepository } from './drizzle/reports.js'
+import { DrizzleSpendRollupRepository } from './drizzle/spendRollup.js'
 
 import {
   DrizzleAccountInvitationRepository,
@@ -182,6 +184,7 @@ export interface CoreRepositories {
   platformMetricsRepository: PlatformMetricsRepository
   gateOutcomeRepository: GateOutcomeRepository
   reportsRepository: ReportsRepository
+  spendRollupRepository: SpendRollupRepository
   modelPresetRepository: ModelPresetRepository
   agentPromptRepository: AgentPromptRepository
   workspaceAgentSettingsRepository: WorkspaceAgentSettingsRepository
@@ -246,6 +249,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     platformMetricsRepository: new DrizzlePlatformMetricsRepository(db),
     gateOutcomeRepository: new DrizzleGateOutcomeRepository(db),
     reportsRepository: new DrizzleReportsRepository(db),
+    spendRollupRepository: new DrizzleSpendRollupRepository(db),
     modelPresetRepository: new DrizzleModelPresetRepository(db),
     agentPromptRepository: new DrizzleAgentPromptRepository(db),
     workspaceAgentSettingsRepository: new DrizzleWorkspaceAgentSettingsRepository(db),

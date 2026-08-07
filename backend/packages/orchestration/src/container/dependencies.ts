@@ -134,6 +134,7 @@ import type {
   RepoBootstrapper,
   RepoProjectionRepository,
   ReportsRepository,
+  SpendRollupRepository,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
   ResolveRunRepoContext,
@@ -515,6 +516,14 @@ export interface CoreDependencies {
    * the admin read endpoint; absent (tests / unconfigured facades) → no reports view.
    */
   reportsRepository?: ReportsRepository
+  /**
+   * The DURABLE cost-attribution rollup (`spend_days`) behind the Reports view's long
+   * windows, materialised by the retention sweep and never pruned. Optional, like
+   * {@link reportsRepository}: absent ⇒ every window falls back to the ledger and the
+   * projection reports `source: 'ledger'` rather than presenting ledger numbers as durable
+   * ones.
+   */
+  spendRollupRepository?: SpendRollupRepository
   /**
    * Whether the LLM observability sink persists the full prompt body with each metric.
    * Defaults to true; set false (via `LLM_RECORD_PROMPTS=false`) to keep the numeric

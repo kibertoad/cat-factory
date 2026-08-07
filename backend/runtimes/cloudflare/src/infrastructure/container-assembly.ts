@@ -100,6 +100,7 @@ import { D1SubscriptionActivationRepository } from './repositories/D1PersonalSub
 import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
 import { D1ValidationConfigRepository } from './repositories/D1ValidationConfigRepository'
 import { D1ReportsRepository } from './repositories/D1ReportsRepository'
+import { D1SpendRollupRepository } from './repositories/D1SpendRollupRepository'
 import { D1TokenUsageRepository } from './repositories/D1TokenUsageRepository'
 import { D1UserRepoAccessRepository } from './repositories/D1UserRepoAccessRepository'
 import { D1UserRepository } from './repositories/D1UserRepository'
@@ -380,6 +381,8 @@ Partial<CoreDependencies> & Pick<CoreDependencies, 'gateOutcomeRepository'> {
     // Cross-cutting usage analytics over `token_usage` + `agent_runs` (both MAIN db) for
     // the Reports view.
     reportsRepository: new D1ReportsRepository({ db }),
+    // The durable cost-attribution rollup the same view's long (TCO) windows read.
+    spendRollupRepository: new D1SpendRollupRepository({ db }),
     // Unified provisioning event log (separate D1 binding). Threads the recorder into
     // the env services and exposes the read service for the logs controller; undefined
     // when PROVISIONING_DB isn't bound.

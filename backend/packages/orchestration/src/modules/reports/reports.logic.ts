@@ -1,6 +1,7 @@
 import type {
   ReportActivityRow,
   ReportSpendRow,
+  ReportSpendSource,
   ReportTotals,
   ReportTrendPoint,
   ReportWindow,
@@ -30,12 +31,36 @@ export function alignWindowStart(until: number, windowMs: number, bucketMs: numb
   return Math.floor((until - windowMs) / bucketMs) * bucketMs
 }
 
-/** Per-window sizing: how far back to aggregate and how wide each trend bucket is. */
-export const REPORT_WINDOWS: Record<ReportWindow, { windowMs: number; bucketMs: number }> = {
-  '24h': { windowMs: 24 * 60 * 60_000, bucketMs: 60 * 60_000 }, // 24 × 1h buckets
-  '7d': { windowMs: 7 * 24 * 60 * 60_000, bucketMs: 6 * 60 * 60_000 }, // 28 × 6h buckets
-  '30d': { windowMs: 30 * 24 * 60 * 60_000, bucketMs: 24 * 60 * 60_000 }, // 30 × 1d buckets
-  '90d': { windowMs: 90 * 24 * 60 * 60_000, bucketMs: 3 * 24 * 60 * 60_000 }, // 30 × 3d buckets
+/**
+ * Per-window sizing: how far back to aggregate, how wide each trend bucket is, and WHICH
+ * store answers the spend half.
+ *
+ * The two long windows read the durable `spend_days` rollup. That is not only a cost
+ * decision (though a quarter of a busy deployment's ledger is a lot of rows to group at read
+ * time): those are the windows a TCO question is actually asked over, and only the rollup
+ * carries the attribution as it stood when the money was spent. The two short windows stay on
+ * the ledger, where the rollup's sweep cadence would be visible as a missing tail.
+ *
+ * Every rollup-backed bucket is a whole number of UTC days, which is what lets a day-grained
+ * table serve them: `alignWindowStart` snaps `since` down to a bucket edge, and a multiple of
+ * one day (`30d`) or three (`90d`) is always a UTC midnight.
+ */
+export const REPORT_WINDOWS: Record<
+  ReportWindow,
+  { windowMs: number; bucketMs: number; source: ReportSpendSource }
+> = {
+  // 24 × 1h buckets
+  '24h': { windowMs: 24 * 60 * 60_000, bucketMs: 60 * 60_000, source: 'ledger' },
+  // 28 × 6h buckets
+  '7d': { windowMs: 7 * 24 * 60 * 60_000, bucketMs: 6 * 60 * 60_000, source: 'ledger' },
+  // 30 × 1d buckets
+  '30d': { windowMs: 30 * 24 * 60 * 60_000, bucketMs: 24 * 60 * 60_000, source: 'daily-rollup' },
+  // 30 × 3d buckets
+  '90d': {
+    windowMs: 90 * 24 * 60 * 60_000,
+    bucketMs: 3 * 24 * 60 * 60_000,
+    source: 'daily-rollup',
+  },
 }
 
 /** Widen a port spend group into its wire row (the shapes match; this pins the boundary). */

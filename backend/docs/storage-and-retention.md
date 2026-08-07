@@ -204,6 +204,77 @@ verdict) rides the same sweep on a 90-day window. It is a projection rather than
 aggregation happens at write time), and it exists because the gate's live state lives inside the
 run's `detail` JSON blob, where no `GROUP BY` can reach it.
 
+## 1c. The durable cost-attribution rollup (`spend_days`), the one table with NO retention
+
+The Reports view's TCO axes (spend per repository, per ticket, per run) were computed at READ
+time by joining the ledger to `agent_runs` and then to the LIVE `services.repo_github_id` /
+`tasks.linked_block_id` links. That answers "what is this costing me now" correctly and
+answers "what did this repository cost us last quarter" wrongly in three separate ways: the
+ledger is pruned at 395 days, the runs it joins through are prunable too, and re-pointing a
+service or re-importing an issue silently rewrites history that has already been reported.
+
+`spend_days` folds the ledger once per sweep, per UTC day, and freezes the board shape the
+spend happened under: run, block (and its title), service (and its name), repository id and
+`owner/name`, task type, tracker ref, plus the account and board names. Reading it joins
+nothing, so nothing downstream can be re-pointed or pruned out from under a report. The Reports
+view routes to it on the `30d` / `90d` windows and says so (`source`, `rolledUpThrough`).
+
+**It is deliberately never pruned**, which makes it the exception on this page and needs the
+arithmetic stated rather than assumed:
+
+- **The grain is what makes that affordable**: one row per `(workspace, day, run, agent kind,
+provider:model, billing, vendor)`. A run writes hundreds of ledger rows and a handful of
+  these, so the table grows with RUN volume, not call volume. At ~0.3 KB/row and ~8 rows per
+  run, 1,000 runs/day is ~2.4 MB/day, ~0.9 GB/year, the same order as the audit log's
+  multi-year budget in §"The audit log", and the reason the grain must not be widened to
+  per-call without revisiting this.
+- **A window would defeat the point.** A TCO table has to outlive the ledger it was folded
+  from; one that expires is just a slower ledger. So there is no `deleteOlderThan` on
+  `SpendRollupRepository` at all: the absence is structural, not an omission a future sweep
+  could quietly fill.
+- **It survives a board deletion too** (named in `WORKSPACE_CASCADE_SPECIAL_TABLES`): money
+  already spent is an account-level fact, and reclaiming it would shrink last quarter's numbers
+  retroactively and silently. The frozen labels (board name, block title, repo name) therefore
+  outlive the board, which is the same trade the audit log makes.
+  - Staying out of the cascade is only half of that. The rewrite below would have finished the
+    job on the sweep's own schedule, with no further operator action: `token_usage` IS
+    cascaded, so for a deleted board the re-fold reads nothing, and a window DELETE would have
+    reclaimed every frozen row still inside the trailing window. **So the rewrite reaches only
+    workspaces that still exist**, which is the general rule that a rewrite may only delete
+    what it can reproduce. A live board whose ledger was pruned and a deleted board look
+    identical to the fold and are opposites here: the first is still there to be asked and is
+    answering "nothing"; the second can never be re-folded again, which is what makes its rows
+    final.
+  - What is genuinely lost is the deleted board's spend **since the last completed rollup
+    day**, at most one sweep interval: those ledger rows go with the cascade before any pass
+    saw them. Recovering it would mean folding the board's un-rolled days inside the delete
+    itself, which is not done today.
+- **The pass resumes from its own watermark**, unlike the run rollup's fixed lookback, because
+  a day missed here is missing from the only durable record of it. Each pass is capped
+  (`SPEND_DAY_ROLLUP_MAX_SPAN_MS`) so a wide catch-up is several queries rather than one
+  unbounded `GROUP BY`, and the first pass on a deployment backfills 90 days so the longest
+  report window is not under-reported for a quarter while looking complete.
+  - **The catch-up horizon is `TOKEN_USAGE_RETENTION_DAYS`, not that 90-day backfill.** The two
+    answer different questions. The backfill bounds how much history a deployment ADOPTS on its
+    first pass, a judgement call; a resumed pass has no such choice, because every day since the
+    watermark is one this deployment already committed to recording and the ledger still holds
+    it (the prune runs in this same sweep, so a sweep that was down pruned nothing either).
+    Capping the resume at 90 days stepped over months of still-readable days and then advanced
+    the high-water mark straight past the hole.
+  - Past the ledger's retention there is nothing left to fold, so that is where the walk stops,
+    and the pass **logs the span it gave up on** (`spend_days`, warn). A high-water mark
+    structurally cannot represent a hole, so that line is the only notice the loss ever gets.
+- **`rolledUpThrough` is the last COMPLETE day**, never the newest day written. A sweep firing
+  at noon folds today's spend so far, because deferring the partial day would leave the newest
+  bucket missing outright, but today goes on accruing after the pass returns. Stamping it would
+  present the one bucket guaranteed to be short as finished, under a panel that reads "complete
+  through <date>". The reader measures lag against the same day boundary (`lastCompleteRollupDay`
+  in `@cat-factory/contracts`, shared with the SPA), so the verdict does not swing with the hour
+  the report happened to be opened.
+- **It runs BEFORE the ledger prune in the same sweep.** Ordering is a correctness property:
+  the rollup reads `token_usage`, so a pass that pruned first would drop spend that had never
+  been rolled up.
+
 ## 2. Bound or expire the `github_rate_limits` telemetry
 
 **Concern.** `github_rate_limits` (migration `0004`) records one append-only row
@@ -261,8 +332,9 @@ and the fast-ack → queue design (ADR 0001) already smooths webhook write burst
 
 ## Suggested sequencing
 
-1. ~~**`token_usage` retention/rollup**~~: done (deletion-based; rollup deferred).
+1. ~~**`token_usage` retention/rollup**~~: done (deletion-based).
    1b. ~~**Daily run rollup + settled-gate projection**~~: done (see above).
+   1c. ~~**Durable cost-attribution rollup (`spend_days`)**~~: done (see above).
 2. ~~**`github_rate_limits` retention**~~: done.
 3. ~~**`github_commits` backfill bounds + retention**~~: done.
 4. **Throughput / read-replica review**: revisit when real multi-tenant load

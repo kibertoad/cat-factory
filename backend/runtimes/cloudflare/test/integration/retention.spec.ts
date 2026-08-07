@@ -13,6 +13,7 @@ import { D1MachineNodeRepository } from '../../src/infrastructure/repositories/D
 import { D1NotificationRepository } from '../../src/infrastructure/repositories/D1NotificationRepository'
 import { D1AuditEventRepository } from '../../src/infrastructure/repositories/D1AuditEventRepository'
 import { D1PlatformMetricsRepository } from '../../src/infrastructure/repositories/D1PlatformMetricsRepository'
+import { D1SpendRollupRepository } from '../../src/infrastructure/repositories/D1SpendRollupRepository'
 import { D1RateLimitRepository } from '../../src/infrastructure/repositories/D1RateLimitRepository'
 import { D1SubscriptionQuotaCycleRepository } from '../../src/infrastructure/repositories/D1SubscriptionQuotaCycleRepository'
 import { D1TokenUsageRepository } from '../../src/infrastructure/repositories/D1TokenUsageRepository'
@@ -67,6 +68,8 @@ function deps() {
     platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
     // The account audit log lives in its OWN database (AUDIT_DB), not the main one.
     auditEventRepository: new D1AuditEventRepository({ db: env.AUDIT_DB }),
+    // The durable cost-attribution rollup: written by this sweep, never pruned by it.
+    spendRollupRepository: new D1SpendRollupRepository({ db }),
     clock,
     policy: POLICY,
   }
@@ -295,9 +298,11 @@ describe('storage retention sweep', () => {
       gateOutcomes: 0,
       runDays: 0,
       auditEvents: 0,
-      // The rollup is a WRITE with every window disabled around it, so it still runs: a
-      // disabled RETENTION window means "never delete", not "stop materialising".
+      // The rollups are WRITES with every window disabled around them, so they still run: a
+      // disabled RETENTION window means "never delete", not "stop materialising". The
+      // durable spend rollup has no window to disable in the first place.
       runDaysRolledUp: expect.any(Number),
+      spendDaysRolledUp: expect.any(Number),
       // A clean pass names no failed table. This list is what distinguishes a prune that
       // reclaimed nothing from one that could not run — both report 0 rows.
       failedTables: [],

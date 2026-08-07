@@ -225,6 +225,8 @@ function selectNodeObservabilityDeps(args: {
     gateOutcomeRepository: repos.gateOutcomeRepository,
     // Cross-cutting usage analytics over `token_usage` + `agent_runs` for the Reports view.
     reportsRepository: repos.reportsRepository,
+    // The durable cost-attribution rollup the same view's long (TCO) windows read.
+    spendRollupRepository: repos.spendRollupRepository,
     // Unified provisioning event log (its own Postgres schema). Threads the recorder
     // into the env services and exposes the read service for the logs controller.
     provisioningLogRepository: repos.provisioningLogRepository,

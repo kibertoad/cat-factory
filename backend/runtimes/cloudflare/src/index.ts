@@ -34,6 +34,7 @@ import { D1GateOutcomeRepository } from './infrastructure/repositories/D1GateOut
 import { D1NotificationRepository } from './infrastructure/repositories/D1NotificationRepository'
 import { D1PlatformMetricsRepository } from './infrastructure/repositories/D1PlatformMetricsRepository'
 import { D1AuditEventRepository } from './infrastructure/repositories/D1AuditEventRepository'
+import { D1SpendRollupRepository } from './infrastructure/repositories/D1SpendRollupRepository'
 import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
 import {
   GITHUB_RECONCILE_STALE_MS,
@@ -375,6 +376,9 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
       // prune here that does not read `env.DB`: audit retention is measured in years and must not
       // compete with live transactional state for the per-database ceiling.
       auditEventRepository: new D1AuditEventRepository({ db: requireAuditDb(env) }),
+      // The durable cost-attribution rollup: this sweep is its only writer, and prunes it
+      // nowhere (see `RetentionDeps`).
+      spendRollupRepository: new D1SpendRollupRepository({ db: env.DB }),
       // Prune the separate provisioning-log database when its binding is present.
       ...(env.PROVISIONING_DB
         ? {

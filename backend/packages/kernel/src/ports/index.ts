@@ -152,6 +152,8 @@ export type {
   ReportSpendTrendBucket,
   ReportsRepository,
 } from './reports.js'
+export type { SpendRollupRepository } from './spend-rollup.js'
+export { SPEND_DAYS_ROLLUP } from './spend-rollup.js'
 export type {
   AgentContextFile,
   AgentContextFragment,
