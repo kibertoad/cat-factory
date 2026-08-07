@@ -309,8 +309,8 @@ jobs:
   # cannot take them along: both are exactly the checks a docs-/markdown-only PR is most
   # likely to trip — the package catalog IS README.md content, and the image-tag consistency
   # check reads the pinned tag files — so they must run on every PR regardless of scope.
-  # But they are PURE PRE-MERGE GATES with no post-merge signal (both deterministic from
-  # content, and deploy.yml re-runs the image-tag check on main anyway), so they do NOT run
+  # But they are PURE PRE-MERGE GATES with no post-merge signal (both are deterministic from
+  # content, so a push re-run could only repeat the PR's verdict), so they do NOT run
   # on push to main. On a PR the `Build` gate accepts nothing but `success` from this job; on
   # push it is skipped and the gate tolerates that (see `build-gate`).
   repo-guards:
@@ -331,10 +331,12 @@ jobs:
 
       # Guard the executor-harness runner image tag: the harness version and the
       # cat-factory-executor:<tag> pins in deploy/backend/{package.json, wrangler.toml} must
-      # stay in lockstep, and an image-source change must bump the tag. deploy.yml runs the
-      # same check post-merge on main; this catches the mistake on the PR instead of turning
-      # main red. BASE_REF is empty off PRs (push/dispatch) → the script runs the
-      # consistency check only. Pure node + git; no install needed.
+      # stay in lockstep, and an image-source change must bump the tag. This repo publishes
+      # the image (docker-publish.yml) but operates no deployment of its own, so the PR is
+      # the primary place the drift is caught (docker-publish.yml re-runs the same guard as
+      # a publisher-side backstop): a deployment consuming the published image reads those
+      # pins as the supported tag. BASE_REF is empty off PRs (push/dispatch) → the script
+      # runs the consistency check only. Pure node + git; no install needed.
       - name: Guard runner image tag
         env:
           BASE_REF: ${{ github.base_ref }}
@@ -344,6 +346,14 @@ jobs:
           else
             node scripts/check-runner-image-tag.mjs
           fi
+
+      # Guard the deploy templates' placeholder invariant: `deploy/*`'s wrangler configs are
+      # templates, so a live line may not carry a real account id, resource id or hostname
+      # (the docs promise `REPLACE_WITH_*` placeholders and example names, and this is what
+      # keeps a filled-in copy from being committed back during real-deployment testing).
+      # Its fixtures run in the `node --test` step below. Pure node; no install.
+      - name: Guard deploy templates
+        run: node scripts/check-deploy-placeholders.mjs
 
       # Guard the version numbers a branch introduces against the npm registry. In practice this
       # gates the RELEASE PR, the only branch that moves a version field. `changeset publish`
@@ -361,21 +371,6 @@ jobs:
         run: |
           if [ -n "$BASE_REF" ]; then
             node scripts/check-release-versions.mjs --since "origin/${BASE_REF}"
-          fi
-
-      # Guard the production deployment config against an unfilled placeholder in a LIVE
-      # binding. deploy.yml ships the Worker automatically on merge, and `wrangler deploy`
-      # validates every D1 id against the API, so a `REPLACE_WITH_…` that reaches main turns the
-      # deploy red with no window for the operator step that was supposed to precede it. A
-      # placeholder inside a COMMENTED example block (an optional binding a deployment opts into)
-      # is the intended shape and passes.
-      - name: Guard deploy placeholders
-        run: |
-          if grep -vE '^\s*#' deploy/backend/wrangler.toml | grep -q 'REPLACE_WITH_'; then
-            echo "::error file=deploy/backend/wrangler.toml::An active binding still holds a REPLACE_WITH_ placeholder. Provision the resource and paste its id, or comment the binding out."
-            # Only the LIVE lines: listing the commented examples too would read as more to fix.
-            grep -n 'REPLACE_WITH_' deploy/backend/wrangler.toml | grep -vE '^[0-9]+:[[:space:]]*#'
-            exit 1
           fi
 
       # Guard the human/LLM-facing package map: every workspace package must have a

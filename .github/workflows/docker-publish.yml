@@ -79,9 +79,38 @@ jobs:
               - '.github/workflows/docker-publish.yml'
               - '.github/actions/**'
 
+  # The PR lane (ci.yml's repo-guards) is the primary image-tag enforcement, but it never
+  # runs on push. This is the publisher-side backstop: a push to main that changed image
+  # sources without bumping the tag (an admin hotfix or revert that bypassed a PR) would
+  # otherwise republish over the live `<image>:<version>` tag below, silently mutating an
+  # immutable tag downstream deployments pin. `github.event.before` is the pushed range's
+  # base; when it is unusable (force push, dispatch) the script still runs its consistency
+  # half, which needs no base.
+  guard:
+    name: Guard image tags
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # Full history so the guard can diff against the pushed range's base.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Guard runner image tag
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ -n "${BEFORE}" ] && git cat-file -e "${BEFORE}" 2>/dev/null; then
+            node scripts/check-runner-image-tag.mjs --since "${BEFORE}"
+          else
+            node scripts/check-runner-image-tag.mjs
+          fi
+
   publish:
     name: Build, test & push
-    needs: changes
+    needs: [changes, guard]
     if: needs.changes.outputs.executor == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
@@ -193,7 +222,7 @@ jobs:
   # unit tests only), so this validates with `test:run` before publishing.
   publish-deploy:
     name: Build & push (deploy image)
-    needs: changes
+    needs: [changes, guard]
     if: needs.changes.outputs.deploy == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
@@ -284,3 +313,40 @@ jobs:
           push: true
           no-cache: true
           tags: ${{ steps.tags.outputs.tags }}
+
+  # The per-PR preview environments (preview-env.yml) pull the executor image from the
+  # PREVIEW account's managed registry, because Cloudflare Containers cannot pull the GHCR
+  # image published above and Docker Hub publishing is optional. Keep that registry stocked:
+  # after a successful publish, mirror the freshly pinned tag into the preview account with
+  # the same `image:publish` script a real deployment's operator runs. Runs AFTER `publish`
+  # so a tag that failed the acceptance suite is never mirrored, and skips cleanly when the
+  # `preview` environment was never configured (previews are opt-in infrastructure).
+  mirror-preview-registry:
+    name: Mirror into the preview registry
+    needs: [changes, publish]
+    if: needs.changes.outputs.executor == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: preview
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup # zizmor: ignore[cache-poisoning]
+        with:
+          node-modules-cache: 'false'
+
+      - name: Mirror the executor image
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "::notice::Preview environments are not configured (no Cloudflare credentials in the preview environment); skipping the mirror. See deploy/preview/README.md."
+            exit 0
+          fi
+          pnpm --filter @cat-factory/deploy-backend image:publish

@@ -53,12 +53,15 @@
       "outputs": [".output/**", ".nuxt/**"]
     },
     // Wrangler deploy / pages deploy. Never cached (it has live side effects) and
-    // gated on its dependencies being built (the backend Worker, etc.). Turbo runs
-    // tasks in strict env mode, so the Cloudflare credentials the CI step exports
-    // must be passed through explicitly or wrangler sees an empty environment and
-    // fails with "necessary to set a CLOUDFLARE_API_TOKEN". `passThroughEnv` (not
-    // `env`) keeps these secrets out of the cache key — moot here since the task is
-    // uncached, but the semantically-correct seam for credentials.
+    // gated on its dependencies being built (the backend Worker, etc.). This is the
+    // in-repo deploy path the deploy/* READMEs document (`turbo run deploy
+    // --filter=...`): the templates depend on the workspace library, whose gitignored
+    // `dist` only exists after the `^build` edge runs. Turbo runs tasks in strict env
+    // mode, so an operator's Cloudflare credentials must be passed through explicitly
+    // or wrangler sees an empty environment and fails with "necessary to set a
+    // CLOUDFLARE_API_TOKEN". `passThroughEnv` (not `env`) keeps these secrets out of
+    // the cache key: moot here since the task is uncached, but the
+    // semantically-correct seam for credentials.
     "deploy": {
       "dependsOn": ["^build"],
       "cache": false,

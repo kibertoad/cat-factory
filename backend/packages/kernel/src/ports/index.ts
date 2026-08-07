@@ -325,10 +325,12 @@ export type {
   DocumentSourceProvider,
   DocumentSourceRegistry,
   DocumentContentResolver,
+  DeploymentDocumentResolver,
   LinkedDocumentRefresher,
   LinkedDocumentRefreshOutcome,
   RefreshedDocument,
 } from './document-source.js'
+export { DEPLOYMENT_DOCUMENT_CACHE_GROUP } from './document-source.js'
 export type {
   DocumentConnectionRecord,
   DocumentConnectionRepository,

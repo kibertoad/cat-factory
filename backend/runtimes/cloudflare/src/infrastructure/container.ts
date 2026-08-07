@@ -1,7 +1,6 @@
 import {
   type Clock,
   CompositeNotificationChannel,
-  type DocumentSourceProvider,
   type EmailSender,
   type ExecutionEventPublisher,
   type GitHubClient,
@@ -15,15 +14,9 @@ import {
 } from '@cat-factory/kernel'
 import { createTierInstallationResolvers } from '@cat-factory/agents'
 import {
-  ConfluenceProvider,
-  FigmaProvider,
-  ZeplinProvider,
-  GitHubDocsProvider,
   GitHubIssuesProvider,
   JiraProvider,
-  LinearDocumentProvider,
   LinearTaskProvider,
-  NotionProvider,
   EMAIL_CIPHER_INFO,
   ProvisioningLogRecorder,
   OBSERVABILITY_CIPHER_INFO,
@@ -109,7 +102,6 @@ import { D1PasswordResetTokenRepository } from './repositories/D1PasswordResetTo
 import { D1EmailConnectionRepository } from './repositories/D1EmailConnectionRepository'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
 import { D1RateLimitRepository } from './repositories/D1RateLimitRepository'
-import { D1DocumentConnectionRepository } from './repositories/D1DocumentConnectionRepository'
 import { D1DocumentRepository } from './repositories/D1DocumentRepository'
 import { D1EnvironmentConnectionRepository } from './repositories/D1EnvironmentConnectionRepository'
 import { D1CustomManifestTypeRepository } from './repositories/D1CustomManifestTypeRepository'
@@ -582,71 +574,6 @@ export function selectEventPublisher(
     workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
   })
 }
-/**
- * Build the document-source integration's concrete ports: the configured source
- * providers (Confluence, Notion, …) plus the two D1 repositories. The integration is
- * always on (config load fails loudly without the encryption key), so this is wired
- * on every deployment. The model provider is wired only in 'llm' planner mode (it
- * just needs a provider credential); the planner degrades to its deterministic parser
- * if no model is usable.
- */
-export function selectDocumentsDeps(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-  idGenerator: IdGenerator,
-): Partial<CoreDependencies> {
-  const providers: DocumentSourceProvider[] = []
-  if (config.documents.sources.includes('confluence')) providers.push(new ConfluenceProvider())
-  if (config.documents.sources.includes('notion')) providers.push(new NotionProvider())
-  // Figma + Zeplin authenticate with a per-workspace PAT (no GitHub client needed), like
-  // Notion/Confluence.
-  if (config.documents.sources.includes('figma')) providers.push(new FigmaProvider())
-  if (config.documents.sources.includes('zeplin')) providers.push(new ZeplinProvider())
-  if (config.documents.sources.includes('linear')) providers.push(new LinearDocumentProvider())
-  // GitHub repo docs reuse the workspace's installed GitHub App, so this provider
-  // is wired only when the GitHub integration is also configured — it has no
-  // credentials of its own and resolves the installation per file (mirrors the
-  // GitHub-issues task source).
-  if (config.documents.sources.includes('github') && config.github.enabled) {
-    const registry = buildAppRegistry(env, config, db, clock)
-    providers.push(
-      new GitHubDocsProvider({
-        githubClient: new FetchGitHubClient({
-          registry,
-          rateLimitRepository: new D1RateLimitRepository({ db, idGenerator }),
-          idGenerator,
-          clock,
-          apiBase: config.github.apiBase,
-        }),
-        installations: new D1GitHubInstallationRepository({ db }),
-        logger,
-      }),
-    )
-  }
-  if (providers.length === 0) return {}
-  return {
-    documentSourceProviders: providers,
-    documentConnectionRepository: new D1DocumentConnectionRepository({
-      db,
-      // The config gate guarantees the key is present when enabled; source
-      // credentials are encrypted at rest under a documents-scoped HKDF info.
-      cipher: new WebCryptoSecretCipher({
-        masterKeyBase64: config.documents.encryptionKey!,
-        info: 'cat-factory:documents',
-      }),
-    }),
-    documentRepository: new D1DocumentRepository({ db }),
-    ...(config.documents.planner === 'llm'
-      ? {
-          modelProviderResolver: buildModelProviderResolver(env, db),
-          documentPlannerModel: config.agents.routing.default.ref,
-        }
-      : {}),
-  }
-}
-
 /**
  * Build the task-source integration's concrete ports. Mirrors `selectDocumentsDeps`
  * but with no planner — issues are linked for context, not expanded into board

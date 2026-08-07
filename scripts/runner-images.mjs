@@ -19,8 +19,8 @@ export const WRANGLER = 'deploy/backend/wrangler.toml'
 // One descriptor per per-run container image. `image` is the bare image name; the tag
 // pin `<image>:<semver>` appears in DEPLOY_PKG + WRANGLER (verified for consistency by the
 // guard) plus any `extraPins` (kept in step by the sync). `sourcePrefixes`/`sourceFiles`
-// are the files whose content goes into that image — kept in sync with the `image*`
-// paths-filters in .github/workflows/deploy.yml.
+// are the files whose content goes into that image, kept in sync with the per-harness
+// paths-filters in .github/workflows/docker-publish.yml.
 export const IMAGES = [
   {
     label: 'executor',

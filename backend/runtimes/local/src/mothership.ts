@@ -7,6 +7,7 @@ import {
   HttpMachineTelemetryReadClient,
   HttpBinaryGeneratorSource,
   HttpFoundationalBuiltinSource,
+  HttpDeploymentDocumentResolver,
   HttpPromptFragmentSource,
   HttpPersistenceRpcClient,
   type LocalFirstPersistenceRepository,
@@ -131,6 +132,14 @@ export interface MothershipComposition {
    * machine token as the persistence RPC.
    */
   promptFragments: HttpPromptFragmentSource
+  /**
+   * How a code-registered fragment's `documentRef` resolves on a node: over
+   * `POST /internal/prompt-fragments/document-bodies`, because the credentials that authenticate
+   * the fetch live in the MOTHERSHIP's environment and never reach a laptop. So the credential
+   * stays put and the resolved BODY crosses, which is the same shape the sealed-secret rule forces
+   * on a decrypting repository.
+   */
+  deploymentDocuments: HttpDeploymentDocumentResolver
   /**
    * The real-time UPSTREAM propagation adapter: forwards this local node's engine events to the
    * mothership over `POST /internal/events/publish`, so a hosted teammate on the same shared board
@@ -257,6 +266,11 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   // …and the standards pool, on the same base URL + per-request token, for the same reason once
   // more (see the boot warning in `server.ts` when a registry is nonetheless registered here).
   const promptFragments = new HttpPromptFragmentSource({ baseUrl, token: machineToken })
+  // …and the living documents those standards may name. No `configuredSources` here: a node cannot
+  // see the mothership's environment, so it assumes every deployment-scopable source may be served
+  // and lets the read decide. That direction costs one round trip that resolves nothing; the
+  // opposite would silently skip a document the mothership could have served.
+  const deploymentDocuments = new HttpDeploymentDocumentResolver({ baseUrl, token: machineToken })
   // Real-time, BOTH directions, on the SAME base URL + per-request token, so the stream follows the
   // same connect/expiry lifecycle as the rest of the machine API. A token-less node neither
   // publishes nor subscribes (its own SPA still gets every locally produced event).
@@ -303,6 +317,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     foundationalBuiltins,
     binaryGenerators,
     promptFragments,
+    deploymentDocuments,
     realtimeAdapter,
     realtimeSubscriber,
     notificationChannel,
