@@ -1535,6 +1535,16 @@
           "oauthNotConnected": "Connect this board to it from the Infrastructure window. A deployment with no ENCRYPTION_KEY has nowhere to keep a grant, so an operator has to set that first.",
           "oauthTokenFailed": "Reconnect it from the Infrastructure window, or wait out the vendor's outage.",
           "overBudget": "Trim what the agent declares, so one run can carry all of it."
+        },
+        "observed": {
+          "ready": "started",
+          "readyTools": "{count} tools",
+          "readyNoTools": "started, no tools",
+          "failed": "failed to start",
+          "needsAuth": "needs authorization",
+          "unknown": "state unresolved",
+          "notLoaded": "never loaded",
+          "unattributed": "The agent CLI reported a server this step did not wire: {id}."
         }
       },
       "adherence": {

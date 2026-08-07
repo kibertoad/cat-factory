@@ -204,10 +204,39 @@ export function buildRunningUpdate(
     // finished slices become durable BEFORE its aggregation pass returns, so a poll that drops
     // them costs real review work. The harness republishes the whole set on each slice.
     ...(view.sliceReviews ? { sliceReviews: view.sliceReviews } : {}),
+    // The CLI's own startup report on the tool servers this dispatch wired. Republished whole by
+    // the harness on every poll rather than drained, so forwarding the latest is safe and no
+    // single dropped poll response can be the one that loses it — which matters here more than
+    // for the reports above, since the CLI announces its servers exactly once.
+    ...(view.toolServers ? { toolServers: view.toolServers } : {}),
   }
   return view.progress
     ? { state: 'running', subtasks: view.progress, ...followUps, ...containerMeta }
     : { state: 'running', ...followUps, ...containerMeta }
+}
+
+/**
+ * Map a settled-and-successful runner view into the engine's `done` {@link AgentJobUpdate}: the
+ * normalised run result, any final burst of streamed follow-ups the harness drained on this same
+ * poll, and the agent CLI's tool-server startup report.
+ *
+ * That last one rides the SETTLED poll and not only the running ones, which is not redundancy: a
+ * job short enough to finish between two polls is never observed `running` at all, so for exactly
+ * the runs that were quick about it this is the only poll that can carry the report. Pure, like
+ * its `running` and `failed` siblings here — the executor's poll site owns the side effects and
+ * delegates the shaping.
+ */
+export function buildDoneUpdate(
+  view: RunnerJobView,
+  result: AgentRunResult,
+  followUps: { followUps?: StreamedFollowUp[] },
+): Extract<AgentJobUpdate, { state: 'done' }> {
+  return {
+    state: 'done',
+    result,
+    ...followUps,
+    ...(view.toolServers ? { toolServers: view.toolServers } : {}),
+  }
 }
 
 /**
@@ -229,6 +258,7 @@ export function buildFailureMeta(view: RunnerJobView): {
   evicted?: ContainerEvictionKind
   validationReport?: unknown
   reproductionReport?: unknown
+  toolServers?: unknown
 } {
   const validationReport = view.result?.validationReport ?? view.validationReport
   // A job that died for an UNRELATED reason after the proof ran still has a verdict worth keeping
@@ -242,5 +272,10 @@ export function buildFailureMeta(view: RunnerJobView): {
     ...(view.evicted ? { evicted: view.evicted } : {}),
     ...(validationReport ? { validationReport } : {}),
     ...(reproductionReport ? { reproductionReport } : {}),
+    // Read off the VIEW alone, unlike the two reports above: the observation is a fact about the
+    // CLI's startup rather than about the work, so the harness publishes it on the view and never
+    // on the terminal result. A failed run is the one that most needs it — a prompt that promised
+    // tools the CLI never started is a prime suspect for whatever went wrong.
+    ...(view.toolServers ? { toolServers: view.toolServers } : {}),
   }
 }

@@ -16,10 +16,12 @@ import type {
   RunnerPoolManifest,
   RunnerPoolProvider,
   RunnerPoolRequestTemplate,
+  RunnerObservedToolServer,
   RunnerSliceReview,
   SecretResolver,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
+import { isToolServerObservedStatus } from '@cat-factory/contracts'
 import {
   CONTAINER_EVICTION_ERROR,
   isHarnessFailureCause,
@@ -456,6 +458,13 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     const sliceReviews = this.mapSliceReviews(manifest, json)
     if (sliceReviews) view.sliceReviews = sliceReviews
 
+    // What the agent's CLI reported about the tool servers it loaded, when the manifest maps it —
+    // a latest-value publish like the reports above. An unmapped path injects NOTHING rather than
+    // an empty list, which is what keeps "this pool does not proxy the channel" from rendering as
+    // "the CLI loaded no servers" on a run whose servers were all healthy.
+    const toolServers = this.mapToolServers(manifest, json)
+    if (toolServers) view.toolServers = toolServers
+
     // The harness's structured failure cause + extended diagnostic, when the manifest maps
     // them — so a pool that proxies the executor-harness verbatim classifies a failure exactly
     // like a Cloudflare container, instead of degrading to the engine's error-string regex.
@@ -614,6 +623,60 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     const reviews = coerceSliceReviews(environmentsLogic.extractByPath(json, path))
     return reviews.length > 0 ? reviews : undefined
   }
+
+  /**
+   * Project the scheduler's tool-server startup report onto the canonical view, when the manifest
+   * maps it. Coerced per ENTRY like the slices above — the rows are independent facts about
+   * independent servers — and an empty result injects nothing, so a pool that maps the path for a
+   * job which wired no tool servers is indistinguishable from one that maps nothing. That is the
+   * right collapse here: neither case is evidence that a server failed.
+   */
+  private mapToolServers(
+    manifest: RunnerPoolManifest,
+    json: unknown,
+  ): RunnerJobView['toolServers'] | undefined {
+    const path = manifest.response.toolServersPath
+    if (!path) return undefined
+    const observed = coerceObservedToolServers(environmentsLogic.extractByPath(json, path))
+    return observed.length > 0 ? observed : undefined
+  }
+}
+
+/**
+ * Coerce a scheduler's `toolServers` envelope into canonical {@link RunnerObservedToolServer}
+ * entries, dropping anything unusable. Mirrors the executor-harness's shape.
+ *
+ * An entry needs a non-empty `id`: it is the only key the engine can pair an observation to the
+ * dispatch's own record by, so an id-less row describes a server nobody can name. It is stored
+ * TRIMMED, because the pairing is an exact string match against the dispatch's declaration: a
+ * scheduler that pads its ids would otherwise clear this guard and then match nothing, rendering a
+ * healthy server as both never-loaded (an amber fault) and unattributed at once.
+ *
+ * `status` is narrowed through the contracts predicate that owns the vocabulary, and anything
+ * unrecognised reads as `unknown` rather than being dropped. That is the safe direction, because
+ * dropping reads as a server the CLI never loaded (a different fault with a different fix), while
+ * `unknown` says exactly what happened: the pool named a state this deployment cannot map.
+ */
+function coerceObservedToolServers(raw: unknown): RunnerObservedToolServer[] {
+  if (!Array.isArray(raw)) return []
+  const observed: RunnerObservedToolServer[] = []
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const o = entry as Record<string, unknown>
+    const id = typeof o.id === 'string' ? o.id.trim() : ''
+    if (!id) continue
+    const server: RunnerObservedToolServer = {
+      id,
+      status: isToolServerObservedStatus(o.status) ? o.status : 'unknown',
+    }
+    // `0` is a server that connected and exposed no tools — the most diagnostic count there is,
+    // and the one a truthiness guard would silently turn into "not counted".
+    if (typeof o.toolCount === 'number' && Number.isFinite(o.toolCount) && o.toolCount >= 0) {
+      server.toolCount = o.toolCount
+    }
+    observed.push(server)
+  }
+  return observed
 }
 
 /**

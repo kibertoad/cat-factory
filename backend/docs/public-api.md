@@ -208,7 +208,12 @@ The replacement is not a rename. An agent-context snapshot exists only where the
 prompt recording on, and is pruned on the telemetry retention window, so the copy on the snapshot
 was blank or gone for most readers of it; the step carries the same facts unconditionally and for
 as long as the run exists. Both are projected from the same value at dispatch, so they cannot
-disagree while both are served.
+disagree about what the platform decided while both are served.
+
+The step's copy is also the only one that grows. It gained `observed` in spec `1.24.0`, the agent
+CLI's own account of the servers it managed to load, which is not a dispatch-time fact and so has
+no place on the snapshot to project onto. A reader still on the deprecated copy is not seeing a
+smaller version of the same answer; it is missing the half that says a wired server never came up.
 
 ## Quick start
 
@@ -1048,7 +1053,7 @@ runs no freshness check at all, which is not the same fact as a check that ran a
 conclude. `movedDuringRun` is computed from the run's own records: the source moved WHILE the run
 was in flight, so its earlier steps built against something its later ones did not read. Nothing
 here is re-probed at read time, by design: the source has moved on since, so a fresh probe would
-answer about a revision no agent on this run ever saw. Added in 1.26.0 (report `version` 9), so a
+answer about a revision no agent on this run ever saw. Added in 1.27.0 (report `version` 9), so a
 consumer written earlier simply does not see the key.
 
 `observability` carries the links back: `runUrl` (the app's panel, for a person), `trajectoryUrl`
@@ -1081,7 +1086,7 @@ recorded about it (that is the state the run ended on) plus `movedDuringRun`, wh
 changed while the run was in flight and is therefore the one thing that last verdict cannot say.
 `url` is null for an `upload`, which has no source page to open, and a null `freshness` means the
 deployment runs no freshness check at all rather than a check that ran and could not conclude. Its
-`gap` when absent is `none_linked` or `run_unavailable`. Added in 1.26.0 (outcome `version` 2).
+`gap` when absent is `none_linked` or `run_unavailable`. Added in 1.27.0 (outcome `version` 2).
 
 Both are composed by the same code over one read of the run's evidence, so the coverage counts
 (`met` / `notMet` / `notCovered` / `regressions` / `total`) and the regression rule are the same

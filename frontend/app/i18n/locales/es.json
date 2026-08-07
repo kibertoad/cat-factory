@@ -1444,6 +1444,16 @@
           "oauthNotConnected": "Conecta este tablero con él desde la ventana de Infraestructura. Un despliegue sin ENCRYPTION_KEY no tiene dónde guardar una concesión, así que un operador debe configurarla primero.",
           "oauthTokenFailed": "Vuelve a conectarlo desde la ventana de Infraestructura, o espera a que pase la caída del proveedor.",
           "overBudget": "Recorta lo que declara el agente, para que una ejecución pueda llevarlo todo."
+        },
+        "observed": {
+          "ready": "iniciado",
+          "readyTools": "{count} herramientas",
+          "readyNoTools": "iniciado, sin herramientas",
+          "failed": "no arrancó",
+          "needsAuth": "requiere autorización",
+          "unknown": "estado sin determinar",
+          "notLoaded": "nunca se cargó",
+          "unattributed": "La CLI del agente informó de un servidor que este paso no conectó: {id}."
         }
       },
       "adherence": {

@@ -3,6 +3,7 @@ import type { FollowUpLine } from './follow-ups.js'
 import type { ValidationReport } from './validation-checks.js'
 import type { ReproductionReport } from './reproduction-proof.js'
 import type { SliceReview } from './subagents.js'
+import type { ObservedMcpServer } from './agent-capabilities.js'
 import type { HarnessCallMetric, TodoProgress, ToolSpan } from './pi.js'
 import { log, type Logger } from './logger.js'
 import {
@@ -56,6 +57,15 @@ export interface RunOptions {
    * already persisted. Absent for a job that dispatched no subagents.
    */
   onSliceReviews?: (reviews: SliceReview[]) => void
+  /**
+   * Receives what the agent's CLI reported about the tool servers (MCP) it loaded, once it
+   * announces its resolved session. Latest-wins (NOT a drain buffer) for the same reason as
+   * {@link onValidationReport}, with an extra one of its own: the CLI announces the set ONCE,
+   * near the start of the run, so a drain buffer would hand it to whichever poll happened to
+   * land next and lose it entirely if that poll response were dropped — on the single fact this
+   * whole channel exists to carry. Absent for a job that wired no tool servers.
+   */
+  onToolServers?: (observed: ObservedMcpServer[]) => void
   /**
    * Receives each per-call telemetry row the moment the agent's CLI stream yields it, so a
    * run's model calls reach `llm_call_metrics` WHILE it runs rather than only in its terminal
@@ -224,6 +234,18 @@ export interface JobView<TResult extends JobResultBase = JobResultBase> {
    * from. Absent for a job that dispatched no subagents.
    */
   sliceReviews?: SliceReview[]
+  /**
+   * What the agent's CLI reported about the tool servers (MCP) wired for this job when it started
+   * up: per server, the status the CLI gave it and how many tools it contributed. A whole-value
+   * latest publish like {@link validationReport}, not drain-on-read — the CLI announces this once
+   * and every later poll re-reports the same set, so no poll can be the one that loses it.
+   *
+   * The complement of what the BACKEND recorded at dispatch, and the only source for the half it
+   * cannot see: the dispatch record says why the platform withheld a tool, this says a wired
+   * server failed to start anyway. Absent for a job that wired none, and for a harness whose CLI
+   * reports nothing — which is why it is absent rather than empty (see `ObservedMcpServer`).
+   */
+  toolServers?: ObservedMcpServer[]
 }
 
 interface JobEntry<TResult extends JobResultBase> extends JobView<TResult> {
@@ -542,6 +564,9 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
         },
         onSliceReviews: (reviews) => {
           entry.sliceReviews = reviews
+        },
+        onToolServers: (observed) => {
+          entry.toolServers = observed
         },
         onReproductionProof: (report) => {
           entry.reproductionReport = report
