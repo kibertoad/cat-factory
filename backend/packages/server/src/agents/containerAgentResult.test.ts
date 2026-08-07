@@ -1,6 +1,10 @@
 import type { RunnerJobResult, RunnerJobView, RunnerReproductionReport } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
+import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import { buildFailureMeta, buildRunningUpdate, toRunResult } from './containerAgentResult.js'
+
+/** The registry every facade builds; the kind is irrelevant to the orthogonal channels below. */
+const registry = defaultAgentKindRegistry()
 
 // The BUGFIX REPRODUCTION PROOF's crossing of the runner→engine boundary. The harness half is
 // covered against a real git repo in `executor-harness/test/reproduction-proof.test.ts`; what
@@ -34,7 +38,7 @@ describe('toRunResult — the reproduction proof on the terminal result', () => 
       reproductionReport: REPRODUCED,
     }
 
-    expect(toRunResult(result).reproductionReport).toEqual(REPRODUCED)
+    expect(toRunResult(result, undefined, registry).reproductionReport).toEqual(REPRODUCED)
   })
 
   it('attaches an INCONCLUSIVE verdict too — it is evidence, not a failure', () => {
@@ -43,7 +47,7 @@ describe('toRunResult — the reproduction proof on the terminal result', () => 
     // tell "we tried and could not demonstrate it" from "nobody tried".
     const result: RunnerJobResult = { pushed: true, reproductionReport: INCONCLUSIVE }
 
-    expect(toRunResult(result).reproductionReport).toEqual(INCONCLUSIVE)
+    expect(toRunResult(result, undefined, registry).reproductionReport).toEqual(INCONCLUSIVE)
   })
 
   it('coexists with the other orthogonal channels rather than displacing them', () => {
@@ -53,7 +57,7 @@ describe('toRunResult — the reproduction proof on the terminal result', () => 
       validationReport: { passed: true, attempts: 1, maxAttempts: 3, outcomes: [], at: 1 },
       effortReport: { difficulty: 3 },
     }
-    const mapped = toRunResult(result)
+    const mapped = toRunResult(result, undefined, registry)
 
     expect(mapped.reproductionReport).toEqual(REPRODUCED)
     expect(mapped.validationReport).toBeDefined()
@@ -61,7 +65,7 @@ describe('toRunResult — the reproduction proof on the terminal result', () => 
   })
 
   it('sets nothing for a job that carried no reproduction declaration', () => {
-    expect(toRunResult({ pushed: true }).reproductionReport).toBeUndefined()
+    expect(toRunResult({ pushed: true }, undefined, registry).reproductionReport).toBeUndefined()
   })
 })
 

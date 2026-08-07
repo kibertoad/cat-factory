@@ -11,10 +11,19 @@
   `FOLLOW_UP_GUIDANCE`, and `PR_DESCRIPTION_GUIDANCE` (the reviewer briefing a PR-opening coding
   agent writes to `.cat-pr-description.md`, which the harness lifts onto the PR it opens)),
   `runtime/` (`runRepoOps`, the custom-agent pre/post-op runner).
+  `kinds/built-in-container.ts` registers every BUILT-IN CONTAINER kind (`coder`, the testers,
+  the in-place fixers, the conflict-resolver, `merger`, `on-call`, the read-only explorers) as an
+  ordinary `AgentKindDefinition` declaring its `AgentStepSpec`, which is what let the server's
+  per-kind job-body switch and the executor's result-coercion chain both be deleted. Each
+  declares NO `systemPrompt` (its shipped TRACK owns the text; a copy would be dead the day the
+  track moves) and NO `presentation` (that field is what promotes a REGISTERED kind into the
+  palette, so declaring it would list the built-in twice). Their task prompts + shape hints live
+  in `prompts/built-in-container.ts` and their engine-channel mappings in `kinds/built-in-results.ts`.
   `kinds/gatable.ts` answers whether a pipeline may ESTIMATE-GATE a step of a given kind
   (`isGatableKind`): a `BUILTIN_GATABLE_KINDS` set beside the `AgentKindRegistry.gatable()`
-  override, the same shape as `kinds/read-only.ts` and `kinds/tuning.ts`, because the built-in
-  kinds are not registry entries. A kind is NOT gatable by default; the set's comments say why
+  override, the same shape as `kinds/read-only.ts` and `kinds/tuning.ts` — those catalogs still
+  answer for a built-in that declares nothing, so setting the field to `false` on a registration
+  SHADOWS them. A kind is NOT gatable by default; the set's comments say why
   each exclusion (`merger`, `deployer`, `conflicts`/`ci`, `bug-intake`) would break a run.
   `kinds/companions.ts` holds the COMPANION pairing vocabulary: a companion grades the
   immediately-preceding producer and loops it back for automatic rework below the step's

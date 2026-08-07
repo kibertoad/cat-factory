@@ -18,6 +18,7 @@ import {
   noopLogger,
   runBestEffort,
 } from '@cat-factory/kernel'
+import type { DispatchToolServers } from '@cat-factory/contracts'
 import {
   isReservedPlatformEnvKey,
   isToolchainEnvName,
@@ -595,6 +596,40 @@ export function createEnvToolSecretResolver(
       }
       return out
     },
+  }
+}
+
+/**
+ * Project a dispatch's resolution into the record the RUN carries: what the agent got, and what it
+ * was told it would not get.
+ *
+ * The third channel of a resolution, beside the prompt and the job body, and the only one that
+ * outlives the dispatch. It drops `mcpServers` entirely, which is the whole point: that field is
+ * where the resolved credentials live, and this one is persisted on the run and rendered in a
+ * browser. `tools` survives because a narrowed allow-list is the likeliest reason a working server
+ * produced no useful call, and nothing else on the run says which tools the agent was held to.
+ *
+ * Called UNCONDITIONALLY at dispatch, so a kind that declared nothing records two empty lists.
+ * That is a real answer and a different one from absent, which means no container dispatch
+ * recorded here at all: collapsing them would make a step whose servers were every one of them
+ * dropped read exactly like an inline step that could never have had any.
+ *
+ * Carries no agent kind: the engine stamps the DISPATCHED kind on it in
+ * `recordDispatchAttribution`, so this cannot name a kind other than the one that ran.
+ */
+export function stepToolServerRecord(resolved: ResolvedToolServers): DispatchToolServers {
+  return {
+    wired: resolved.toolServers.map((server) => ({
+      id: server.id,
+      label: server.label,
+      transport: server.transport,
+      ...(server.tools?.length ? { tools: server.tools } : {}),
+    })),
+    unavailable: resolved.unavailableToolServers.map((server) => ({
+      id: server.id,
+      label: server.label,
+      reason: server.reason,
+    })),
   }
 }
 

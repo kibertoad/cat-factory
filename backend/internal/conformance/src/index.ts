@@ -9,6 +9,8 @@ export {
   type ConformanceHarness,
   type LocalModelEndpointsProbe,
   type PackageRegistriesProbe,
+  type ToolServerDispatchProbe,
+  type ToolServerDispatchResult,
   type UserSecretsProbe,
   RecordingEventPublisher,
   type TestResponse,
@@ -35,6 +37,10 @@ export {
   type OnboardingProbe,
   type OnboardingUsersProbe,
 } from './onboarding.js'
+export {
+  makeToolServerDispatchProbe,
+  type ToolServerDispatchContainer,
+} from './tool-servers-probe.js'
 export { makeIncorporatedReview, makeReadyReviewWithOpenItem } from './requirements-fixtures.js'
 export { makeIncorporatedClarityReview, makeReadyClarityReview } from './clarity-fixtures.js'
 export {
