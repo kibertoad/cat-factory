@@ -1,5 +1,12 @@
 # @cat-factory/gatekeeper-bindings
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [74ea2bc]
+  - @cat-factory/sdk@0.21.0
+
 ## 0.2.0
 
 ### Minor Changes
