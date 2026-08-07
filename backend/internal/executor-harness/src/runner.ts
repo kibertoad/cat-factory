@@ -11,6 +11,7 @@ import {
   failureCauseOf,
   inactivityAbortMessage,
   maxDurationAbortMessage,
+  toolSilenceAbortMessage,
 } from './failure.js'
 
 /** Non-secret correlation fields a job carries on every log line (jobId, repo, branch, …). */
@@ -266,6 +267,13 @@ interface JobEntry<TResult extends JobResultBase> extends JobView<TResult> {
   abort?: (reason: string) => void
 }
 
+/**
+ * The phase label every mode marks around its agent pass (`opts.onPhase('agent')`), and the only
+ * one the tool-silence watchdog is armed for. Named rather than spelled at each site so the
+ * watchdog's arming condition and the handlers' marking cannot drift apart silently.
+ */
+export const AGENT_PHASE = 'agent'
+
 /** Watchdog windows that bound every job. Tunable via the container's env. */
 export interface RunnerLimits {
   /** Hard ceiling on total job wall-clock before it's force-failed. */
@@ -281,6 +289,18 @@ export interface RunnerLimits {
    * progress, which counts as activity). Set to 0 to disable.
    */
   coldStartMs: number
+  /**
+   * Stuck-run audit F13: force-fail the job if, while the AGENT phase is running, no tool call
+   * completes for this long. The gap the other two watchdogs structurally cannot see — a model
+   * that keeps talking (or thinking out loud) resets the inactivity timer on every chunk while
+   * completing nothing, so the only remaining bound was the full wall-clock cap and the engine's
+   * ~70-minute poll budget behind it.
+   *
+   * Armed ONLY during the agent phase, so the activity-silent phases (clone, dependency install,
+   * push) are outside it by construction: those legitimately complete no tool calls, and they
+   * are bounded by their own per-command timeouts. Set to 0 to disable.
+   */
+  toolSilenceMs: number
 }
 
 function intEnv(value: string | undefined, fallback: number): number {
@@ -296,21 +316,43 @@ function intEnvAllowZero(value: string | undefined, fallback: number): number {
 }
 
 export function loadRunnerLimits(env: NodeJS.ProcessEnv = process.env): RunnerLimits {
+  const maxDurationMs = intEnv(env.JOB_MAX_DURATION_MS, 60 * 60_000)
+  const inactivityMs = intEnv(env.JOB_INACTIVITY_MS, 10 * 60_000)
   return {
     // 60 minutes: generous headroom for serious multi-file coding tasks while
     // still bounding a runaway container.
-    maxDurationMs: intEnv(env.JOB_MAX_DURATION_MS, 60 * 60_000),
+    maxDurationMs,
     // 10 minutes of zero output is treated as hung (a single long LLM/tool call
     // is far shorter; Pi streams events as it works). The per-git command ceiling
     // (`GIT_TIMEOUT_MS` in git.ts) is DERIVED from this value — a fixed margin below
     // it — so a slow clone/push (which emits no activity events) always times out
     // with git's own clear reason rather than this watchdog's "likely hung" message,
     // for any configured window. See the invariant note in git.ts.
-    inactivityMs: intEnv(env.JOB_INACTIVITY_MS, 10 * 60_000),
+    inactivityMs,
     // 2 minutes: comfortably longer than a warm agent's time-to-first-token yet far
     // under the 10-minute inactivity kill, so a truly output-less start is flagged early.
     coldStartMs: intEnvAllowZero(env.JOB_COLD_START_MS, 2 * 60_000),
+    toolSilenceMs: intEnvAllowZero(
+      env.JOB_TOOL_SILENCE_MS,
+      toolSilenceDefault(maxDurationMs, inactivityMs),
+    ),
   }
+}
+
+/**
+ * The tool-silence window when the operator has not set one: HALF the configured wall-clock cap,
+ * DERIVED rather than a constant so lowering `JOB_MAX_DURATION_MS` tightens it too (a fixed
+ * 30 minutes would sit past the whole budget of a deployment that runs 20-minute jobs, i.e. be
+ * silently disabled).
+ *
+ * Clamped to at least the inactivity window because the two must not race: inactivity owns the
+ * gone-quiet case and has the clearer diagnostic for it, so a tool-silence kill firing FIRST
+ * would relabel an ordinary hang as a rabbit-hole. That ordering also means a genuinely silent
+ * run always trips inactivity, which is why this watchdog needs no "but is it chatty?" test —
+ * by the time it can fire, output has been arriving all along.
+ */
+function toolSilenceDefault(maxDurationMs: number, inactivityMs: number): number {
+  return Math.max(Math.round(maxDurationMs / 2), inactivityMs)
 }
 
 function toView<TResult extends JobResultBase>(entry: JobEntry<TResult>): JobView<TResult> {
@@ -475,9 +517,28 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
 
   private async drive(entry: JobEntry<TResult>, job: TJob): Promise<void> {
     const controller = new AbortController()
-    let killReason: 'inactivity' | 'max-duration' | undefined
+    let killReason: 'inactivity' | 'max-duration' | 'no-tool-progress' | undefined
 
     const jobLog = log.child({ jobId: entry.id, ...this.describe(job) })
+
+    // Stuck-run audit F13: the third watchdog, and the only one that can see a model which
+    // keeps TALKING while completing nothing — its output resets the inactivity timer on every
+    // chunk, and it is nowhere near the wall-clock cap. Armed only while the agent phase runs,
+    // and reset by every completed tool call.
+    let toolSilence: ReturnType<typeof setTimeout> | undefined
+    const clearToolSilence = (): void => {
+      clearTimeout(toolSilence)
+      toolSilence = undefined
+    }
+    const armToolSilence = (): void => {
+      clearToolSilence()
+      if (this.limits.toolSilenceMs <= 0) return
+      toolSilence = setTimeout(() => {
+        // First watchdog to fire wins the reason (see `resetInactivity` below).
+        killReason ??= 'no-tool-progress'
+        controller.abort(new Error('no tool progress'))
+      }, this.limits.toolSilenceMs)
+    }
 
     // Stuck-run breadcrumb: the coarse phase the handler is in, per-phase wall-clock, and
     // the last completed tool — so an inactivity kill can say WHERE it hung instead of a
@@ -494,6 +555,11 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
       // (cloning / running the agent / pushing) — the same marker drives the failure
       // breadcrumb. A terminal `done`/`failed` is set by the caller below.
       entry.phase = next
+      // The tool-silence window belongs to the AGENT: clone, dependency install and push
+      // legitimately complete no tool calls and carry their own per-command timeouts. Each
+      // re-entry (a validation- or reproduction-repair loop returns here) starts a fresh window.
+      if (next === AGENT_PHASE) armToolSilence()
+      else clearToolSilence()
     }
     let lastTool: { name: string; at: number } | undefined
 
@@ -555,6 +621,8 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
         onSpan: (span) => {
           entry.spanBuffer.push(span)
           lastTool = { name: span.tool, at: span.endedAt }
+          // A completed tool call IS the progress this watchdog measures.
+          if (phase === AGENT_PHASE) armToolSilence()
         },
         onFollowUp: (items) => {
           entry.followUpBuffer.push(...items)
@@ -630,6 +698,7 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
       clearTimeout(inactivity)
       clearTimeout(cap)
       clearTimeout(coldStart)
+      clearToolSilence()
       entry.abort = undefined
       entry.heartbeatAt = Date.now()
     }
@@ -679,6 +748,19 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
         ),
       }
     }
+    if (ctx.killReason === 'no-tool-progress') {
+      return {
+        // The breadcrumb carries the last completed tool, which is the whole diagnostic here:
+        // it names what the agent was doing when it stopped doing anything.
+        message: redactSecrets(
+          `${toolSilenceAbortMessage(this.limits.toolSilenceMs)} (${breadcrumb})`,
+        ),
+        cause: 'no-tool-progress',
+        detail: redactSecrets(
+          `Phase timings: ${phaseBreakdown || '(none)'}. ${breadcrumb}.${cold}`,
+        ),
+      }
+    }
     const raw = ctx.error instanceof Error ? ctx.error.message : String(ctx.error)
     // A thrown error tagged with a structured cause (a git op / an upstream API call) keeps
     // it; an untagged throw is a generic agent failure.
@@ -699,7 +781,7 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
  */
 interface FailureContext {
   /** Which watchdog killed it; unset when the run threw on its own. */
-  killReason: 'inactivity' | 'max-duration' | undefined
+  killReason: 'inactivity' | 'max-duration' | 'no-tool-progress' | undefined
   error: unknown
   /** The phase the job was IN when it failed (captured before the `failed` transition). */
   phase: string

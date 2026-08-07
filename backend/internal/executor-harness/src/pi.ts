@@ -20,6 +20,7 @@ import {
   toolCallResult,
   toolCallStart,
 } from './tool-trajectory.js'
+import { BoundedTail, JsonlLineReader } from './jsonl-stream.js'
 
 // Drives the Pi coding-agent CLI. Pi is pointed at the Worker's OpenAI-compatible
 // proxy via a custom provider in ~/.pi/agent/models.json, authenticated with the
@@ -38,6 +39,15 @@ import {
  * {@link runDiagnostics} flagging the rare case where even 32k is not enough.
  */
 export const PI_MAX_OUTPUT_TOKENS = 32_768
+
+/**
+ * How much of Pi's raw stdout/stderr the run holds for diagnostics. Every consumer takes a tail
+ * of it (2 KB for the last-resort summary, 1.5 KB for a stderr quote, 500 B for a crash detail),
+ * so this is generous headroom over the largest of them rather than a number anything depends
+ * on. What it replaces is retaining the WHOLE of a chatty run's output to slice 2 KB off the end
+ * (stuck-run audit F6).
+ */
+const OUTPUT_TAIL_CHARS = 64 * 1024
 
 /**
  * Longest phase label the backend keeps. Mirrors kernel's `MAX_PHASE_CHARS`; see
@@ -928,15 +938,21 @@ export function runPi(opts: {
     // 'close'/'error' handlers below own the actual failure reporting.
     child.stdin.on('error', () => {})
     child.stdin.end(opts.userPrompt)
-    let stdout = ''
-    let stderr = ''
+    // Every record this run emitted, parsed ONCE as it streamed. The close-of-run reductions
+    // (summary, stats, diagnostics, terminal-error scan) read these instead of re-parsing the
+    // whole of stdout two more times: those passes were O(entire output) on the event loop the
+    // watchdog timers and the poll endpoints share, at exactly the moment the job is settling
+    // (stuck-run audit F6). Holding the parsed records also replaces holding the raw text, so
+    // this is not a second copy of the run.
+    const events: Record<string, unknown>[] = []
+    // Raw output kept ONLY to quote on a failure, so a bounded tail is the whole requirement —
+    // the longest slice anyone takes below is 2 KB.
+    const stdout = new BoundedTail(OUTPUT_TAIL_CHARS)
+    const stderr = new BoundedTail(OUTPUT_TAIL_CHARS)
     let aborted = false
     // Set when the no-progress guard kills Pi; carries the diagnostic the run
     // fails with (distinct from an external watchdog abort).
     let guardReason: string | undefined
-    // Pi's json mode is strict LF-framed JSONL; buffer partial lines across
-    // chunks so we only ever parse complete records for progress + the guard.
-    let lineBuffer = ''
     // Counters for silent losses, warned ONCE at close (not per-line, to avoid log
     // spam): `{`-leading lines that failed to JSON.parse, and observer-callback throws.
     let malformedLines = 0
@@ -961,14 +977,14 @@ export function runPi(opts: {
     // and the no-progress guard; the `close` handler turns it into a rejection.
     const killChild = (): void => killChildProcess(child)
 
-    // Parse each complete JSONL record once, feeding both the todo-progress
-    // emitter and the no-progress guard. A tripped guard kills Pi with a
-    // diagnostic the run then fails on.
-    // `runGuard` is false only for the at-close flush of a final unterminated line: the
-    // process has already exited, so feeding that record to the no-progress guard could trip
-    // it and turn a clean (code 0) exit into a spurious "no progress" rejection. The flush
-    // still recovers the record's progress/span signal; only the kill decision is skipped.
-    const processLine = (line: string, runGuard = true): void => {
+    // Parse each complete JSONL record once, retaining it for the close-of-run reductions and
+    // feeding the todo-progress emitter and the no-progress guard. A tripped guard kills Pi
+    // with a diagnostic the run then fails on.
+    // `final` marks the at-close flush of a final unterminated line: the process has already
+    // exited, so feeding that record to the no-progress guard could trip it and turn a clean
+    // (code 0) exit into a spurious "no progress" rejection. The flush still recovers the
+    // record's progress/span signal; only the kill decision is skipped.
+    const processLine = (line: string, final: boolean): void => {
       if (!line.startsWith('{')) return
       let event: Record<string, unknown>
       try {
@@ -979,6 +995,7 @@ export function runPi(opts: {
         malformedLines++
         return
       }
+      events.push(event)
       if (opts.onEvent) {
         try {
           opts.onEvent(event)
@@ -1010,7 +1027,7 @@ export function runPi(opts: {
           }
         }
       }
-      if (runGuard && !guardReason && !aborted) {
+      if (!final && !guardReason && !aborted) {
         const reason = guard.observe(event)
         if (reason) {
           guardReason = reason
@@ -1019,16 +1036,9 @@ export function runPi(opts: {
       }
     }
 
-    const consumeStdout = (text: string): void => {
-      lineBuffer += text
-      let nl = lineBuffer.indexOf('\n')
-      while (nl !== -1) {
-        const line = lineBuffer.slice(0, nl).trim()
-        lineBuffer = lineBuffer.slice(nl + 1)
-        nl = lineBuffer.indexOf('\n')
-        processLine(line)
-      }
-    }
+    // Pi's json mode is strict LF-framed JSONL; the reader buffers partial records across
+    // chunks (bounded — see `JsonlLineReader`) so we only ever parse complete ones.
+    const reader = new JsonlLineReader(processLine)
 
     // When the watchdog aborts, terminate Pi: the `close` handler then rejects
     // with the abort reason.
@@ -1041,9 +1051,9 @@ export function runPi(opts: {
     const onChunk = (chunk: Buffer, sink: 'out' | 'err'): void => {
       const text = chunk.toString()
       if (sink === 'out') {
-        stdout += text
-        consumeStdout(text)
-      } else stderr += text
+        stdout.push(text)
+        reader.push(text)
+      } else stderr.push(text)
       // Any output means progress: reset the inactivity watchdog.
       opts.onActivity?.()
     }
@@ -1058,20 +1068,21 @@ export function runPi(opts: {
       // Flush a final record that arrived without a trailing newline: Pi usually LF-frames
       // every line, but a clean exit can leave the last event (often `agent_end`) unterminated
       // in the buffer, so without this its progress/span/guard signal would be silently lost.
-      if (lineBuffer.trim()) {
-        processLine(lineBuffer.trim(), false)
-        lineBuffer = ''
-      }
+      reader.flush()
       // Surface any silent stream losses ONCE (counts, not per-line), so a corrupted JSONL
-      // stream or a throwing observer is diagnosable rather than invisible.
-      if (malformedLines > 0 || observerErrors > 0) {
-        log.warn('pi: skipped malformed JSONL lines / observer errors', {
+      // stream, an oversized record the reader refused to buffer, or a throwing observer is
+      // diagnosable rather than invisible.
+      if (malformedLines > 0 || observerErrors > 0 || reader.droppedLines > 0) {
+        log.warn('pi: skipped malformed/oversized JSONL lines or observer errors', {
           malformedLines,
+          oversizedLines: reader.droppedLines,
           observerErrors,
         })
       }
+      const outText = stdout.toString()
+      const errText = stderr.toString()
       if (guardReason) {
-        const tail = redactSecrets(stderr.trim()).slice(-700)
+        const tail = redactSecrets(errText.trim()).slice(-700)
         reject(new Error(tail ? `${guardReason} Agent stderr: ${tail}` : guardReason))
       } else if (aborted) {
         reject(
@@ -1080,20 +1091,23 @@ export function runPi(opts: {
           ),
         )
       } else if (code === 0) {
-        const tail = redactSecrets(stderr.trim()).slice(-1500)
+        const tail = redactSecrets(errText.trim()).slice(-1500)
         // Pi can exit 0 even when the agent run ended in a hard error (e.g. every
         // model call failed and its retries were exhausted): the process completed,
         // but the agent did not. Exit code alone then reads as success, and a run
         // that RESUMED a branch with prior commits would even open a PR off work this
         // pass never produced. Inspect the terminal transcript and fail loudly so the
         // step is marked failed instead of masking a total failure as green.
-        const runError = terminalRunError(stdout)
+        const runError = terminalErrorFromEvents(events)
         if (runError) {
           const scrubbed = redactSecrets(runError).slice(0, 1000)
           const detail = tail ? `${scrubbed} Agent stderr: ${tail}` : scrubbed
           reject(piRunFailure(detail, runError))
         } else {
-          resolve({ ...summarizePiRun(stdout), ...(tail ? { stderrTail: tail } : {}) })
+          resolve({
+            ...summarizeFromEvents(events, outText),
+            ...(tail ? { stderrTail: tail } : {}),
+          })
         }
       } else {
         // A non-zero exit is the OTHER way a proxy refusal can surface (Pi crashing rather
@@ -1101,7 +1115,7 @@ export function runPi(opts: {
         // 401/402/429 that happens to crash Pi would read as a generic agent failure. Redact
         // the transcript slice before it becomes the detail: unlike the exit-0 path above, the
         // raw `stderr`/`stdout` here was previously interpolated unscrubbed.
-        const raw = (stderr || stdout).slice(-500)
+        const raw = (errText || outText).slice(-500)
         reject(piRunFailure(`pi exited with code ${code}: ${redactSecrets(raw)}`, raw))
       }
     })
@@ -1146,7 +1160,14 @@ function parsePiEvents(stdout: string): Record<string, unknown>[] {
  * a fixed event sequence.
  */
 export function terminalRunError(stdout: string): string | undefined {
-  const events = parsePiEvents(stdout)
+  return terminalErrorFromEvents(parsePiEvents(stdout))
+}
+
+/**
+ * {@link terminalRunError} over records already parsed from the stream, which is how the live
+ * run reaches it: re-parsing the whole of stdout at close is the event-loop stall F6 is about.
+ */
+export function terminalErrorFromEvents(events: Record<string, unknown>[]): string | undefined {
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]!
     if (e.type === 'auto_retry_end') {
@@ -1218,9 +1239,23 @@ export function classifyLlmUpstreamError(finalError: string): string | undefined
  * answer and to detect a no-op run (the agent never acted).
  */
 export function summarizePiRun(stdout: string): PiRunOutcome {
-  const events = parsePiEvents(stdout)
+  return summarizeFromEvents(parsePiEvents(stdout), stdout)
+}
+
+/**
+ * {@link summarizePiRun} over records already parsed from the stream (see
+ * {@link terminalErrorFromEvents} for why the live run takes this path).
+ *
+ * `stdoutTail` backs the last-resort summary fallback for a run whose output matched nothing
+ * structured, and a TAIL is all that fallback ever wanted: it slices the final 2 KB. Passing the
+ * bounded tail rather than the whole run's output is what lets `runPi` stop retaining it.
+ */
+export function summarizeFromEvents(
+  events: Record<string, unknown>[],
+  stdoutTail: string,
+): PiRunOutcome {
   return {
-    summary: summaryFromEvents(events, stdout),
+    summary: summaryFromEvents(events, stdoutTail),
     stats: statsFromEvents(events),
     diagnostics: diagnosticsFromEvents(events),
   }

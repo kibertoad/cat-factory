@@ -31,6 +31,7 @@ import {
   type SkillSpec,
 } from './agent-capabilities.js'
 import { ProgressGuard, type ProgressGuardLimits } from './progress-guard.js'
+import { BoundedTail, JsonlLineReader } from './jsonl-stream.js'
 import { killChildProcess, spawnDetached } from './process.js'
 import { describeProcessExit } from './process-exit.js'
 import { redact, registerKnownSecrets, secretsToRedact } from './redact.js'
@@ -227,9 +228,10 @@ function streamCli(
     child.stdin.on('error', () => {})
     child.stdin.end(prompt)
 
-    let stderr = ''
+    // 8 KB is well over the 700 B tail anyone quotes below, and the CLI's stderr is diagnostic
+    // noise rather than a product, so a bounded tail is all this ever needed to be.
+    const stderr = new BoundedTail(8_000)
     let aborted = false
-    let lineBuffer = ''
 
     const killChild = (): void => killChildProcess(child)
 
@@ -253,16 +255,9 @@ function streamCli(
       }
     }
 
-    const consumeStdout = (text: string): void => {
-      lineBuffer += text
-      let nl = lineBuffer.indexOf('\n')
-      while (nl !== -1) {
-        const line = lineBuffer.slice(0, nl).trim()
-        lineBuffer = lineBuffer.slice(nl + 1)
-        nl = lineBuffer.indexOf('\n')
-        processLine(line)
-      }
-    }
+    // Bounded framing, shared with `runPi`: an unterminated record must not be able to grow
+    // until parsing it stalls the loop the watchdogs and poll handlers run on (audit F6).
+    const reader = new JsonlLineReader(processLine)
 
     const onAbort = (): void => {
       aborted = true
@@ -272,12 +267,11 @@ function streamCli(
 
     child.stdout.on('data', (chunk: Buffer) => {
       opts.onActivity?.()
-      consumeStdout(chunk.toString())
+      reader.push(chunk.toString())
     })
     child.stderr.on('data', (chunk: Buffer) => {
       opts.onActivity?.()
-      stderr += chunk.toString()
-      if (stderr.length > 8_000) stderr = stderr.slice(-8_000)
+      stderr.push(chunk.toString())
     })
 
     child.on('error', (err) => {
@@ -286,8 +280,8 @@ function streamCli(
     })
     child.on('close', (code, signal) => {
       opts.signal?.removeEventListener('abort', onAbort)
-      const stderrTail = redact(stderr, secrets).slice(-700)
-      if (lineBuffer.trim()) processLine(lineBuffer.trim(), true)
+      const stderrTail = redact(stderr.toString(), secrets).slice(-700)
+      reader.flush()
       if (aborted) {
         // Carry the tail on the rejection so a caller that REPLACES this generic message with a
         // more specific cause (the no-progress guard's diagnostic) can still append it — the

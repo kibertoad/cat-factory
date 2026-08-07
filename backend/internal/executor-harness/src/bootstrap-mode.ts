@@ -101,6 +101,7 @@ export async function runBootstrap(job: AgentJob, opts: RunOptions): Promise<Age
       dir,
       target: boot.target,
       ghToken: job.ghToken,
+      signal,
       message: fromScratch
         ? 'Bootstrap new repository'
         : `Bootstrap from ${job.repo.owner}/${job.repo.name}`,

@@ -140,7 +140,13 @@ container, `wrangler.toml:171-173`):
 
 - `JOB_MAX_DURATION_MS`: force-fails a job after this long (default
   `3600000` = **60 min**).
-- `JOB_INACTIVITY_MS`: kills the agent after a stretch of no progress.
+- `JOB_INACTIVITY_MS`: kills the agent after a stretch of no output.
+- `JOB_TOOL_SILENCE_MS`: kills the agent after a stretch of output with no
+  completed tool call (default: half `JOB_MAX_DURATION_MS`, `0` disables). The
+  case the other two structurally cannot see, since a model that keeps talking
+  resets the inactivity timer on every chunk while finishing nothing. Armed only
+  while the agent phase runs, so clone/install/push (which complete no tool calls
+  by nature, and carry their own per-command timeouts) sit outside it.
 
 A force-failed job becomes terminal, after which polling stops and Layer 1 (or a
 stop on the observed failure) reaps the instance.

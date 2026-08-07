@@ -299,11 +299,12 @@ reach the same runner/job.
 
 ### Runner lifecycle knobs (env on the runner, read by the harness)
 
-| Env var               | Default         | Effect                                                      |
-| --------------------- | --------------- | ----------------------------------------------------------- |
-| `PORT`                | `8080`          | HTTP port the harness listens on.                           |
-| `JOB_MAX_DURATION_MS` | `3600000` (60m) | Hard ceiling on a job's wall-clock time; force-fails after. |
-| `JOB_INACTIVITY_MS`   | `600000` (10m)  | Kills a hung agent that produces no output for this long.   |
+| Env var               | Default                    | Effect                                                                                                                                                                    |
+| --------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                | `8080`                     | HTTP port the harness listens on.                                                                                                                                         |
+| `JOB_MAX_DURATION_MS` | `3600000` (60m)            | Hard ceiling on a job's wall-clock time; force-fails after.                                                                                                               |
+| `JOB_INACTIVITY_MS`   | `600000` (10m)             | Kills a hung agent that produces no output for this long.                                                                                                                 |
+| `JOB_TOOL_SILENCE_MS` | half `JOB_MAX_DURATION_MS` | Kills an agent that keeps producing output but completes no tool call for this long. Armed only while the agent runs, so clone/install/push are outside it. `0` disables. |
 
 Rely on these watchdogs to reap stuck jobs: cat-factory will not kill a runner for
 you (it only calls your `release`).
