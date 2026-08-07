@@ -127,7 +127,7 @@ function selectNodeTasksDeps(
       new GitLabIssuesProvider({
         gitlabClient,
         installations,
-        webBaseUrl: gitlabWebBaseFromApiBase(config.gitlab?.apiBase),
+        webBaseUrl: gitlabWebBaseFromApiBase(config.gitlab.apiBase),
       }),
     )
   }
@@ -445,7 +445,7 @@ function selectVcsConnectDeps(input: {
 }): { client: GitHubClient; service: VcsPatConnectionService } | undefined {
   const { config, installations, workspaceRepository, clock } = input
   const gitlab = config.gitlab
-  if (!gitlab?.enabled || !gitlab.encryptionKey) return undefined
+  if (!gitlab.enabled || !gitlab.encryptionKey) return undefined
   // One cipher seals (connect) and unseals (token source) under the same domain, so the two
   // instances the client + service build from the same key + info interoperate.
   const cipher = new WebCryptoSecretCipher({

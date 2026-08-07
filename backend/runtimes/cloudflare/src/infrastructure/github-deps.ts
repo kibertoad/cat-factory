@@ -79,7 +79,7 @@ export function selectGitHubDeps(
     // still work, so wire them from the single-token GitLab engine client. When per-workspace connect
     // is enabled, ALSO wire the `github` module (browse/link/sync) with the per-workspace connect
     // client + the connect service, so a GitLab user connects and manages repos through the UI.
-    if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
+    if (config.gitlab.enabled && env.GITLAB_TOKEN) {
       const engineClient = buildGitLabEngineClient({
         token: env.GITLAB_TOKEN,
         apiBase: config.gitlab.apiBase,

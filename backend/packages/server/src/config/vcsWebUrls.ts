@@ -11,17 +11,18 @@ import type { AppConfig } from './types.js'
  * (see `vcsWebBaseUrl`) is simply absent, which the SPA renders by withholding the links that
  * needed a host rather than pointing at the provider's public instance.
  *
- * Keyed off the API BASE alone, never off a provider's `enabled` flag: local mode connects
- * GitHub with a PAT and no App, so `config.github.enabled` is false there while the workspace
- * very much has a GitHub connection whose repos need linking. Nothing reads a host for a
- * provider it has no connection or connect option for, so an unused entry costs nothing.
+ * Keyed off the API BASE alone, never off a provider's `enabled` flag, and asked of EVERY
+ * provider rather than only the ones whose config happens to be present: local mode connects
+ * with a PAT and no App/`GITLAB_TOKEN`, so both `enabled` flags are false there while the
+ * workspace very much has a connection whose repos need linking. Nothing reads a host for a
+ * provider it has no connection or connect option for, so an unused entry costs nothing —
+ * which is why both branches below are unconditional and only the DERIVATION may withhold.
  */
 export function resolveVcsWebUrls(config: AppConfig): VcsWebUrls {
   const urls: { -readonly [K in keyof VcsWebUrls]: VcsWebUrls[K] } = {}
   const github = vcsWebBaseUrl('github', config.github.apiBase)
   if (github) urls.github = github
-  const gitlabApiBase = config.gitlab?.apiBase
-  const gitlab = gitlabApiBase ? vcsWebBaseUrl('gitlab', gitlabApiBase) : null
+  const gitlab = vcsWebBaseUrl('gitlab', config.gitlab.apiBase)
   if (gitlab) urls.gitlab = gitlab
   return urls
 }

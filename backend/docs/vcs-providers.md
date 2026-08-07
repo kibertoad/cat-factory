@@ -65,3 +65,8 @@ are stripped, `api.github.com` maps to `github.com`, and a relative-URL install 
 prefix (`https://host/gitlab/api/v4` → `https://host/gitlab`). A base with none of those shapes
 names no host, and the SPA withholds those links rather than pointing at the provider's public
 instance, where the same namespace path is very likely somebody else's project.
+
+Both API bases are read on **every** deployment, independently of the opt-in beside them
+(`GITLAB_TOKEN`, a GitHub App): a deployment reaching either provider with a PAT still has
+repositories to link, and local mode is exactly that shape. The opt-in governs the single-token
+engine connection alone.

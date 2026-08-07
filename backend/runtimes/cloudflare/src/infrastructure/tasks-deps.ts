@@ -73,7 +73,7 @@ export function selectTasksDeps(
       new GitLabIssuesProvider({
         gitlabClient: gitlabConnect.client,
         installations,
-        webBaseUrl: gitlabWebBaseFromApiBase(config.gitlab?.apiBase),
+        webBaseUrl: gitlabWebBaseFromApiBase(config.gitlab.apiBase),
       }),
     )
   }

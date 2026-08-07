@@ -21,7 +21,7 @@ export function selectWorkerVcsConnectDeps(
   clock: Clock,
 ): { client: GitHubClient; service: VcsPatConnectionService } | undefined {
   const gitlab = config.gitlab
-  if (!gitlab?.enabled || !gitlab.encryptionKey) return undefined
+  if (!gitlab.enabled || !gitlab.encryptionKey) return undefined
   // One cipher seals (connect) and unseals (token source) under the same domain.
   const cipher = new WebCryptoSecretCipher({
     masterKeyBase64: gitlab.encryptionKey,

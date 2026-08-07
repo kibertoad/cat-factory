@@ -196,7 +196,7 @@ export function resolveNodeContainerFoundation(options: NodeContainerOptions) {
   // so they OVERRIDE the config wiring (local mode wires a PAT-backed CI provider here that would
   // otherwise clobber a faked one) — gates read their provider lazily at probe time, last write wins.
   let gitlabEngineClient: GitHubClient | undefined
-  if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
+  if (config.gitlab.enabled && env.GITLAB_TOKEN) {
     registerGitLab(vcsRegistry, {
       tokenSource: new StaticGitLabTokenSource(env.GITLAB_TOKEN, config.gitlab.apiBase),
       clock,
