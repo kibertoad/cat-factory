@@ -290,7 +290,8 @@ With that scoping, the pipeline properties are:
   credential, on a code path the container cannot reach or influence except through those scores.
   The merger container is _not_ credential-free: it is a container agent kind that clones
   the PR head to read the diff, so its job carries the same clone/push token as any other dispatch
-  (`CONTAINER_AGENT_KINDS`). What it lacks is a way to make the ENGINE merge; what a stolen token
+  (it declares a `container-explore` surface on the agent-kind registry, like every other container
+  kind). What it lacks is a way to make the ENGINE merge; what a stolen token
   could still do is the Layer 2/3 story above, not this one.
 - The inputs the agent cannot game are deliberate **mechanisms**: the change **class**
   (`docs < test < dependency < config < source < schema`) is computed in backend TypeScript from

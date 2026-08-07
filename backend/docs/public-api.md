@@ -191,6 +191,18 @@ clients, and the webhook delivery contract do not change incompatibly. What that
 - **Scope semantics only ever widen without a migration path**; narrowing what a key may do is a
   break like any other.
 
+#### Deprecated, still served
+
+| What                                                                                             | Read instead                                      | Removed no earlier than |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------- | ----------------------- |
+| `extras.toolServers` / `extras.unavailableToolServers` on `GET /debug/agent-context/:snapshotId` | `steps[].toolServers` on `GET /debug/runs/:runId` | the next OpenAPI major  |
+
+The replacement is not a rename. An agent-context snapshot exists only where the deployment has
+prompt recording on, and is pruned on the telemetry retention window, so the copy on the snapshot
+was blank or gone for most readers of it; the step carries the same facts unconditionally and for
+as long as the run exists. Both are projected from the same value at dispatch, so they cannot
+disagree while both are served.
+
 ## Quick start
 
 ```sh

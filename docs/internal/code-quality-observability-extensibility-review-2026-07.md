@@ -372,14 +372,15 @@ threshold settings UI, and the optional daily rollup table for >3-day trends.
 
 **Gaps:**
 
-- **The built-in-agent strangler has not advanced since the last revision**: the seven
-  orchestration-id built-ins in `buildMigratedBuiltInBody`'s switch (now in
-  `server/src/agents/jobBody.ts`; `ci-fixer`/`fixer`/`conflict-resolver`/`merger`/
-  `on-call`/`tester`/`ui-tester`) plus the `toRunResult` coercion chain in
-  `containerAgentResult.ts` still bypass the registry path, and the merger resolver is
-  still built inline rather than via `registerStepResolver`. Two parallel prompt/result
-  mechanisms coexist (matches `refactoring-candidates.md` #5). (The bespoke _harness_
-  handlers are already gone: every built-in synthesizes an `AgentStepSpec` through the one
+- **The built-in-agent strangler has since FINISHED** (recorded here rather than rewritten,
+  since this document is a point-in-time review): the seven orchestration-id built-ins in
+  `buildMigratedBuiltInBody`'s switch (`ci-fixer`/`fixer`/`conflict-resolver`/`merger`/
+  `on-call`/`tester`/`ui-tester`) are registrations, as are the read-only and producer kinds
+  that used to fall through it, and the `toRunResult` coercion chain is one registry lookup.
+  What remains from this gap is the merger resolver, still built inline rather than via
+  `registerStepResolver`. As reviewed, two parallel prompt/result
+  mechanisms coexisted (matched `refactoring-candidates.md` #5). (The bespoke _harness_
+  handlers were already gone: every built-in synthesizes an `AgentStepSpec` through the one
   generic body path; the remaining work is folding the two backend switches into registry
   lookups.)
 - **`github-client.ts` is a 773-line god-interface (up from 724)** (~62 methods) that
@@ -529,7 +530,7 @@ candidate entry: the recommendation is to prioritize them, not to re-plan them.
 | 7   | Code quality    | ✅ **Done**: `TaskRepository.listByRefs` (chunked-`IN` batch read, D1 ⇄ Drizzle + conformance assertion) replaced the N+1 in `AgentContextBuilder`.                                                                                                                                                                                                                                                                                                                                                                                                        | Medium | Low     |
 | 8   | Observability   | Distributed tracing: HTTP server spans on the shared Hono app + `traceparent` propagation into the container job body so harness tool spans nest under the run's trace instead of being siblings. Re-verified still absent.                                                                                                                                                                                                                                                                                                                                | Medium | Medium  |
 | 9   | Frontend        | 🟡 **Half done**: the WebSocket degraded-state indicator landed (`ConnectionStatusBanner`: reconnecting/offline states, backoff + resync). Still open: a global Nuxt error handler reporting client exceptions to a backend sink; client JS errors remain invisible to operators.                                                                                                                                                                                                                                                                          | Medium | Low     |
-| 10  | Extensibility ↗ | 🟡 **In progress (no movement this revision)**: migrate the seven remaining `buildMigratedBuiltInBody` switch cases (`ci-fixer`/`fixer`/`conflict-resolver`/`merger`/`on-call`/`tester`/`ui-tester`) onto registered kinds, fold the `toRunResult` coercion chain onto the definitions, and move the inline merger resolver to `registerStepResolver`. Some need a `userPrompt(context)` seam extension first.                                                                                                                                             | Medium | Medium  |
+| 10  | Extensibility ↗ | ✅ **Done**: every built-in container kind is a `registerAgentKind` entry, so `buildMigratedBuiltInBody`'s switch and the `toRunResult` coercion chain are both deleted (one registry lookup each), and the hard-coded `CONTAINER_AGENT_KINDS` / multi-repo fan-out Sets are gone with them. The blocker was the seam: a kind's `userPrompt` now receives an `AgentDispatchContext` (base/work branch, multi-repo), which is what let the branch-naming prompts move. Still open: move the inline merger resolver to `registerStepResolver`.               | Medium | Medium  |
 | 11  | Extensibility   | Split the `github-client.ts` god-interface (now 773 lines / ~62 methods: it grew) into cohesive sub-ports (repos, PRs, issues, CI, git-data) so VCS providers implement neutral slices instead of adapting into the GitHub shape.                                                                                                                                                                                                                                                                                                                          | Medium | High    |
 | 12  | Usability       | Automate accessibility: axe assertions in a couple of e2e specs + a keyboard-nav pass on board/modals, and broaden `EmptyState`/`IconButton` primitive adoption. The manual a11y wins (focus traps, reduced-motion, labeled icon buttons) need a regression guard to stick.                                                                                                                                                                                                                                                                                | Medium | Low–Med |
 | 13  | Testing         | Exercise the real Redis path for `RedisWebSocketPropagator` (a Redis service container in the `test-db` lane); promote e2e (now 27 specs) into `test-gate.needs` once flake-trust is earned.                                                                                                                                                                                                                                                                                                                                                               | Medium | Low–Med |

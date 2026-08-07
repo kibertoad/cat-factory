@@ -14,6 +14,7 @@ import {
   makeReadyClarityReview,
   makeIncorporatedReview,
   makeOnboardingProbe,
+  makeToolServerDispatchProbe,
   makeReadyReviewWithOpenItem,
   seedMergePresets,
   type CreateWorkspaceOptions,
@@ -561,26 +562,7 @@ export function makeMothershipConformanceApp(
     accountSettingsRepository: () => new DrizzleAccountSettingsRepository(db),
     seedService,
     getService,
-    onboarding: () => makeOnboardingProbe(container),
-    localModelEndpoints: () => {
-      const svc = container.localModelEndpoints
-      if (!svc) return undefined
-      return {
-        list: (userId: string) => svc.list(userId),
-        upsert: (userId: string, input) =>
-          svc.upsert(userId, input as UpsertLocalModelEndpointInput),
-        resolve: (userId: string, provider: string) => svc.resolve(userId, provider),
-        remove: (userId: string, provider: string) => svc.remove(userId, provider as LocalRunner),
-      }
-    },
-    openRouterCatalog: () => {
-      const svc = container.openRouterCatalog
-      if (!svc) return undefined
-      return {
-        get: (workspaceId: string) => svc.get(workspaceId),
-        upsert: (workspaceId: string, input) => svc.upsert(workspaceId, input),
-      }
-    },
+    ...containerServiceProbes(container),
   }
 }
 
@@ -631,5 +613,45 @@ function createMothershipSeedHelpers(db: DrizzleDb) {
     seedService,
     getService,
     mothershipRepos,
+  }
+}
+
+/**
+ * The optional per-container service probes, split out of the app factory so its size stays inside
+ * the per-function budget. Each is undefined when this facade did not wire the service, which is
+ * how the suite skips an assertion rather than failing it on a deployment shape that legitimately
+ * lacks the store.
+ */
+function containerServiceProbes(
+  container: ServerContainer,
+): Pick<
+  ConformanceApp,
+  'onboarding' | 'toolServerDispatch' | 'localModelEndpoints' | 'openRouterCatalog'
+> {
+  return {
+    onboarding: () => makeOnboardingProbe(container),
+    // The tool-server (MCP) dispatch resolution over this facade's own composed
+    // capability-credential chain: the half no HTTP route can show, since credential values are
+    // write-only on the wire and the resolution happens inside a job body.
+    toolServerDispatch: () => makeToolServerDispatchProbe(container),
+    localModelEndpoints: () => {
+      const svc = container.localModelEndpoints
+      if (!svc) return undefined
+      return {
+        list: (userId: string) => svc.list(userId),
+        upsert: (userId: string, input) =>
+          svc.upsert(userId, input as UpsertLocalModelEndpointInput),
+        resolve: (userId: string, provider: string) => svc.resolve(userId, provider),
+        remove: (userId: string, provider: string) => svc.remove(userId, provider as LocalRunner),
+      }
+    },
+    openRouterCatalog: () => {
+      const svc = container.openRouterCatalog
+      if (!svc) return undefined
+      return {
+        get: (workspaceId: string) => svc.get(workspaceId),
+        upsert: (workspaceId: string, input) => svc.upsert(workspaceId, input),
+      }
+    },
   }
 }

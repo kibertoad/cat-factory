@@ -1,6 +1,6 @@
 # MCP support maturation
 
-Status: **in progress; slices 1, 2, 3, 4, slice 5's HANDSHAKE half and slice 7's CONSUMING half landed.** Sources: the 2026-08-04 review of both MCP
+Status: **in progress; slices 1, 2, 3, 4, slice 5's HANDSHAKE and RUN-RECORD halves and slice 7's CONSUMING half landed.** Sources: the 2026-08-04 review of both MCP
 surfaces, and the 2026-08-05 follow-up review of one question through the same material: how well
 a deployment can add EXTERNAL tool servers programmatically, without forking. That review's
 verdict and its new findings are folded in below (the inventory rows marked 2026-08-05, slice 8,
@@ -66,7 +66,7 @@ dump and never uses the word MCP).
   `WebStandardStreamableHTTPServerTransport` (the `Request → Response` sibling of the Node-only
   `StreamableHTTPServerTransport`, which is what let slice 3 land in the shared controller layer).
 - **OAuth tokens live in the capability-credential store**
-  ([capability-credential-store.md](./capability-credential-store.md)): sealed, per-workspace,
+  ([ADR 0041](../../backend/docs/adr/0041-capability-credential-store.md)): sealed, per-workspace,
   already composed in front of the environment resolver per key.
 
 ## Slices
@@ -116,8 +116,8 @@ dump and never uses the word MCP).
       declared in kernel and populated into the checklist the contract already had a field for; the
       Test button and the inventory rendered above the credential checklist; and the operator docs
       (the Slack runbook, the `MCP_*` convention). Its four decisions are below.
-- [ ] **5. Run-surface observability for tool servers. The HANDSHAKE half has landed; the
-      TELEMETRY half has not.**
+- [ ] **5. Run-surface observability for tool servers. The HANDSHAKE and RUN-RECORD halves have
+      landed; the CLI-OBSERVED half has not.**
       **Handshake (done):** the harness reports the job-body capability field names it parses
       (`mcpServers`, `skills`) on `/health` and on the `POST /jobs` acceptance; `RunnerTransport`
       gained a `RunnerDispatchAck` return every harness-speaking transport forwards; and the
@@ -127,18 +127,31 @@ dump and never uses the word MCP).
       step a `preflight` fault, while `unknown` proceeds and is reported through a warn line plus
       `container.capability_unknown`. Its decisions and the gotchas it surfaced are below. Image
       bumped to 1.93.0.
-      **Telemetry (open):** dispatch telemetry recording what the CLI actually reached (server
-      started, N tools) on a typed snapshot field instead of the raw `extras` dump the SPA renders,
-      and an unavailable server becoming a stated chip on the run surface rather than a line only
-      the agent's own prompt and a backend warn ever see. The job-body observation seam
-      ([capability-credential-store.md](./capability-credential-store.md) slice 3, re-scoped there as
-      exactly this) lands with it, giving tool servers their first cross-runtime conformance
-      assertion. It comes AFTER the probe on purpose: the chip and the snapshot field both need a
-      wire vocabulary for a tool server, and slice 4 is where that vocabulary now exists
-      (`@cat-factory/contracts`'s `tool-servers.ts`), so this extends one rather than inventing a
-      second. The handshake went first because the 2026-08-05 review rated the blind run the
-      likeliest failure an adopting deployment actually hits, and unlike the chip it needed no wire
-      vocabulary.
+      **Run record (done):** what a dispatch DECIDED is now a typed record on the step itself
+      (`step.toolServers`: the wired servers, and the dropped ones each with their reason), carried
+      on the job handle and folded by `recordDispatchAttribution`, rendered as chips on the step
+      detail with translated copy per reason in all ten locales. The reason vocabulary moved into
+      `@cat-factory/contracts` and kernel's `UnavailableToolServer` is typed against it, so the two
+      sides cannot drift into a member that renders blank. The duplicated entries in the
+      agent-context snapshot's untyped `extras` bag were deleted rather than kept beside it. The
+      job-body observation seam landed with it
+      (the last open slice of the capability-credential store, whose tracker this PR converts to
+      [ADR 0041](../../backend/docs/adr/0041-capability-credential-store.md)): a
+      `toolServerDispatch()` harness probe over each facade's OWN composed credential chain,
+      giving tool servers and capability credentials their first cross-runtime assertions. Its
+      decisions are below.
+      **CLI-observed (open):** what the agent's CLI actually reached (server started, N tools),
+      read off the CLI's own startup report and folded onto the same record beside what the
+      platform decided. Split from the record half because it is a HARNESS change and therefore an
+      image bump, and because the two answer different questions: the record says why the platform
+      withheld a tool, while this says a wired server failed to start anyway. Nothing blocks it:
+      the record is the field it extends, and the probe already diagnoses the same condition
+      interactively, which is why it ranked below the two halves that shipped.
+      Ordering note: the handshake went first because the 2026-08-05 review rated the blind run the
+      likeliest failure an adopting deployment actually hits, and unlike the chips it needed no wire
+      vocabulary; the chips came second because slice 4 is where that vocabulary now exists
+      (`@cat-factory/contracts`'s `tool-servers.ts`), so this extended one rather than inventing a
+      second.
 - [ ] **6. Tenant-level configurability.** The binary-generator pattern applied to tool servers:
       a contracts-level non-secret vocabulary, a snapshot projection, per-workspace
       enable/disable, per-step selection via `stepOptions`, and a picker. The SPA finally learns
@@ -200,10 +213,10 @@ carries it; "done" means that slice has landed.
 | No inventory: a registration attached to no kind is invisible                     | Slice 4 (done)                |
 | `McpSecretRef` lacks the `usage` note the checklist can render                    | Slice 4 (done)                |
 | The credential checklist's READ was documented as gated and was not               | Slice 4 (done)                |
-| Telemetry records ids only; SPA renders raw `extras` JSON                         | Slice 5                       |
-| Dropped-server diagnosis reaches the agent and a warn log, no operator surface    | Slice 5                       |
+| Telemetry records ids only; SPA renders raw `extras` JSON                         | Slice 5 (run record done)     |
+| Dropped-server diagnosis reaches the agent and a warn log, no operator surface    | Slice 5 (done)                |
 | Older harness image silently drops `mcpServers` (blind run)                       | Slice 5 (handshake done)      |
-| Tool servers asserted nowhere cross-runtime                                       | Slice 5                       |
+| Tool servers asserted nowhere cross-runtime                                       | Slice 5 (done)                |
 | No per-workspace/per-step server selection; no wire vocabulary; no SPA visibility | Slice 6                       |
 | Capability credentials absent from the public API                                 | Slice 6                       |
 | No OAuth for remote tool servers                                                  | Slice 7 (consuming half done) |
@@ -252,10 +265,10 @@ Recorded so the next iteration does not re-propose them.
   a product decision to take separately if demand shows up.
 - **Checklist granularity changes.** The (workspace, key) sharing, the `required` fold and the
   deliberately-unscoped list are standing decisions with their reasoning recorded in
-  [capability-credential-store.md](./capability-credential-store.md); nothing in this review
+  [ADR 0041](../../backend/docs/adr/0041-capability-credential-store.md); nothing in this review
   overturns them.
 - **The environment-fallback default and `allowKeys`.** Both are already tracked: the default is
-  the product call capability-credential-store slice 4 deliberately did not make, and unset
+  the product call the capability-credential store deliberately did not make, and unset
   `allowKeys` is on the security model's hardening checklist.
 - **MCP resources, prompts, elicitation and progress notifications.** Deferred, not refused:
   host support is uneven and none of them gates the flows above. The natural revisit point is
@@ -367,6 +380,61 @@ Recorded so the next iteration does not re-propose them.
   guessing at an arbitrary JSON document manufactures one. Nothing in the response can tell the two
   apart, and the operator can, in one line. Unmapped now means `unknown`, which is the truth about a
   control plane this backend knows nothing about.
+
+## Slice 5 (run record): its four decisions
+
+- **The record lives on the STEP, not on the agent-context snapshot.** The tracker originally said
+  "a typed snapshot field", and the snapshot is where the same facts already were (in its untyped
+  `extras` bag). It is the wrong home for anything a person is meant to see: the snapshot is
+  DOUBLE-GATED (`LLM_RECORD_PROMPTS` plus the per-workspace `storeAgentContext`) and pruned on the
+  telemetry retention window, so a chip reading it would be blank on a deployment that simply has
+  prompt recording off, and gone from an older run on one that does not. "Which tools did this step
+  have" is an ordinary question about a run, not an opt-in debugging artifact. Cost avoided as a
+  side effect: no telemetry column, so no D1 migration ⇄ Drizzle pair for a field the run row
+  already carries as JSON. The `extras` entries were DELETED rather than left beside it, so there is
+  one authority.
+- **The reason vocabulary MOVED to `@cat-factory/contracts` and kernel is typed against it.** The
+  cheap version leaves kernel's union where it is and hand-copies the members into the SPA, which is
+  what every other run-surface vocabulary here was already doing. It is the drift this repo has a
+  rule about: the SPA cannot see kernel, and a member added on one side only renders as a blank
+  chip. Which member a dispatch PICKS still lives in kernel; only the list moved.
+- **Two lists, never one list with a status field.** A filtered read gives the same answer, so this
+  is about what an unfiltered one gives: a wired server is a capability the prompt promised the
+  agent, and a dropped one is a promise the platform deliberately withheld. Rendering them from one
+  array is one forgotten filter away from reporting a withheld tool as a working one, which is the
+  precise failure the whole unavailability vocabulary exists to prevent.
+- **The conformance seam is a PROBE over the facade's own container, not a fake.** Asserting the
+  credential chain by injecting a resolver would assert the injection: what differs between
+  deployments is whether a facade composed the per-workspace store IN FRONT of its environment
+  resolver and PER KEY, and only the facade's own wiring can answer that. So the probe binds each
+  facade's real `container.toolSecretResolver` and `agentKindRegistry` into the SAME
+  `resolveToolServers` the executor calls. It closes
+  the capability-credential store's last open slice, which had scoped itself as exactly this seam
+  ([ADR 0041](../../backend/docs/adr/0041-capability-credential-store.md)).
+
+## Gotchas slice 5 (run record) surfaced
+
+- **Only an ASYNC dispatch produces a handle to fold.** `recordDispatchAttribution` runs at the
+  dispatch site, and `ContainerAgentExecutor.runsAsync` is unconditionally true, so the fold is on
+  the container path by construction. A conformance test that drives the kind INLINE therefore
+  asserts nothing and passes vacuously until it sets `asyncKinds`; that is the shape to copy for
+  any future handle field.
+- **The fold is guarded on the field's PRESENCE, never on its content.** Both lists empty is a real
+  answer (a kind declaring no tool servers), and a re-dispatch by an executor that resolves none
+  must not erase what a container round recorded. Same rule the neighbouring fields already follow,
+  and the reason `stepToolServerRecord` is called unconditionally at dispatch rather than only when
+  something was wired.
+- **The environment-fallback leg of the credential chain is deliberately NOT asserted
+  cross-runtime.** Seeding a deployment ENVIRONMENT variable is per-runtime (a workerd binding
+  versus `process.env`), so a conformance assertion of it would grade the seeding rather than the
+  chain. What the suite asserts instead is the property that actually differs between facades and
+  needs no seeding: a workspace that stored ONE of two declared keys keeps the server that key
+  belongs to and loses only the other. A "first resolver that answers wins" chain fails exactly
+  there.
+- **`@cat-factory/conformance` is consumed from `dist`, so a suite edit needs a rebuild.** A facade
+  test run against a stale build reports the PREVIOUS revision of an assertion, which reads as a
+  product bug for as long as it takes to notice. `pnpm exec turbo run build --filter=@cat-factory/conformance`
+  before running a facade's spec.
 
 ## Gotchas slice 5 (handshake) surfaced
 

@@ -80,6 +80,27 @@ export interface AgentCloneSpec {
    * Best-effort: a failed fetch just leaves the review on the base checkout + injected diff.
    */
   prHead?: boolean
+  /**
+   * Refuse the dispatch when the block has NO pull request to work on, instead of falling back
+   * to {@link prFallback}. Right for a kind whose whole job is an EXISTING pull request (the
+   * in-place fixers, the conflict-resolver): with no PR there is nothing to fix, and a silent
+   * fall back to the base branch would push unrelated work onto it. Absent ⇒ the fallback runs.
+   */
+  requirePr?: boolean
+  /**
+   * What a `pr` clone falls back to when the block carries no PR branch: the repo's base branch
+   * (the default) or the per-block WORK branch. `work` is right for a kind that acts on the
+   * shared per-task branch every repo's PR rides, which is the robust value when the OWN service
+   * had no change but a PEER repo did (the peer-conflict case). Ignored for other clone targets.
+   */
+  prFallback?: 'base' | 'work'
+  /**
+   * Merge the repo's BASE branch into the checkout before the agent runs, so the conflict hunks
+   * are present in the working tree for the agent to resolve (the conflict-resolver). The harness
+   * completes the merge commit and pushes back onto the same branch, refusing a half-resolved
+   * tree. Absent ⇒ nothing is merged in.
+   */
+  mergeBase?: boolean
 }
 
 /** The optional LLM step of an agent definition. */
@@ -88,8 +109,28 @@ export interface AgentStepSpec {
   output?: AgentOutputSpec
   /** Container surfaces only: what to clone. */
   clone?: AgentCloneSpec
-  /** Container coding surface only: how to stand dependencies up (tester). */
-  infra?: 'none' | 'compose' | 'ephemeral-url'
+  /**
+   * Stand the service's declared TEST DEPENDENCIES up around this run (the tester family). The
+   * concrete spec is DERIVED per run from the frame's capability profile plus whatever the run
+   * actually provisioned — a kind declares only that it needs one — and the step's resolved test
+   * secrets ride along with it. Absent ⇒ nothing is stood up.
+   */
+  testInfra?: boolean
+  /**
+   * The container IMAGE this kind's job needs. `ui` selects the heavier Playwright + browser
+   * image (the UI tester drives a real browser and captures screenshots); absent ⇒ the default
+   * harness image, so the browser never bloats every other kind's cold start.
+   */
+  image?: 'ui'
+  /**
+   * `container-explore` only: suppress the READ-ONLY guardrail the surface otherwise appends to
+   * the kind's prompt. An explore kind never PUSHES, but a few legitimately write inside their
+   * own working tree while running: a tester installs dependencies and runs a suite, which
+   * creates build output. Telling those they must not create files reads to the agent as a
+   * refusal to run the suite at all. Absent ⇒ the guardrail is appended, which is right for
+   * every reporting/reviewing kind.
+   */
+  localWrites?: boolean
   /**
    * Container-coding surface only: whether a run that produced NO file changes is a
    * failure. The implementer (coder) fails a no-op; a kind that may legitimately produce
@@ -108,6 +149,38 @@ export interface AgentStepSpec {
    */
   opensPr?: boolean
 }
+
+/**
+ * The resolved DISPATCH facts a container kind's prompt builder needs beyond its
+ * {@link AgentRunContext}.
+ *
+ * The run context describes the WORK (the block, the pipeline, the prior outputs); it does not
+ * carry the checkout the engine is about to create, because that is resolved per dispatch from
+ * the service↔repo projection. A prompt that has to name a branch ("diff `HEAD` against
+ * `origin/main`") needs both, and before this seam existed the built-in kinds that needed it
+ * were exactly the ones that could not be registry entries.
+ *
+ * OPTIONAL at the call site: an inline caller (the consensus panel) has no checkout to describe,
+ * so a builder that receives none must phrase itself without naming branches rather than invent
+ * one.
+ */
+export interface AgentDispatchContext {
+  /** The repo's base (default) branch: what a diff targets and what a work branch forks from. */
+  baseBranch: string
+  /** The deterministic per-block work branch this dispatch pushes or resumes. */
+  workBranch: string
+  /** Whether this dispatch fans out across peer repos (one sibling checkout + PR per service). */
+  multiRepo: boolean
+}
+
+/**
+ * A kind's own user-prompt builder. Receives the run context and, on a container dispatch, the
+ * resolved {@link AgentDispatchContext}.
+ */
+export type AgentUserPromptBuilder = (
+  context: AgentRunContext,
+  dispatch?: AgentDispatchContext,
+) => string
 
 /** Context handed to a {@link RepoOp}. */
 export interface RepoOpContext {
