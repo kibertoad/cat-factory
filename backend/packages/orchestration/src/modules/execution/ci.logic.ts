@@ -98,10 +98,14 @@ import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
 /** Both tester gate kinds (API + UI). They share the Tester→Fixer loop + infra choice. */
 export const TESTER_KINDS: readonly string[] = [TESTER_AGENT_KIND, UI_TESTER_AGENT_KIND]
 
-/** Whether an agent kind is one of the tester gate kinds (API or UI). */
-export function isTesterKind(kind: string): boolean {
-  return kind === TESTER_AGENT_KIND || kind === UI_TESTER_AGENT_KIND
-}
+/**
+ * Whether an agent kind is one of the tester gate kinds (API or UI).
+ *
+ * Re-exported from `@cat-factory/contracts` rather than restated: it is the first question every
+ * reduction of a run's test evidence asks, and the SPA has to ask it too, which is exactly how
+ * the engine's copy and a hand-written frontend one came to be two spellings of one rule.
+ */
+export { isTesterKind } from '@cat-factory/contracts'
 
 /**
  * The agent kind of the special `tracker` step: a non-LLM step that files a GitHub

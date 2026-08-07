@@ -110,7 +110,7 @@ export function publicDebugController(): Hono<AppEnv> {
 
   // The entry point for a caller that holds no run id: "which of my runs failed recently".
   buildHonoRoute(app, listDebugRunsContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, listDebugRunsContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
@@ -128,7 +128,7 @@ export function publicDebugController(): Hono<AppEnv> {
 
   // The run's diagnostic map — aggregates only, so this is the call a client always makes first.
   buildHonoRoute(app, getDebugRunContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, getDebugRunContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
@@ -140,7 +140,7 @@ export function publicDebugController(): Hono<AppEnv> {
 
   // The run's model calls. Bodies only when `bodyChars` asks for them, sliced in SQL.
   buildHonoRoute(app, listDebugLlmCallsContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, listDebugLlmCallsContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
@@ -169,7 +169,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // One call's full (windowed) prompt delta, response and reasoning — raw, or parsed into
   // per-message rows via `?view=messages`.
   buildHonoRoute(app, getDebugLlmCallContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, getDebugLlmCallContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
@@ -184,7 +184,7 @@ export function publicDebugController(): Hono<AppEnv> {
 
   // The run's captured dispatches — identity and sizes, never bodies.
   buildHonoRoute(app, listDebugAgentContextContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, listDebugAgentContextContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
@@ -204,7 +204,7 @@ export function publicDebugController(): Hono<AppEnv> {
 
   // One dispatch's prompts, folded fragments and injected files, each budgeted independently.
   buildHonoRoute(app, getDebugAgentContextContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, getDebugAgentContextContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
@@ -220,7 +220,7 @@ export function publicDebugController(): Hono<AppEnv> {
 
   // The web searches the run's agents performed (small rows, returned whole).
   buildHonoRoute(app, listDebugSearchQueriesContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, listDebugSearchQueriesContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
@@ -244,7 +244,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // exists for and the one a client cannot correctly derive from the rows itself. `?outcome=`
   // narrows either order to the calls that FAILED, the one failure class no LLM rollup sees.
   buildHonoRoute(app, listDebugToolCallsContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, listDebugToolCallsContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
@@ -275,7 +275,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // run whose container never started this is the ONLY record of the cause — it has no model
   // telemetry at all.
   buildHonoRoute(app, listDebugLogsContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, listDebugLogsContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)

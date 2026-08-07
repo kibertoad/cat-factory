@@ -1,17 +1,18 @@
 # Cloudflare Pages config for the frontend (the Nuxt SPA).
 #
-# This pins the Pages project and the build output directory so the frontend
-# deploys with a bare `wrangler pages deploy` (no --project-name / dir args). The
-# project is a direct-upload Pages project (no git integration); `main` is its
-# production branch, aliased to https://catfactory.kiberion.com.
+# This is an EXAMPLE deployment config: it pins a Pages project and the build
+# output directory so the frontend deploys with a bare `wrangler pages deploy`
+# (no --project-name / dir args). The shape it assumes is a direct-upload Pages
+# project (no git integration) whose production branch is `main`, aliased to
+# whatever app hostname you point at it.
 #
 # IMPORTANT: the SPA's backend URL is baked in at BUILD time, not here. Pages
 # `[vars]` only reach Pages Functions at runtime, and this is a pure static SPA
 # (ssr: false), so the API base must be passed to `nuxt generate` via
-# NUXT_PUBLIC_API_BASE (see README "Deploy"). Production value:
-#   NUXT_PUBLIC_API_BASE=https://catfactory-api.kiberion.com
+# NUXT_PUBLIC_API_BASE (see README "Deploy"), e.g.
+#   NUXT_PUBLIC_API_BASE=https://api.example.com
 #
-# `name` is per-deployment — change it to your own Pages project.
+# `name` is per-deployment: change it to your own Pages project.
 name = "cat-factory"
 pages_build_output_dir = ".output/public"
 compatibility_date = "2025-06-01"

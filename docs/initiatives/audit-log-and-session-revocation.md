@@ -194,13 +194,11 @@ revocation via a per-user session-generation check.
   that cannot be walked back: the backend does not localize, and a PERSISTED sentence (unlike a wire
   shape) can never be re-rendered for a reader in another locale years later. Anything a later slice
   wants a viewer to say goes in as fields plus a key.
-- **A new D1 lineage is four edits, and three of them are outside the runtime.** `audit-migrations/`
-  needs its `[[d1_databases]]` entry, its `files` entry in the worker package, a leg in
-  `deploy/backend`'s `db:migrate:*` scripts AND a path in deploy.yml's `migrations` change filter.
-  Miss either of the last two and slice 7's retention migration is never applied to production: the
-  Worker ships against a schema that never moved, which surfaces as a repository error rather than
-  as a failed deploy. The production `wrangler.toml` also may not carry a placeholder id in a LIVE
-  binding, since deploys are automatic on merge (CI's "Guard deploy placeholders" refuses one).
+- **A new D1 lineage is three edits, and two of them are outside the runtime.** `audit-migrations/`
+  needs its `[[d1_databases]]` entry, its `files` entry in the worker package, and a leg in
+  `deploy/backend`'s `db:migrate:*` scripts. Miss the last one and slice 7's retention migration is
+  never applied by a deployment copying that template: the Worker ships against a schema that never
+  moved, which surfaces as a repository error rather than as a failed deploy.
 
 ## What slices 4-7 settled (carry these forward)
 

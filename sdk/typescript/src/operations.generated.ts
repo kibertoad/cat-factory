@@ -18,6 +18,7 @@ import type {
   DebugLlmCall,
   DebugRunOverview,
   GetDebugLlmCallView,
+  GetPublicRunOutcomeResponse,
   ListDebugAgentContextResponse,
   ListDebugLlmCallsOrder,
   ListDebugLlmCallsResponse,
@@ -1403,7 +1404,7 @@ export class DebugResource {
   }
 }
 
-/** What a run proved: the engine's verification report and the artifacts it captured, bytes included. */
+/** What a run proved: the engine's verification report, the outcome summary behind it, and the artifacts it captured, bytes included. */
 export class EvidenceResource {
   readonly #transport: Transport
 
@@ -1420,6 +1421,19 @@ export class EvidenceResource {
     return this.#transport.bytes({
       method: 'GET',
       path: `/api/v1/artifacts/${encodePathSegment(artifactId)}/blob`,
+      options,
+    })
+  }
+
+  /**
+   * Get a run's outcome summary
+   * What the run changed and what backs that up, in product language, for a reader who will not open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, and the machine checks that ran. The same reduction the app’s outcome card renders, over the same evidence the verification report is built from, so the two cannot state different totals for one run. Nothing here is asserted by a model: every count is derived from recorded verdicts. Prefer the verification report when you need a reviewer’s full bundle; prefer this when you need to say what shipped. Sections state `reported` or `absent` with a machine-readable gap code, and `truncations` names any list the response had to bound.
+   * `GET /api/v1/runs/{runId}/outcome` — operation `getPublicRunOutcome`.
+   */
+  getOutcome(runId: string, options: RequestOptions = {}): Promise<GetPublicRunOutcomeResponse> {
+    return this.#transport.request<GetPublicRunOutcomeResponse>({
+      method: 'GET',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/outcome`,
       options,
     })
   }
@@ -1531,7 +1545,7 @@ export abstract class CatFactoryResources {
   readonly decisions: DecisionsResource
   /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
   readonly debug: DebugResource
-  /** What a run proved: the engine's verification report and the artifacts it captured, bytes included. */
+  /** What a run proved: the engine's verification report, the outcome summary behind it, and the artifacts it captured, bytes included. */
   readonly evidence: EvidenceResource
   /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */
   readonly keys: KeysResource

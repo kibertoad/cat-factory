@@ -125,6 +125,12 @@
       "entry": ["src/index.ts", "src/bin.ts", "test/**/*.test.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"],
     },
+    // The gatekeeper bindings over that same surface: a generated policy table plus hand-written
+    // ladder helpers, re-exported from the entry like the client's generated modules are.
+    "sdk/gatekeeper": {
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"],
+    },
     "backend/internal/*": {
       "entry": ["src/**/*.ts", "tests/**/*.ts", "test/**/*.ts"],
       "project": ["src/**/*.ts"],

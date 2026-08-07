@@ -1,0 +1,17 @@
+{
+  "extends": "../../backend/tsconfig.base.json",
+  "compilerOptions": {
+    // Same shape as the TypeScript SDK's: a published library, resolved and emitted for Node's
+    // ESM resolver rather than for this repo's build graph.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rewriteRelativeImportExtensions": true,
+    "erasableSyntaxOnly": true,
+    "lib": ["ES2022"],
+    // NO ambient `@types/*`, for the SDK's own reason: the bindings run wherever the SDK does
+    // (Node, a browser, a Worker isolate), so the shipped code compiles against the ES library
+    // alone. Tests get Node types through tsconfig.dev.json.
+    "types": []
+  },
+  "include": ["src/**/*.ts"]
+}

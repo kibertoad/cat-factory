@@ -13,8 +13,8 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * What a run proved: the engine's verification report and the artifacts it captured, bytes
- * included.
+ * What a run proved: the engine's verification report, the outcome summary behind it, and the
+ * artifacts it captured, bytes included.
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
 public final class EvidenceClient {
@@ -36,6 +36,23 @@ public final class EvidenceClient {
      */
     public byte[] downloadArtifact(String artifactId) {
         return transport.requestBytes("GET", "/api/v1/artifacts/" + Transport.pathSegment(artifactId) + "/blob", null, Map.of());
+    }
+
+    /**
+     * Get a run's outcome summary
+     * What the run changed and what backs that up, in product language, for a reader who will not
+     * open the diff: the run’s disposition, the pull requests it opened, requirement coverage
+     * joined to the service’s `spec/`, the tester’s verdict and concerns, the views it captured,
+     * and the machine checks that ran. The same reduction the app’s outcome card renders, over the
+     * same evidence the verification report is built from, so the two cannot state different
+     * totals for one run. Nothing here is asserted by a model: every count is derived from
+     * recorded verdicts. Prefer the verification report when you need a reviewer’s full bundle;
+     * prefer this when you need to say what shipped. Sections state `reported` or `absent` with a
+     * machine-readable gap code, and `truncations` names any list the response had to bound.
+     * {@code GET /api/v1/runs/{runId}/outcome} (operation {@code getPublicRunOutcome}).
+     */
+    public GetPublicRunOutcomeResponse getOutcome(String runId) {
+        return transport.request("GET", "/api/v1/runs/" + Transport.pathSegment(runId) + "/outcome", null, Map.of(), new TypeReference<GetPublicRunOutcomeResponse>() {});
     }
 
     /**

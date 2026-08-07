@@ -1,6 +1,6 @@
 # Initiative: PR verification report
 
-**Status:** phases 1 + 2 landed; slice 11 landed; slice 12 BLOCKED on another initiative ·
+**Status:** phases 1 + 2 landed; slices 11 and 15 landed; slice 12 BLOCKED on another initiative ·
 **Owner:** core · **Started:** 2026-07-26
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
@@ -242,6 +242,7 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
 | 12  | **Phase 2 follow-up**; retire the narrow deep-link replay once global-search slice 4 lands                                                                                                               | ⬜ blocked |      |
 | 13  | **Phase 2**; test environment lifecycle PROOF: dated up/down timeline from the provisioning log, tester-evidence attribution + links, computed verdict, teardown republish                               | 🟩 done    | this |
 | 14  | **Phase 2**; machine reachability: the report names the run's auditable TRAJECTORY and serves itself live over `/api/v1`                                                                                 | 🟩 done    | this |
+| 15  | **Phase 2**; one evidence reduction: the outcome summary served over `/api/v1` and composed from this report's shared rules and shared loader                                                            | 🟩 done    | this |
 
 ### Phase-2 notes (slices 9 + 10, as landed)
 
@@ -376,6 +377,40 @@ Three things about it are deliberate:
   (`PrVerificationReportController.composeForRun`), so the live JSON and the PR body cannot state
   different facts about one run. It is also why the report shape is now part of the STABLE public
   surface: see [ADR 0043](../../backend/docs/adr/0043-public-decision-surface.md).
+
+### One evidence reduction, two documents (slice 15)
+
+The report is not the only reduction of a run's evidence. The SPA's OUTCOME summary answers the same
+question for a reader who will not open a diff, and it was a pure module inside the frontend, which
+made it invisible to anything but a browser and free to disagree with this report. It did, on two
+axes: this report unions every tester step's verdicts and counts coverage over the service's `spec/`,
+while the summary read only the last tester that reported and counted over the verdicts it happened
+to return. Same run, two numbers under the same words.
+
+Serving the summary at `GET /api/v1/runs/:runId/outcome` (usage:
+[`public-api.md`](../../backend/docs/public-api.md)) is what forced the fix. What binds anyone
+touching this composer now:
+
+- **A rule BOTH documents state lives in `@cat-factory/contracts` `run-evidence.ts`**, never in this
+  file: `isTesterKind`, `selectEvidenceStep`, `indexRequirementVerdicts`, `joinSpecRequirements`,
+  `isRequirementRegression`, `tallyRequirements`. This file keeps what is genuinely its own, which is
+  the BOUNDARY treatment (scrubbing, cell clamping, the severity-first cap) and its absence prose.
+- **The two read one run's evidence once**, through `RunEvidenceLoader` (block + `spec/`, gated on a
+  tester report and memoised per run). Sharing the rules while reading twice would move the drift one
+  layer down.
+- **`unmatchedVerdicts` exists because the join is spec-anchored.** A verdict against an id `spec/`
+  does not carry has no row and used to vanish, which made this section report fewer rulings than the
+  tester made with nothing to explain the difference.
+- **The parity is a TEST, not a convention**: `runOutcome.parity.test.ts` composes both from one
+  instance and asserts equal counts, equal regressions and the same tester session, plus the literal
+  values so a change that breaks both in the same direction still fails.
+- **`outcome = f(report)` was considered and REJECTED**, though it would have been the stronger
+  structural guarantee. This report is BOUNDED to a pull-request body and says so in `truncations`,
+  so a tally taken off its capped tables would be quietly wrong. The guarantee comes from shared
+  inputs and shared rules instead, which is what the parity test pins.
+- **The summary gets NO managed PR section of its own.** The pull request already carries this
+  report, which is the strictly richer document for that audience; a second section would compete
+  for the same body budget and give a reviewer two places to look.
 
 ### Evidence reachability (landed with slices 9 + 10)
 

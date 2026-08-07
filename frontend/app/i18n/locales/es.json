@@ -5576,11 +5576,8 @@
       "notCovered": "Sin comprobar: {count}",
       "regressions": "Regresiones: {count}",
       "regressionTag": "Regresión",
-      "idOnly": "solo id",
-      "idOnlyHint": "Este identificador no está en la especificación del servicio, así que no hay ningún título que mostrar.",
       "spec": {
-        "not_read": "No se leyó la especificación del servicio, así que estos son los identificadores de requisito que informó el probador, sin sus títulos.",
-        "unmatched": "Ninguno de estos identificadores de requisito aparece en la especificación del servicio que se leyó, así que solo se muestran los identificadores que informó el probador."
+        "not_read": "No se leyó la especificación del servicio, así que estos recuentos solo cubren aquello sobre lo que se pronunció el tester, por identificador."
       },
       "verdict": {
         "met": "Verificado",
@@ -5590,8 +5587,10 @@
       "gap": {
         "no_tester_step": "Esta canalización no tiene paso de pruebas, así que no se comprobó ningún requisito.",
         "tester_not_reported": "El tester aún no ha informado, así que no se ha resuelto ningún requisito.",
-        "no_verdicts": "El tester informó sin pronunciarse sobre ningún requisito de la especificación del servicio."
-      }
+        "no_verdicts": "El tester informó sin pronunciarse sobre ningún requisito de la especificación del servicio.",
+        "no_requirements": "La especificación del servicio no registra ningún requisito, así que no había nada sobre lo que el tester pudiera pronunciarse."
+      },
+      "unmatchedVerdicts": "El tester también se pronunció sobre {count} identificador(es) que esta especificación no contiene, así que su propio recuento es mayor que los de arriba."
     },
     "tests": {
       "title": "Cómo se probó",

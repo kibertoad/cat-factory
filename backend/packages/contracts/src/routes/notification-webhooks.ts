@@ -5,7 +5,7 @@ import {
   publicNotificationWebhookSchema,
   putNotificationWebhookSchema,
 } from '../notification-webhooks.js'
-import { errorResponses } from './_shared.js'
+import { errorResponses, withMinScope } from './_shared.js'
 
 // Management routes for a workspace's OUTBOUND notification webhook, on TWO surfaces:
 //
@@ -57,11 +57,14 @@ export const deleteNotificationWebhookContract = defineApiContract({
  * answer rather than a 404, so a caller's startup self-check ("am I already wired up?") reads one
  * response shape instead of branching on a status the surface also uses for a bad path.
  */
-export const getPublicNotificationWebhookContract = defineApiContract({
-  method: 'get',
-  pathResolver: () => '/api/v1/notification-webhook',
-  responsesByStatusCode: { 200: publicNotificationWebhookSchema, ...errorResponses },
-})
+export const getPublicNotificationWebhookContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/notification-webhook',
+    responsesByStatusCode: { 200: publicNotificationWebhookSchema, ...errorResponses },
+  }),
+)
 
 /**
  * Register or update the endpoint. Returns the stored projection directly (not the `webhook`
@@ -72,16 +75,22 @@ export const getPublicNotificationWebhookContract = defineApiContract({
  * never returned by the read. An `admin` key can therefore ROTATE the signing secret but can
  * never exfiltrate the one already stored.
  */
-export const putPublicNotificationWebhookContract = defineApiContract({
-  method: 'put',
-  pathResolver: () => '/api/v1/notification-webhook',
-  requestBodySchema: putNotificationWebhookSchema,
-  responsesByStatusCode: { 200: notificationWebhookSchema, ...errorResponses },
-})
+export const putPublicNotificationWebhookContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'put',
+    pathResolver: () => '/api/v1/notification-webhook',
+    requestBodySchema: putNotificationWebhookSchema,
+    responsesByStatusCode: { 200: notificationWebhookSchema, ...errorResponses },
+  }),
+)
 
 /** Remove the endpoint (deliveries stop). Idempotent: 204 whether or not one was registered. */
-export const deletePublicNotificationWebhookContract = defineApiContract({
-  method: 'delete',
-  pathResolver: () => '/api/v1/notification-webhook',
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
-})
+export const deletePublicNotificationWebhookContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'delete',
+    pathResolver: () => '/api/v1/notification-webhook',
+    responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  }),
+)
