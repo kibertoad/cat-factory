@@ -77,6 +77,7 @@ const MEMBER_TIER_WRITES: Readonly<Record<string, readonly string[]>> = {
     'POST /document-sources/:source/plan',
     'POST /document-sources/:source/spawn',
     'POST /documents/link',
+    'POST /documents/refresh',
   ],
 }
 

@@ -46,7 +46,7 @@ describe('buildContextFiles', () => {
     const out = buildContextFiles(
       ctx({
         contextDocs: [
-          doc({ freshness: { status: 'confirmed', version: '2317456', reimported: true } }),
+          doc({ freshness: { status: 'confirmed', version: '2317456', change: 'reimported' } }),
         ],
       }),
     )

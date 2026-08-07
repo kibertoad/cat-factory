@@ -1,5 +1,18 @@
-import type { ReportWindow, ReportsView } from '@cat-factory/contracts'
-import type { Clock, ReportRange, ReportScope, ReportsRepository } from '@cat-factory/kernel'
+import type {
+  ReportSpendDimension,
+  ReportSpendSource,
+  ReportWindow,
+  ReportsView,
+} from '@cat-factory/contracts'
+import type {
+  Clock,
+  ReportRange,
+  ReportScope,
+  ReportSpendGroup,
+  ReportSpendTrendBucket,
+  ReportsRepository,
+  SpendRollupRepository,
+} from '@cat-factory/kernel'
 import {
   REPORT_WINDOWS,
   alignWindowStart,
@@ -9,8 +22,28 @@ import {
   toSpendRow,
 } from './reports.logic.js'
 
+/** The spend half of a window, from whichever store the window routes to. */
+interface SpendSource {
+  byDimension(
+    scope: ReportScope,
+    dimension: ReportSpendDimension,
+    range: ReportRange,
+  ): Promise<ReportSpendGroup[]>
+  trend(scope: ReportScope, range: ReportRange, bucketMs: number): Promise<ReportSpendTrendBucket[]>
+  /** The sweep's coverage, on the rollup path; null on the ledger path (nothing to be behind). */
+  watermark(): Promise<number | null>
+}
+
 export interface ReportsServiceDependencies {
   reportsRepository: ReportsRepository
+  /**
+   * The durable cost-attribution rollup, which serves the long windows. Optional so a facade
+   * that has not wired it (or a unit test) falls back to the ledger for every window rather
+   * than losing the two long ones: the ledger holds ~13 months, so the fallback is accurate
+   * until retention reaches it, and the projection still SAYS `ledger` so nothing reads as
+   * durable that is not.
+   */
+  spendRollupRepository?: SpendRollupRepository
   clock: Clock
   /**
    * The deployment's spend currency (the base pricing table's), so the SPA formats every
@@ -22,16 +55,24 @@ export interface ReportsServiceDependencies {
 }
 
 /**
- * Cross-cutting usage analytics: composes the rollups behind {@link ReportsRepository}
- * into the Reports view: spend sliced by model, agent kind, repository and tracker ticket,
- * spend and run activity sliced by workspace / service / task type, and a spend trend, over a
- * time window. The repository and ticket slices are the TCO axes: what an organisation budgets
- * against, answered by a grouped query rather than a hand-written join against the database.
+ * Cross-cutting usage analytics: composes the rollups behind {@link ReportsRepository} and
+ * {@link SpendRollupRepository} into the Reports view: spend sliced by model, agent kind,
+ * repository, tracker ticket and run, spend and run activity sliced by workspace / service /
+ * task type, and a spend trend, over a time window. Run, repository and ticket are the TCO
+ * axes: what an organisation budgets against, answered by a grouped query rather than a
+ * hand-written join against the database.
  *
  * The dual of {@link PlatformObservabilityService}: that answers "is the deployment
  * healthy", this answers "where are the money and the work going". Every breakdown is one
  * SQL GROUP BY, and they are independent aggregates run in parallel — NOT an N+1. The
  * reshaping (totals fold, trend zero-fill) is the pure logic in `reports.logic.ts`.
+ *
+ * Two stores answer the spend half, routed by window exactly as the operator dashboard routes
+ * its own: `24h`/`7d` scan the `token_usage` ledger live, `30d`/`90d` read the durable
+ * `spend_days` rollup, which carries each run's board shape frozen at spend time and is never
+ * pruned. The projection reports which answered (`source`) and, on the rollup path, how far
+ * the sweep has covered (`rolledUpThrough`), because an un-materialised rollup and an idle
+ * quarter produce the same empty breakdown and are opposite facts.
  */
 export class ReportsService {
   constructor(private readonly deps: ReportsServiceDependencies) {}
@@ -41,15 +82,17 @@ export class ReportsService {
     window: ReportWindow,
     workspaceId?: string | null,
   ): Promise<ReportsView> {
-    const { windowMs, bucketMs } = REPORT_WINDOWS[window]
+    const { windowMs, bucketMs, source: preferred } = REPORT_WINDOWS[window]
     const until = this.deps.clock.now()
     // Snapped to a bucket edge so the trend's leading column is a COMPLETE bucket; every
     // breakdown and the totals aggregate over the same snapped window, so the tiles and the
-    // chart can never describe different spans. See `alignWindowStart`.
+    // chart can never describe different spans. It is also what keeps a rollup-backed window
+    // on whole UTC days. See `alignWindowStart`.
     const since = alignWindowStart(until, windowMs, bucketMs)
     const scope: ReportScope = { accountId, workspaceId: workspaceId ?? null }
     const range: ReportRange = { since, until }
     const repo = this.deps.reportsRepository
+    const { source, spend } = this.spendSource(preferred)
     const [
       byModel,
       byAgentKind,
@@ -58,22 +101,26 @@ export class ReportsService {
       spendByRepo,
       spendByTaskType,
       spendByTicket,
+      spendByRun,
       activityByWorkspace,
       activityByService,
       activityByTaskType,
       trend,
+      rolledUpThrough,
     ] = await Promise.all([
-      repo.spendByDimension(scope, 'model', range),
-      repo.spendByDimension(scope, 'agentKind', range),
-      repo.spendByDimension(scope, 'workspace', range),
-      repo.spendByDimension(scope, 'service', range),
-      repo.spendByDimension(scope, 'repo', range),
-      repo.spendByDimension(scope, 'taskType', range),
-      repo.spendByDimension(scope, 'ticket', range),
+      spend.byDimension(scope, 'model', range),
+      spend.byDimension(scope, 'agentKind', range),
+      spend.byDimension(scope, 'workspace', range),
+      spend.byDimension(scope, 'service', range),
+      spend.byDimension(scope, 'repo', range),
+      spend.byDimension(scope, 'taskType', range),
+      spend.byDimension(scope, 'ticket', range),
+      spend.byDimension(scope, 'run', range),
       repo.activityByDimension(scope, 'workspace', range),
       repo.activityByDimension(scope, 'service', range),
       repo.activityByDimension(scope, 'taskType', range),
-      repo.spendTrend(scope, range, bucketMs),
+      spend.trend(scope, range, bucketMs),
+      spend.watermark(),
     ])
     const spendByModel = byModel.map(toSpendRow)
     return {
@@ -82,8 +129,10 @@ export class ReportsService {
       since,
       workspaceId: workspaceId ?? null,
       currency: this.deps.currency,
-      // Every spend breakdown partitions the same ledger rows, so the totals fold from
-      // whichever one is at hand rather than costing a sixth query.
+      source,
+      rolledUpThrough,
+      // Every spend breakdown partitions the same rows, so the totals fold from
+      // whichever one is at hand rather than costing another query.
       totals: foldTotals(spendByModel),
       spend: {
         byModel: spendByModel,
@@ -93,6 +142,7 @@ export class ReportsService {
         byRepo: spendByRepo.map(toSpendRow),
         byTaskType: spendByTaskType.map(toSpendRow),
         byTicket: spendByTicket.map(toSpendRow),
+        byRun: spendByRun.map(toSpendRow),
       },
       activity: {
         byWorkspace: activityByWorkspace.map(toActivityRow),
@@ -100,6 +150,42 @@ export class ReportsService {
         byTaskType: activityByTaskType.map(toActivityRow),
       },
       trend: { bucketMs, points: buildSpendTrend(trend, since, until, bucketMs) },
+    }
+  }
+
+  /**
+   * Bind the window's spend reads to the store that serves them, and report which one that
+   * turned out to be. The window PREFERS the rollup on the long windows; an unwired rollup
+   * repository degrades to the ledger, and the returned `source` says so rather than
+   * labelling ledger numbers as durable ones.
+   */
+  private spendSource(preferred: ReportSpendSource): {
+    source: ReportSpendSource
+    spend: SpendSource
+  } {
+    const rollup = this.deps.spendRollupRepository
+    if (preferred === 'daily-rollup' && rollup) {
+      return {
+        source: 'daily-rollup',
+        spend: {
+          byDimension: (scope, dimension, range) =>
+            rollup.spendByDimension(scope, dimension, range),
+          trend: (scope, range, bucketMs) => rollup.spendTrend(scope, range, bucketMs),
+          watermark: () => rollup.spendRollupWatermark(),
+        },
+      }
+    }
+    const repo = this.deps.reportsRepository
+    return {
+      source: 'ledger',
+      spend: {
+        byDimension: (scope, dimension, range) => repo.spendByDimension(scope, dimension, range),
+        trend: (scope, range, bucketMs) => repo.spendTrend(scope, range, bucketMs),
+        // Null, not a stale watermark: there is no rollup in this path, so there is nothing
+        // about it that could be behind, and reporting one would invite the reader to believe
+        // the ledger numbers were bounded by it.
+        watermark: () => Promise.resolve(null),
+      },
     }
   }
 }

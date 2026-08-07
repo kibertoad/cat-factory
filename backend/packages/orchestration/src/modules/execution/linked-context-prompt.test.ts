@@ -166,7 +166,7 @@ describe('linked context in agent prompts', () => {
     ctx.block.contextDocs![0]!.freshness = {
       status: 'confirmed',
       version: 'v42',
-      reimported: false,
+      change: 'unchanged',
     }
 
     expect(userPromptFor(ctx, registry)).toContain('Revision: v42')

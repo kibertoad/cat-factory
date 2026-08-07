@@ -6,6 +6,7 @@ import {
   retiredPipelines,
   seedBlocks,
   seedRiskPolicies,
+  riskPolicySeedRows,
   seedModelPresets,
   seedPipelines,
 } from '@cat-factory/kernel'
@@ -28,6 +29,7 @@ import type {
   PipelineRegistry,
   PipelineRepository,
   ResolveBinaryArtifactStore,
+  RiskPolicyRepository,
   ServiceRehome,
   ServiceRepository,
   WorkspaceAccessCacheValue,
@@ -68,6 +70,24 @@ export interface WorkspaceServiceDependencies {
    * accounts for them). Optional — absent (tests) ⇒ the built-in catalog only.
    */
   pipelineRegistry?: PipelineRegistry
+  /**
+   * The workspace's merge-preset library. When wired, `create` seeds the built-in catalog onto a
+   * new board, exactly as it seeds the pipeline catalog and for the same reason: which merge
+   * policy governs a run is product configuration, and the run path must not have to discover it.
+   *
+   * It is seeded HERE, on the write, rather than on the first `list()` read, because the engine
+   * resolves a task's preset with no read of its own: a workspace whose library nothing had
+   * listed yet answered `getDefault` with null, and the run fell through to
+   * `FALLBACK_RISK_POLICY`, which auto-merges nothing. Through the SPA that never showed, since
+   * loading a board lists the presets; through the public API, which starts runs on boards no
+   * browser has opened, it meant the same task merged or did not depending on whether anyone had
+   * looked at the board first.
+   *
+   * Optional so a deployment that wires no preset repository still creates boards. Such a
+   * deployment has genuinely configured no merge policy, and its runs report exactly that
+   * (`no_policy_configured`) rather than landing pull requests on a model's own scores.
+   */
+  riskPolicyRepository?: RiskPolicyRepository
   /**
    * The `workspaceAccess` cache slice (workspace-rbac initiative). When wired, a board delete
    * drops the deleted board's whole access GROUP so no stale (grant/denial) entry outlives it —
@@ -113,6 +133,7 @@ export class WorkspaceService {
   private readonly workspaceMountRepository?: WorkspaceMountRepository
   private readonly workspaceMemberRepository?: WorkspaceMemberRepository
   private readonly pipelineRegistry?: PipelineRegistry
+  private readonly riskPolicyRepository?: RiskPolicyRepository
   private readonly workspaceAccessCache?: GroupCacheHandle<WorkspaceAccessCacheValue>
   private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   private readonly logger?: Logger
@@ -130,6 +151,7 @@ export class WorkspaceService {
     workspaceMountRepository,
     workspaceMemberRepository,
     pipelineRegistry,
+    riskPolicyRepository,
     workspaceAccessCache,
     resolveBinaryArtifactStore,
     logger,
@@ -145,6 +167,7 @@ export class WorkspaceService {
     this.serviceRepository = serviceRepository
     this.workspaceMountRepository = workspaceMountRepository
     this.pipelineRegistry = pipelineRegistry
+    this.riskPolicyRepository = riskPolicyRepository
     this.workspaceMemberRepository = workspaceMemberRepository
     this.workspaceAccessCache = workspaceAccessCache
     this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
@@ -240,6 +263,16 @@ export class WorkspaceService {
     // every board gets it — including the empty boards real users start with.
     for (const pipeline of seedPipelines(this.pipelineRegistry)) {
       await this.pipelineRepository.insert(workspace.id, pipeline)
+    }
+    // The built-in MERGE PRESET library, for the same reason and on the same footing: the run
+    // path reads a task's governing policy without ever listing the library, so seeding it on a
+    // read would leave a board nobody had opened governed by the built-in fallback (see
+    // `riskPolicyRepository` above). One shared row mapping with `RiskPolicyService.reseed`, so
+    // a later reseed restores a built-in to what creation wrote rather than to a second copy.
+    if (this.riskPolicyRepository) {
+      for (const preset of riskPolicySeedRows(this.clock.now())) {
+        await this.riskPolicyRepository.upsert(workspace.id, preset)
+      }
     }
     // The sample architecture blocks are opt-in (demo boards + the test fixtures);
     // production boards start empty (the SPA creates with `seed: false`).

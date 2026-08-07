@@ -1263,6 +1263,7 @@
         "within_thresholds": "Tous les scores sont dans les seuils de {preset}, la PR a donc été fusionnée automatiquement.",
         "exceeded_thresholds": "{axes} a dépassé les seuils de {preset}, la PR attend donc une fusion par une personne.",
         "auto_merge_disabled": "Le préréglage {preset} envoie chaque PR à une personne ; celle-ci attend donc une revue.",
+        "no_policy_configured": "Aucune politique de fusion n'a régi cette exécution, donc aucune PR ne fusionne d'elle-même. Ce déploiement n'a pas de bibliothèque de préréglages de fusion configurée, ce que seul un opérateur peut corriger.",
         "no_rationale": "Le fusionneur a évalué la PR mais n'a donné aucune justification, le verdict n'a donc pas pu être approuvé pour une fusion automatique ; la PR attend une fusion par une personne.",
         "no_assessment": "Le fusionneur n'a pas renvoyé d'évaluation exploitable, la PR attend donc une fusion par une personne.",
         "merge_failed": "Les scores étaient dans les seuils de {preset}, mais la fusion automatique n'a pas pu aboutir (par exemple protection de branche ou conflit), la PR attend donc une fusion par une personne.",
@@ -1428,6 +1429,15 @@
           "oauthTokenFailed": "n'était pas disponible : la connexion ne produit plus de jeton d'accès.",
           "overBudget": "n'était pas disponible : cet agent déclare plus de serveurs d'outils qu'une exécution n'en transporte.",
           "unknown": "n'était pas disponible ({reason})."
+        },
+        "remedy": {
+          "harnessUnsupported": "Exécutez l’étape sur une CLI d’agent qui parle MCP, ou élargissez la liste de harnesses du serveur.",
+          "transportUnsupported": "Déclarez un serveur stdio à sa place, ou exécutez l’étape sur une CLI d’agent qui atteint les serveurs HTTP.",
+          "missingSecret": "Renseignez l’identifiant qu’il nomme dans les identifiants de capacités, depuis la fenêtre Infrastructure.",
+          "reservedSecret": "Modifiez la déclaration pour demander une autre clé ; définir cette variable est précisément ce qui n’aidera pas.",
+          "oauthNotConnected": "Connectez ce tableau à ce serveur depuis la fenêtre Infrastructure.",
+          "oauthTokenFailed": "Reconnectez-le depuis la fenêtre Infrastructure, ou attendez la fin de la panne du fournisseur.",
+          "overBudget": "Réduisez ce que l’agent déclare, pour qu’une exécution puisse tout transporter."
         }
       },
       "adherence": {
@@ -1777,6 +1787,11 @@
     "retry": "Réessayer",
     "error": "Impossible de charger les rapports.",
     "period": "Du {from} au {to}",
+    "rollup": {
+      "none": "L'agrégation durable des coûts n'a encore rien produit : cette fenêtre est vide faute de données, pas faute de dépenses.",
+      "stale": "L'agrégation durable des coûts ne va que jusqu'au {date}. Ce qui suit correspond à des données manquantes, pas à une semaine bon marché.",
+      "current": "Issu de l'agrégation durable des coûts, complète jusqu'au {date}. L'attribution au dépôt, au ticket et à l'exécution est celle enregistrée au moment de la dépense."
+    },
     "unattributed": "Non attribué",
     "window": {
       "oneDay": "Dernières 24 heures",
@@ -1819,6 +1834,7 @@
       "byAgentKind": "Dépense par type d’agent",
       "byRepo": "Dépense par dépôt",
       "byTicket": "Dépense par ticket",
+      "byRun": "Dépense par exécution",
       "heading": "Dépense",
       "empty": "Aucune utilisation enregistrée sur cette période.",
       "calls": "{count} appel | {count} appels",
@@ -4216,6 +4232,25 @@
       "noneImported": "Aucun document importé pour l'instant.",
       "imported": "« {title} » importé",
       "importFailed": "Échec de l'importation"
+    },
+    "freshness": {
+      "updated": "Mis à jour le {when}",
+      "refresh": "Vérifier les changements",
+      "change": {
+        "unchanged": "Correspond à la source",
+        "reimported": "Version plus récente récupérée",
+        "revision_only": "La source a évolué, mais cette copie est inchangée"
+      },
+      "checkedAt": "Vérifié le {when}",
+      "revision": "Révision {version}",
+      "notApplicable": "Ce déploiement n'a pas de lecteur pour cette source, il n'y a donc rien à comparer.",
+      "gap": {
+        "not_connected": "Non vérifié : cet espace de travail n'est plus connecté à la source.",
+        "credentials_unreadable": "Non vérifié : ce déploiement ne peut pas lire les identifiants de la source.",
+        "unversioned": "Non vérifié : la source ne publie aucune révision à comparer.",
+        "source_unreachable": "Non vérifié : la source est injoignable."
+      },
+      "refreshFailed": "Impossible de vérifier les changements"
     },
     "connect": {
       "title": "Connecter une source",

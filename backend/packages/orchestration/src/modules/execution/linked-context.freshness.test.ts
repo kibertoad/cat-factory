@@ -53,7 +53,7 @@ function documentsRepo(corpus: DocumentRecord[]): DocumentRepository {
 /** A refresher that hands back a replacement record plus a verdict, like the real one does. */
 function refresherReturning(
   replacement: DocumentRecord,
-  freshness: DocumentFreshness = { status: 'confirmed', version: 'v2', reimported: true },
+  freshness: DocumentFreshness = { status: 'confirmed', version: 'v2', change: 'reimported' },
 ): LinkedDocumentRefresher & { refresh: ReturnType<typeof vi.fn> } {
   const refresh = vi.fn(async () => [{ record: replacement, freshness }])
   return { refresh }
@@ -78,7 +78,7 @@ describe('resolveLinkedContext: dispatch-time freshness', () => {
     expect(refresher.refresh).toHaveBeenCalledWith('ws1', [stored])
     // The whole point: what reaches the checkout is the current revision, not import's copy.
     expect(docs[0]?.body).toBe('## Checkout (revised)')
-    expect(docs[0]?.freshness).toEqual({ status: 'confirmed', version: 'v2', reimported: true })
+    expect(docs[0]?.freshness).toEqual({ status: 'confirmed', version: 'v2', change: 'reimported' })
   })
 
   it('leaves every document untouched and un-annotated when no refresher is wired', async () => {

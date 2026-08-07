@@ -10,6 +10,7 @@ import {
   listDocumentSourcesContract,
   listDocumentsContract,
   planDocumentContract,
+  refreshDocumentContract,
   resolveDocumentRefContract,
   searchDocumentsContract,
   spawnDocumentContract,
@@ -140,6 +141,22 @@ export function documentSourceController(): Hono<AppEnv> {
       c.req.valid('json').ref,
     )
     return c.json(document, 201)
+  })
+
+  // Re-confirm one stored document against its source now, pulling the new body if the page moved.
+  // Member tier for the same reason import is: it spends the workspace's stored credential on a
+  // page the member can already attach, and the write it may perform is a refresh of a projection
+  // every run of theirs already reads.
+  //
+  // The `:source` here rides the BODY rather than the path, because this route is about a stored
+  // row (whose key is `(source, externalId)`) rather than about a provider surface.
+  buildHonoRoute(app, refreshDocumentContract, async (c) => {
+    const documents = requireDocuments(c)
+    const { source, externalId } = c.req.valid('json')
+    return c.json(
+      await documents.linkedRefresher.refreshNow(param(c, 'workspaceId'), source, externalId),
+      200,
+    )
   })
 
   // Search a source's catalogue by free text (title/content), returning lean hits

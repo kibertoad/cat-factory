@@ -147,6 +147,14 @@ function spendKeyAndLabel(
         key: sql<string>`coalesce(${tickets.ticketKey}, '')`,
         label: sql<string | null>`null::text`,
       }
+    case 'run':
+      // The KEY needs no join (the ledger row records its run); the joins are the LABEL's, and
+      // both are 1:1 primary-key joins. A run with no block (a repo bootstrap) keeps its money
+      // and loses its name, like an unsynced repo above.
+      return {
+        key: sql<string>`coalesce(${tokenUsage.execution_id}, '')`,
+        label: sql<string | null>`max(${blocks.title})`,
+      }
   }
 }
 
@@ -246,7 +254,7 @@ export class DrizzleReportsRepository implements ReportsRepository {
           ),
         )
         .leftJoin(labels, eq(labels.serviceId, agentRuns.service_id))
-    } else if (dimension === 'taskType') {
+    } else if (dimension === 'taskType' || dimension === 'run') {
       query = query
         .leftJoin(
           agentRuns,

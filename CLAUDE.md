@@ -923,11 +923,11 @@ recording an LLM call: [`llm-telemetry.md`](./backend/docs/llm-telemetry.md). Th
   `composeTraceSinks`, never a second recording path; a run's spans are a hierarchy built from DERIVED
   ids with extents folded from recorded stamps, and a span name is a bounded class.
 
-The deployment-level projections (`gate_outcomes`, `platform_run_days`) deliberately live in the MAIN
-store; their rewrite/watermark/derived-id rules:
-[`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md). Remote
-debugging reads (`/api/v1/debug/*`) obey one rule: a response's size is computable BEFORE the request;
-model: [`debug-api.md`](./backend/docs/debug-api.md).
+The deployment-level projections (`gate_outcomes`, `platform_run_days`, plus `spend_days`, the ONE with
+no retention: a TCO table that expires is a slower ledger) live in the MAIN store; their rewrite,
+watermark and derived-id rules: [`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md)
+and [`storage-and-retention.md`](./backend/docs/storage-and-retention.md). Remote debugging reads
+(`/api/v1/debug/*`) obey one rule: size is computable BEFORE the request: [`debug-api.md`](./backend/docs/debug-api.md).
 
 ## Board / service / repo-linkage model
 

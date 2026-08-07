@@ -14,7 +14,8 @@ import type { ResolvedRunRiskPolicy } from './policy-types.js'
 export interface RunMergePolicyDeps {
   /**
    * Optional: resolves a task's merge threshold preset (auto-merge ceilings, the per-class
-   * rules, and the CI-fixer attempt budget). Absent → the built-in `DEFAULT_RISK_POLICY`.
+   * rules, and the CI-fixer attempt budget). Absent → the built-in `FALLBACK_RISK_POLICY`, which
+   * auto-merges nothing.
    */
   riskPolicyRepository?: RiskPolicyRepository
   /**
@@ -49,7 +50,7 @@ export class RunMergePolicy {
 
   /**
    * Resolve the merge threshold preset that governs a task: its explicitly-picked preset, else
-   * the workspace default, else the built-in `DEFAULT_RISK_POLICY`. Returns the thresholds
+   * the workspace default, else the built-in `FALLBACK_RISK_POLICY`. Returns the thresholds
    * the engine compares against, the per-class rules, and the CI attempt budget.
    *
    * Reads through the `riskPolicy` cache slice when wired: the row is slow-moving admin config

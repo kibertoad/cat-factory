@@ -13,20 +13,60 @@ import * as v from 'valibot'
 // workspace filter that narrows every breakdown at once.
 // ---------------------------------------------------------------------------
 
-/** The time window every breakdown aggregates over. */
+/**
+ * The time window every breakdown aggregates over. `24h`/`7d` are scanned live off the
+ * `token_usage` ledger; `30d`/`90d` are served from the DURABLE `spend_days` rollup the
+ * retention sweep materialises, which carries each run's board shape frozen at the time the
+ * money was spent. Which source answered is carried on the projection
+ * ({@link reportSpendSourceSchema}) rather than left to be inferred from the window.
+ */
 export const reportWindowSchema = v.picklist(['24h', '7d', '30d', '90d'])
 export type ReportWindow = v.InferOutput<typeof reportWindowSchema>
+
+/**
+ * Where a window's spend breakdowns and trend came from: a live scan of the `token_usage`
+ * ledger (`ledger`) or the durable daily cost-attribution rollup (`daily-rollup`).
+ *
+ * The two differ in more than cost. The ledger is exact to the millisecond and resolves a
+ * repository or a ticket through the LIVE links, so it re-attributes history whenever a
+ * service is re-pointed or an issue re-imported, and it forgets everything the retention
+ * sweep prunes. The rollup froze that attribution while the spend was happening and keeps it
+ * with no retention at all, at the cost of being as fresh as the last sweep. A reader has to
+ * know which one is talking, so it is reported rather than derived.
+ */
+export const reportSpendSourceSchema = v.picklist(['ledger', 'daily-rollup'])
+export type ReportSpendSource = v.InferOutput<typeof reportSpendSourceSchema>
+
+/** One UTC day in milliseconds: the grain the durable spend rollup is materialised at. */
+export const ROLLUP_DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * The newest UTC day that is COMPLETE at `atEpochMs` (its midnight, epoch ms): the day
+ * before the one `atEpochMs` falls in, and `atEpochMs` itself when that is exactly midnight.
+ *
+ * Both sides of the wire have to agree about this, which is why it lives here rather than in
+ * either of them. The WRITER uses it to stamp `rolledUpThrough`: a sweep firing at noon has
+ * folded only part of today, so recording today would present a bucket still accruing as a
+ * finished one, and the panel's "complete through <date>" would name a day that is missing up
+ * to a day of spend. The READER uses it to judge how far behind the rollup is, and it can only
+ * do that against the newest day the sweep COULD have covered by now: measuring against the
+ * wall clock instead makes the same healthy rollup read as fresh in the morning and stale by
+ * the evening, purely from the time of day the report was opened.
+ */
+export function lastCompleteRollupDay(atEpochMs: number): number {
+  return Math.floor(atEpochMs / ROLLUP_DAY_MS) * ROLLUP_DAY_MS - ROLLUP_DAY_MS
+}
 
 /**
  * What a SPEND breakdown groups by. `model` keys on the canonical `provider:model`
  * id; `agentKind` on the metered call's agent kind; the rest resolve through the
  * call's run (`workspace` directly, the others via the run's service and block).
  *
- * `repo` and `ticket` are the TCO axes: the two dimensions an organisation actually
- * budgets against. They key on the run's service repo and on the tracker issue linked
- * to the run's block respectively, so "what did this repository cost us this quarter"
- * and "what did this ticket cost" are one grouped query rather than a hand-written join
- * against the database.
+ * `run`, `repo` and `ticket` are the TCO axes: the dimensions an organisation actually
+ * budgets against. They key on the run itself, on the run's service repo, and on the
+ * tracker issue linked to the run's block, so "what did this repository cost us this
+ * quarter", "what did this ticket cost" and "what did that pipeline run cost" are one
+ * grouped query rather than a hand-written join against the database.
  */
 export const reportSpendDimensionSchema = v.picklist([
   'model',
@@ -36,6 +76,7 @@ export const reportSpendDimensionSchema = v.picklist([
   'repo',
   'taskType',
   'ticket',
+  'run',
 ])
 export type ReportSpendDimension = v.InferOutput<typeof reportSpendDimensionSchema>
 
@@ -131,6 +172,24 @@ export const reportsViewSchema = v.object({
   workspaceId: v.nullable(v.string()),
   /** The deployment's spend currency, so the SPA formats costs without a second call. */
   currency: v.string(),
+  /**
+   * Which store answered every SPEND breakdown, the totals and the trend for this window.
+   * The activity breakdowns always come off `agent_runs` and are unaffected.
+   */
+  source: reportSpendSourceSchema,
+  /**
+   * On a `daily-rollup` window: the newest day (epoch ms, UTC midnight) the rollup SWEEP has
+   * covered, or NULL when no pass has ever completed. Always null on a `ledger` window,
+   * where there is no rollup in the path to be behind.
+   *
+   * Null is why the field exists. A rollup that has never run and an account that has spent
+   * nothing produce the same empty breakdown, and the operator response to each is the
+   * opposite of the other's. It is also how a reader tells a genuinely cheap tail-end of the
+   * window from one the sweep has not reached yet, which matters most on the facade whose
+   * sweep is a daily cron. The value is the SWEEP's own recorded coverage, deployment-wide,
+   * never `max(day)` over the rolled-up rows, which cannot tell either pair apart.
+   */
+  rolledUpThrough: v.nullable(v.number()),
   totals: reportTotalsSchema,
   /** Spend sliced every way, each heaviest-first. */
   spend: v.object({
@@ -147,6 +206,12 @@ export const reportsViewSchema = v.object({
      * otherwise be labelled with one ticket's title beside the other's ref.
      */
     byTicket: v.array(reportSpendRowSchema),
+    /**
+     * Spend per agent RUN, keyed by the run id and labelled with the title of the block the
+     * run targets (null for a run that carries none, such as a repo bootstrap). The finest
+     * TCO axis: what one pipeline execution cost, end to end.
+     */
+    byRun: v.array(reportSpendRowSchema),
   }),
   /** Run activity sliced every way, each busiest-first. */
   activity: v.object({

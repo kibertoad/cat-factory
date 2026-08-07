@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { KNOWN_REASONS, REASON_KEY, reasonText } from './StepToolServers.logic'
+import {
+  KNOWN_REASONS,
+  REASON_KEY,
+  REMEDY_KEY,
+  reasonText,
+  remedyText,
+} from './StepToolServers.logic'
 import type { ToolServerUnavailableReason } from '~/types/toolServers'
 
 /**
@@ -45,6 +51,40 @@ describe('tool-server unavailability reasons', () => {
           params: { reason: inherited },
         },
       ])
+    }
+  })
+})
+
+/**
+ * The remedy is the half an operator acts on. A diagnosis with no next step is where this surface
+ * started: the reason was already stated to the AGENT in its prompt, and stating it to a person
+ * changes nothing unless it also names what to change.
+ */
+describe('tool-server unavailability remedies', () => {
+  it('gives every reason in the wire vocabulary a remedy of its own', () => {
+    expect(Object.keys(REMEDY_KEY).sort()).toEqual([...KNOWN_REASONS].sort())
+  })
+
+  it('never points two reasons at one remedy', () => {
+    // The vocabulary exists BECAUSE each member needs a different fix, so two members sharing a
+    // remedy line means either the copy is wrong or the split was.
+    const keys = Object.values(REMEDY_KEY)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('never reuses a reason line as a remedy', () => {
+    // The two are rendered together. A remedy pointing at the reason's own key would render the
+    // diagnosis twice and read as advice.
+    const reasons = new Set(Object.values(REASON_KEY))
+    for (const key of Object.values(REMEDY_KEY)) expect(reasons.has(key)).toBe(false)
+  })
+
+  it('offers no remedy for a retired reason, rather than guessing one', () => {
+    // The build knows the code was recorded and not what it meant. Any remedy here would name a
+    // surface picked from a member the operator may never have hit, and the reason line already
+    // states the raw code, which is the whole of what is known.
+    for (const reason of ['legacy_reason', 'constructor', '__proto__']) {
+      expect(remedyText(reason as ToolServerUnavailableReason, (key) => key)).toBeNull()
     }
   })
 })

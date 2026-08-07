@@ -1832,6 +1832,7 @@
         "within_thresholds": "Ogni punteggio rientra nelle soglie {preset}, quindi la PR e' stata unita automaticamente.",
         "exceeded_thresholds": "{axes} ha superato le soglie {preset}, quindi la PR e' in attesa che un umano la unisca.",
         "auto_merge_disabled": "Il preset {preset} invia ogni PR a un umano, quindi questa e' in attesa di revisione.",
+        "no_policy_configured": "Nessuna policy di merge ha governato questa esecuzione, quindi nessuna PR viene unita da sola. Questo deployment non ha una libreria di preset di merge configurata, cosa che solo un operatore può correggere.",
         "no_rationale": "Il merger ha valutato la PR ma non ha fornito alcuna motivazione, quindi il verdetto non poteva essere ritenuto affidabile per l'unione automatica; la PR e' in attesa che un umano la unisca.",
         "no_assessment": "Il merger non ha restituito una valutazione analizzabile, quindi la PR e' in attesa che un umano la unisca.",
         "merge_failed": "I punteggi rientravano nelle soglie {preset}, ma l'unione automatica non e' riuscita a completarsi (ad esempio protezione del branch o un conflitto), quindi la PR e' in attesa che un umano la unisca.",
@@ -1997,6 +1998,15 @@
           "oauthTokenFailed": "non era disponibile: la connessione ha smesso di produrre un token di accesso.",
           "overBudget": "non era disponibile: questo agente dichiara più server di strumenti di quanti ne porti una singola esecuzione.",
           "unknown": "non era disponibile ({reason})."
+        },
+        "remedy": {
+          "harnessUnsupported": "Esegui il passo su una CLI dell'agente che parla MCP, oppure amplia l'elenco di harness del server.",
+          "transportUnsupported": "Dichiara un server stdio al suo posto, oppure esegui il passo su una CLI dell'agente che raggiunge i server HTTP.",
+          "missingSecret": "Imposta la credenziale che indica nelle credenziali delle capability, dalla finestra Infrastruttura.",
+          "reservedSecret": "Cambia la dichiarazione perché chieda un'altra chiave; impostare quella variabile è proprio ciò che non aiuterà.",
+          "oauthNotConnected": "Collega questa lavagna al server dalla finestra Infrastruttura.",
+          "oauthTokenFailed": "Ricollegalo dalla finestra Infrastruttura, oppure attendi la fine del disservizio del fornitore.",
+          "overBudget": "Riduci ciò che l'agente dichiara, così una singola esecuzione può portarlo tutto."
         }
       },
       "adherence": {
@@ -3640,6 +3650,11 @@
     "retry": "Riprova",
     "error": "Impossibile caricare i report.",
     "period": "Dal {from} al {to}",
+    "rollup": {
+      "none": "L'aggregazione permanente dei costi non ha ancora prodotto nulla: questa finestra è vuota per mancanza di dati, non di spesa.",
+      "stale": "L'aggregazione permanente dei costi arriva solo al {date}. Quello che viene dopo sono dati mancanti, non una settimana economica.",
+      "current": "Dall'aggregazione permanente dei costi, completa fino al {date}. L'attribuzione a repository, ticket ed esecuzione è quella registrata quando la spesa è avvenuta."
+    },
     "unattributed": "Non attribuito",
     "window": {
       "oneDay": "Ultime 24 ore",
@@ -3682,6 +3697,7 @@
       "byAgentKind": "Spesa per tipo di agente",
       "byRepo": "Spesa per repository",
       "byTicket": "Spesa per ticket",
+      "byRun": "Spesa per esecuzione",
       "heading": "Spesa",
       "empty": "Nessun utilizzo registrato in questo periodo.",
       "calls": "{count} chiamata | {count} chiamate",
@@ -3833,6 +3849,25 @@
       "noneImported": "Nessun documento ancora importato.",
       "imported": "Importato \"{title}\"",
       "importFailed": "Importazione non riuscita"
+    },
+    "freshness": {
+      "updated": "Aggiornato il {when}",
+      "refresh": "Verifica le modifiche",
+      "change": {
+        "unchanged": "Corrisponde alla fonte",
+        "reimported": "Recuperata la versione più recente",
+        "revision_only": "La fonte è cambiata, ma questa copia è invariata"
+      },
+      "checkedAt": "Verificato il {when}",
+      "revision": "Revisione {version}",
+      "notApplicable": "Questa installazione non ha un lettore per quella sorgente, quindi non c'è nulla con cui confrontare.",
+      "gap": {
+        "not_connected": "Non verificato: questo workspace non è più collegato alla sorgente.",
+        "credentials_unreadable": "Non verificato: questa installazione non riesce a leggere le credenziali della sorgente.",
+        "unversioned": "Non verificato: la sorgente non pubblica alcuna revisione da confrontare.",
+        "source_unreachable": "Non verificato: la sorgente non è raggiungibile."
+      },
+      "refreshFailed": "Impossibile verificare le modifiche"
     },
     "connect": {
       "title": "Collega sorgente",
