@@ -13,6 +13,7 @@ import org.jspecify.annotations.Nullable;
  * @param agentKind the {@code agentKind} field.
  * @param at the {@code at} field.
  * @param executionBackend May be absent entirely.
+ * @param failure May be absent entirely.
  * @param model May be absent entirely.
  * @param repo May be absent entirely.
  * @param stepIndex the {@code stepIndex} field.
@@ -25,6 +26,9 @@ public record DebugRunOverviewDiagnosticsLastDispatch(
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("executionBackend") @Nullable String executionBackend,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("failure") @Nullable DebugRunOverviewDiagnosticsLastDispatchFailure failure,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("model") @Nullable String model,
@@ -50,6 +54,7 @@ public record DebugRunOverviewDiagnosticsLastDispatch(
         private @Nullable String agentKind;
         private @Nullable Double at;
         private @Nullable String executionBackend;
+        private @Nullable DebugRunOverviewDiagnosticsLastDispatchFailure failure;
         private @Nullable String model;
         private @Nullable DebugRunOverviewDiagnosticsLastDispatchRepo repo;
         private @Nullable Double stepIndex;
@@ -69,6 +74,12 @@ public record DebugRunOverviewDiagnosticsLastDispatch(
         /** Set {@code executionBackend}. */
         public Builder executionBackend(@Nullable String executionBackend) {
             this.executionBackend = executionBackend;
+            return this;
+        }
+
+        /** Set {@code failure}. */
+        public Builder failure(@Nullable DebugRunOverviewDiagnosticsLastDispatchFailure failure) {
+            this.failure = failure;
             return this;
         }
 
@@ -92,7 +103,7 @@ public record DebugRunOverviewDiagnosticsLastDispatch(
 
         /** Build the {@link DebugRunOverviewDiagnosticsLastDispatch}. */
         public DebugRunOverviewDiagnosticsLastDispatch build() {
-            return new DebugRunOverviewDiagnosticsLastDispatch(agentKind, at, executionBackend, model, repo, stepIndex);
+            return new DebugRunOverviewDiagnosticsLastDispatch(agentKind, at, executionBackend, failure, model, repo, stepIndex);
         }
     }
 }

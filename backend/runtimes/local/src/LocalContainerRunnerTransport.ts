@@ -676,6 +676,12 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         this.dropMember(member)
         return true
       },
+      // Same last chance to read the dying member as the per-run path: this is the only
+      // moment its exit state and log tail are still readable, and a pooled member is where
+      // a long coding step actually runs on a warm deployment. Without it the whole class of
+      // mid-run container deaths that pooling is meant to make cheaper were the ones that
+      // reported nothing but the bare eviction sentinel.
+      postMortem: () => this.containerPostMortem(member.containerId),
     })
     // Same container id + host URL enrichment as the per-run path (the leased pool member
     // is just a differently-sourced container); the harness view carries the live `phase`.

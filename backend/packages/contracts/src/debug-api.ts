@@ -423,8 +423,9 @@ export const debugRunOverviewSchema = v.object({
   run: debugRunSummarySchema,
   steps: v.array(debugRunStepSchema),
   /**
-   * Where and on what the run's most recent container step executed (backend, model, repo,
-   * control-plane host), when the engine recorded it. Null for a pure-inline run.
+   * Where and on what the run's most recent step dispatched (backend, model, repo,
+   * control-plane host) and how that dispatch ended if it never reached a running job, when
+   * the engine recorded it. Null for a run that has not dispatched a step yet.
    */
   diagnostics: v.nullable(runDiagnosticsSchema),
   sinks: v.object({

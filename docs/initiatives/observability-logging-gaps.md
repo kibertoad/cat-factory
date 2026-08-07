@@ -2,7 +2,8 @@
 
 **Status:** Phases 1, 1b, 2 + 4 landed; Phase 3 landed except 3.3, whose span-PARENTAGE half
 landed separately with the run/step spans (see C1), leaving only the container-boundary
-`traceparent`; Phase 5 landed for 5.6–5.8; Phase 6 open (plus 1.2d, 3.3, 5.1–5.5)
+`traceparent`; Phase 5 landed for 5.2, 5.4 and 5.6–5.8, with 5.1 landed for the local pooled
+poll only; Phase 6 open (plus 1.2d, 3.3, 5.1's three remaining transports, 5.3, 5.5)
 · **Owner:** core · **Started:** 2026-07-28
 **Audited at:** `main` @ `4b3bab4`. File:line references are against that commit and will drift;
 the anchoring file + symbol names are kept current: search by symbol, not line.
@@ -288,6 +289,8 @@ code-quality review). The two `console.error` sites in the frontend are the whol
 ### D. Execution-path failure visibility
 
 **D1 (Container death yields no post-mortem on most transports) including production. (P1)**
+_(PARTLY FIXED in 5.1: the local POOLED poll now passes `postMortem`, the same argument the
+per-run poll always did. The CF transport, Kubernetes and the native process transport remain.)_
 The post-mortem machinery (`exitState()` + scrubbed `logs()` tail → `firstEvictionDetail`) exists
 and is user-visible, but is wired into exactly **one** path: the local per-run poll
 (`LocalContainerRunnerTransport.ts:413`). Not wired: the **Cloudflare transport** (all three
@@ -338,8 +341,9 @@ could not promote any (GitHub 403, shard mismatch) reports as fully green with n
 persisted note, no user surface. Blocked on A1 (RepoOp ctx has no logger to wire).
 
 **D4: Re-drives, stalls and orphan-finalizations are uncountable. (P1)**
-_(PARTLY FIXED in Phase 4.1: the per-run `redrive_count` column plus the sweep counters. The
-`instanceState` swallow that turns a Workflows outage into a mass re-drive is still 5.4.)_
+_(FIXED across Phase 4.1 and 5.4: 4.1 added the per-run `redrive_count` column plus the sweep
+counters; 5.4 closed the `instanceState` swallow that turned a Workflows outage into a mass
+re-drive, and the sweep now counts what it could not classify.)_
 Neither sweeper persists a re-drive count; `orphanedSince` is an in-memory map holding only a
 timestamp. "Was this run re-driven 3 times?" is unanswerable except by grepping logs, and on
 Cloudflare not even that: the sweep logs only aggregates (`{redriven: 3}`, no run ids), and
@@ -349,6 +353,8 @@ run look missing and triggers a mass re-drive with zero log lines) and an unconf
 binding returns `'alive'`, silently exempting that kind from sweeping forever.
 
 **D5: `RunDiagnostics` misses the failures that need it most, and has no UI. (P2)**
+_(HALF FIXED in 5.2: the block is stamped before the dispatch, carries the dispatch's failure
+verdict, and inline steps stamp one. The UI half is 5.3.)_
 `recordDispatchDiagnostics` runs **after** `startJob` returns, so dispatch/preflight failures
 (the class where "which model / which repo / which backend" matters most) carry no `lastDispatch`.
 Inline steps never stamp diagnostics at all. And the whole block is write-only: zero frontend
@@ -357,6 +363,8 @@ references to run `diagnostics`, `firstEvictionDetail` (for runs that _recovered
 served today only by hand-written SQL.
 
 **D6: A dead Workflows instance discards its own cause. (P1)**
+_(FIXED in 5.4 for the sweeper's half: the instance's own error reaches the stop reason, and the
+`WorkflowsWorkRunner` swallows were given their log lines in Phase 1.4.)_
 `finalizeOrphan` stops the run with a fixed string; `instance.status()` returns an `error` field
 the sweeper never destructures (`sweeper.ts:37`). `buildWorkflowRuntime` retries with no logging
 (its own doc says a persistent failure "SHOULD fail loudly": it fails silently into the
@@ -846,18 +854,105 @@ where they became countable.
   of `db/schema.ts` (1716 → 1700) and the binary-artifact storage pair out of the Worker's
   `container.ts` (1500 → 1470).
 
-### Phase 5 (Execution-path forensics) **5.6 + 5.7 LANDED**
+### Phase 5 (Execution-path forensics) **5.2, 5.4 + 5.6–5.8 LANDED**
 
-| #   | Step                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Fixes                       | Sev | Status |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | --- | ------ |
-| 5.1 | Post-mortem parity: pass `postMortem` to the local pooled poll (method already exists); have the CF container DO capture exit state + a scrubbed log tail and expose it on the eviction view; read `lastState.terminated` in the K8s transport; capture exit code + stderr tail in the native process transport. Pool eviction classification itself is stuck-run F4: land the visibility with it.                                                                                                        | D1                          | P1  |        |
-| 5.2 | Call `recordDispatchDiagnostics` **before** `startJob` so dispatch/preflight failures carry `lastDispatch`; stamp a minimal diagnostics block for inline steps.                                                                                                                                                                                                                                                                                                                                           | D5                          | P2  |        |
-| 5.3 | Surface what's already persisted: `diagnostics.lastDispatch`, `firstEvictionDetail` (recovered runs), `evictionRecoveries`, and the new re-drive count in the SPA (an "investigation" disclosure on `AgentFailureCard` / the run panel). Frontend-only once 4.1 lands.                                                                                                                                                                                                                                    | D5                          | P2  |        |
-| 5.4 | Read `instance.status().error` into the `finalizeOrphan` stop reason; distinguish `instanceState`'s two swallowed error paths from genuine `missing` (log + treat repeated lookup failures as "unknown", not "missing", to prevent outage-triggered mass re-drives); warn once for an unconfigured workflow binding.                                                                                                                                                                                      | D6, D4                      | P1  |        |
-| 5.5 | Harness slice (image-bumping, batch together): `uncaughtException`/`unhandledRejection` handlers that flush terminal `JobView`s before exit; attach `detail` (phase timings + breadcrumb) on clean-exit failures too; log the PR-description/effort-report read failures; scrub log fields through `redactSecrets` in the harness logger. Surface `coldStart` through `RunnerJobView` while in there (its FAILURE-path legibility already landed via the `detail` fold: what's left is the running view). | D2, D2.1, A5 (harness half) | P1  |        |
-| 5.6 | Persist inline LLM calls to `llm_call_metrics` via `LlmObservabilityService` (the instrumented provider gains an optional recorder dep) so `ObservabilityPanel` and `investigate-telemetry` see judge/consensus/inline-kind runs.                                                                                                                                                                                                                                                                         | C2 (coverage half)          | P2  | ✅     |
-| 5.7 | Close the two attribution holes 5.6 left: apply the instrumentation OUTSIDE any facade wrap that substitutes a resolved model (local mode's subscription-inline harness), through one composer that owns the order, and fall back to the credential scope's `executionId` (narrowed to a LIVE run) for a call whose tag names no run.                                                                                                                                                                     | C2 (coverage half)          | P1  | ✅     |
-| 5.8 | Make an inline step served by a harness CLI report PER CALL and LIVE: the model takes the facade's recorder, publishes each call off the CLI's `stream-json` as it arrives (reusing the container harness's own fold), and stands the instrumentation middleware down. Closes the three things 5.7 structurally could not: one lumped row for a whole tool loop, nothing at all until the subprocess exits, and zeros whenever it was killed.                                                             | C2 (coverage half)          | P1  | ✅     |
+| #   | Step                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Fixes                       | Sev | Status                                                                                |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | --- | ------------------------------------------------------------------------------------- |
+| 5.1 | Post-mortem parity: pass `postMortem` to the local pooled poll (method already exists); have the CF container DO capture exit state + a scrubbed log tail and expose it on the eviction view; read `lastState.terminated` in the K8s transport; capture exit code + stderr tail in the native process transport. Pool eviction classification itself is stuck-run F4: land the visibility with it.                                                                                                        | D1                          | P1  | ◐ the local POOLED poll landed; the CF container DO, K8s and native transports remain |
+| 5.2 | Call `recordDispatchDiagnostics` **before** `startJob` so dispatch/preflight failures carry `lastDispatch`; stamp a minimal diagnostics block for inline steps.                                                                                                                                                                                                                                                                                                                                           | D5                          | P2  | ✅                                                                                    |
+| 5.3 | Surface what's already persisted: `diagnostics.lastDispatch`, `firstEvictionDetail` (recovered runs), `evictionRecoveries`, and the new re-drive count in the SPA (an "investigation" disclosure on `AgentFailureCard` / the run panel). Frontend-only once 4.1 lands.                                                                                                                                                                                                                                    | D5                          | P2  |                                                                                       |
+| 5.4 | Read `instance.status().error` into the `finalizeOrphan` stop reason; distinguish `instanceState`'s two swallowed error paths from genuine `missing` (log + treat repeated lookup failures as "unknown", not "missing", to prevent outage-triggered mass re-drives); warn once for an unconfigured workflow binding.                                                                                                                                                                                      | D6, D4                      | P1  | ✅                                                                                    |
+| 5.5 | Harness slice (image-bumping, batch together): `uncaughtException`/`unhandledRejection` handlers that flush terminal `JobView`s before exit; attach `detail` (phase timings + breadcrumb) on clean-exit failures too; log the PR-description/effort-report read failures; scrub log fields through `redactSecrets` in the harness logger. Surface `coldStart` through `RunnerJobView` while in there (its FAILURE-path legibility already landed via the `detail` fold: what's left is the running view). | D2, D2.1, A5 (harness half) | P1  |                                                                                       |
+| 5.6 | Persist inline LLM calls to `llm_call_metrics` via `LlmObservabilityService` (the instrumented provider gains an optional recorder dep) so `ObservabilityPanel` and `investigate-telemetry` see judge/consensus/inline-kind runs.                                                                                                                                                                                                                                                                         | C2 (coverage half)          | P2  | ✅                                                                                    |
+| 5.7 | Close the two attribution holes 5.6 left: apply the instrumentation OUTSIDE any facade wrap that substitutes a resolved model (local mode's subscription-inline harness), through one composer that owns the order, and fall back to the credential scope's `executionId` (narrowed to a LIVE run) for a call whose tag names no run.                                                                                                                                                                     | C2 (coverage half)          | P1  | ✅                                                                                    |
+| 5.8 | Make an inline step served by a harness CLI report PER CALL and LIVE: the model takes the facade's recorder, publishes each call off the CLI's `stream-json` as it arrives (reusing the container harness's own fold), and stands the instrumentation middleware down. Closes the three things 5.7 structurally could not: one lumped row for a whole tool loop, nothing at all until the subprocess exits, and zeros whenever it was killed.                                                             | C2 (coverage half)          | P1  | ✅                                                                                    |
+
+#### What 5.2 + 5.4 shipped (and 5.1's pooled half)
+
+One theme across three sites: **the record of a failure was being written by the thing that only
+exists once the failure did not happen.** Each was a fact the platform had, discarded at the exact
+moment it became the only fact anyone would want.
+
+**5.2, the dispatch record now predates the dispatch.** `lastDispatch` was stamped from the job
+HANDLE, which `startJob` returns only after a container has accepted the job, so the two failure
+classes the block exists to explain (a container that never started, a preflight rejection like
+`github_not_connected`) were precisely the ones that recorded nothing. The block is now opened
+BEFORE the dispatch from what is already known (step index, agent kind, the model its ref resolved
+to, the control-plane host) and refined afterwards by what only the accepted dispatch knows (the
+repo it resolved, the model it confirmed).
+
+- **The failure lands on the block too**, in the engine's own dispatch taxonomy
+  (`failure.kind` + the `DomainError`'s machine-readable `reason`). The step already carries that
+  verdict, but a retry of the step OVERWRITES it, and the diagnostics block is what survives to be
+  read afterwards. PRESENCE is the signal, so there is no `succeeded` member to keep in step with
+  anything, and a re-dispatch cannot inherit the last attempt's failure because opening the block
+  REPLACES it rather than merging.
+- **An inline step stamps one too, naming its backend `inline`.** Dispatching nowhere is why it
+  used to stamp nothing, and the result was that a pure-inline run answered `diagnostics: null` and
+  a mixed pipeline answered with whatever CONTAINER step ran last: a run reporting, confidently,
+  that it was somewhere it had already left. `inline` is a distinct value rather than an absent
+  `executionBackend` because absent already means "a container step whose first poll has not
+  reported yet", and those two need opposite investigations.
+- It costs no extra write. The pre-dispatch stamp rides the persist the cold-boot emit already
+  does, the refinement rides the one after the handle lands, and the inline stamp rides the
+  step's own settlement.
+
+**5.4, the sweeper stops guessing.** `WorkflowsLookup` answered `missing` ("the instance was lost,
+re-create it") for both of its throw paths, so a Workflows API outage read as every stale run
+losing its instance at once and the sweeper re-drove the fleet with no log line to say why. It now
+answers a PROBE (`{ state, detail }`) over a four-member state, and the fourth member is the point:
+
+- **`unknown` is not a disposition, it is the absence of one.** Only an `instance.not_found` code
+  is `missing`; any other throw, and an unreadable status, is `unknown` with the cause logged. The
+  sweep takes NO action on it. Every action it has is destructive against a run that is actually
+  fine (a re-drive is at best wasted work, a finalize stops the run outright), so an unclassifiable
+  instance costs one tick of recovery latency where a guess costs a live run.
+- **An `unknown` tick FORGETS the run's orphan clock rather than carrying it.** The run was not
+  observed orphaned, and letting an outage age a deadline nobody could measure is how a Workflows
+  incident would come out the far side as a batch of `stalled` runs. Same reasoning as the
+  `orphanedSince` map itself: the deadline measures time-observed-orphaned, and an outage is not an
+  observation.
+- **Two more states were being read as `terminal` by fall-through**, which is the most destructive
+  disposition available: Workflows' own `unknown` status (its "I cannot tell you" answer) and
+  `waitingForPause` (an instance finishing its current work before parking, i.e. doing exactly what
+  it was asked). The alive set is now explicit and the unknown one is routed away from the
+  fall-through.
+- **A terminal instance's own error reaches the run's stop reason.** `InstanceStatus.error` was
+  destructured by nobody, so every run this branch settles carried the identical sentence about a
+  driver that "ended without finalizing it". It rides `InstanceProbe.detail` into `finalizeOrphan`,
+  scrubbed through `redactSecrets` and capped, because Workflows echoes the step's own throw and
+  this lands on a run surface a person reads.
+- **An unconfigured workflow binding says so, once per isolate.** It used to answer `alive`, which
+  silently exempted that run kind from sweeping forever in a way indistinguishable from health.
+  Once per isolate rather than per run per tick: the condition is a deployment fault that holds for
+  every stale run of the kind, so repeating it would bury the one line that matters.
+- **`sweep.run_state_unknown` is a new operational counter**, dimensioned by the bounded run kind.
+  It is counted apart from the three dispositions because a blind sweeper looks exactly like a
+  healthy one in all of them: nothing re-driven, nothing finalized, nothing stalled, and the stale
+  runs simply sit there. The per-sweep log line reports it even when nothing else happened.
+
+**5.1's pooled half.** `postMortem` was passed to the per-RUN local poll and not to the POOLED one,
+though the method takes the same argument and a warm deployment is exactly where a long coding step
+runs. The class of container death that pooling exists to make cheaper was the class reporting
+nothing but the bare eviction sentinel. One argument; the rest of 5.1 (the CF container DO, K8s,
+the native transport) is untouched and still open.
+
+#### Notes for the next implementer (5.2 / 5.4)
+
+- **The probe is a PORT-shaped answer now, not a string.** `SweepDeps.instanceState` returns
+  `InstanceProbe`, and `finalizeOrphan` takes the cause as a second argument. A new sweeper over a
+  durable driver copies that shape rather than re-deriving a three-state string, and a new state
+  must decide explicitly whether it is actionable: the fall-through is what `unknown` and
+  `waitingForPause` were both lost to.
+- **This is CF-only on purpose** (the tracker's runtime-symmetry note): Node's stale-run sweeper
+  probes pg-boss, which has no analogous swallow. The `lastDispatch` half IS runtime-neutral
+  (engine code) and is pinned by conformance on both facades.
+- **5.3 is now worth more.** It renders `diagnostics.lastDispatch` in the SPA, and the block it
+  would render is no longer absent on exactly the failures a person opens that panel for.
+- **The `failure` object is additive on the public API** (`info.version` → 1.28.0), but the
+  POPULATION changed: a pure-inline run used to answer `diagnostics: null` on the debug overview
+  and now answers a block. A consumer reading "no diagnostics" as "no agent work happened" reads
+  differently, which is stated in the spec's version note rather than left to be discovered.
 
 #### What 5.8 shipped
 

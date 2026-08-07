@@ -1366,9 +1366,10 @@ export const executionInstanceSchema = v.object({
    */
   rev: v.optional(v.number()),
   /**
-   * After-the-fact investigation context — where/what the run's most recent container step
-   * executed on (backend, model, repo) plus the control-plane host. Rides in the `detail` JSON
-   * (see {@link runDiagnosticsSchema}); absent on legacy runs and pure inline pipelines.
+   * After-the-fact investigation context: where/what the run's most recent step dispatched
+   * to (backend, model, repo), how that dispatch ended if it never reached a running job, plus
+   * the control-plane host. Rides in the `detail` JSON (see {@link runDiagnosticsSchema});
+   * absent on legacy runs and on a run that has not dispatched a step yet.
    */
   diagnostics: v.optional(runDiagnosticsSchema),
   /**

@@ -464,6 +464,45 @@ function registerCompanionAndFailureTests(harness: ConformanceHarness): void {
     const coderStep = exec.steps.find((s) => s.agentKind === 'coder')!
     expect(coderStep.state).not.toBe('done')
     expect(coderStep.container?.status).toBe('errored')
+    // The investigation diagnostics survive the failure they exist for. They used to be
+    // stamped from the job handle, which only exists once a container has ACCEPTED the job,
+    // so this failure, the one where "which step, which kind, which model" is hardest to
+    // reconstruct afterwards, recorded nothing at all.
+    const dispatch = exec.diagnostics?.lastDispatch
+    expect(dispatch?.agentKind).toBe('coder')
+    expect(dispatch?.stepIndex).toBe(0)
+    expect(dispatch?.failure?.kind).toBe('dispatch')
+    // No repo: nothing resolved one, and claiming a repo the dispatch never reached would be
+    // worse than an absent field.
+    expect(dispatch?.repo).toBeUndefined()
+  })
+
+  it('records diagnostics for an INLINE step, naming its backend', async () => {
+    // An inline step dispatches nowhere, which is why it used to stamp nothing: a pure-inline
+    // run reported no diagnostics at all, and a mixed pipeline reported whatever CONTAINER
+    // step ran last as where the run was when it died.
+    const app = harness.makeApp()
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Inline only',
+      agentKinds: ['coder'],
+    })
+    const start = await app.call<ExecutionInstance>(
+      'POST',
+      `/workspaces/${wsId}/blocks/task_login/executions`,
+      { pipelineId: pipeline.body.id },
+    )
+    expect(start.status).toBe(201)
+    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+
+    const dispatch = exec.diagnostics?.lastDispatch
+    expect(dispatch?.agentKind).toBe('coder')
+    // `inline` is what distinguishes "the engine answered this itself" from a container step
+    // still waiting for the first poll to report its backend. Both are otherwise an absent
+    // `executionBackend`, and they need opposite investigations.
+    expect(dispatch?.executionBackend).toBe('inline')
+    expect(dispatch?.failure).toBeUndefined()
   })
 
   it("maps a polled job's structured failureCause → AgentFailureKind and surfaces the detail", async () => {
