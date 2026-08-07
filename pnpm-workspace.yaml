@@ -49,6 +49,7 @@ packages:
   - 'deploy/frontend'
   - 'deploy/node'
   - 'deploy/local'
+  - 'deploy/gatekeeper'
   # The four public-API SDK clients live together under `sdk/`; only the TypeScript one is an
   # npm package, so it is the only client member here. Python/Go/Java are built and published by
   # their own toolchains (see sdk/README.md). `sdk/mcp` is not a fifth client: it is the MCP

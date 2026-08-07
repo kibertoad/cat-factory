@@ -1,6 +1,6 @@
 # Cloudflare OS Gatekeeper integration
 
-Status: in progress. Slices 1, 2 and 3 have landed; slice 4 is open.
+Status: in progress. Slices 1 to 4 have landed; slice 5 is open.
 
 ## Goal and rationale
 
@@ -159,14 +159,14 @@ enforcement behind it; per-user keys already give the real thing. Do not re-prop
 "answer only runs the OS started" itself by filtering to runs it tracks. If it ever lands in
 core it must be a new additive rung, never a narrowing of `decide`.
 
-### 4. Gatekeeper reference implementation (`deploy/gatekeeper`)
+### 4. Gatekeeper reference implementation (`deploy/gatekeeper`) (landed)
 
-The Worker skeleton consuming `@cat-factory/gatekeeper-bindings`: Cap'n Web bindings over the
-policy table, the webhook receiver plus Durable Object fan-out, the approval-card flow, per-user
-key minting. An example deployment template like its neighbours (`deploy/backend`,
-`deploy/frontend`): an operator copies it, points it at their own workspace and edits the policy.
+The Worker consuming `@cat-factory/gatekeeper-bindings`: Cap'n Web capabilities over the policy
+table, the webhook receiver, the approval-card flow, per-actor key minting. An example deployment
+template like its neighbours (`deploy/backend`, `deploy/frontend`): an operator copies it, points
+it at their own workspace and edits `src/policy.config.ts`.
 
-Three constraints make "in the repo" and "isolated" both true, and they are the reviewable part:
+Three constraints made "in the repo" and "isolated" both true, and all three held:
 
 - **Dependency direction, enforced by the workspace.** It depends on the published surface
   (`@cat-factory/sdk`, `@cat-factory/gatekeeper-bindings`) and nothing in `backend/packages` may
@@ -177,6 +177,73 @@ Three constraints make "in the repo" and "isolated" both true, and they are the 
   is still moving: a partner-side breaking change should not turn this repo's CI red.
 - **Not a published package.** `private: true`, no changeset, no npm release. It is read and
   copied, not installed.
+
+Four decisions worth carrying forward:
+
+- **The granted operations ARE the object's methods**, installed on a per-session PROTOTYPE. So an
+  operation policy withheld is not a method that refuses, it is absent, and there is no allow-list
+  at the call site to get backwards. The prototype is not a style choice: Cap'n Web deliberately
+  REFUSES to serve an RpcTarget's own instance properties (they would leak private internals), so
+  an instance-property capability is a set of methods no caller can reach.
+- **A policy is compiled against the live table and only ever SUBTRACTS.** Compilation starts from
+  `bindingsWithinScope(tier.keyScope)`, so a tier cannot grant above the key backing it and a
+  retired or misspelled operation is a refusal to serve rather than a method that 403s on every
+  call. The corollary is that `keyScope` is ONE value doing two jobs (the scope minted for each
+  actor, and the ceiling on the grant), which is what stops the credential and the capability
+  disagreeing. `admin` is unreachable as a `keyScope` and says so: `POST /api/v1/keys` cannot mint
+  it, so a tier asking for it is asking for the Gatekeeper's own provisioning secret.
+- **What is NOT granted is published beside what is**, with the reason separated three ways:
+  `denied_by_policy`, `above_key_scope` and `not_relayable` (an SSE stream or a binary blob cannot
+  cross a Cap'n Web call). An agent that cannot tell "your policy hides this" from "no policy can
+  grant this" from "ask for it another way" reports the wrong one to whoever has to fix it.
+- **Answering an approval re-reads the run, every time.** The card carries no `approvalId` (the
+  notification does not have one) and the run may have moved between the delivery and the answer,
+  so the card is a POINTER and the decision list is the truth. That is also what makes the three
+  outcomes distinguishable: `answered`, `recorded` (the vote counted but the quorum is unmet, so
+  the run is still parked) and `stale` (with the run's own `unanswerable` entry quoted). Collapsing
+  them into "it worked" is the integration bug the platform's docs warn about.
+
+#### The review of the first cut, and what it changed (same slice)
+
+The reference implementation shipped understanding ONE of the platform's thirteen park kinds, and
+the review of it found that the shape of the mistake mattered more than its size. Five corrections
+landed, and each is a rule worth carrying into anything else that consumes this surface.
+
+- **The answer path may not know any kind.** `approvals_answer` looked for a pending
+  `approval-gate`, so a card raised for a requirements review, a fork, a judge verdict or a
+  follow-up triage could never be answered from the inbox, and the failure was INVISIBLE, because
+  it reported `stale`, which is also what a card whose run genuinely moved on reports. The fix is a
+  data table (`src/decisions.ts`) keyed on the SDK's own `PublicDecision['kind']` union with
+  `satisfies Record<…>`, so a park the platform adds fails this package's BUILD. The shipped
+  `approver` tier derives its grants from that table for the same reason: fifteen hand-typed
+  decision bindings against a surface carrying more than forty is a tier that answers the parks
+  somebody remembered.
+- **A card the surface cannot settle is a NOTICE, and says so.** `merge_review` is answered by a
+  real merge (`notifications_act`), deliberately withheld from every tier because the merge policy
+  wants a person the platform can name (ADR 0037/0039). Subscribing to it was right; presenting it
+  as answerable was not. The type list became a map to a `disposition`, stamped onto the card.
+- **`stale` settles nothing.** The card was being resolved as `superseded` on the first stale
+  answer, which destroys the inbox entry of a run that may still be parked. The platform
+  re-delivers a card under a NEW notification id, so a wrongly settled one is never re-raised. Only
+  an answer that leaves the run UNPARKED settles the card.
+- **A dedupe marker and the effect it guards are ONE write.** They were two Durable Object calls,
+  so a failed card write turned the platform's retry into a `duplicate` and the approval reached
+  nobody, silently. `applyDelivery` now does both in one multi-key `put`, which is exactly the
+  repo's own "commit the local state first, and a claim that ERRORS must propagate" rule arriving
+  from the receiver's side.
+- **A cached credential needs a claim in front of it and an invalidation behind it.** `POST
+/api/v1/keys` returns its secret exactly once, so a read-then-mint-then-write has two pipelined
+  first calls both minting and the loser's key live upstream with nothing recording it; and a cache
+  with no 401 path makes the documented kill switch (rotate the provisioning key) a permanent
+  outage. Both are now the standard shapes: an atomic, EXPIRING claim taken before the effect, and
+  one re-mint on a 401. The mint race is the one fact not observable in a response, so the scripted
+  origin counts what it was asked to issue.
+
+The two additions that make it a base rather than a sample fall out of the same work:
+`approvals_inspect` (the live park, its verbs, the fields each needs, and whether this tier holds
+the operation behind it) and `runs_watched` (the lifecycle projection the `run.*` subscription was
+already paying for and then discarding). Offboarding moved onto the admin surface as
+`POST /admin/retire`, because revoking another person's keys is a decision the OS makes ABOUT them.
 
 #### How it gets tested (decided in slice 2, before the Worker exists)
 
@@ -230,15 +297,49 @@ nothing pulls a Gatekeeper, because the artifact an operator wants is the source
 and an image would freeze the policy configuration that is the whole point of copying it.
 Do not re-propose without a consumer that pulls rather than copies.
 
+### 5. The two legs a scripted origin cannot cover
+
+Both are ADDITIONS to the slice-4 suite, never replacements for it, and both are non-blocking by
+construction. Neither is a prerequisite for using the Gatekeeper; they exist to catch a
+disagreement the hermetic suite structurally cannot see.
+
+- **Against a real `/api/v1`.** A phase in `backend/internal/sdk-smoketest`, which already boots
+  the real Node facade and mints keys, driving the Gatekeeper's own forwarding path against it.
+  The reason it belongs THERE rather than in `deploy/gatekeeper` is the one the smoketest itself
+  gives: the harness that boots a backend should be the one that owns the boot, and the template an
+  operator copies should not carry a Postgres-shaped devDependency. What it would catch is the
+  Gatekeeper and the live surface disagreeing about a request shape the generated bindings and the
+  SDK both consider correct.
+- **Against a real Cloudflare OS.** Manual/nightly, opt-in behind a `GATEKEEPER_OS_REF` pointing at
+  a partner commit, allowed to go red without blocking anyone. Do not fold it into the PR lane on
+  the grounds that it passed a few times.
+
 ## Checklist
 
 - [x] Slice 1: scope as data, `x-min-scope`, `@cat-factory/gatekeeper-bindings`
       ([#1804](https://github.com/kibertoad/cat-factory/pull/1804))
 - [x] Slice 2: outbound webhook collection (both runtimes + conformance + SDK surface)
 - [x] Slice 3: `externalIdentity` on key provisioning, echoed on run detail
-- [ ] Slice 4: reference Gatekeeper Worker (`deploy/gatekeeper`, own CI lane, unpublished)
+- [x] Slice 4: reference Gatekeeper Worker (`deploy/gatekeeper`, own CI lane, unpublished), plus
+      the review corrections above (every park answerable, card dispositions, atomic delivery,
+      claimed minting, `approvals_inspect` / `runs_watched` / `POST /admin/retire`)
+- [ ] Slice 5: the two legs the scripted origin cannot cover (below)
 
 ## Gotchas the pilot surfaced
+
+- **"Card type" and "decision kind" are two vocabularies, and neither maps onto the other.** A
+  `decision_required` notification can be an approval gate or an agent question; `merge_review` maps
+  to no `/runs/:runId/decisions` entry at all; a run that parked twice is holding the SECOND park by
+  the time anyone opens the first card. So the notification type may drive what is SUBSCRIBED and
+  what an inbox renders, and must never drive what an answer posts. That comes from re-reading the
+  run, every time.
+- **A run can hold TWO parks at once.** A follow-up triage accrues while the step still runs, so it
+  can be pending under a later step's approval gate. The decision list is in a shape order, not a
+  priority order, so a consumer that answers `decisions[0]` settles whichever the projection built
+  first. Refusing without a named `kind` is the only honest option.
+- **`parked: false` does not mean "nothing to answer".** The follow-ups park is listed whenever any
+  item is `pending`, which is deliberately before the run stops. A predicate keyed on the run's
+  status misses every early triage, which is the case the surface added it for.
 
 - **`minScope` is the STATIC floor, not the whole admission story.** `startPublicTask` and
   `createPublicJob` escalate to `decide` at request time when the named pipeline can park
@@ -273,6 +374,18 @@ Do not re-propose without a consumer that pulls rather than copies.
   database. Heal (add nullable, `UPDATE`, `SET NOT NULL`) then constrain, on both sides, and write
   the conformance case that puts TWO ids in one workspace: every single-endpoint assertion passes
   against a `put` still keyed on the workspace alone.
+- **A Cap'n Web stub intercepts EVERY property, `.call` included.** `method.call(target, args)` on
+  a stub does not invoke `Function.prototype.call`; it asks the far side for an operation named
+  `tasks_get.call`, and the failure reads like a client-side bug in the caller's own helper. Invoke
+  a stub's method directly. The same rule is why a capability's state lives in a CLOSURE rather
+  than on the instance: own properties of an RpcTarget are refused outright, so a method installed
+  as an instance field is unreachable while looking present in the source.
+- **`@cloudflare/vitest-pool-workers` declares `cloudflare:test` under its `./types` export, not
+  its main one.** `"types": ["@cloudflare/vitest-pool-workers"]` in a tsconfig resolves the POOL's
+  types and leaves `cloudflare:test` unresolvable; the module declaration arrives through a
+  `/// <reference types="@cloudflare/vitest-pool-workers/types" />` in a `test/env.d.ts`, which is
+  also where the Worker's own `Env` is merged onto the ambient `Cloudflare.Env`. The Worker
+  runtime's `test/env.d.ts` is the model; a new workerd-tested package needs its own.
 - **`contract.minScope` is enforcement, not just documentation**, wherever a controller
   references it. Lowering an annotation lowers the gate. Treat a `minScope` diff in review
   exactly like a permission change, because it is one.

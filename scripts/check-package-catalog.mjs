@@ -36,6 +36,7 @@ const WORKSPACE_GLOBS = [
   'deploy/frontend',
   'deploy/node',
   'deploy/local',
+  'deploy/gatekeeper',
   'sdk/*',
 ]
 

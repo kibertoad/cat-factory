@@ -1155,6 +1155,34 @@ importers:
         specifier: ^4.118.0
         version: 4.118.0(@cloudflare/workers-types@5.20260804.1)
 
+  deploy/gatekeeper:
+    dependencies:
+      '@cat-factory/gatekeeper-bindings':
+        specifier: workspace:*
+        version: link:../../sdk/gatekeeper
+      '@cat-factory/sdk':
+        specifier: workspace:*
+        version: link:../../sdk/typescript
+      capnweb:
+        specifier: ^0.10.0
+        version: 0.10.0
+    devDependencies:
+      '@cloudflare/vitest-pool-workers':
+        specifier: ^0.20.1
+        version: 0.20.1(@cloudflare/workers-types@5.20260804.1)(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@4.1.10)
+      '@cloudflare/workers-types':
+        specifier: ^5.20260804.1
+        version: 5.20260804.1
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/coverage-v8@4.1.10)(happy-dom@20.11.1)(msw@2.15.0(@types/node@26.1.2)(typescript@7.0.2))(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.1)(tsx@4.22.4)(yaml@2.9.0))
+      wrangler:
+        specifier: ^4.118.0
+        version: 4.118.0(@cloudflare/workers-types@5.20260804.1)
+
   deploy/local:
     dependencies:
       '@cat-factory/local-server':
@@ -5651,6 +5679,9 @@ packages:
 
   caniuse-lite@1.0.30001806:
     resolution: {integrity: sha512-72Cuvd95zbSYPKq6Fhg8eDJRlzgWDf7/mtoZv6Qe/DYNCEBdNxoA3+rZAU2ZhGCpZlns3EssFavaZomckT5Uuw==}
+
+  capnweb@0.10.0:
+    resolution: {integrity: sha512-lQ2nlzaifkqBeNfs8RLErn7NZ8FNf3vn1W7J3nSH73edWG+0B5nHZGR51S2S9HMZEuZcEypOO469dZRY/BluFA==}
 
   chai@6.2.2:
     resolution: {integrity: sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg==}
@@ -14354,6 +14385,8 @@ snapshots:
       caniuse-lite: 1.0.30001806
 
   caniuse-lite@1.0.30001806: {}
+
+  capnweb@0.10.0: {}
 
   chai@6.2.2: {}
 
