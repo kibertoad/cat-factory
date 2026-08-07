@@ -110,16 +110,16 @@ Nothing here renames, retypes or re-scopes anything already served. Each one fol
 
 ## Slices, in priority order
 
-| #   | Slice                                                       | Sev | Status  | PR  |
-| --- | ----------------------------------------------------------- | --- | ------- | --- |
-| A1  | Repair a refused input: `fields` on the task PATCH          | P1  | ✅ done |     |
-| A2  | Board provisioning: create a service, link a repo           | P1  | ⬜ todo |     |
-| A3  | Task dependencies over the API                              | P2  | ⬜ todo |     |
-| A4  | The artifact list under-reports reference designs           | P2  | ⬜ todo |     |
-| A5  | Retire the stale visual-confirmation caveat (docs only)     | P2  | ✅ done |     |
-| A6  | Documents after create: list, attach, detach                | P2  | ⬜ todo |     |
-| B1  | A deployment-registered wait gate is invisible to admission | P2  | ⬜ todo |     |
-| B2  | Step output on `GET /api/v1/tasks/:taskId/run`              | P3  | ⬜ todo |     |
+| #   | Slice                                                       | Sev | Status  | PR                                                          |
+| --- | ----------------------------------------------------------- | --- | ------- | ----------------------------------------------------------- |
+| A1  | Repair a refused input: `fields` on the task PATCH          | P1  | ✅ done | [#1808](https://github.com/kibertoad/cat-factory/pull/1808) |
+| A2  | Board provisioning: create a service, link a repo           | P1  | ⬜ todo |                                                             |
+| A3  | Task dependencies over the API                              | P2  | ⬜ todo |                                                             |
+| A4  | The artifact list under-reports reference designs           | P2  | ⬜ todo |                                                             |
+| A5  | Retire the stale visual-confirmation caveat (docs only)     | P2  | ✅ done | [#1808](https://github.com/kibertoad/cat-factory/pull/1808) |
+| A6  | Documents after create: list, attach, detach                | P2  | ⬜ todo |                                                             |
+| B1  | A deployment-registered wait gate is invisible to admission | P2  | ⬜ todo |                                                             |
+| B2  | Step output on `GET /api/v1/tasks/:taskId/run`              | P3  | ⬜ todo |                                                             |
 
 ### A1: repair a refused input (the pilot)
 
