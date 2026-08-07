@@ -132,6 +132,7 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
     dependencies.reportsRepository
       ? new ReportsService({
           reportsRepository: dependencies.reportsRepository,
+          spendRollupRepository: dependencies.spendRollupRepository,
           clock: dependencies.clock,
           currency: (dependencies.spendPricing ?? DEFAULT_SPEND_PRICING).currency,
         })

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
+import { lastCompleteRollupDay } from '@cat-factory/contracts'
 import type {
   ReportActivityDimension,
   ReportActivityRow,
@@ -87,6 +88,29 @@ const activityByDimension = computed<ReportActivityRow[]>(() => {
   if (dimension.value === 'workspace') return activity.byWorkspace
   if (dimension.value === 'service') return activity.byService
   return activity.byTaskType
+})
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+// How the window's SPEND half was answered. The long (TCO) windows read the durable
+// cost-attribution rollup, which is only as fresh as the last retention sweep, so a rollup
+// that has materialised NOTHING must not render as a quiet quarter and one whose watermark is
+// well behind `now` must not render its empty tail as thrift. Same three states as the
+// operator dashboard's daily run rollup.
+//
+// The lag is measured against `lastCompleteRollupDay(generatedAt)`, NOT against `generatedAt`
+// itself, because that is what `rolledUpThrough` counts in: the newest day the sweep could
+// possibly have finished by now. Measuring against the wall clock instead compares a day
+// boundary with an instant, so the very same healthy rollup drifts from ~0h of apparent lag
+// just after midnight to ~24h just before the next one, and any fixed threshold then turns the
+// hour the report happened to be opened into a health verdict. One whole missed day of slack
+// is deliberate: the sweep is a daily cron on one facade, so a single skipped firing is a
+// hiccup the next pass heals, while two in a row is the wedge worth naming.
+const rollupState = computed<'none' | 'stale' | 'current' | null>(() => {
+  const v = view.value
+  if (!v || v.source !== 'daily-rollup') return null
+  if (v.rolledUpThrough == null) return 'none'
+  return lastCompleteRollupDay(v.generatedAt) - v.rolledUpThrough > DAY_MS ? 'stale' : 'current'
 })
 
 const maxTrend = computed(() => maxOf(view.value?.trend.points ?? [], trendMagnitude))
@@ -246,6 +270,38 @@ watch(
               }}
             </p>
 
+            <!-- Which store answered, and how far it reaches. An un-materialised rollup and an
+                 account that spent nothing produce the same empty breakdown. -->
+            <p
+              v-if="rollupState === 'none'"
+              class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"
+              data-testid="reports-rollup-none"
+            >
+              {{ t('reports.rollup.none') }}
+            </p>
+            <p
+              v-else-if="rollupState === 'stale'"
+              class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"
+              data-testid="reports-rollup-stale"
+            >
+              {{
+                t('reports.rollup.stale', {
+                  date: d(new Date(view.rolledUpThrough ?? 0), 'short'),
+                })
+              }}
+            </p>
+            <p
+              v-else-if="rollupState === 'current'"
+              class="text-[11px] text-slate-500"
+              data-testid="reports-rollup-current"
+            >
+              {{
+                t('reports.rollup.current', {
+                  date: d(new Date(view.rolledUpThrough ?? 0), 'short'),
+                })
+              }}
+            </p>
+
             <!-- Headline totals. A stat tile, not a chart: these are single numbers. -->
             <section>
               <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -352,10 +408,11 @@ watch(
               </section>
             </div>
 
-            <!-- The TCO axes: what a repository and a ticket actually cost. Spend-only, like the
-                 pair above, because a run's activity is already sliced by the service that owns
-                 the repo and there is no second population to pair a ticket with. -->
-            <div class="grid gap-6 md:grid-cols-2">
+            <!-- The TCO axes: what a repository, a ticket and a single run actually cost.
+                 Spend-only, like the pair above, because a run's activity is already sliced by
+                 the service that owns the repo and there is no second population to pair a
+                 ticket with, and a run IS the unit activity counts. -->
+            <div class="grid gap-6 md:grid-cols-3">
               <section>
                 <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   {{ t('reports.spend.byRepo') }}
@@ -375,6 +432,17 @@ watch(
                   :rows="view.spend.byTicket"
                   :currency="currency"
                   test-id="reports-spend-ticket"
+                  :label-of="sliceLabel"
+                />
+              </section>
+              <section>
+                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {{ t('reports.spend.byRun') }}
+                </h2>
+                <ReportsSpendBreakdown
+                  :rows="view.spend.byRun"
+                  :currency="currency"
+                  test-id="reports-spend-run"
                   :label-of="sliceLabel"
                 />
               </section>

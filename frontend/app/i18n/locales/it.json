@@ -3649,6 +3649,11 @@
     "retry": "Riprova",
     "error": "Impossibile caricare i report.",
     "period": "Dal {from} al {to}",
+    "rollup": {
+      "none": "L'aggregazione permanente dei costi non ha ancora prodotto nulla: questa finestra è vuota per mancanza di dati, non di spesa.",
+      "stale": "L'aggregazione permanente dei costi arriva solo al {date}. Quello che viene dopo sono dati mancanti, non una settimana economica.",
+      "current": "Dall'aggregazione permanente dei costi, completa fino al {date}. L'attribuzione a repository, ticket ed esecuzione è quella registrata quando la spesa è avvenuta."
+    },
     "unattributed": "Non attribuito",
     "window": {
       "oneDay": "Ultime 24 ore",
@@ -3691,6 +3696,7 @@
       "byAgentKind": "Spesa per tipo di agente",
       "byRepo": "Spesa per repository",
       "byTicket": "Spesa per ticket",
+      "byRun": "Spesa per esecuzione",
       "heading": "Spesa",
       "empty": "Nessun utilizzo registrato in questo periodo.",
       "calls": "{count} chiamata | {count} chiamate",

@@ -1786,6 +1786,11 @@
     "retry": "Réessayer",
     "error": "Impossible de charger les rapports.",
     "period": "Du {from} au {to}",
+    "rollup": {
+      "none": "L'agrégation durable des coûts n'a encore rien produit : cette fenêtre est vide faute de données, pas faute de dépenses.",
+      "stale": "L'agrégation durable des coûts ne va que jusqu'au {date}. Ce qui suit correspond à des données manquantes, pas à une semaine bon marché.",
+      "current": "Issu de l'agrégation durable des coûts, complète jusqu'au {date}. L'attribution au dépôt, au ticket et à l'exécution est celle enregistrée au moment de la dépense."
+    },
     "unattributed": "Non attribué",
     "window": {
       "oneDay": "Dernières 24 heures",
@@ -1828,6 +1833,7 @@
       "byAgentKind": "Dépense par type d’agent",
       "byRepo": "Dépense par dépôt",
       "byTicket": "Dépense par ticket",
+      "byRun": "Dépense par exécution",
       "heading": "Dépense",
       "empty": "Aucune utilisation enregistrée sur cette période.",
       "calls": "{count} appel | {count} appels",
