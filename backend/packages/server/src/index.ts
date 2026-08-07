@@ -497,6 +497,9 @@ export {
   type InfraReachabilityEnvInput,
 } from './config/infraReachability.js'
 export { resolveUrlSafetyPolicy } from './config/url-safety.js'
+// The browser-facing host of each provider's configured instance, stamped onto every VCS
+// connection + connect option so the SPA links to the instance a workspace is actually bound to.
+export { resolveVcsWebUrls } from './config/vcsWebUrls.js'
 export {
   parseDetectionConventions,
   type DetectionConventionsConfig,

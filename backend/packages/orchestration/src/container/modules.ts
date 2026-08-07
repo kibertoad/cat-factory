@@ -190,6 +190,9 @@ export function createGitHubModule(
     clock: deps.clock,
     canCreateRepos: deps.canCreateRepos,
     workflowsGranted: deps.workflowsGranted,
+    // Where this connection's repositories can be opened in a browser, so the SPA links to the
+    // instance the workspace is actually bound to rather than hand-building a github.com URL.
+    webUrls: deps.vcsWebUrls,
   })
   const syncService = new GitHubSyncService({
     githubClient,

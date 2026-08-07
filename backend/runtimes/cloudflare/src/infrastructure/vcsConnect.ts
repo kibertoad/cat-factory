@@ -1,6 +1,6 @@
 import type { GitHubClient, Clock, GitHubInstallationRepository } from '@cat-factory/kernel'
 import type { AppConfig } from '@cat-factory/server'
-import { logger } from '@cat-factory/server'
+import { logger, resolveVcsWebUrls } from '@cat-factory/server'
 import { buildGitLabConnectClient, GitLabIdentityResolver } from '@cat-factory/gitlab'
 import { VcsPatConnectionService } from '@cat-factory/integrations'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
@@ -21,7 +21,7 @@ export function selectWorkerVcsConnectDeps(
   clock: Clock,
 ): { client: GitHubClient; service: VcsPatConnectionService } | undefined {
   const gitlab = config.gitlab
-  if (!gitlab?.enabled || !gitlab.encryptionKey) return undefined
+  if (!gitlab.enabled || !gitlab.encryptionKey) return undefined
   // One cipher seals (connect) and unseals (token source) under the same domain.
   const cipher = new WebCryptoSecretCipher({
     masterKeyBase64: gitlab.encryptionKey,
@@ -41,6 +41,9 @@ export function selectWorkerVcsConnectDeps(
     identityResolver: new GitLabIdentityResolver({ apiBase: gitlab.apiBase }),
     cipher,
     clock,
+    // Where this connection's projects can be opened in a browser, from the SAME resolver the
+    // App connect path and the connect-capability route read.
+    webUrls: resolveVcsWebUrls(config),
   })
   return { client, service }
 }

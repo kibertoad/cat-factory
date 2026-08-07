@@ -461,7 +461,6 @@
       "noPipelineBody": "Crea una en el constructor primero.",
       "pr": "PR",
       "prNumber": "PR n.º {number}",
-      "openPrOnGithub": "Abrir {pr} en GitHub",
       "readOutcome": "Resultado",
       "readOutcomeHint": "Lee qué cambió, con las pruebas que lo respaldan",
       "review": "Revisar",
@@ -479,7 +478,8 @@
       "startedToast": {
         "title": "Ejecución iniciada",
         "body": "Ejecutando \"{name}\"."
-      }
+      },
+      "openPrLink": "Abrir {pr}"
     },
     "dryRunToast": {
       "title": "Ejecución de prueba iniciada",
@@ -602,7 +602,7 @@
         "agent_backend_unconfigured": "No hay ningún backend de runner disponible para ejecutar agentes en contenedores. Registra un pool de runners autoalojado o habilita Cloudflare Containers en tu despliegue.",
         "run_not_retryable": "Solo se puede reintentar una ejecución fallida o finalizada. Esta ejecución sigue activa o está en un estado que no admite reintentos.",
         "no_pr_to_merge": "Esta ejecución aún no ha abierto una pull request, así que no hay nada que fusionar.",
-        "github_not_connected": "Conecta este espacio de trabajo con GitHub para que los agentes puedan clonar el repositorio, enviar cambios y abrir pull requests.",
+        "github_not_connected": "Conecta este espacio de trabajo a un host de repositorios para que los agentes puedan clonar el repositorio, enviar cambios y abrir pull requests.",
         "bootstrap_not_retryable": "Este trabajo de arranque no puede reintentarse en su estado actual (todavía se está ejecutando o ya finalizó correctamente).",
         "bootstrap_reference_missing": "El repositorio de referencia que adapta este arranque ya no es accesible. Se eliminó o se revocó su acceso. Elige otra referencia o crea desde cero.",
         "preset_unsatisfiable": "El modelo de un paso en línea no puede ejecutarse en línea en este despliegue (un modelo solo por suscripción sin soporte en línea). Elige un modelo o preset compatible con la ejecución en línea.",
@@ -4055,14 +4055,11 @@
       "loading": "Cargando…",
       "tabs": {
         "repos": "Repositorios",
-        "pulls": "Solicitudes de incorporación de cambios",
         "issues": "Incidencias"
       },
       "linkedToBoard": "Vinculado a este tablero",
       "manageRepos": "Gestionar repositorios",
-      "manageHint": "Elige los repositorios que este tablero debe seguir. La conexión de GitHub se comparte en toda la cuenta, y cada tablero vincula sus propios repositorios.",
       "loadingRepos": "Cargando repositorios…",
-      "noAvailableRepos": "La instalación aún no puede acceder a ningún repositorio.",
       "private": "privado",
       "saveSelection": "Guardar selección",
       "noLinkedRepos": "Aún no hay repositorios vinculados. Usa Gestionar repositorios para elegir qué repositorios sigue este tablero.",
@@ -4072,15 +4069,11 @@
       "fromSha": "Desde SHA",
       "commitShaPlaceholder": "sha del commit",
       "createBranch": "Crear rama",
-      "openPr": "Abrir PR",
       "repository": "Repositorio",
       "chooseRepository": "Elige un repositorio",
       "prTitle": "Título",
       "headBranch": "Rama de origen",
       "baseBranch": "Rama base",
-      "openPullRequest": "Abrir solicitud de incorporación de cambios",
-      "noPulls": "No hay solicitudes de incorporación de cambios sincronizadas.",
-      "mergePr": "Fusionar solicitud de incorporación de cambios",
       "noIssues": "No hay incidencias sincronizadas.",
       "prState": {
         "open": "abierta",
@@ -4094,9 +4087,7 @@
       "toast": {
         "resync": "Resincronización {status}",
         "reposUpdated": "Repositorios vinculados actualizados",
-        "branchCreated": "Rama {name} creada",
-        "prOpened": "Solicitud de incorporación de cambios abierta",
-        "prMerged": "PR #{number} fusionada"
+        "branchCreated": "Rama {name} creada"
       },
       "errors": {
         "disconnect": "No se pudo desconectar",
@@ -4105,7 +4096,6 @@
         "updateRepos": "No se pudieron actualizar los repositorios",
         "loadBranches": "No se pudieron cargar las ramas",
         "createBranch": "No se pudo crear la rama",
-        "openPr": "No se pudo abrir la solicitud de incorporación de cambios",
         "merge": "No se pudo fusionar"
       }
     },
@@ -4878,7 +4868,7 @@
       "suffixFixing": "· el corrector está atendiendo los comentarios…",
       "suffixFailing": "· comentarios de revisión por atender",
       "suffixAwaiting": "· a la espera de revisión",
-      "reviewPr": "Revisar la pull request en GitHub",
+      "reviewPr": "Revisar el pull request",
       "requestFixHeading": "Solicitar una corrección",
       "requestFixDescription": "Describe un cambio para que el corrector lo haga ahora en la rama del PR (además de los comentarios de revisión, que atiende automáticamente).",
       "requestFixPlaceholder": "p. ej. renombra el helper y añade una prueba unitaria para el caso de entrada vacía",
@@ -4892,12 +4882,12 @@
     },
     "conflicts": {
       "mergeability": "Fusionabilidad",
-      "viewPr": "Ver la pull request en GitHub"
+      "viewPr": "Ver el pull request"
     },
     "docQuality": {
       "findings": "Problemas del documento",
       "findingsFallback": "El documento superó las comprobaciones estructurales.",
-      "viewPr": "Ver la pull request en GitHub"
+      "viewPr": "Ver el pull request"
     },
     "attemptsHeading": "Intentos de {helper}",
     "attempt": "Intento {number}",
@@ -6907,7 +6897,33 @@
       },
       "toast": {
         "disconnected": "{provider} desconectado"
-      }
+      },
+      "pulls": {
+        "github": {
+          "tab": "Pull requests",
+          "open": "Abrir PR",
+          "openSubmit": "Abrir pull request",
+          "merge": "Fusionar este pull request",
+          "none": "No hay pull requests sincronizados.",
+          "opened": "Pull request abierto",
+          "mergedToast": "PR #{number} fusionado",
+          "openFailed": "No se pudo abrir el pull request"
+        },
+        "gitlab": {
+          "tab": "Merge requests",
+          "open": "Abrir MR",
+          "openSubmit": "Abrir merge request",
+          "merge": "Fusionar este merge request",
+          "none": "No hay merge requests sincronizados.",
+          "opened": "Merge request abierto",
+          "mergedToast": "MR !{number} fusionado",
+          "openFailed": "No se pudo abrir el merge request"
+        }
+      },
+      "manageHintApp": "Elige los repositorios que debe seguir este tablero. La instalación de la App se comparte en toda la cuenta y cada tablero enlaza los suyos.",
+      "manageHintToken": "Elige los repositorios que debe seguir este tablero. La lista es lo que alcanza el token conectado y cada tablero enlaza los suyos.",
+      "noAvailableReposApp": "La instalación de la App todavía no puede acceder a ningún repositorio.",
+      "noAvailableReposToken": "El token conectado todavía no alcanza ningún repositorio. Revisa su ámbito y tu acceso a ellos."
     },
     "connect": {
       "or": "o",

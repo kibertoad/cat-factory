@@ -461,7 +461,6 @@
       "noPipelineBody": "Önce oluşturucuda bir tane oluşturun.",
       "pr": "PR",
       "prNumber": "PR #{number}",
-      "openPrOnGithub": "{pr} öğesini GitHub'da aç",
       "readOutcome": "Sonuç",
       "readOutcomeHint": "Neyin değiştiğini, kanıtlarıyla birlikte okuyun",
       "review": "İncele",
@@ -479,7 +478,8 @@
       "startedToast": {
         "title": "Çalıştırma başladı",
         "body": "\"{name}\" çalıştırılıyor."
-      }
+      },
+      "openPrLink": "{pr} aç"
     },
     "dryRunToast": {
       "title": "Prova çalışması başladı",
@@ -602,7 +602,7 @@
         "agent_backend_unconfigured": "Konteyner aracılarını çalıştıracak bir runner arka ucu yok. Kendi barındırdığın bir runner havuzu kaydet veya dağıtımında Cloudflare Containers'ı etkinleştir.",
         "run_not_retryable": "Yalnızca başarısız olan veya tamamlanan bir çalıştırma yeniden denenebilir. Bu çalıştırma hâlâ etkin ya da yeniden denemeye uygun olmayan bir durumda.",
         "no_pr_to_merge": "Bu çalıştırma henüz bir pull request açmadı, bu yüzden birleştirilecek bir şey yok.",
-        "github_not_connected": "Aracıların depoyu klonlayabilmesi, değişiklikleri gönderebilmesi ve pull request açabilmesi için bu çalışma alanını GitHub'a bağla.",
+        "github_not_connected": "Ajanların depoyu klonlayabilmesi, değişiklikleri gönderebilmesi ve pull request açabilmesi için bu çalışma alanını bir depo sağlayıcısına bağlayın.",
         "bootstrap_not_retryable": "Bu bootstrap işi mevcut durumunda yeniden denenemez (hâlâ çalışıyor veya zaten başarıyla tamamlandı).",
         "bootstrap_reference_missing": "Bu bootstrap'in uyarladığı referans deposuna artık erişilemiyor. Silinmiş veya erişimi iptal edilmiş. Başka bir referans seç ya da sıfırdan oluştur.",
         "preset_unsatisfiable": "Bir satır içi adımın modeli bu dağıtımda satır içi çalışamaz (satır içi desteği olmayan yalnızca abonelikle kullanılan bir model). Satır içi çalışmayı destekleyen bir model veya hazır ayar seç.",
@@ -4055,14 +4055,11 @@
       "loading": "Yükleniyor…",
       "tabs": {
         "repos": "Depolar",
-        "pulls": "Pull request'ler",
         "issues": "Sorunlar"
       },
       "linkedToBoard": "Bu panoya bağlı",
       "manageRepos": "Depoları yönet",
-      "manageHint": "Bu panonun izlemesi gereken depoları seçin. GitHub bağlantısı hesap genelinde paylaşılır ve her pano kendi depolarını bağlar.",
       "loadingRepos": "Depolar yükleniyor…",
-      "noAvailableRepos": "Yükleme henüz herhangi bir depoya erişemiyor.",
       "private": "özel",
       "saveSelection": "Seçimi kaydet",
       "noLinkedRepos": "Henüz bağlı depo yok. Bu panonun hangi depoları takip ettiğini seçmek için Depoları yönet seçeneğini kullanın.",
@@ -4072,15 +4069,11 @@
       "fromSha": "SHA'dan",
       "commitShaPlaceholder": "commit sha",
       "createBranch": "Dal oluştur",
-      "openPr": "PR aç",
       "repository": "Depo",
       "chooseRepository": "Bir depo seçin",
       "prTitle": "Başlık",
       "headBranch": "Head dalı",
       "baseBranch": "Base dalı",
-      "openPullRequest": "Pull request aç",
-      "noPulls": "Senkronize edilmiş pull request yok.",
-      "mergePr": "Pull request'i birleştir",
       "noIssues": "Senkronize edilmiş sorun yok.",
       "prState": {
         "open": "açık",
@@ -4094,9 +4087,7 @@
       "toast": {
         "resync": "{status} yeniden senkronize et",
         "reposUpdated": "Bağlı depolar güncellendi",
-        "branchCreated": "{name} dalı oluşturuldu",
-        "prOpened": "Pull request açıldı",
-        "prMerged": "PR #{number} birleştirildi"
+        "branchCreated": "{name} dalı oluşturuldu"
       },
       "errors": {
         "disconnect": "Bağlantı kesilemedi",
@@ -4105,7 +4096,6 @@
         "updateRepos": "Depolar güncellenemedi",
         "loadBranches": "Dallar yüklenemedi",
         "createBranch": "Dal oluşturulamadı",
-        "openPr": "Pull request açılamadı",
         "merge": "Birleştirilemedi"
       }
     },
@@ -4878,7 +4868,7 @@
       "suffixFixing": "· düzeltici yorumları ele alıyor…",
       "suffixFailing": "· ele alınacak inceleme yorumları",
       "suffixAwaiting": "· inceleme bekleniyor",
-      "reviewPr": "Çekme isteğini GitHub'da incele",
+      "reviewPr": "Pull request’i incele",
       "requestFixHeading": "Bir düzeltme iste",
       "requestFixDescription": "Düzelticinin PR dalında şimdi yapması için bir değişiklik tanımlayın (otomatik olarak ele aldığı inceleme yorumlarına ek olarak).",
       "requestFixPlaceholder": "örn. yardımcıyı yeniden adlandır ve boş girdi durumu için bir birim testi ekle",
@@ -4892,12 +4882,12 @@
     },
     "conflicts": {
       "mergeability": "Birleştirilebilirlik",
-      "viewPr": "Çekme isteğini GitHub'da görüntüle"
+      "viewPr": "Pull request’i görüntüle"
     },
     "docQuality": {
       "findings": "Belge sorunları",
       "findingsFallback": "Belge yapısal denetimleri geçti.",
-      "viewPr": "Çekme isteğini GitHub'da görüntüle"
+      "viewPr": "Pull request’i görüntüle"
     },
     "attemptsHeading": "{helper} denemeleri",
     "attempt": "Deneme {number}",
@@ -6907,7 +6897,33 @@
       },
       "toast": {
         "disconnected": "{provider} bağlantısı kesildi"
-      }
+      },
+      "pulls": {
+        "github": {
+          "tab": "Pull request’ler",
+          "open": "PR aç",
+          "openSubmit": "Pull request aç",
+          "merge": "Bu pull request’i birleştir",
+          "none": "Eşitlenmiş pull request yok.",
+          "opened": "Pull request açıldı",
+          "mergedToast": "PR #{number} birleştirildi",
+          "openFailed": "Pull request açılamadı"
+        },
+        "gitlab": {
+          "tab": "Merge request’ler",
+          "open": "MR aç",
+          "openSubmit": "Merge request aç",
+          "merge": "Bu merge request’i birleştir",
+          "none": "Eşitlenmiş merge request yok.",
+          "opened": "Merge request açıldı",
+          "mergedToast": "MR !{number} birleştirildi",
+          "openFailed": "Merge request açılamadı"
+        }
+      },
+      "manageHintApp": "Bu panonun izleyeceği depoları seçin. App kurulumu hesap genelinde paylaşılır ve her pano kendi depolarını bağlar.",
+      "manageHintToken": "Bu panonun izleyeceği depoları seçin. Liste, bağlı belirtecin erişebildiklerini gösterir ve her pano kendi depolarını bağlar.",
+      "noAvailableReposApp": "App kurulumu henüz hiçbir depoya erişemiyor.",
+      "noAvailableReposToken": "Bağlı belirteç henüz hiçbir depoya ulaşamıyor. Kapsamını ve bunlara erişiminizi kontrol edin."
     },
     "connect": {
       "or": "veya",

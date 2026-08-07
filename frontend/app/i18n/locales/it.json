@@ -3050,7 +3050,6 @@
       },
       "pr": "PR",
       "prNumber": "PR #{number}",
-      "openPrOnGithub": "Apri {pr} su GitHub",
       "readOutcome": "Esito",
       "readOutcomeHint": "Leggi che cosa è cambiato, con le prove che lo sostengono",
       "review": "Rivedi",
@@ -3064,7 +3063,8 @@
       "module": "Modulo: {name}",
       "buildSteps": "Fasi di build",
       "reviewAndApprove": "Rivedi e approva",
-      "clickToViewStep": "Clicca per vedere i dettagli e l'output della fase"
+      "clickToViewStep": "Clicca per vedere i dettagli e l'output della fase",
+      "openPrLink": "Apri {pr}"
     },
     "dryRunToast": {
       "title": "Prova avviata",
@@ -3319,14 +3319,11 @@
       "loading": "Caricamento…",
       "tabs": {
         "repos": "Repository",
-        "pulls": "Pull request",
         "issues": "Issue"
       },
       "linkedToBoard": "Collegati a questa board",
       "manageRepos": "Gestisci i repository",
-      "manageHint": "Scegli i repository che questa board dovrebbe tracciare. La connessione GitHub è condivisa nell'account, e ogni board collega i propri repository.",
       "loadingRepos": "Caricamento dei repository…",
-      "noAvailableRepos": "L'installazione non può ancora accedere ad alcun repository.",
       "private": "privato",
       "saveSelection": "Salva selezione",
       "noLinkedRepos": "Nessun repository ancora collegato. Usa Gestisci i repository per scegliere quali repository questa board traccia.",
@@ -3336,15 +3333,11 @@
       "fromSha": "Da SHA",
       "commitShaPlaceholder": "sha del commit",
       "createBranch": "Crea branch",
-      "openPr": "Apri PR",
       "repository": "Repository",
       "chooseRepository": "Scegli un repository",
       "prTitle": "Titolo",
       "headBranch": "Branch head",
       "baseBranch": "Branch base",
-      "openPullRequest": "Apri pull request",
-      "noPulls": "Nessuna pull request sincronizzata.",
-      "mergePr": "Effettua il merge della pull request",
       "noIssues": "Nessuna issue sincronizzata.",
       "prState": {
         "open": "aperta",
@@ -3358,9 +3351,7 @@
       "toast": {
         "resync": "Risincronizzazione {status}",
         "reposUpdated": "Repository collegati aggiornati",
-        "branchCreated": "Branch {name} creato",
-        "prOpened": "Pull request aperta",
-        "prMerged": "PR #{number} sottoposta a merge"
+        "branchCreated": "Branch {name} creato"
       },
       "errors": {
         "disconnect": "Impossibile disconnettere",
@@ -3369,7 +3360,6 @@
         "updateRepos": "Impossibile aggiornare i repository",
         "loadBranches": "Impossibile caricare i branch",
         "createBranch": "Impossibile creare il branch",
-        "openPr": "Impossibile aprire la pull request",
         "merge": "Impossibile effettuare il merge"
       }
     },
@@ -5547,7 +5537,7 @@
         "agent_backend_unconfigured": "Nessun backend runner disponibile per eseguire gli agenti in container. Registra un pool di runner self-hosted oppure abilita Cloudflare Containers nel tuo deployment.",
         "run_not_retryable": "Solo un'esecuzione fallita o conclusa può essere ripetuta. Questa esecuzione è ancora attiva o in uno stato che non consente il nuovo tentativo.",
         "no_pr_to_merge": "Questa esecuzione non ha ancora aperto una pull request, quindi non c'è nulla da unire.",
-        "github_not_connected": "Collega questo workspace a GitHub così gli agenti possono clonare il repository, inviare modifiche e aprire pull request.",
+        "github_not_connected": "Collega questo workspace a un host di repository perché gli agent possano clonare il repository, inviare modifiche e aprire pull request.",
         "bootstrap_not_retryable": "Questo job di bootstrap non può essere ripetuto nello stato attuale (è ancora in esecuzione o già concluso con successo).",
         "bootstrap_reference_missing": "Il repository di riferimento adattato da questo bootstrap non è più raggiungibile. È stato eliminato o l'accesso è stato revocato. Scegli un altro riferimento oppure crea da zero.",
         "preset_unsatisfiable": "Il modello di un passaggio inline non può essere eseguito inline in questo deployment (un modello solo in abbonamento senza supporto inline). Scegli un modello o un preset compatibile con l'esecuzione inline.",
@@ -5737,7 +5727,7 @@
       "suffixFixing": "· il fixer sta gestendo i commenti…",
       "suffixFailing": "· commenti di revisione da gestire",
       "suffixAwaiting": "· in attesa di revisione",
-      "reviewPr": "Rivedi la pull request su GitHub",
+      "reviewPr": "Rivedi la pull request",
       "requestFixHeading": "Richiedi una correzione",
       "requestFixDescription": "Descrivi una modifica che il fixer deve apportare ora sul branch della PR (oltre a eventuali commenti di revisione, che gestisce automaticamente).",
       "requestFixPlaceholder": "es. rinomina l'helper e aggiungi un test unitario per il caso di input vuoto",
@@ -5751,12 +5741,12 @@
     },
     "conflicts": {
       "mergeability": "Possibilità di merge",
-      "viewPr": "Visualizza la pull request su GitHub"
+      "viewPr": "Vedi la pull request"
     },
     "docQuality": {
       "findings": "Problemi del documento",
       "findingsFallback": "Il documento ha superato i controlli strutturali.",
-      "viewPr": "Visualizza la pull request su GitHub"
+      "viewPr": "Vedi la pull request"
     },
     "attemptsHeading": "Tentativi di {helper}",
     "attempt": "Tentativo {number}",
@@ -6907,7 +6897,33 @@
       },
       "toast": {
         "disconnected": "{provider} disconnesso"
-      }
+      },
+      "pulls": {
+        "github": {
+          "tab": "Pull request",
+          "open": "Apri PR",
+          "openSubmit": "Apri pull request",
+          "merge": "Unisci questa pull request",
+          "none": "Nessuna pull request sincronizzata.",
+          "opened": "Pull request aperta",
+          "mergedToast": "PR #{number} unita",
+          "openFailed": "Impossibile aprire la pull request"
+        },
+        "gitlab": {
+          "tab": "Merge request",
+          "open": "Apri MR",
+          "openSubmit": "Apri merge request",
+          "merge": "Unisci questa merge request",
+          "none": "Nessuna merge request sincronizzata.",
+          "opened": "Merge request aperta",
+          "mergedToast": "MR !{number} unita",
+          "openFailed": "Impossibile aprire la merge request"
+        }
+      },
+      "manageHintApp": "Scegli i repository che questa board deve seguire. L’installazione della App è condivisa nell’account e ogni board collega i propri.",
+      "manageHintToken": "Scegli i repository che questa board deve seguire. L’elenco è ciò che il token collegato raggiunge e ogni board collega i propri.",
+      "noAvailableReposApp": "L’installazione della App non ha ancora accesso ad alcun repository.",
+      "noAvailableReposToken": "Il token collegato non raggiunge ancora alcun repository. Controlla il suo ambito e il tuo accesso."
     },
     "connect": {
       "or": "oppure",

@@ -88,7 +88,7 @@ function resolveConnection(
 ): VcsConnectionRef | null {
   if (provider === 'gitlab') {
     const gitlab = config.gitlab
-    if (!gitlab?.enabled) return null
+    if (!gitlab.enabled) return null
     return { provider: 'gitlab', connectionId: gitlab.connectionId }
   }
   // GitHub uses its dedicated `/github/webhooks` route; the neutral route does not serve it.
@@ -98,7 +98,7 @@ function resolveConnection(
 /** The deployment's configured webhook secret for a provider ('' when unset) — the signal for
  * the C2 "no secret configured" rejection sub-case. */
 function connectionSecret(config: AppConfig, provider: 'github' | 'gitlab'): string {
-  if (provider === 'gitlab') return config.gitlab?.webhookSecret ?? ''
+  if (provider === 'gitlab') return config.gitlab.webhookSecret
   // GitHub is not served by the neutral route (see resolveConnection).
   return ''
 }

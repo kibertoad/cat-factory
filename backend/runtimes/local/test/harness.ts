@@ -183,6 +183,15 @@ type ConformanceAppOpts = {
   testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
   taskSourceProviders?: CoreDependencies['taskSourceProviders']
   detectionConventions?: CoreDependencies['detectionConventions']
+  /**
+   * Env entries layered over {@link TEST_ENV}, for a spec that needs a different DEPLOYMENT
+   * SHAPE rather than a different dependency — a GitLab PAT instead of the default GitHub one,
+   * say. Set a key to `undefined` to unset it. It reaches both `buildLocalContainer` and
+   * `createApp`, because the config the container composes and the one the app reads must be
+   * the same one (a divergence here would make a spec pass against a deployment that cannot
+   * exist).
+   */
+  env?: NodeJS.ProcessEnv
 }
 
 /** Copy only the truthy-valued keys of `obj` — the object-literal form of `...(v ? { k: v } : {})`. */
@@ -335,9 +344,10 @@ export function makeConformanceApp(
 ): ConformanceApp {
   const recorder = new RecordingEventPublisher()
   const overrides = buildConformanceOverrides(recorder, agentOptions, opts)
+  const env: NodeJS.ProcessEnv = { ...TEST_ENV, ...opts?.env }
   const container = buildLocalContainer({
     db,
-    env: TEST_ENV,
+    env,
     overrides,
     // Local mode's PRODUCTION default model preset is Claude (subscription-only, no Cloudflare
     // flavour), but the conformance suite drives runs through the fake executor with only
@@ -356,7 +366,7 @@ export function makeConformanceApp(
     // matching suites) so buildLocalContainer forwards each into buildNodeContainer by reference.
     ...buildContainerRegistryOptions(opts),
   })
-  const app = createApp(container, TEST_ENV)
+  const app = createApp(container, env)
 
   async function call<T>(
     method: string,

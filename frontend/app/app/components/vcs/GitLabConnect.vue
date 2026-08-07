@@ -11,7 +11,7 @@
 // flattened into a generic toast.
 import SecretInput from '~/components/common/SecretInput.vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
-import { VCS_PROVIDER_TOKEN_URLS } from '~/utils/vcs'
+import { vcsTokenCreateUrl } from '~/utils/vcs'
 
 const { t } = useI18n()
 const github = useGitHubStore()
@@ -21,7 +21,13 @@ const pat = ref('')
 const connecting = ref(false)
 const error = ref<string | null>(null)
 
-const tokenUrl = VCS_PROVIDER_TOKEN_URLS.gitlab
+// The token page on the instance this deployment would connect, not on gitlab.com: a
+// self-managed GitLab's tokens are minted on its own host. The advertised host is null when the
+// deployment's API base does not name one, and only THIS link falls back to the public instance
+// (a wrong settings page costs a click; see `~/utils/vcs`).
+const tokenUrl = computed(() =>
+  vcsTokenCreateUrl('gitlab', github.connectOptions.find((o) => o.provider === 'gitlab')?.webUrl),
+)
 
 async function connect() {
   const token = pat.value.trim()

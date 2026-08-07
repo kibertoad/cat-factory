@@ -180,6 +180,20 @@ export const githubConnectionSchema = v.object({
    */
   method: vcsConnectMethodSchema,
   /**
+   * The browser-facing base URL of the instance this connection talks to (`https://github.com`,
+   * `https://gitlab.acme.dev`), or null when the deployment's API base does not name one.
+   *
+   * The SPA renders every repo / pull request / issue link from this: the host is a
+   * PER-CONNECTION fact (like {@link provider} and {@link method}), not a per-repo one, and
+   * before it was on the wire the SPA hand-built `https://github.com/{owner}/{name}`, which
+   * sent a self-managed GitLab workspace to whatever lives at that path on gitlab.com.
+   *
+   * Null is a real state, not a gap to paper over: a base behind a proxy path cannot be
+   * inverted, and a link to the wrong instance's namespace is worse than no link. Readers
+   * WITHHOLD the affordance rather than falling back to the provider's public host.
+   */
+  webUrl: v.nullable(v.string()),
+  /**
    * Whether cat-factory can create repositories under this account itself — true
    * only for accounts served by the privileged App tier (ADR 0005). When false,
    * the UI keeps the manual "create on GitHub" flow.

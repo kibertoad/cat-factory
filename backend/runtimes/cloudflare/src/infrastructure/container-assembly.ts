@@ -35,6 +35,7 @@ import {
   operationalMetrics,
   runWithInitiator,
   resolveWorkspaceCapabilities,
+  resolveVcsWebUrls,
   testEnvHasZeroConfigDefault,
   WebCryptoPasswordHasher,
   WebCryptoSecretCipher,
@@ -634,6 +635,10 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     initiativePresetRegistry,
     workRunner: selectWorkRunner(env),
     executionEventPublisher: eventPublisher,
+    // The browser-facing host of each provider's configured instance, stamped onto every VCS
+    // connection + connect option so the SPA links to the instance a workspace is bound to.
+    // Derived by the shared resolver both facades call, so they cannot name different hosts.
+    vcsWebUrls: resolveVcsWebUrls(config),
     spendPricing: config.spend,
     // Price metered dynamic OpenRouter models at their real per-model rate (not the
     // bare-`openrouter` fallback) using this workspace's enabled catalog.

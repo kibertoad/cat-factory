@@ -180,6 +180,7 @@ import type {
   TutorialProgressRepository,
   UserSettingsRepository,
   VcsProviderRegistry,
+  VcsWebUrls,
   WebhookVerifier,
   WorkRunner,
   TaskTypeSuppressionRepository,
@@ -621,6 +622,13 @@ export interface CoreDependencies {
    * 503, exactly like the App-based `github` module when unconfigured.
    */
   vcsConnectionService?: VcsPatConnectionService
+  /**
+   * The browser-facing base URL of each provider's configured instance, derived from its API
+   * base by the facade (`resolveVcsWebUrls`). Stamped onto every connection the SPA reads, which
+   * renders each repo / pull request / issue link from it; a provider absent here reports a null
+   * host and the SPA withholds those links rather than pointing at the public instance.
+   */
+  vcsWebUrls?: VcsWebUrls
   repoProjectionRepository?: RepoProjectionRepository
   branchProjectionRepository?: BranchProjectionRepository
   pullRequestProjectionRepository?: PullRequestProjectionRepository

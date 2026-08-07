@@ -39,6 +39,7 @@ import {
   logger,
   operationalMetrics,
   resolveUrlSafetyPolicy,
+  resolveVcsWebUrls,
   resolveWorkspaceCapabilities,
 } from '@cat-factory/server'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
@@ -562,6 +563,10 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     // the LLM proxy on. The verification report builds direct links to captured artifacts' bytes
     // from it; unset ⇒ the report lists artifact ids with no link, never a link to nowhere.
     apiBaseUrl: env.PUBLIC_URL?.trim() || undefined,
+    // The browser-facing host of each provider's configured instance, stamped onto every VCS
+    // connection + connect option so the SPA links to the instance a workspace is bound to.
+    // Derived by the shared resolver both facades call, so they cannot name different hosts.
+    vcsWebUrls: resolveVcsWebUrls(config),
     spendPricing: config.spend,
     // Price metered dynamic OpenRouter models at their real per-model rate (not the
     // bare-`openrouter` fallback) using this workspace's enabled catalog.

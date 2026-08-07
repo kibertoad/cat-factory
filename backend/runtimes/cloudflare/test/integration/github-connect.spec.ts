@@ -24,6 +24,11 @@ describe('github connect', () => {
     // repo-access grant) key off this, so the connect response and the read must agree
     // that this is an installation rather than a pasted token.
     expect(connected.body.method).toBe('app')
+    // Where this connection's repositories can be opened, derived by the facade from the API
+    // base it was configured with. The SPA renders every repo / PR / issue link from it, so a
+    // facade that forgot to wire the resolver silently strips those links on that runtime only
+    // — which is why the Node facade asserts the same thing against its own composition root.
+    expect(connected.body.webUrl).toBe('https://github.com')
 
     const read = await app.call<{ connection: GitHubConnection | null }>(
       'GET',
@@ -31,6 +36,7 @@ describe('github connect', () => {
     )
     expect(read.body.connection?.installationId).toBe(installationId)
     expect(read.body.connection?.method).toBe('app')
+    expect(read.body.connection?.webUrl).toBe('https://github.com')
   })
 
   it('discovers the App installations, annotating which are already bound', async () => {

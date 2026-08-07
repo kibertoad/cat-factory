@@ -461,7 +461,6 @@
       "noPipelineBody": "まずビルダーで作成してください。",
       "pr": "PR",
       "prNumber": "PR #{number}",
-      "openPrOnGithub": "{pr} を GitHub で開く",
       "readOutcome": "成果",
       "readOutcomeHint": "何が変わったかを、その根拠とともに読む",
       "review": "レビュー",
@@ -479,7 +478,8 @@
       "startedToast": {
         "title": "実行を開始しました",
         "body": "「{name}」を実行中です。"
-      }
+      },
+      "openPrLink": "{pr} を開く"
     },
     "dryRunToast": {
       "title": "ドライランを開始しました",
@@ -602,7 +602,7 @@
         "agent_backend_unconfigured": "コンテナエージェントを実行できるランナーバックエンドがありません。セルフホストのランナープールを登録するか、デプロイで Cloudflare Containers を有効にしてください。",
         "run_not_retryable": "再試行できるのは失敗または完了した実行のみです。この実行はまだ実行中か、再試行できない状態です。",
         "no_pr_to_merge": "この実行はまだプルリクエストを開いていないため、マージするものがありません。",
-        "github_not_connected": "エージェントがリポジトリのクローン、変更のプッシュ、プルリクエストのオープンを行えるように、このワークスペースを GitHub に接続してください。",
+        "github_not_connected": "エージェントがリポジトリをクローンし、変更をプッシュし、プルリクエストを作成できるように、このワークスペースをリポジトリホストに接続してください。",
         "bootstrap_not_retryable": "このブートストラップジョブは現在の状態では再試行できません（まだ実行中か、すでに正常に完了しています）。",
         "bootstrap_reference_missing": "このブートストラップが利用する参照リポジトリにアクセスできなくなりました。削除されたか、アクセス権が取り消されています。別の参照を選択するか、最初から作成してください。",
         "preset_unsatisfiable": "インラインステップのモデルは、このデプロイではインラインで実行できません（インライン非対応のサブスクリプション専用モデル）。インライン対応のモデルまたはプリセットを選択してください。",
@@ -4055,14 +4055,11 @@
       "loading": "読み込み中…",
       "tabs": {
         "repos": "リポジトリ",
-        "pulls": "プルリクエスト",
         "issues": "イシュー"
       },
       "linkedToBoard": "このボードにリンク済み",
       "manageRepos": "リポジトリを管理",
-      "manageHint": "このボードで追跡するリポジトリを選択します。GitHub 接続はアカウント全体で共有され、各ボードがそれぞれのリポジトリをリンクします。",
       "loadingRepos": "リポジトリを読み込み中…",
-      "noAvailableRepos": "このインストールはまだどのリポジトリにもアクセスできません。",
       "private": "プライベート",
       "saveSelection": "選択を保存",
       "noLinkedRepos": "リンクされたリポジトリはまだありません。このボードが追跡するリポジトリを選ぶには「リポジトリの管理」を使用してください。",
@@ -4072,15 +4069,11 @@
       "fromSha": "SHAから",
       "commitShaPlaceholder": "コミットsha",
       "createBranch": "ブランチを作成",
-      "openPr": "PRを開く",
       "repository": "リポジトリ",
       "chooseRepository": "リポジトリを選択",
       "prTitle": "タイトル",
       "headBranch": "ヘッドブランチ",
       "baseBranch": "ベースブランチ",
-      "openPullRequest": "プルリクエストを開く",
-      "noPulls": "同期されたプルリクエストはありません。",
-      "mergePr": "プルリクエストをマージ",
       "noIssues": "同期されたイシューはありません。",
       "prState": {
         "open": "オープン",
@@ -4094,9 +4087,7 @@
       "toast": {
         "resync": "{status}を再同期",
         "reposUpdated": "リンクされたリポジトリを更新しました",
-        "branchCreated": "ブランチ{name}を作成しました",
-        "prOpened": "プルリクエストを開きました",
-        "prMerged": "PR #{number}をマージしました"
+        "branchCreated": "ブランチ{name}を作成しました"
       },
       "errors": {
         "disconnect": "接続を解除できませんでした",
@@ -4105,7 +4096,6 @@
         "updateRepos": "リポジトリを更新できませんでした",
         "loadBranches": "ブランチを読み込めませんでした",
         "createBranch": "ブランチを作成できませんでした",
-        "openPr": "プルリクエストを開けませんでした",
         "merge": "マージできませんでした"
       }
     },
@@ -4878,7 +4868,7 @@
       "suffixFixing": "· fixer がコメントに対応中…",
       "suffixFailing": "· 対応すべきレビューコメントあり",
       "suffixAwaiting": "· レビュー待ち",
-      "reviewPr": "GitHub でプルリクエストをレビュー",
+      "reviewPr": "プルリクエストをレビュー",
       "requestFixHeading": "修正をリクエスト",
       "requestFixDescription": "fixer に今すぐ PR ブランチで行わせる変更を記述してください(自動的に対応されるレビューコメントに加えて)。",
       "requestFixPlaceholder": "例: ヘルパーの名前を変更し、空入力ケースのユニットテストを追加する",
@@ -4892,12 +4882,12 @@
     },
     "conflicts": {
       "mergeability": "マージ可能性",
-      "viewPr": "GitHub でプルリクエストを表示"
+      "viewPr": "プルリクエストを表示"
     },
     "docQuality": {
       "findings": "文書の問題",
       "findingsFallback": "文書は構造チェックに合格しました。",
-      "viewPr": "GitHub でプルリクエストを表示"
+      "viewPr": "プルリクエストを表示"
     },
     "attemptsHeading": "{helper} の試行",
     "attempt": "試行 {number}",
@@ -6907,7 +6897,33 @@
       },
       "toast": {
         "disconnected": "{provider} の接続を解除しました"
-      }
+      },
+      "pulls": {
+        "github": {
+          "tab": "プルリクエスト",
+          "open": "PR を作成",
+          "openSubmit": "プルリクエストを作成",
+          "merge": "このプルリクエストをマージ",
+          "none": "同期済みのプルリクエストはありません。",
+          "opened": "プルリクエストを作成しました",
+          "mergedToast": "PR #{number} をマージしました",
+          "openFailed": "プルリクエストを作成できませんでした"
+        },
+        "gitlab": {
+          "tab": "マージリクエスト",
+          "open": "MR を作成",
+          "openSubmit": "マージリクエストを作成",
+          "merge": "このマージリクエストをマージ",
+          "none": "同期済みのマージリクエストはありません。",
+          "opened": "マージリクエストを作成しました",
+          "mergedToast": "MR !{number} をマージしました",
+          "openFailed": "マージリクエストを作成できませんでした"
+        }
+      },
+      "manageHintApp": "このボードが追跡するリポジトリを選びます。App のインストールはアカウント全体で共有され、各ボードは自分のリポジトリを紐づけます。",
+      "manageHintToken": "このボードが追跡するリポジトリを選びます。一覧は接続中のトークンが到達できる範囲で、各ボードは自分のリポジトリを紐づけます。",
+      "noAvailableReposApp": "App のインストールはまだどのリポジトリにもアクセスできません。",
+      "noAvailableReposToken": "接続中のトークンはまだどのリポジトリにも到達できません。スコープと自分のアクセス権を確認してください。"
     },
     "connect": {
       "or": "または",
