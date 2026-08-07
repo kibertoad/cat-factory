@@ -30,7 +30,9 @@ role text; a copy on the definition would be dead the day the track's wording mo
 `userPromptSuffix` (append to the generic block-context prompt instead of replacing it — the
 `on-call` agent reasons over the regression evidence that prompt carries) and `mapStructuredResult`
 (the kind's own answer to which engine channel its JSON belongs in). `standardsDelivery` gains a
-`none` tier for a kind that judges rather than produces.
+`none` tier for a kind that judges rather than produces. A suffix is applied OUTSIDE the revision
+and injected-context wrappers, so a reply-shape instruction still ends the prompt on a revision
+re-run and on the inline (no-checkout) path.
 
 **Behaviour.** Parity was gated on the executor's existing per-kind snapshot suite, which drives
 every kind through the public `startJob` and diffs the whole body: every body is byte-identical bar

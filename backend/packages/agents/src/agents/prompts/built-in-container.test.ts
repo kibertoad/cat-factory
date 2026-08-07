@@ -89,6 +89,36 @@ describe('the on-call prompt', () => {
     expect(p).toContain('Block: T')
     expect(p).toContain('Pipeline: Ship')
   })
+
+  it('closes on the reply-shape instruction even on a revision re-run', () => {
+    // `userPromptSuffix` is the ADDITIVE form precisely so the kind's own closing instruction is
+    // the last thing the agent reads. `withRevision` appends too, so a suffix folded into the
+    // generic prompt body stopped being last the moment a human requested changes — leaving
+    // "respond with ONLY a JSON object" buried above the reviewer's feedback, on the one pass
+    // where the model has a competing instruction to follow.
+    const p = prompt(ON_CALL_AGENT_KIND, {
+      ...withPr(7, 'feat/y'),
+      revision: { previousProposal: 'the last assessment', feedback: 'check the cache layer' },
+    })
+    expect(p).toContain('check the cache layer')
+    expect(p.trimEnd().endsWith('"evidence":["…"]}.')).toBe(true)
+  })
+
+  it('closes on the reply-shape instruction after folded-in context files', () => {
+    // The inline path (a consensus panel, the inline executor) folds the run's context-file bodies
+    // in, which appends as well — and is the larger of the two appenders, so a suffix ahead of it
+    // is the further from where the model looks for its instruction.
+    const p = userPromptFor(
+      context(ON_CALL_AGENT_KIND, {
+        ...withPr(7, 'feat/y'),
+        injectedContextFiles: [{ path: '.cat-context/incident.md', content: 'p99 doubled' }],
+      }),
+      registry,
+      {},
+    )
+    expect(p).toContain('p99 doubled')
+    expect(p.trimEnd().endsWith('"evidence":["…"]}.')).toBe(true)
+  })
 })
 
 describe('the conflict-resolver prompt', () => {

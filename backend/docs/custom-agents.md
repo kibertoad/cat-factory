@@ -528,7 +528,9 @@ repo-writing agent ships with **zero** harness changes.
     rather than produces).
   - **A kind's own prompt can name a branch.** `userPrompt` receives an `AgentDispatchContext`
     (`baseBranch` / `workBranch` / `multiRepo`) on a container dispatch, and `userPromptSuffix`
-    appends to the generic block-context prompt instead of replacing it.
+    appends to the generic block-context prompt instead of replacing it. A suffix ENDS the
+    prompt: it is applied after the human's revision feedback and after any folded-in context
+    files, both of which append too, so a reply-shape instruction stays the last thing read.
   - **A built-in's structured reply reaches its engine channel through `mapStructuredResult`**
     on the definition (`mergeAssessment`, `testReport`, `spec`, …). A kind that declares none
     surfaces its parsed JSON on `result.custom`, which is what a custom kind's post-op reads.

@@ -13,22 +13,10 @@ import type {
 import type { AgentExecutor } from '@cat-factory/kernel'
 import {
   type AgentKindRegistry,
-  BLUEPRINTS_AGENT_KIND,
   defaultAgentKindRegistry,
   isCompanionKind,
   RALPH_AGENT_KIND,
-  SPEC_WRITER_AGENT_KIND,
 } from '@cat-factory/agents'
-
-// Migrated built-in structured kinds that have a DEDICATED id-keyed channel in this fake
-// (`blueprints` → `blueprintService`, `spec-writer` → `spec`). They are now real registrations
-// declaring a structured `agent` output, so the generic "structured kind → `custom`" branch must
-// NOT capture them when their configured option is unset — their id channel wins when set, and
-// the plain block-echo default (the pre-migration behaviour) applies otherwise.
-const MIGRATED_BUILTIN_STRUCTURED_KINDS = new Set<string>([
-  BLUEPRINTS_AGENT_KIND,
-  SPEC_WRITER_AGENT_KIND,
-])
 
 export interface FakeAgentOptions {
   /** Confidence reported on the final step (drives auto-merge vs PR). Default 1. */
@@ -571,12 +559,11 @@ export class FakeAgentExecutor implements AgentExecutor {
     // post-completion resolver faults the run (an absent plan is a hard error), so a test that
     // drives create-with-preset → auto-plan → spawn supplies the draft via `initiativePlan`.
     //
-    // This MUST precede the generic structured-output branch below: the planner is now a
-    // registered kind whose `agent` spec declares `output.kind === 'structured'`, so the generic
-    // branch would otherwise capture it and return a plain `custom` result. That mirrors the real
-    // executor, where `toRunResult` coerces the planner's `custom` into `initiativePlan` by id
-    // (see `containerAgentResult.ts`) BEFORE the default `custom` passthrough — the id-keyed
-    // channel wins over the generic one on both paths.
+    // The planner is a registered kind whose `agent` spec declares `output.kind === 'structured'`,
+    // so it is also one of the kinds the generic structured-output branch below stands down for:
+    // it declares a `mapStructuredResult`, which on the real path coerces its `custom` into
+    // `initiativePlan` rather than passing the raw JSON through. Its dedicated channel here is the
+    // fake's half of that mapping.
     if (context.agentKind === 'initiative-planner' && this.options.initiativePlan !== undefined) {
       return {
         output: `[initiative-planner] planned "${context.block.title}"`,
@@ -590,15 +577,17 @@ export class FakeAgentExecutor implements AgentExecutor {
     // surfaces — so the engine's registered post-op (render + commit via RepoFiles) runs
     // without a container. Detected from the registry, so the shared fake needs no per-kind id.
     //
-    // The migrated built-ins with a DEDICATED channel above (`blueprints`/`spec-writer`) are
-    // excluded: they are now real registrations declaring `output.kind === 'structured'`, so
-    // this generic branch would otherwise capture them when their configured option is unset and
-    // return a plain `custom` result — where a test drives the step purely to check requirement
-    // preservation and expects the ordinary block-echo output (the pre-migration behaviour). Their
-    // own id-keyed channels above win when their option IS set, mirroring `toRunResult`, which
-    // coerces their `custom` into `blueprintService`/`spec` by id BEFORE the default passthrough.
+    // Gated on the kind declaring NO `mapStructuredResult`, which is precisely the rule the real
+    // path applies: `coerceCustomResult` hands a kind's own mapper the reply when it has one and
+    // falls back to a raw `custom` only when it does not. A built-in with an engine channel
+    // (`merger` → `mergeAssessment`, `on-call` → `onCallAssessment`, the testers → `testReport`,
+    // `blueprints`/`spec-writer`/`initiative-planner` → theirs) declares that mapper, and the
+    // fake owns the matching channel itself — in dedicated arms below and in `runProducerKinds`.
+    // Reading the same declaration keeps the two in step with no hand-maintained id list: a
+    // built-in registering a structured output plus a mapper cannot silently start returning
+    // `custom: {ok:true}` here and shadow the arm that answers it.
     if (
-      !MIGRATED_BUILTIN_STRUCTURED_KINDS.has(context.agentKind) &&
+      this.agentKindRegistry.mapStructuredResult(context.agentKind) === undefined &&
       this.agentKindRegistry.agentStep(context.agentKind)?.output?.kind === 'structured'
     ) {
       return {

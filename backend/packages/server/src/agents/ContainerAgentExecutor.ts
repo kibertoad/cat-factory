@@ -1091,6 +1091,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         ),
       },
       this.deps,
+      this.agentKindRegistry,
     )
     // The prompt's linked-context summary index is rendered from the block's own docs/tasks: every
     // one of them was materialised, because `buildContextFiles` refuses a corpus that would not fit

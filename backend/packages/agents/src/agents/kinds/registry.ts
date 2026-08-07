@@ -79,6 +79,11 @@ export interface AgentKindDefinition {
    * and the wrapper sections (an initiative preset's steering, a reusable operation's
    * parameters) would be folded in twice. Ignored when {@link userPrompt} is set, which
    * replaces the generic prompt outright.
+   *
+   * It ends the prompt UNCONDITIONALLY: `userPromptFor` appends it after the revision feedback
+   * and the injected context files, both of which append too. That ordering is the field's whole
+   * value for a reply-shape instruction ("respond with ONLY a JSON object"), which a revision
+   * re-run would otherwise bury behind the reviewer's comments.
    */
   userPromptSuffix?: AgentUserPromptBuilder
   /**

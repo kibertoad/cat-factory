@@ -77,6 +77,7 @@ export function buildCommonBody(
     guardLimits?: unknown
   },
   deps: ContainerAgentExecutorDependencies,
+  agentKindRegistry: AgentKindRegistry,
 ): Record<string, unknown> {
   const { jobId, model, auth, ghToken, packageRegistries, repoSpec, contextFiles } = args
   const { skillsBody, mcpServers, generatorSecrets, guardLimits } = args
@@ -86,8 +87,14 @@ export function buildCommonBody(
   // base URL — so no extra credential and no extra public-URL dependency. Keyed off the kind's
   // DECLARED `ui` image (only a browser image captures anything); every other kind never sees
   // an upload seam.
+  //
+  // Read off the executor's NORMALIZED registry (passed in), never `deps.agentKindRegistry`,
+  // which is optional and undefined whenever the facade leaves the default registry implicit. The
+  // image the transport dispatches to is chosen from the normalized one, so reading the optional
+  // dep here would route a `tester-ui` job to the browser image with no upload seam and lose
+  // every screenshot it captured — silently, since a missing seam is not an error anywhere.
   const artifactUpload =
-    deps.agentKindRegistry?.agentStep(context.agentKind)?.image === 'ui' &&
+    agentKindRegistry.agentStep(context.agentKind)?.image === 'ui' &&
     typeof auth.proxyBaseUrl === 'string' &&
     typeof auth.sessionToken === 'string'
       ? { url: `${auth.proxyBaseUrl}/artifacts/ingest`, token: auth.sessionToken }
