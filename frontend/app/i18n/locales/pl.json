@@ -4220,8 +4220,12 @@
     "freshness": {
       "updated": "Zaktualizowano {when}",
       "refresh": "Sprawdź zmiany",
-      "unchanged": "Sprawdzono przed chwilą: jest aktualny",
-      "reimported": "Pobrano nowszą wersję",
+      "change": {
+        "unchanged": "Zgodny ze źródłem",
+        "reimported": "Pobrano nowszą wersję",
+        "revision_only": "Źródło się zmieniło, ale ta kopia pozostaje bez zmian"
+      },
+      "checkedAt": "Sprawdzono {when}",
       "revision": "Wersja {version}",
       "notApplicable": "Ta instalacja nie ma czytnika dla tego źródła, więc nie ma z czym porównać.",
       "gap": {

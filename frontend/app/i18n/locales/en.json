@@ -4357,8 +4357,12 @@
     "freshness": {
       "updated": "Updated {when}",
       "refresh": "Check for changes",
-      "unchanged": "Current as of just now",
-      "reimported": "Pulled the newer version",
+      "change": {
+        "unchanged": "Matches the source",
+        "reimported": "Pulled the newer version",
+        "revision_only": "The source moved on, but this copy is unchanged"
+      },
+      "checkedAt": "Checked {when}",
       "revision": "Revision {version}",
       "notApplicable": "This deployment has no reader for that source, so there is nothing to check against.",
       "gap": {

@@ -28,7 +28,7 @@ function doc(over: Partial<SourceDocument> = {}): SourceDocument {
   }
 }
 
-const CONFIRMED: DocumentFreshness = { status: 'confirmed', version: 'v2', reimported: true }
+const CONFIRMED: DocumentFreshness = { status: 'confirmed', version: 'v2', change: 'reimported' }
 
 /** The store reads `useApi()` off the auto-import, so each test stubs just what it calls. */
 function stubApi(over: Record<string, unknown>) {
@@ -75,9 +75,60 @@ describe('documents store: manual refresh', () => {
 
     await store.refresh('figma', 'file1:1-2')
 
-    expect(store.freshnessFor('figma', 'file1:1-2')).toEqual(CONFIRMED)
+    expect(store.freshnessFor('figma', 'file1:1-2')?.verdict).toEqual(CONFIRMED)
+    // Stamped with WHEN it was reached, because a verdict never expires: what keeps an hour-old
+    // confirmation from rendering as the present state of a page that has had an hour to move is
+    // that the moment travels with it.
+    expect(store.freshnessFor('figma', 'file1:1-2')?.checkedAt).toBeTypeOf('number')
     // Scoped to the document that was asked about, never to the source.
     expect(store.freshnessFor('figma', 'other:9-9')).toBeUndefined()
+  })
+
+  it('never shows one board\u2019s verdict against another board\u2019s row', async () => {
+    // The same Figma file can be imported into two boards, and `(source, externalId)` is identical
+    // in both, so a verdict keyed by that pair alone would render board A's "confirmed, revision
+    // v2" against a board B row nobody has ever checked. That breaks the "absent means nobody has
+    // asked" rule in the one direction nothing can notice, since the wrong answer looks like a
+    // right one.
+    stubApi({
+      refreshDocument: () => Promise.resolve({ document: doc(), freshness: CONFIRMED }),
+    })
+    const store = useDocumentsStore()
+    await store.refresh('figma', 'file1:1-2')
+    expect(store.freshnessFor('figma', 'file1:1-2')?.verdict).toEqual(CONFIRMED)
+
+    useWorkspaceStore().workspaceId = 'ws2'
+
+    expect(store.freshnessFor('figma', 'file1:1-2')).toBeUndefined()
+
+    // …and switching back does not lose it: the verdict stays true of the board it was asked on.
+    useWorkspaceStore().workspaceId = 'ws1'
+    expect(store.freshnessFor('figma', 'file1:1-2')?.verdict).toEqual(CONFIRMED)
+  })
+
+  it('does not merge a check that outlived a board switch into the new board\u2019s list', async () => {
+    // The list is the ACTIVE board's and is not keyed by board, so a row arriving after the switch
+    // would be a document from somewhere else appearing on a board that never imported it. The
+    // verdict is still filed, under the board that asked.
+    let resolve!: (v: unknown) => void
+    stubApi({
+      listDocuments: () => Promise.resolve([]),
+      refreshDocument: () =>
+        new Promise((res) => {
+          resolve = res
+        }),
+    })
+    const store = useDocumentsStore()
+    await store.loadDocuments()
+
+    const pending = store.refresh('figma', 'file1:1-2')
+    useWorkspaceStore().workspaceId = 'ws2'
+    resolve({ document: doc(), freshness: CONFIRMED })
+    await pending
+
+    expect(store.documents).toHaveLength(0)
+    useWorkspaceStore().workspaceId = 'ws1'
+    expect(store.freshnessFor('figma', 'file1:1-2')?.verdict).toEqual(CONFIRMED)
   })
 
   it('reports in-flight state per document, and clears it when the source refuses', async () => {

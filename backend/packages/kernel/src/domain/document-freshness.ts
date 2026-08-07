@@ -1,4 +1,8 @@
-import type { DocumentFreshness, DocumentFreshnessGap } from '@cat-factory/contracts'
+import type {
+  DocumentFreshness,
+  DocumentFreshnessChange,
+  DocumentFreshnessGap,
+} from '@cat-factory/contracts'
 
 // How current the body of a linked context document actually is at the moment a run reads it.
 //
@@ -21,7 +25,7 @@ import type { DocumentFreshness, DocumentFreshnessGap } from '@cat-factory/contr
 //   - a confirmed document STATES its revision rather than saying nothing, so "which revision did
 //     this run build against" is answerable from the materialised context after the fact.
 
-export type { DocumentFreshness, DocumentFreshnessGap }
+export type { DocumentFreshness, DocumentFreshnessChange, DocumentFreshnessGap }
 
 /** The human-readable half of a {@link DocumentFreshnessGap}, for the note the agent reads. */
 function describeGap(reason: DocumentFreshnessGap): string {

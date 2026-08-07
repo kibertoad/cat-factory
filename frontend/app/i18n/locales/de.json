@@ -3837,8 +3837,12 @@
     "freshness": {
       "updated": "Aktualisiert am {when}",
       "refresh": "Auf Änderungen prüfen",
-      "unchanged": "Soeben geprüft: aktuell",
-      "reimported": "Neuere Fassung übernommen",
+      "change": {
+        "unchanged": "Stimmt mit der Quelle überein",
+        "reimported": "Neuere Fassung übernommen",
+        "revision_only": "Die Quelle hat sich geändert, diese Kopie jedoch nicht"
+      },
+      "checkedAt": "Geprüft am {when}",
       "revision": "Revision {version}",
       "notApplicable": "Diese Installation hat keinen Leser für diese Quelle, es gibt also nichts zum Abgleichen.",
       "gap": {

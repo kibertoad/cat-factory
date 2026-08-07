@@ -61,6 +61,7 @@ export const useDocumentsStore = defineStore('documents', () => {
   // statement about a moment rather than a property of a row, and `useDocumentFreshness` owns why
   // the two must not merge.
   const { refresh, freshnessFor, isRefreshing } = useDocumentFreshness({
+    workspaceId: () => workspace.workspaceId,
     refresh: (source, externalId) =>
       api.refreshDocument(workspace.requireId(), { source, externalId }),
     onRefreshed: upsertDoc,

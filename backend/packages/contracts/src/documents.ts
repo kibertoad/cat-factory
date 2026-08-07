@@ -168,6 +168,31 @@ export const documentFreshnessGapSchema = v.picklist([
 export type DocumentFreshnessGap = v.InferOutput<typeof documentFreshnessGapSchema>
 
 /**
+ * What a confirmed check found had changed in the board's copy. None of the three is a degradation
+ * (all leave the reader on the live revision), but they answer "did my edit land" differently and
+ * the middle one is the reason this is not a boolean:
+ *
+ * - `unchanged`: the source is still at the revision the stored copy was taken from. Nothing was
+ *   fetched and nothing was written.
+ * - `reimported`: the source had moved on, and the copy an agent reads was rewritten from it.
+ * - `revision_only`: the source's revision token moved, but nothing an agent reads differs. This is
+ *   the NORMAL case for a whole-file source with a per-file version: a Figma file's version bumps on
+ *   any edit anywhere in it, including frames a given document does not cover. Folding it into
+ *   `reimported` would tell a person their design was pulled in when their own edit may not have
+ *   been touched at all, and it is exactly the false confidence this vocabulary exists to remove.
+ *
+ * A closed picklist rather than a boolean for the same reason `DocumentFreshnessGap` is: the SPA
+ * keys translated copy off these members, and adding one has to fail a build rather than render an
+ * empty line.
+ */
+export const documentFreshnessChangeSchema = v.picklist([
+  'unchanged',
+  'reimported',
+  'revision_only',
+])
+export type DocumentFreshnessChange = v.InferOutput<typeof documentFreshnessChangeSchema>
+
+/**
  * What a refresh attempt concluded about one linked document.
  *
  * A source-backed document is a PROJECTION of a page someone else keeps editing, so "is the copy
@@ -178,15 +203,13 @@ export type DocumentFreshnessGap = v.InferOutput<typeof documentFreshnessGapSche
  */
 export const documentFreshnessSchema = v.variant('status', [
   /**
-   * Checked against the source. `reimported` records whether the check found the page had moved
-   * and pulled the new body, or found it unchanged: both leave the reader on the live revision, so
-   * neither is a degradation, but the distinction tells "the design is being iterated on" from
-   * "nothing has changed since import".
+   * Checked against the source, which is now known to be the revision named here. What the check
+   * had to DO to get there is {@link DocumentFreshnessChange}.
    */
   v.object({
     status: v.literal('confirmed'),
     version: v.string(),
-    reimported: v.boolean(),
+    change: documentFreshnessChangeSchema,
   }),
   /**
    * Nothing to confirm against: an `upload` body the platform was handed directly, or a source

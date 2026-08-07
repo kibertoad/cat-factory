@@ -4220,8 +4220,12 @@
     "freshness": {
       "updated": "{when} tarihinde güncellendi",
       "refresh": "Değişiklikleri denetle",
-      "unchanged": "Az önce denetlendi: güncel",
-      "reimported": "Daha yeni sürüm alındı",
+      "change": {
+        "unchanged": "Kaynakla eşleşiyor",
+        "reimported": "Daha yeni sürüm alındı",
+        "revision_only": "Kaynak değişti, ancak bu kopya aynı kaldı"
+      },
+      "checkedAt": "{when} tarihinde denetlendi",
       "revision": "Revizyon {version}",
       "notApplicable": "Bu kurulumda o kaynak için okuyucu yok, dolayısıyla karşılaştırılacak bir şey de yok.",
       "gap": {

@@ -16,6 +16,7 @@ export type {
   DocumentSourceDescriptor,
   DocumentConnection,
   DocumentFreshness,
+  DocumentFreshnessChange,
   DocumentFreshnessGap,
   RefreshedDocumentView,
   SourceDocument,

@@ -4220,8 +4220,12 @@
     "freshness": {
       "updated": "{when} に更新",
       "refresh": "変更を確認",
-      "unchanged": "たった今確認しました: 最新です",
-      "reimported": "新しい版を取り込みました",
+      "change": {
+        "unchanged": "ソースと一致しています",
+        "reimported": "新しい版を取り込みました",
+        "revision_only": "ソースは更新されましたが、この写しは変わっていません"
+      },
+      "checkedAt": "{when} に確認",
       "revision": "リビジョン {version}",
       "notApplicable": "このデプロイにはそのソースのリーダーがないため、照合できるものがありません。",
       "gap": {

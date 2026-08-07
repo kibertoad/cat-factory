@@ -116,7 +116,9 @@ function service(
 beforeEach(() => {
   counted = []
   probeVersion = vi.fn(async () => 'v1')
-  reimport = vi.fn(async () => record({ body: '## Checkout (revised)', sourceVersion: 'v2' }))
+  reimport = vi.fn(async () =>
+    record({ body: '## Checkout (revised)', contentHash: 'h2', sourceVersion: 'v2' }),
+  )
   requireDocument = vi.fn(async () => record())
   resolveConnections = vi.fn(
     async (_ws: string, sources: readonly DocumentSourceKind[]) =>
@@ -129,7 +131,7 @@ describe('LinkedDocumentRefreshService', () => {
   it('confirms without re-importing when the probed version matches the stored one', async () => {
     const [out] = await service({ versionCache: passThroughCache() }).refresh(WS, [record()])
 
-    expect(out?.freshness).toEqual({ status: 'confirmed', version: 'v1', reimported: false })
+    expect(out?.freshness).toEqual({ status: 'confirmed', version: 'v1', change: 'unchanged' })
     // The whole point of storing the version: an unchanged design costs one cheap probe and no
     // download, which is what makes this affordable on EVERY step dispatch.
     expect(reimport).not.toHaveBeenCalled()
@@ -142,7 +144,7 @@ describe('LinkedDocumentRefreshService', () => {
     const [out] = await service({ versionCache: passThroughCache() }).refresh(WS, [record()])
 
     expect(reimport).toHaveBeenCalledWith(WS, 'figma', 'file1:1-2', { fallbackVersion: 'v2' })
-    expect(out?.freshness).toEqual({ status: 'confirmed', version: 'v2', reimported: true })
+    expect(out?.freshness).toEqual({ status: 'confirmed', version: 'v2', change: 'reimported' })
     // The refreshed body, not the stored one — the reason the whole feature exists.
     expect(out?.record.body).toBe('## Checkout (revised)')
   })
@@ -155,7 +157,7 @@ describe('LinkedDocumentRefreshService', () => {
     ])
 
     expect(reimport).toHaveBeenCalledTimes(1)
-    expect(out?.freshness).toEqual({ status: 'confirmed', version: 'v2', reimported: true })
+    expect(out?.freshness).toEqual({ status: 'confirmed', version: 'v2', change: 'reimported' })
   })
 
   it('CONVERGES on a provider whose fetch exposes no version but whose probe does', async () => {
@@ -168,20 +170,27 @@ describe('LinkedDocumentRefreshService', () => {
     probeVersion.mockResolvedValue('sha-abc')
     reimport = vi.fn(async (_ws, _source, _id, opts?: { fallbackVersion?: string }) => {
       stored.version = opts?.fallbackVersion ?? null
-      return record({ sourceVersion: stored.version })
+      // A distinct hash keeps this test about CONVERGENCE: a fetch that also rewrote the body is
+      // the case where the recorded token has to stick, and the `revision_only` classification has
+      // its own test below rather than riding along here.
+      return record({ contentHash: 'h2', sourceVersion: stored.version })
     })
 
     const svc = service({ versionCache: passThroughCache() })
     const [first] = await svc.refresh(WS, [record({ sourceVersion: null })])
     const [second] = await svc.refresh(WS, [record({ sourceVersion: stored.version })])
 
-    expect(first?.freshness).toEqual({ status: 'confirmed', version: 'sha-abc', reimported: true })
+    expect(first?.freshness).toEqual({
+      status: 'confirmed',
+      version: 'sha-abc',
+      change: 'reimported',
+    })
     // The second dispatch is the assertion that matters: nothing re-downloaded, and no false
     // `unversioned` note about a source that exposes a token.
     expect(second?.freshness).toEqual({
       status: 'confirmed',
       version: 'sha-abc',
-      reimported: false,
+      change: 'unchanged',
     })
     expect(reimport).toHaveBeenCalledTimes(1)
   })
@@ -353,7 +362,7 @@ describe('LinkedDocumentRefreshService', () => {
     // stale body with the fresh revision is exactly the lie the feature exists to prevent.
     probeVersion.mockResolvedValue('v2')
     requireDocument.mockResolvedValue(
-      record({ body: '## Checkout (revised)', sourceVersion: 'v2' }),
+      record({ body: '## Checkout (revised)', contentHash: 'h2', sourceVersion: 'v2' }),
     )
     const cache = memoCache()
     const svc = service({ versionCache: cache })
@@ -364,7 +373,21 @@ describe('LinkedDocumentRefreshService', () => {
     expect(reimport).toHaveBeenCalledTimes(1)
     expect(requireDocument).toHaveBeenCalledWith(WS, 'figma', 'file1:1-2')
     expect(second?.record.body).toBe('## Checkout (revised)')
-    expect(second?.freshness).toEqual({ status: 'confirmed', version: 'v2', reimported: true })
+    expect(second?.freshness).toEqual({ status: 'confirmed', version: 'v2', change: 'reimported' })
+  })
+
+  it('calls a moved TOKEN with an unmoved body revision_only, never a re-import', async () => {
+    // The normal case for a whole-file source: a Figma file's version bumps on any edit anywhere in
+    // it, so a document covering one frame routinely sees a newer revision with not one byte a
+    // reader sees different. Collapsing that into `reimported` would tell a person their own edit
+    // had landed when it may be in a frame this document does not cover. It is the same class of lie as
+    // calling a stale copy confirmed, pointing the other way.
+    probeVersion.mockResolvedValue('v2')
+    reimport.mockResolvedValue(record({ sourceVersion: 'v2' }))
+
+    const [out] = await service({ versionCache: passThroughCache() }).refresh(WS, [record()])
+
+    expect(out?.freshness).toEqual({ status: 'confirmed', version: 'v2', change: 'revision_only' })
   })
 
   it('returns one verdict per input, in input order', async () => {
@@ -391,7 +414,59 @@ describe('LinkedDocumentRefreshService', () => {
       // confirmed current. The same row under a `confirmed` and an `unconfirmed` verdict is
       // identical bytes and opposite facts.
       expect(out.document.title).toBe('Checkout v2')
-      expect(out.freshness).toEqual({ status: 'confirmed', version: 'v2', reimported: true })
+      expect(out.freshness).toEqual({ status: 'confirmed', version: 'v2', change: 'reimported' })
+    })
+
+    it('does NOT count a person\u2019s gap against the dispatch-time staleness rate', async () => {
+      // `document.freshness_gap` measures runs reading a copy the source has moved past. A click
+      // hands no body to any agent, and the commonest reason to click is that the source was down a
+      // moment ago, so counting it would let one person retrying an outage move a deployment-wide
+      // rate as far as they have patience for, in the direction that reads as a worsening fleet.
+      probeVersion.mockRejectedValue(new Error('figma 500'))
+      const svc = service({ versionCache: memoCache() })
+
+      const manual = await svc.refreshNow(WS, 'figma', 'file1:1-2')
+
+      expect(manual.freshness).toEqual({ status: 'unconfirmed', reason: 'source_unreachable' })
+      expect(counted).toEqual([])
+    })
+
+    it('leaves NO failure behind in the cache the dispatches read', async () => {
+      // The asymmetry that makes the manual entry point safe. `refreshNow` drops the cached entry
+      // before it asks; if it then re-filled it with whatever the click found, a person retrying
+      // past a flaky source would install an `unreachable` verdict every dispatch reads for the
+      // rest of the TTL window, degrading the run path with a failure no dispatch ever observed,
+      // and renewing it with each further click.
+      probeVersion.mockRejectedValueOnce(new Error('figma 429'))
+      const svc = service({ versionCache: memoCache() })
+
+      const manual = await svc.refreshNow(WS, 'figma', 'file1:1-2')
+      const [dispatched] = await svc.refresh(WS, [record()])
+
+      expect(manual.freshness).toEqual({ status: 'unconfirmed', reason: 'source_unreachable' })
+      // The dispatch asked for itself rather than inheriting the click's failure.
+      expect(dispatched?.freshness).toEqual({
+        status: 'confirmed',
+        version: 'v1',
+        change: 'unchanged',
+      })
+      expect(probeVersion).toHaveBeenCalledTimes(2)
+    })
+
+    it('leaves a SUCCESS behind, so the dispatches after it inherit the answer', async () => {
+      // The other half: dropping the entry is about not SERVING a stale answer to the click, not
+      // about withholding the fresh one from the run path that follows it.
+      const svc = service({ versionCache: memoCache() })
+
+      await svc.refreshNow(WS, 'figma', 'file1:1-2')
+      const [dispatched] = await svc.refresh(WS, [record()])
+
+      expect(probeVersion).toHaveBeenCalledTimes(1)
+      expect(dispatched?.freshness).toEqual({
+        status: 'confirmed',
+        version: 'v1',
+        change: 'unchanged',
+      })
     })
 
     it('re-asks a source the cached verdict says is unreachable', async () => {
@@ -405,7 +480,7 @@ describe('LinkedDocumentRefreshService', () => {
       const manual = await svc.refreshNow(WS, 'figma', 'file1:1-2')
 
       expect(dispatched?.freshness).toEqual({ status: 'unconfirmed', reason: 'source_unreachable' })
-      expect(manual.freshness).toEqual({ status: 'confirmed', version: 'v1', reimported: false })
+      expect(manual.freshness).toEqual({ status: 'confirmed', version: 'v1', change: 'unchanged' })
       expect(probeVersion).toHaveBeenCalledTimes(2)
     })
   })

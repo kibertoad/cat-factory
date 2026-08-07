@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { isConnectableSource } from '@cat-factory/contracts'
-import type { DocumentFreshnessGap, SourceDocument } from '~/types/domain'
+import type { SourceDocument } from '~/types/domain'
+import { CHANGE_KEYS, GAP_KEYS } from '~/components/documents/DocumentSyncState.logic'
 
 // When a stored document was last written, and a way to ask its source whether that is still the
 // current revision.
@@ -23,6 +24,13 @@ import type { DocumentFreshnessGap, SourceDocument } from '~/types/domain'
 // So an absent verdict means "nobody has asked", never "unknown", and a row that was refreshed and
 // found UNCHANGED still shows its old `syncedAt` beside a confirmation: the body genuinely was not
 // rewritten, and moving the stamp would claim a write that never happened.
+//
+// BOTH are rendered WITH THEIR TIME, and that is not decoration. Each is a claim about a moment in
+// the history of a page someone else is still editing, and a moment stated without its time is read
+// as "now": a confirmation reached an hour ago would otherwise keep showing a green check under
+// copy that says the copy is current, which is the precise false confidence this whole surface
+// exists to remove. Hence the `long` datetime format (`short` is date-only, so two writes on the
+// same day are indistinguishable) on the one side and the verdict's own `checkedAt` on the other.
 const props = defineProps<{ doc: SourceDocument }>()
 
 const { t, d } = useI18n()
@@ -39,19 +47,6 @@ const askable = computed(() => (isConnectableSource(props.doc.source) ? props.do
 const verdict = computed(() => documents.freshnessFor(props.doc.source, props.doc.externalId))
 const busy = computed(() => documents.isRefreshing(props.doc.source, props.doc.externalId))
 
-/**
- * One FULL sentence per gap rather than a shared "not confirmed: {reason}" frame, because each of
- * these asks for a different fix and a clause spliced into a sentence is what breaks first in a
- * language whose word order is not English's. Keyed verbatim by the contracts vocabulary, so
- * adding a gap fails to compile here rather than rendering an empty line.
- */
-const GAP_KEYS = {
-  not_connected: 'documents.freshness.gap.not_connected',
-  credentials_unreadable: 'documents.freshness.gap.credentials_unreadable',
-  unversioned: 'documents.freshness.gap.unversioned',
-  source_unreachable: 'documents.freshness.gap.source_unreachable',
-} as const satisfies Record<DocumentFreshnessGap, string>
-
 interface Stated {
   tone: 'ok' | 'warn' | 'muted'
   icon: string
@@ -62,19 +57,16 @@ interface Stated {
 
 /** What the last check concluded, or null when nobody has asked yet. */
 const stated = computed<Stated | null>(() => {
-  const value = verdict.value
+  const value = verdict.value?.verdict
   if (!value) return null
   switch (value.status) {
     case 'confirmed':
-      // `reimported` is not a degradation either way, but the distinction is the whole answer to
-      // "did my edit land": one says the board just pulled it, the other that there was nothing to
-      // pull.
+      // None of the three is a degradation, but they are the whole answer to "did my edit land",
+      // and each answers it differently.
       return {
         tone: 'ok',
         icon: 'i-lucide-check',
-        text: value.reimported
-          ? t('documents.freshness.reimported')
-          : t('documents.freshness.unchanged'),
+        text: t(CHANGE_KEYS[value.change]),
         revision: value.version,
       }
     case 'unconfirmed':
@@ -103,6 +95,40 @@ function unstatable(_value: never): null {
   return null
 }
 
+/**
+ * The verdict's own moment, always rendered beside it.
+ *
+ * A verdict does not expire and is deliberately not made to: expiring it would invent an "unknown"
+ * where the rule is that only "nobody has asked" exists. What makes that safe is stating WHEN, so a
+ * check reached an hour ago reads as an hour-old check instead of as the current state of a page
+ * that has had an hour to move.
+ */
+const checkedAt = computed(() => {
+  const at = verdict.value?.checkedAt
+  if (at === undefined) return ''
+  return t('documents.freshness.checkedAt', { when: d(new Date(at), 'long') })
+})
+
+/**
+ * The verdict's detail line: which revision was confirmed, and when it was confirmed.
+ *
+ * In the hover title rather than the row, which is an 11px line already carrying a stamp, a
+ * sentence and a button. That placement is only safe because the visible sentences state what the
+ * check FOUND and never when it ran ("Matches the source", not "current as of just now"): a claim
+ * about the present tense would still be a claim about the present tense with the timestamp hidden
+ * one layer down.
+ */
+const detail = computed(() =>
+  [
+    stated.value?.revision
+      ? t('documents.freshness.revision', { version: stated.value.revision })
+      : '',
+    checkedAt.value,
+  ]
+    .filter(Boolean)
+    .join(' · '),
+)
+
 const TONE_CLASS: Record<Stated['tone'], string> = {
   ok: 'text-emerald-400',
   warn: 'text-amber-400',
@@ -128,17 +154,13 @@ async function refresh() {
 <template>
   <div class="flex items-center gap-1.5 text-[11px] text-slate-500">
     <span class="truncate">
-      {{ t('documents.freshness.updated', { when: d(new Date(props.doc.syncedAt), 'short') }) }}
+      {{ t('documents.freshness.updated', { when: d(new Date(props.doc.syncedAt), 'long') }) }}
     </span>
     <span
       v-if="stated"
       class="flex min-w-0 items-center gap-1"
       :class="TONE_CLASS[stated.tone]"
-      :title="
-        stated.revision
-          ? t('documents.freshness.revision', { version: stated.revision })
-          : undefined
-      "
+      :title="detail || undefined"
     >
       <UIcon :name="stated.icon" class="h-3 w-3 shrink-0" />
       <span class="truncate">{{ stated.text }}</span>

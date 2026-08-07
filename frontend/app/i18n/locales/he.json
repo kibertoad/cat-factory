@@ -4220,8 +4220,12 @@
     "freshness": {
       "updated": "עודכן ב-{when}",
       "refresh": "בדיקת שינויים",
-      "unchanged": "נבדק כרגע: מעודכן",
-      "reimported": "נמשכה גרסה חדשה יותר",
+      "change": {
+        "unchanged": "תואם למקור",
+        "reimported": "נמשכה גרסה חדשה יותר",
+        "revision_only": "המקור השתנה, אך העותק הזה לא"
+      },
+      "checkedAt": "נבדק ב-{when}",
       "revision": "גרסה {version}",
       "notApplicable": "לפריסה הזו אין קורא למקור הזה, ולכן אין מול מה להשוות.",
       "gap": {

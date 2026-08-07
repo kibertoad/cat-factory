@@ -4220,8 +4220,12 @@
     "freshness": {
       "updated": "Mis à jour le {when}",
       "refresh": "Vérifier les changements",
-      "unchanged": "Vérifié à l'instant : à jour",
-      "reimported": "Version plus récente récupérée",
+      "change": {
+        "unchanged": "Correspond à la source",
+        "reimported": "Version plus récente récupérée",
+        "revision_only": "La source a évolué, mais cette copie est inchangée"
+      },
+      "checkedAt": "Vérifié le {when}",
       "revision": "Révision {version}",
       "notApplicable": "Ce déploiement n'a pas de lecteur pour cette source, il n'y a donc rien à comparer.",
       "gap": {

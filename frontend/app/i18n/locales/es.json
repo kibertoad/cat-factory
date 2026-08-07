@@ -4220,8 +4220,12 @@
     "freshness": {
       "updated": "Actualizado el {when}",
       "refresh": "Buscar cambios",
-      "unchanged": "Comprobado ahora mismo: está al día",
-      "reimported": "Se ha traído la versión más reciente",
+      "change": {
+        "unchanged": "Coincide con la fuente",
+        "reimported": "Se ha traído la versión más reciente",
+        "revision_only": "La fuente ha cambiado, pero esta copia sigue igual"
+      },
+      "checkedAt": "Comprobado el {when}",
       "revision": "Revisión {version}",
       "notApplicable": "Esta instalación no tiene lector para esa fuente, así que no hay nada con lo que comparar.",
       "gap": {
