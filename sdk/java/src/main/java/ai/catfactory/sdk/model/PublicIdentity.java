@@ -11,6 +11,7 @@ import org.jspecify.annotations.Nullable;
  * The {@code PublicIdentity} wire model.
  * @param accountId the {@code accountId} field.
  * @param createdAt the {@code createdAt} field.
+ * @param externalIdentity Always present; {@code null} when the server has no value for it.
  * @param keyId the {@code keyId} field.
  * @param label the {@code label} field.
  * @param scope the {@code scope} field.
@@ -21,6 +22,9 @@ public record PublicIdentity(
     @JsonProperty("accountId") String accountId,
 
     @JsonProperty("createdAt") Double createdAt,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("externalIdentity") @Nullable String externalIdentity,
 
     @JsonProperty("keyId") String keyId,
 
@@ -45,6 +49,7 @@ public record PublicIdentity(
     public static final class Builder {
         private @Nullable String accountId;
         private @Nullable Double createdAt;
+        private @Nullable String externalIdentity;
         private @Nullable String keyId;
         private @Nullable String label;
         private @Nullable PublicApiKeyScope scope;
@@ -59,6 +64,12 @@ public record PublicIdentity(
         /** Set {@code createdAt}. */
         public Builder createdAt(@Nullable Double createdAt) {
             this.createdAt = createdAt;
+            return this;
+        }
+
+        /** Set {@code externalIdentity}. */
+        public Builder externalIdentity(@Nullable String externalIdentity) {
+            this.externalIdentity = externalIdentity;
             return this;
         }
 
@@ -88,7 +99,7 @@ public record PublicIdentity(
 
         /** Build the {@link PublicIdentity}. */
         public PublicIdentity build() {
-            return new PublicIdentity(accountId, createdAt, keyId, label, scope, workspaceId);
+            return new PublicIdentity(accountId, createdAt, externalIdentity, keyId, label, scope, workspaceId);
         }
     }
 }

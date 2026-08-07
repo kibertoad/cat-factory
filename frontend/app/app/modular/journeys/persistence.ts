@@ -5,7 +5,7 @@ import { createPiniaJourneyPersistence } from '@modular-vue/journeys'
 
 /**
  * Pinia-backed journey persistence (slice 3 of the modular-vue adoption —
- * docs/initiatives/modular-vue-adoption.md).
+ * backend/docs/adr/0049-modular-vue-adoption.md).
  *
  * A journey's `persistence` adapter is what makes `runtime.start()` mean
  * RESUME: it probes `keyFor(input)` for an in-flight serialized instance and

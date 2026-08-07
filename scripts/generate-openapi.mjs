@@ -189,7 +189,16 @@ const API_PREFIX = '/api/v1'
 // its own `toolServers` CLI record and the webhook collection. Two long-lived branches losing this
 // race independently is the case for reading the note at the top of the block rather than treating
 // it as history.
-const API_VERSION = '1.29.0'
+//
+// 1.30.0, not 1.29.0: `POST /api/v1/keys` accepts an opaque `externalIdentity`, the identity a
+// provisioner is minting a key FOR, echoed on the key resource, on `GET /api/v1/me`, and on the
+// run projections as the identity the run was started for. Additive on every axis: one optional
+// request field, one nullable response field, and `null` is what every run and key that predates
+// it correctly reports. This branch first claimed 1.29.0, which main then published for the
+// dispatch-`failure` diagnostics above while the branch was in flight: the SECOND number this one
+// has held, and it surfaced here rather than on the VERSION line, which auto-merged clean to the
+// number main had just used. Re-read this line after any merge rather than trusting that.
+const API_VERSION = '1.30.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

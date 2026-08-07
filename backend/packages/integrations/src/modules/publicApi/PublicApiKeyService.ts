@@ -59,6 +59,13 @@ export interface PublicApiKeyAuth {
    * self-description costs the request nothing beyond the lookup it was already doing.
    */
   label: string
+  /**
+   * Who the key acts for on its provisioner's side, or `null` when it was minted with no
+   * identity. Carried on the auth result for the same reason `label` is (the row is already in
+   * hand) and consumed by two callers: `GET /api/v1/me`, and every run start, which PINS it onto
+   * the run so the run keeps naming the identity that started it after the key is gone.
+   */
+  externalIdentity: string | null
   createdAt: number
 }
 
@@ -104,6 +111,11 @@ export class PublicApiKeyService {
       createdByUserId?: string | null
       /** Set only for a headless mint: the key that authenticated `POST /api/v1/keys`. */
       createdByKeyId?: string | null
+      /**
+       * Who the caller says this key acts for, on their own side. Opaque: stored, echoed and
+       * pinned onto the runs it starts, never interpreted (see {@link PublicApiKeyRecord}).
+       */
+      externalIdentity?: string | null
     },
     label: string,
     scope: PublicApiScope = 'write',
@@ -132,6 +144,7 @@ export class PublicApiKeyService {
       secretHash: await this.hash(secret),
       createdByUserId: owner.createdByUserId ?? null,
       createdByKeyId: owner.createdByKeyId ?? null,
+      externalIdentity: owner.externalIdentity ?? null,
       createdAt: this.deps.clock.now(),
       lastUsedAt: null,
       revokedAt: null,
@@ -188,6 +201,7 @@ export class PublicApiKeyService {
       workspaceId: record.workspaceId,
       scope: record.scope,
       label: record.label,
+      externalIdentity: record.externalIdentity,
       createdAt: record.createdAt,
     }
   }

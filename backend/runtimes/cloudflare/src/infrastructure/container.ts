@@ -278,7 +278,7 @@ export function selectMergeLifecycleDeps(
   // realizing the seam the kernel port documents, with no change to the engine call sites that
   // raise notifications. The webhook channel is what a HEADLESS caller relies on: it has no
   // in-app inbox and no browser WebSocket, so a parked run would otherwise reach it only by
-  // polling (see docs/initiatives/headless-clarification-loop.md).
+  // polling (see backend/docs/adr/0047-headless-clarification-loop.md).
   const channels: NotificationChannel[] = []
   const publisher = selectEventPublisher(env, db)
   if (publisher) channels.push(new InAppNotificationChannel(publisher))

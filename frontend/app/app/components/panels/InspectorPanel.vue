@@ -524,7 +524,7 @@ const showOriginalDescription = ref(false)
            `Block | null` is rejected at compile time. `unknown` is the real
            runtime contract; `as any` is the minimal unblock until the binding
            types the prop explicitly (filed upstream — see the slice-4 residuals
-           in docs/initiatives/modular-vue-slice4-upstream-zones.md). -->
+           in backend/docs/adr/0049-modular-vue-adoption.md). -->
       <PanelsOutlet
         :group="inspectorPanels"
         :subject="(block ?? null) as any"

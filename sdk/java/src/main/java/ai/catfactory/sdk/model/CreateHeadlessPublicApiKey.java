@@ -10,11 +10,15 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code CreateHeadlessPublicApiKey} wire model.
+ * @param externalIdentity May be absent entirely. Length 1..200.
  * @param label Length 1..120.
  * @param scope May be absent entirely.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record CreateHeadlessPublicApiKey(
+    /** May be absent entirely. Length 1..200. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("externalIdentity") @Nullable String externalIdentity,
+
     /** Length 1..120. */
     @JsonProperty("label") String label,
 
@@ -34,8 +38,15 @@ public record CreateHeadlessPublicApiKey(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
+        private @Nullable String externalIdentity;
         private @Nullable String label;
         private @Nullable CreateHeadlessPublicApiKeyScope scope;
+
+        /** Set {@code externalIdentity}. */
+        public Builder externalIdentity(@Nullable String externalIdentity) {
+            this.externalIdentity = externalIdentity;
+            return this;
+        }
 
         /** Set {@code label}. */
         public Builder label(@Nullable String label) {
@@ -51,7 +62,7 @@ public record CreateHeadlessPublicApiKey(
 
         /** Build the {@link CreateHeadlessPublicApiKey}. */
         public CreateHeadlessPublicApiKey build() {
-            return new CreateHeadlessPublicApiKey(label, scope);
+            return new CreateHeadlessPublicApiKey(externalIdentity, label, scope);
         }
     }
 }

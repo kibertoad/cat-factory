@@ -12,7 +12,7 @@ Supersedes the `tracker-webhook-intake` initiative tracker, whose committed scop
 
 The task-source layer was complete on the write side and on the POLLING read side (see the
 "Requirements review flow" and bug-triage notes in [`CLAUDE.md`](../../../CLAUDE.md), plus
-[`headless-clarification-loop.md`](../../../docs/initiatives/headless-clarification-loop.md)). Two
+[ADR 0047](./0047-headless-clarification-loop.md)). Two
 asymmetries remained:
 
 1. **Intake was pull-only.** An issue entered the system when a recurring `bug-intake` schedule
@@ -36,7 +36,7 @@ and a triaged ticket can instead run as its own task. Replays and duplicate deli
 apply once.
 
 This work COMPLETED slice 2b of
-[`headless-clarification-loop.md`](../../../docs/initiatives/headless-clarification-loop.md): that
+[ADR 0047](./0047-headless-clarification-loop.md): that
 tracker's D4 (reply grammar), D5 (per-provider ingest), D6 (loop policy) and D7 (threat model) are
 the design of record for the reply half and are not restated here, only refined where reality
 differed.

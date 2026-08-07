@@ -13,6 +13,7 @@ function key(over: Partial<PublicApiKey> = {}): PublicApiKey {
     scope: 'write',
     createdByUserId: null,
     createdByKeyId: null,
+    externalIdentity: null,
     createdAt: 1,
     lastUsedAt: null,
     revokedAt: null,

@@ -11,7 +11,7 @@ import { platformFailingRunSchema } from './observability.js'
 // `CompositeNotificationChannel`, so nothing about how notifications are RAISED changes. The
 // motivating case is the parked-decision loop: a public-API run that parks on a requirements
 // review should reach its caller by push rather than by polling (see
-// `docs/initiatives/headless-clarification-loop.md`, D3).
+// `backend/docs/adr/0047-headless-clarification-loop.md`, D3).
 //
 // The endpoint's `secret` is write-only on the wire: it is stored encrypted and never read back,
 // exactly like the other outbound credentials. Deliveries are signed with it so a receiver can

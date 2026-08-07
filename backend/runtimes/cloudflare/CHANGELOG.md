@@ -1,5 +1,188 @@
 # @cat-factory/worker
 
+## 0.174.0
+
+### Minor Changes
+
+- 17687a1: Let a headless provisioner say who a key acts for, and carry that onto the runs the key starts
+
+  `POST /api/v1/keys` accepts an optional `externalIdentity`: an opaque string naming who, on the
+  CALLER's side, the key acts for. An integration that mints one key per person (the Cloudflare OS
+  gatekeeper of `docs/initiatives/cloudflare-os-gatekeeper.md` is the motivating consumer) could
+  already get real per-user attribution, but only by keeping its own keyId-to-person table and
+  joining it against every run it read. The field removes that table: the identity is echoed on the
+  key resource, on `GET /api/v1/me`, and on both run projections (`publicRun`, `publicJob`) as the
+  identity the run was started for.
+
+  It is opaque in the strongest sense: stored verbatim, never parsed, never resolved against a user,
+  never an authorization input. What a key may do is still its `scope`; what a run may do is still
+  its pinned role and mode. Bounded at 200 characters and refused if it carries control characters,
+  because it is echoed onto surfaces that later render it.
+
+  The run's copy is PINNED at admission rather than resolved from the key on read, which is the
+  decision worth reviewing. Revoking a per-user key is exactly what an integration does when someone
+  leaves, and that must not erase who a finished run was for; pinning also keeps a page of runs from
+  becoming a page of credential reads, and matches what the run already does with `initiatedByRole`
+  and `mode`. It rides `agent_runs.detail` through the shared mappers, so a retry carries it forward
+  (same work, same requester, whoever pressed retry) and the conformance case asserts it survives
+  both the store round-trip and the key's revocation on each facade.
+
+  A run's identity is not readable by every key. A key that carries an `externalIdentity` of its own
+  sees the value only on the runs started for that identity; a key with none (the provisioner, or
+  one a member minted in the app) sees every run's. Without the rule, the one-key-per-person
+  deployment this feature is built for would hand each person's key the roster of everyone else, and
+  the value is routinely an email. The run projections carry `externalIdentityWithheld` beside the
+  value so a withholding is STATED: `null` already means "this run names nobody", and reporting a
+  mapping the platform holds as one it never had is the failure the flag exists to prevent.
+
+  Two smaller calls: the identity is never inherited from the provisioning key, since a provisioner
+  mints for many identities and naming itself would attribute every run to the integration; and the
+  field is offered on the headless mint only, because the session-authed create already records
+  `createdByUserId`, an account the platform can resolve.
+
+  The validation splits along what can be PUBLISHED. The shipped `pattern` refuses the C0 controls,
+  DEL and the C1 controls, spelled with `\xHH` escapes because that is the one syntax ECMA-262, RE2,
+  PCRE, Python and Java all read: the `\uHHHH` spelling this started with is a parse error in RE2 and
+  PCRE, so it would have broken the Go client outright rather than rejected a value. U+2028 and
+  U+2029 have no portable spelling at all and are refused off the schema, which makes the published
+  pattern a necessary condition rather than a sufficient one.
+
+  Additive on the public surface: one optional request field, one nullable field plus its
+  withheld flag on the run projections, `null` being the correct answer for every key and run that
+  predates it. New nullable `external_identity` column on both stores (D1 0086, Drizzle). OpenAPI
+  `info.version` goes to 1.30.0 (1.29.0 was published by the dispatch-diagnostics change while this
+  branch was in flight).
+
+### Patch Changes
+
+- Updated dependencies [17687a1]
+  - @cat-factory/contracts@0.270.0
+  - @cat-factory/kernel@0.268.0
+  - @cat-factory/integrations@0.146.0
+  - @cat-factory/orchestration@0.236.0
+  - @cat-factory/server@0.248.0
+  - @cat-factory/agents@0.117.8
+  - @cat-factory/consensus@0.14.54
+  - @cat-factory/eks@0.1.266
+  - @cat-factory/gates@0.9.34
+  - @cat-factory/gitlab@0.18.1
+  - @cat-factory/observability-otel@0.18.1
+  - @cat-factory/prompt-fragments@1.0.18
+  - @cat-factory/spend@0.15.36
+  - @cat-factory/caching@0.18.9
+  - @cat-factory/observability-langfuse@0.10.38
+  - @cat-factory/provider-cloudflare@0.7.416
+
+## 0.173.0
+
+### Minor Changes
+
+- 01bb6d2: Keep the cause of a failed dispatch and a dead durable driver, instead of discarding it at the
+  moment it becomes the only thing anyone wants.
+
+  Three sites had the same shape: the record of a failure was written by the thing that only exists
+  once the failure did not happen.
+
+  A run's `diagnostics.lastDispatch` was stamped from the job HANDLE, which `startJob` returns only
+  after a container has accepted the job. So the two failure classes the block exists to explain, a
+  container that never started and a preflight rejection like "GitHub not connected", were exactly
+  the ones that recorded nothing. The block is now opened before the dispatch from what is already
+  known and refined afterwards by what only the accepted dispatch resolved, and it carries the
+  dispatch's own failure verdict, which the step also holds but loses to the next retry. Inline
+  steps stamp one too, naming their backend `inline`: dispatching nowhere is why they stamped
+  nothing, and the result was a mixed pipeline reporting whatever container step ran last as where
+  the run was when it died.
+
+  The Cloudflare stale-run sweeper answered "the instance was lost, re-create it" for both of its
+  swallowed error paths, so a Workflows API outage read as every stale run losing its instance at
+  once and re-drove the fleet with no log line to say why. The lookup now returns a probe over four
+  states, and the fourth is the point: an instance it could not classify produces no action at all.
+  Every action the sweep has is destructive against a run that is actually fine, so one unclassified
+  tick costs a run some recovery latency where a guess costs it its container. Two states were also
+  reaching the finalize branch by fall-through, Workflows' own `unknown` status and an instance
+  finishing its work before pausing, and a terminal instance's own error, destructured by nobody,
+  now reaches the stop reason that until now said only that some driver ended without finalizing
+  something. An unconfigured workflow binding says so once per isolate rather than reporting the
+  kind as healthy forever.
+
+  The local pooled container poll now passes `postMortem`, the same argument the per-run poll always
+  did, so a pool member that dies mid-run leaves its exit state and log tail behind rather than the
+  bare eviction sentinel.
+
+  Additive on the public API (`info.version` 1.29.0): `diagnostics.lastDispatch` grows an optional
+  `failure` object and `executionBackend` one further value. What does change for a consumer is the
+  population, since a pure-inline run used to answer no diagnostics at all and now answers a block.
+  A new `sweep.run_state_unknown` operational counter reports what the sweeper could not classify,
+  which is the one signal that separates a blind sweeper from a healthy one.
+
+- 2b74bd0: Let a mothership open the org credentials a mothership-mode node holds no key for
+
+  Mothership mode splits the encryption keys on purpose: a laptop seals its own agent and model
+  credentials under a local key, and the mothership's `ENCRYPTION_KEY` never travels. That split is
+  what made every sealed-blob repository safe to serve over the persistence RPC, and it is also what
+  left those blobs unreadable on the node. A row a hosted teammate wrote is sealed under the
+  mothership's key, so a mothership-mode node could save an infrastructure connection and never
+  provision with it, save a Datadog connection and never probe with it, and four earlier slices parked
+  a surface rather than ship it broken.
+
+  `POST /internal/secrets/unseal` and `POST /internal/secrets/seal` close that. The node names the
+  ROW, never the ciphertext: it posts a source from a closed table plus the row's identifiers, and the
+  mothership re-reads the authoritative row from its own store, binds the workspace to an account
+  exactly as the persistence RPC does, and decrypts under its own key. A compromised node token can
+  therefore only ask for a value it could already have read had it held the key, in an account it can
+  already reach, which is what keeps this from being a decryption oracle. The seal direction matters
+  just as much: a mothership-mode node provisions environments, and a row it sealed locally would be
+  unopenable by the mothership's own teardown with nothing saying so until a reclaim failed.
+
+  Consumers reach it through one kernel seam, `createOrgSecretCipher`. With no delegate wired (every
+  hosted deployment, and local mode over its own Postgres) it is a pass-through to the facade's own
+  cipher, so nothing changes there.
+
+  With provisioning writes now safe to persist, `environmentRegistryRepository.insert`/`update` join
+  the persistence allow-list, and so does `softDelete`, the tombstone half every re-provision and
+  every reclaim runs. A mothership-mode node therefore provisions, polls and tears down environments
+  for real, and the ephemeral-environment self-test runs end to end. Provisioning and teardown take
+  the delegate together rather than separately: teardown opens the very provision fields provisioning
+  sealed, so a node holding one and not the other could stand infrastructure up and never reclaim it.
+
+  A mothership-mode node may not itself answer the delegation endpoints. They are wired only where a
+  facade holds its own main database, because a node's `ENCRYPTION_KEY` is the local key that seals
+  its own agent credentials, and sealing an org row under it is the split this change removes.
+
+  Behaviour change worth knowing about on an existing mothership-mode node: rows it previously sealed
+  under its LOCAL key are no longer opened locally. Pre-1.0 internals break rather than grow a
+  compatibility path, so re-save an affected environment or observability connection; the key-drift
+  sweep reports them.
+
+  Deliberately still off, and stated in the tracker: the document/task source connections (their
+  repositories decrypt inside, so there is no sealed field for a row-addressed unseal to name), the
+  mothership-side Slack residual, and the sealed-blob consumers a mothership-mode node does not
+  currently drive. Each is a table entry plus service threading on the same pattern, not a new
+  mechanism.
+
+### Patch Changes
+
+- Updated dependencies [01bb6d2]
+- Updated dependencies [f0154ce]
+- Updated dependencies [eac67c5]
+- Updated dependencies [2b74bd0]
+  - @cat-factory/contracts@0.269.0
+  - @cat-factory/kernel@0.267.0
+  - @cat-factory/orchestration@0.235.0
+  - @cat-factory/observability-otel@0.18.0
+  - @cat-factory/server@0.247.0
+  - @cat-factory/integrations@0.145.0
+  - @cat-factory/gitlab@0.18.0
+  - @cat-factory/agents@0.117.7
+  - @cat-factory/consensus@0.14.53
+  - @cat-factory/eks@0.1.265
+  - @cat-factory/gates@0.9.33
+  - @cat-factory/prompt-fragments@1.0.17
+  - @cat-factory/spend@0.15.35
+  - @cat-factory/caching@0.18.8
+  - @cat-factory/observability-langfuse@0.10.37
+  - @cat-factory/provider-cloudflare@0.7.415
+
 ## 0.172.0
 
 ### Minor Changes

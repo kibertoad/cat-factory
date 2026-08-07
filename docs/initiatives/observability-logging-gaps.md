@@ -44,9 +44,9 @@ and cross-references where a fix belongs to them:
 - [`stuck-run-audit.md`](./stuck-run-audit.md): owns runs that wedge or get wrongly killed
   (F4/F6/F8/F9/F11–F13 still open). This doc owns the _visibility_ of those events: whether a
   re-drive, an eviction, or a stall is countable and diagnosable after the fact.
-- [`platform-operator-observability.md`](./platform-operator-observability.md): owns the
-  operator dashboard + `platform_health` alert (slices 4b/6/7 still open). This doc records the
-  signals that projection structurally lacks.
+- [ADR 0048](../../backend/docs/adr/0048-platform-operator-observability.md): owns the
+  operator dashboard + `platform_health` alert (shipped; that initiative is closed). This doc
+  records the signals that projection structurally lacks.
 - `docs/internal/code-quality-observability-extensibility-review-2026-07.md` §7 independently flagged four
   of these gaps (no HTTP spans, no operational metrics, uncounted best-effort drops, no client
   error reporting); this doc turns them into an actionable plan.
@@ -1235,5 +1235,5 @@ causes, both of which record a call the store then cannot be asked for.
   auth headers or query strings verbatim.
 - **Don't double-track**: message _content_ improvements discovered during this work go to
   `error-message-coverage.md`; wedge-behaviour fixes to `stuck-run-audit.md`; dashboard/alert
-  slices to `platform-operator-observability.md`. Update the other tracker rather than widening a
-  slice here.
+  work to the surfaces [ADR 0048](../../backend/docs/adr/0048-platform-operator-observability.md)
+  describes. Update the other document rather than widening a slice here.

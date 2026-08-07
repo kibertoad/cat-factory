@@ -11,6 +11,8 @@ import org.jspecify.annotations.Nullable;
  * The {@code PublicJob} wire model.
  * @param createdAt the {@code createdAt} field.
  * @param error Always present; {@code null} when the server has no value for it.
+ * @param externalIdentity Always present; {@code null} when the server has no value for it.
+ * @param externalIdentityWithheld the {@code externalIdentityWithheld} field.
  * @param jobId the {@code jobId} field.
  * @param pipelineId the {@code pipelineId} field.
  * @param result Always present; {@code null} when the server has no value for it.
@@ -22,6 +24,11 @@ public record PublicJob(
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("error") @Nullable RunError error,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("externalIdentity") @Nullable String externalIdentity,
+
+    @JsonProperty("externalIdentityWithheld") Boolean externalIdentityWithheld,
 
     @JsonProperty("jobId") String jobId,
 
@@ -47,6 +54,8 @@ public record PublicJob(
     public static final class Builder {
         private @Nullable Double createdAt;
         private @Nullable RunError error;
+        private @Nullable String externalIdentity;
+        private @Nullable Boolean externalIdentityWithheld;
         private @Nullable String jobId;
         private @Nullable String pipelineId;
         private @Nullable PublicJobResult result;
@@ -61,6 +70,18 @@ public record PublicJob(
         /** Set {@code error}. */
         public Builder error(@Nullable RunError error) {
             this.error = error;
+            return this;
+        }
+
+        /** Set {@code externalIdentity}. */
+        public Builder externalIdentity(@Nullable String externalIdentity) {
+            this.externalIdentity = externalIdentity;
+            return this;
+        }
+
+        /** Set {@code externalIdentityWithheld}. */
+        public Builder externalIdentityWithheld(@Nullable Boolean externalIdentityWithheld) {
+            this.externalIdentityWithheld = externalIdentityWithheld;
             return this;
         }
 
@@ -90,7 +111,7 @@ public record PublicJob(
 
         /** Build the {@link PublicJob}. */
         public PublicJob build() {
-            return new PublicJob(createdAt, error, jobId, pipelineId, result, status);
+            return new PublicJob(createdAt, error, externalIdentity, externalIdentityWithheld, jobId, pipelineId, result, status);
         }
     }
 }

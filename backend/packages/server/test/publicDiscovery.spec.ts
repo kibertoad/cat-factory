@@ -19,6 +19,18 @@ const KEYS: Record<string, Awaited<ReturnType<PublicApiKeyService['authenticate'
     workspaceId: 'ws_1',
     scope: 'read',
     label: 'CI pipeline',
+    externalIdentity: null,
+    createdAt: 1_700_000_000_000,
+  },
+  // A key a provisioner minted FOR someone: `/me` is how the subsystem holding it discovers which
+  // identity it is running as, rather than being told twice by whoever handed it over.
+  'per-user.secret': {
+    keyId: 'pak_2',
+    accountId: 'acc_1',
+    workspaceId: 'ws_1',
+    scope: 'read',
+    label: 'os user',
+    externalIdentity: 'os-user:42',
     createdAt: 1_700_000_000_000,
   },
 }
@@ -55,8 +67,15 @@ describe('GET /api/v1/me', () => {
       workspaceId: 'ws_1',
       scope: 'read',
       label: 'CI pipeline',
+      externalIdentity: null,
       createdAt: 1_700_000_000_000,
     })
+  })
+
+  it('names the identity a provisioned key acts for, when it has one', async () => {
+    const res = await build().request('/api/v1/me', withKey('per-user.secret'))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ keyId: 'pak_2', externalIdentity: 'os-user:42' })
   })
 
   it('refuses an unknown key with the surface’s own 401, never a description of nobody', async () => {

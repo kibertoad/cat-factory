@@ -38,6 +38,13 @@ async function mintKey(
   return { authorization: `Bearer ${created.body.secret}` }
 }
 
+/**
+ * The opaque identity a provisioner attaches to a per-person key. Shaped like something an
+ * external system would actually send (a namespaced id, not a bare word), because the platform
+ * stores it verbatim and must never be tempted to parse it.
+ */
+const IDENTITY = 'os-user:ada@example.com'
+
 /** A one-step run on the seeded login task, which is what the evidence reads are addressed by. */
 async function startRun(
   app: Awaited<ReturnType<ConformanceHarness['makeApp']>>,
@@ -56,7 +63,17 @@ async function startRun(
   return started.body.id
 }
 
+/**
+ * The two cases split into their own functions rather than one long body: they share the file
+ * because a provisioned key is what every evidence read is addressed with, and nothing else.
+ */
 export function definePublicEvidenceConformance(harness: ConformanceHarness): void {
+  defineRunEvidenceCases(harness)
+  defineKeyProvisioningCases(harness)
+}
+
+/** `/api/v1/runs/:runId/report`, `…/outcome`, `…/artifacts`, `/api/v1/artifacts/:id/blob`. */
+function defineRunEvidenceCases(harness: ConformanceHarness): void {
   describe('public API: run evidence', () => {
     it("composes a run's verification report on read, for a run with no pull request", async () => {
       const app = harness.makeApp()
@@ -265,7 +282,10 @@ export function definePublicEvidenceConformance(harness: ConformanceHarness): vo
       expect(listed.body.error.code).toBe('unavailable')
     })
   })
+}
 
+/** `/api/v1/keys`: the mint bounds, the revocation cascade, and the identity a key carries. */
+function defineKeyProvisioningCases(harness: ConformanceHarness): void {
   describe('public API: headless key provisioning', () => {
     it('mints a working key, refuses the admin rung, and holds the scope gate', async () => {
       const app = harness.makeApp()
@@ -442,6 +462,186 @@ export function definePublicEvidenceConformance(harness: ConformanceHarness): vo
       // whether they reach for the app or the API.
       expect((await app.call('GET', '/api/v1/services', undefined, auth)).status).toBe(401)
       expect((await app.call('GET', '/api/v1/services', undefined, childAuth)).status).toBe(401)
+    })
+
+    it('carries a provisioned key external identity onto the runs it starts, past revocation', async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createOrgWorkspace({ seed: true })
+      const wsId = workspace.id
+      const adminAuth = await mintKey(app, wsId, 'admin')
+
+      const minted = await app.call<{ key: PublicApiKey; secret: string }>(
+        'POST',
+        '/api/v1/keys',
+        { label: 'for ada', scope: 'write', externalIdentity: IDENTITY },
+        adminAuth,
+      )
+      expect(minted.status).toBe(201)
+      // Echoed on the resource, and on the LIST, which is the read that goes back through the
+      // store: a facade whose row mapping dropped the column answers `null` here.
+      expect(minted.body.key.externalIdentity).toBe(IDENTITY)
+      const listed = await app.call<{ keys: PublicApiKey[] }>(
+        'GET',
+        '/api/v1/keys',
+        undefined,
+        adminAuth,
+      )
+      const stored = listed.body.keys.find((k) => k.id === minted.body.key.id)
+      expect(stored?.externalIdentity).toBe(IDENTITY)
+
+      // And on `/me`, which is how a subsystem handed the credential discovers who it runs as.
+      const perUserAuth = { authorization: `Bearer ${minted.body.secret}` }
+      const me = await app.call<{ externalIdentity: string | null }>(
+        'GET',
+        '/api/v1/me',
+        undefined,
+        perUserAuth,
+      )
+      expect(me.status).toBe(200)
+      expect(me.body.externalIdentity).toBe(IDENTITY)
+
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Coder only',
+        agentKinds: ['coder'],
+      })
+      const started = await app.call(
+        'POST',
+        '/api/v1/tasks/task_login/start',
+        { pipelineId: pipeline.body.id },
+        perUserAuth,
+      )
+      expect(started.status).toBe(202)
+
+      const run = await app.call<{ externalIdentity: string | null }>(
+        'GET',
+        '/api/v1/tasks/task_login/run',
+        undefined,
+        adminAuth,
+      )
+      expect(run.status).toBe(200)
+      // The identity rides `agent_runs.detail` through each facade's real store, like the intake
+      // origin beside it: a facade with its own execution mapping drops it here rather than in
+      // production, where it would read as a run nobody started.
+      expect(run.body.externalIdentity).toBe(IDENTITY)
+
+      // The property the PIN exists for, and the one no unit test can stage: revoking the key
+      // (what an integration does the day the person leaves) must not erase who the finished run
+      // was for. A read that resolved the identity from the key would answer `null` from here on.
+      expect(
+        (await app.call('DELETE', `/api/v1/keys/${minted.body.key.id}`, undefined, adminAuth))
+          .status,
+      ).toBe(204)
+      const afterRevoke = await app.call<{ externalIdentity: string | null }>(
+        'GET',
+        '/api/v1/tasks/task_login/run',
+        undefined,
+        adminAuth,
+      )
+      expect(afterRevoke.body.externalIdentity).toBe(IDENTITY)
+    })
+
+    it('leaves the identity null for a key minted without one', async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createOrgWorkspace({ seed: true })
+      const wsId = workspace.id
+      const adminAuth = await mintKey(app, wsId, 'admin')
+      const minted = await app.call<{ key: PublicApiKey; secret: string }>(
+        'POST',
+        '/api/v1/keys',
+        { label: 'plain' },
+        adminAuth,
+      )
+      expect(minted.status).toBe(201)
+      // NOT inherited from the provisioning key (which has none either, but would be the obvious
+      // wrong default): a provisioner mints for many identities, so attributing its own would
+      // name the integration on every run it ever starts for anyone.
+      expect(minted.body.key.externalIdentity).toBeNull()
+
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Coder only',
+        agentKinds: ['coder'],
+      })
+      const started = await app.call(
+        'POST',
+        '/api/v1/tasks/task_login/start',
+        { pipelineId: pipeline.body.id },
+        { authorization: `Bearer ${minted.body.secret}` },
+      )
+      expect(started.status).toBe(202)
+      const run = await app.call<{ externalIdentity: string | null }>(
+        'GET',
+        '/api/v1/tasks/task_login/run',
+        undefined,
+        adminAuth,
+      )
+      expect(run.body.externalIdentity).toBeNull()
+    })
+
+    it('withholds one person key identity from another, and says so rather than blanking it', async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createOrgWorkspace({ seed: true })
+      const wsId = workspace.id
+      const adminAuth = await mintKey(app, wsId, 'admin')
+
+      // The deployment this feature exists for: one key per person, minted by a provisioner.
+      const mintFor = async (identity: string) => {
+        const minted = await app.call<{ key: PublicApiKey; secret: string }>(
+          'POST',
+          '/api/v1/keys',
+          { label: `for ${identity}`, scope: 'write', externalIdentity: identity },
+          adminAuth,
+        )
+        expect(minted.status).toBe(201)
+        return { authorization: `Bearer ${minted.body.secret}` }
+      }
+      const adaAuth = await mintFor(IDENTITY)
+      const bobAuth = await mintFor('os-user:bob@example.com')
+
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Coder only',
+        agentKinds: ['coder'],
+      })
+      expect(
+        (
+          await app.call(
+            'POST',
+            '/api/v1/tasks/task_login/start',
+            { pipelineId: pipeline.body.id },
+            adaAuth,
+          )
+        ).status,
+      ).toBe(202)
+
+      type RunView = { externalIdentity: string | null; externalIdentityWithheld: boolean }
+      const readRun = (auth: Record<string, string>) =>
+        app.call<RunView>('GET', '/api/v1/tasks/task_login/run', undefined, auth)
+
+      // Ada reads her own run whole.
+      const asAda = await readRun(adaAuth)
+      expect(asAda.status).toBe(200)
+      expect(asAda.body).toMatchObject({
+        externalIdentity: IDENTITY,
+        externalIdentityWithheld: false,
+      })
+
+      // Bob's key reaches the same run (the workspace grant is unchanged and deliberate) but not
+      // the identity on it, which is the whole leak: without the rule, every per-person key reads
+      // back the roster of every other person, and that value is routinely an email.
+      const asBob = await readRun(bobAuth)
+      expect(asBob.status).toBe(200)
+      expect(asBob.body).toMatchObject({
+        externalIdentity: null,
+        externalIdentityWithheld: true,
+      })
+
+      // And the provisioner still sees it, because the mapping is what it mints these keys for.
+      // Asserted on the SAME run as the refusal above: the two answers differ only by the reading
+      // key, so a facade that lost the pin cannot pass both halves by answering null throughout.
+      const asProvisioner = await readRun(adminAuth)
+      expect(asProvisioner.body).toMatchObject({
+        externalIdentity: IDENTITY,
+        externalIdentityWithheld: false,
+      })
     })
   })
 }

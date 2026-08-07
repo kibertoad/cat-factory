@@ -6,7 +6,7 @@
 // Tagging is never mandatory: the parent can always act without a selection, and an untagged
 // merge records a null tag. This component only chooses; the parent performs the action.
 //
-// See docs/initiatives/merge-track-record.md.
+// See backend/docs/adr/0046-merge-track-record.md.
 import { computed } from 'vue'
 import { REVIEW_EFFORTS } from '@cat-factory/contracts'
 import type { ChangeClass, MergeClassRollup, ReviewEffort } from '~/types/merge'

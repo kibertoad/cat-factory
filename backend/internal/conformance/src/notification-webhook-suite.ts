@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest'
 // pass every single-endpoint assertion above while silently overwriting a sibling integration's
 // registration, which is precisely the bug this whole shape exists to prevent.
 //
-// See docs/initiatives/headless-clarification-loop.md (D3) and
+// See backend/docs/adr/0047-headless-clarification-loop.md (D3) and
 // docs/initiatives/cloudflare-os-gatekeeper.md (slice 2).
 
 /** A complete record, so each case states only the fields it is about. */

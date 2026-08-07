@@ -8,7 +8,7 @@ import {
   taskCard,
 } from './helpers'
 
-// Slice 5 of the modular-vue adoption (docs/initiatives/modular-vue-slice5-progress.md):
+// Slice 5 of the modular-vue adoption (backend/docs/adr/0049-modular-vue-adoption.md):
 // every agent-run result window now renders inside the shared `ResultWindowShell`, which
 // centralises the modal chrome AND owns the modal *behaviour* via the upstream
 // `useModalBehavior` — focus-trap, body-scroll lock, and a shared overlay stack so Escape
@@ -80,7 +80,7 @@ test.describe('result-window shell (merger)', () => {
   })
 })
 
-// A SECOND converted window — the CI `gate` (docs/initiatives/modular-vue-slice5-progress.md,
+// A SECOND converted window — the CI `gate` (backend/docs/adr/0049-modular-vue-adoption.md,
 // window #4) — through the same shared shell, so the coverage isn't pilot-only. Unlike the
 // merger, the gate contributes a status badge to the shell's `#header-extras` slot and passes
 // `manageEscape: false`, so this proves both the extras slot and the Escape handoff generalise

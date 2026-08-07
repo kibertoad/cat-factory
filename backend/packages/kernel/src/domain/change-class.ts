@@ -12,7 +12,7 @@ import type { ChangeClass } from '@cat-factory/contracts'
 // and be identical for a GitHub or a GitLab deployment.
 //
 // Full design + the rationale for the precedence rule:
-// `docs/initiatives/merge-track-record.md`.
+// `backend/docs/adr/0046-merge-track-record.md`.
 // ---------------------------------------------------------------------------
 
 /**

@@ -514,7 +514,7 @@ describe('IssueWritebackService — issue pickup (bug intake)', () => {
 
 // ---------------------------------------------------------------------------
 // postReviewQuestions — the headless clarification loop's question echo (slice 2a of
-// docs/initiatives/headless-clarification-loop.md). The engine has already established that
+// backend/docs/adr/0047-headless-clarification-loop.md). The engine has already established that
 // the run is headless and the review has open findings; what is asserted here is the
 // provider's half: the workspace opt-in, and the idempotency that keeps a REPLAYING durable
 // driver from re-posting the same questions onto an issue a human is reading.

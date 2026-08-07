@@ -334,6 +334,12 @@ export class RunLifecycleController {
       // from). Absent stays absent rather than being guessed onto a tier; `mode` is stored only
       // when sandboxed, since `live` is the read-time default and what every legacy run was.
       initiatedByRole: options.initiatedByRole ?? null,
+      // Who the caller started this run for, pinned beside the tier and for the same reason: the
+      // credential that carries it can be revoked, and a finished run must keep naming who it was
+      // for. Absent stays absent: the platform never guesses an identity it cannot resolve.
+      ...(options.initiatedByExternalIdentity != null
+        ? { initiatedByExternalIdentity: options.initiatedByExternalIdentity }
+        : {}),
       ...(mode === 'dry_run' ? { mode } : {}),
       // Only a headless start carries an explicit intake origin; `ui` is the read-time
       // default, so an ordinary board/schedule start stores nothing extra.

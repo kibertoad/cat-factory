@@ -49,7 +49,6 @@ a tracker document](../../CLAUDE.md).
 - [Custom initiative definitions (org-registered presets)](./custom-initiative-definitions.md)
 - [Judge registry (the verdict-gate family)](./judge-registry.md)
 - [Library frame support](./library-frame-support.md)
-- [Merge track record](./merge-track-record.md)
 - [Persist, version and reseed fragment definitions](./fragment-definitions-reseed.md)
 - [Pipeline catalog collapse (estimate-gated steps)](./pipeline-catalog-collapse.md)
 - [Pipeline per-step options: one `step_options` bag](./pipeline-step-options.md)
@@ -60,7 +59,6 @@ a tracker document](../../CLAUDE.md).
 - [Ralph loop task type](./ralph-loop.md)
 - [Service acceptance criteria](./service-acceptance-criteria.md)
 - [Shared clarification-item abstraction](./clarification-items.md)
-- [Headless clarification loop](./headless-clarification-loop.md)
 - [Spike task support (research, no code)](./spike-task-support.md)
 
 ### Runtime, infrastructure and environments
@@ -85,7 +83,6 @@ a tracker document](../../CLAUDE.md).
 - [Per-class token telemetry + cost surfacing](./token-telemetry-per-class-and-cost.md)
 - [Per-model Bedrock enablement + per-preset provider preference](./model-provider-preference.md)
 - [Per-run token-burn instrumentation](./token-burn-instrumentation.md)
-- [Platform operator observability and alerting](./platform-operator-observability.md)
 - [Spend forecasting, burn-rate and budget alerts](./spend-forecasting-and-alerts.md)
 - [Stuck-run audit](./stuck-run-audit.md)
 - [Token-usage and subscription-quota tracking](./usage-and-quota-tracking.md)
@@ -105,18 +102,14 @@ a tracker document](../../CLAUDE.md).
 - [GitLab product-surface parity](./gitlab-ui-parity.md)
 - [Global search and deep-linkable routing](./global-search-and-deep-links.md)
 - [Mobile-friendly frontend](./mobile-friendly-frontend.md)
-- [modular-vue adoption](./modular-vue-adoption.md) ·
-  [slice 5 progress](./modular-vue-slice5-progress.md)
 - [UX papercuts](./ux-papercuts.md) ·
   [quality-of-life pass](./ux-qol-pass.md)
 
-Four of the modular-vue slices are **upstream requests** written against the
-`modular-react` / `modular-vue` libraries rather than against this repo, so they
-track work that is not ours to land:
-[pairing](./modular-vue-slice2-upstream-pairing.md) ·
-[journeys](./modular-vue-slice3-upstream-journeys.md) ·
-[zones](./modular-vue-slice4-upstream-zones.md) ·
-[overlays](./modular-vue-slice5-upstream-overlays.md).
+The modular-vue adoption closed with slice 5, and its four upstream request specs all shipped
+and were re-adopted, so the whole family converted to
+[ADR 0049](../../backend/docs/adr/0049-modular-vue-adoption.md). The consumer-facing extension
+surface built on those seams is still open, as
+[Frontend extension mechanism](./frontend-extension-mechanism.md) above.
 
 ### API surface and integrations
 

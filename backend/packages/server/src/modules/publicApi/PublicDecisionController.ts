@@ -34,7 +34,7 @@ import { authorize } from './publicApiAuth.js'
 // SPA, which is why the public surface refused any pipeline that could park at all: a headless run
 // had no answerer, and a parked run waits for a human INDEFINITELY. These routes are the answerer,
 // and their existence is what lets `PublicApiController` admit a parking pipeline for a
-// `decide`-scope key. See `docs/initiatives/headless-clarification-loop.md` for the original loop
+// `decide`-scope key. See `backend/docs/adr/0047-headless-clarification-loop.md` for the original loop
 // and `backend/docs/adr/0043-public-decision-surface.md` for the surfaces added since.
 //
 // Three rules shape everything here:

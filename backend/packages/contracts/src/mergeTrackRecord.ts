@@ -19,7 +19,7 @@ import { vcsProviderSchema } from './routes/auth.js'
 // why merge presets carry per-class rules ({@link MergeClassRules} in `merge.ts`).
 //
 // Full design — the class precedence rules, the external-merge detection, and the
-// preset reshape — is in `docs/initiatives/merge-track-record.md`.
+// preset reshape — is in `backend/docs/adr/0046-merge-track-record.md`.
 // ---------------------------------------------------------------------------
 
 /**

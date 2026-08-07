@@ -20,7 +20,7 @@ import type { Block, CustomAgentKind, CustomTaskType } from '~/types/domain'
 
 /**
  * Wire the modular-vue registry into the Nuxt app (slice 0 of the modular-vue
- * adoption — docs/initiatives/modular-vue-adoption.md).
+ * adoption — backend/docs/adr/0049-modular-vue-adoption.md).
  *
  * `enforce: 'post'` is load-bearing for the consumer-contribution seam. Nuxt
  * loads layer plugins before the consuming app's plugins within the same enforce
