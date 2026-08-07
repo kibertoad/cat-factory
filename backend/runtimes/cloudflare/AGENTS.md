@@ -57,7 +57,8 @@ it only reaches the logger the Worker writes through while both imports resolve 
   because an isolate is discarded without notice and no later tick is guaranteed to reach what
   it held. Node's twins use timers. The WORKFLOW entry points cannot use that shape and have
   their own bracket (`workflows/logExport.ts`): a wake gives its isolate back at every durable
-  suspension, so it drains in front of each one instead of after a response it does not serve.
+  wait (a sleep, a park, and a `step.do` attempt that threw into its retry backoff), so it drains
+  in front of each one instead of after a response it does not serve.
 
 Package root (not under `src/`): `migrations/` + `telemetry-migrations/` +
 `sandbox-migrations/` + `migrations-provisioning/` + `audit-migrations/` hold the D1 schema, the

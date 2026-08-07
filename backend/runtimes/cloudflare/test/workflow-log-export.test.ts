@@ -14,9 +14,11 @@ import type { Env } from '../src/infrastructure/env'
 //
 //   1. A wake installs the sink for its own isolate. A `WorkflowEntrypoint` is instantiated by
 //      workerd in an isolate no other entry point has run in, so nothing else can have.
-//   2. A wake drains BEFORE each durable suspension, not only at the end. `step.sleep` /
+//   2. A wake drains BEFORE each durable wait, not only at the end. `step.sleep` /
 //      `step.waitForEvent` give the isolate back and the buffer goes with it, so a driver that
-//      polls for hours would otherwise export its last wake and lose every one before it.
+//      polls for hours would otherwise export its last wake and lose every one before it. A
+//      `step.do` attempt that THREW is the third such wait (the engine holds the instance for
+//      the step's retry backoff, and can evict it there) and the one that reads as safe.
 //
 // The per-class cases at the bottom drive the REAL five entrypoints rather than asserting on
 // their source: each gets its own collector endpoint, so a POST arriving there is proof that
@@ -170,6 +172,44 @@ describe('withWorkflowLogExport', () => {
     )
 
     expect(seen).toEqual(['the real step'])
+  })
+
+  it('drains a `do` attempt that THREW, before the engine’s retry backoff can evict it', async () => {
+    await withWorkflowLogExport(envFor(endpointFor('do-failure')), fakeStep(), async (step) => {
+      await step
+        .do('advance-0', { retries: { limit: 3, delay: '5 seconds' } }, async (): Promise<void> => {
+          logger.error('why the attempt failed')
+          throw new Error('attempt failed')
+        })
+        .catch(() => {
+          // silent-catch-ok: the driver's own handling of an exhausted step is not what this
+          // asserts; the drain has already happened by the time the rejection surfaces here.
+        })
+      trace.push('the backoff would start here')
+    })
+
+    // The drain sits INSIDE the failing attempt, so its POST lands before the rejection is handed
+    // back to the engine. Deferring to the `finally` would read as a trailing `post` instead, and
+    // an eviction during the backoff would have taken those lines with it.
+    expect(trace).toEqual(['do:advance-0', 'post', 'the backoff would start here'])
+    expect(bodies[0]).toContain('why the attempt failed')
+  })
+
+  it('leaves a `do` that SUCCEEDED un-drained: its lines ride the next wait', async () => {
+    await withWorkflowLogExport(envFor(endpointFor('do-success')), fakeStep(), async (step) => {
+      await step.do('advance-0', async (): Promise<void> => {
+        logger.warn('a line from a step that worked')
+      })
+      logger.warn('a line after the step returned')
+      await step.sleep('poll-wait-0', '30 seconds')
+    })
+
+    // ONE POST in front of the sleep, carrying both lines. A wrapper that drained every `do`
+    // would split them across two, buying a collector round-trip per step for lines the next
+    // wait was always going to carry.
+    expect(trace).toEqual(['do:advance-0', 'post', 'sleep:poll-wait-0', 'post'])
+    expect(bodies[0]).toContain('a line from a step that worked')
+    expect(bodies[0]).toContain('a line after the step returned')
   })
 
   it('installs nothing and posts nothing when the deployment has not opted in', async () => {
