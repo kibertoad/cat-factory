@@ -126,8 +126,7 @@ const API_PREFIX = '/api/v1'
 // always saw. It is the floor only: a run-starting operation can still escalate to `decide` at
 // request time when the named pipeline can park.
 //
-// 1.22.0 is main's published number as of this branch's last merge, and it is NOT this change:
-// it belongs to `GET /api/v1/runs/:runId/outcome` and the verification report's new optional
+// 1.22.0 belongs to `GET /api/v1/runs/:runId/outcome` and the verification report's new optional
 // `requirements.unmatchedVerdicts`. Two diffs claiming one number is a lie a consumer pinning
 // the version would act on, so re-read this line after any merge rather than trusting that the
 // VERSION auto-merged clean.
@@ -139,7 +138,17 @@ const API_PREFIX = '/api/v1'
 // `x-min-scope` while the branch was in flight: the collision surfaced as a conflict on this
 // comment block only because each version step writes its own paragraph here, never as one on the
 // VERSION line, which auto-merges clean to a number main has already used.
-const API_VERSION = '1.24.0'
+// 1.25.0, not 1.24.0: `gitlab` joins the `TaskSourceKind` enum, GitLab Issues being a fourth
+// built-in task source. Additive on a CLOSED vocabulary, which is the shape the SDKs are built to
+// tolerate: they map an unknown enum member through rather than refusing it, so a client compiled
+// against 1.24.0 keeps parsing every response it already understood and simply never asks for the
+// new source. No existing member changes meaning and no persisted `source` value moves.
+//
+// This branch has now lost that race TWICE (it claimed 1.22.0, then 1.23.0, then 1.24.0, each
+// published by main while the branch was in flight), which is the paragraph above's point made
+// again: the VERSION line auto-merges clean to a number main has already used, and only this
+// comment block conflicts. Re-read it after every merge.
+const API_VERSION = '1.25.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

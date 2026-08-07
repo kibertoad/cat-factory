@@ -7,16 +7,12 @@ import {
   type IdGenerator,
   type NotificationChannel,
   NoopWorkRunner,
-  type TaskSourceProvider,
   type VcsIdentityRegistry,
   type WorkRunner,
   type ProviderRegistry,
 } from '@cat-factory/kernel'
 import { createTierInstallationResolvers } from '@cat-factory/agents'
 import {
-  GitHubIssuesProvider,
-  JiraProvider,
-  LinearTaskProvider,
   EMAIL_CIPHER_INFO,
   ProvisioningLogRecorder,
   OBSERVABILITY_CIPHER_INFO,
@@ -161,10 +157,6 @@ import { GitHubBranchUpdater } from './github/GitHubBranchUpdater'
 import { GitHubPullRequestMerger } from './github/GitHubPullRequestMerger'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
-import { D1TaskConnectionRepository } from './repositories/D1TaskConnectionRepository'
-import { D1TaskSourceSettingsRepository } from './repositories/D1TaskSourceSettingsRepository'
-import { D1TaskRepository } from './repositories/D1TaskRepository'
-import { D1TrackerCommentIngestRepository } from './repositories/D1TrackerCommentIngestRepository'
 import { D1FragmentBriefRepository } from './repositories/D1FragmentBriefRepository'
 import { D1PromptFragmentRepository } from './repositories/D1PromptFragmentRepository'
 import { D1FragmentSourceRepository } from './repositories/D1FragmentSourceRepository'
@@ -573,59 +565,6 @@ export function selectEventPublisher(
   return new FanOutEventPublisher(new DurableObjectEventPublisher(env.WORKSPACE_EVENTS), {
     workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
   })
-}
-/**
- * Build the task-source integration's concrete ports. Mirrors `selectDocumentsDeps`
- * but with no planner — issues are linked for context, not expanded into board
- * structure. Always on (config load fails loudly without the encryption key), so this
- * is wired on every deployment.
- */
-export function selectTasksDeps(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-  idGenerator: IdGenerator,
-): Partial<CoreDependencies> {
-  // Jira and Linear are always registered (their credentials are per-workspace, entered in the UI).
-  const providers: TaskSourceProvider[] = [new JiraProvider(), new LinearTaskProvider()]
-  // GitHub Issues reuse the workspace's installed GitHub App, so this provider is
-  // wired whenever the GitHub integration is configured — it has no credentials of
-  // its own and resolves the installation per issue. Whether a workspace OFFERS it
-  // is the per-workspace toggle (task_source_settings), not a deployment env gate.
-  if (config.github.enabled) {
-    const registry = buildAppRegistry(env, config, db, clock)
-    providers.push(
-      new GitHubIssuesProvider({
-        githubClient: new FetchGitHubClient({
-          registry,
-          rateLimitRepository: new D1RateLimitRepository({ db, idGenerator }),
-          idGenerator,
-          clock,
-          apiBase: config.github.apiBase,
-        }),
-        installations: new D1GitHubInstallationRepository({ db }),
-      }),
-    )
-  }
-  return {
-    taskSourceProviders: providers,
-    taskConnectionRepository: new D1TaskConnectionRepository({
-      db,
-      // The config gate guarantees the key is present when enabled; source
-      // credentials are encrypted at rest under a tasks-scoped HKDF info.
-      cipher: new WebCryptoSecretCipher({
-        masterKeyBase64: config.tasks.encryptionKey!,
-        info: 'cat-factory:tasks',
-      }),
-    }),
-    taskSourceSettingsRepository: new D1TaskSourceSettingsRepository({ db }),
-    taskRepository: new D1TaskRepository({ db }),
-    // Idempotency markers for INBOUND tracker comments. Wired alongside the task module rather
-    // than the writeback, because it guards the INGEST half (a redelivered comment applying its
-    // answers twice), which exists only when the task projection does.
-    trackerCommentIngestRepository: new D1TrackerCommentIngestRepository({ db }),
-  }
 }
 
 /**

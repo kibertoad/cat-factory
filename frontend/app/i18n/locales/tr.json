@@ -345,6 +345,7 @@
       "intake": "Sorun alımı",
       "intakeHint": "Her çalıştırma, izleyiciden eşleşen açık bir sorunu seçer ve baştan sona işler.",
       "intakeNoSources": "Sorunları çekmek için önce bir görev kaynağı bağlayın.",
+      "intakeNoIntakeSources": "Bir görev kaynağı bağlı, ancak bağlı kaynakların hiçbiri henüz zamanlanmış bir sorun aramasını çalıştıramıyor.",
       "intakeGithubRepo": "Depo",
       "intakeBoardId": "Pano kimliği",
       "intakeBoardIdHelp": "Bu izleyicinin alımı kapsamlandırdığı pano, proje veya kuyruk. Biçimini izleyici belirler.",
@@ -2900,27 +2901,21 @@
         "linearTeamSearchPlaceholder": "Ekiplerde ara…"
       },
       "vendor": {
-        "github": "GitHub Issues",
-        "jira": "Jira",
-        "linear": "Linear"
+        "github": "GitHub Issues"
       },
       "linking": {
         "heading": "Sorunları bağlam olarak bağla",
         "description": "Bir kaynak sunulduğunda, sorunlarını içe aktarıp bir göreve ekleyebilirsiniz; böylece ajanlar uygularken sorun açıklamasını ve yorumları görür. Bu, yukarıdaki kayıt izleyicisinden bağımsızdır.",
-        "github": {
-          "available": "Yüklü GitHub App'inizi kullanır — kimlik bilgisi gerekmez.",
-          "unavailable": "Bu kaynağı sunmak için GitHub App'i yükleyin (Entegrasyonlar → GitHub)."
-        },
         "checkSetup": "Kurulumu kontrol et",
-        "install": "Yükle",
         "connected": "Bağlandı.",
-        "jira": {
-          "connectHint": "Bir Jira hesabı ve API belirteci ile bağlanın."
+        "connect": "Bağlan",
+        "state": {
+          "ridesConnected": "Bu çalışma alanının {provider} bağlantısını kullanır, bu yüzden kendi kimlik bilgilerine gerek duymaz.",
+          "ridesMissing": "Bu kaynağı sunmak için Entegrasyonlar altında {provider} bağlantısını kurun.",
+          "notConnected": "Henüz bağlanmadı."
         },
-        "linear": {
-          "connectHint": "Bir Linear kişisel API anahtarı ile bağlanın."
-        },
-        "connect": "Bağlan"
+        "connectProvider": "{provider} bağlan",
+        "none": "Bu dağıtımda yapılandırılmış görev kaynağı yok."
       },
       "writeback": {
         "heading": "Geri yazma",

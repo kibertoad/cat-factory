@@ -1,7 +1,7 @@
 import type { Clock } from '@cat-factory/kernel'
 import type { TaskConnectionRecord, TaskConnectionRepository } from '@cat-factory/kernel'
 import type { TaskSourceSettingsRepository } from '@cat-factory/kernel'
-import type { GitHubInstallationRepository } from '@cat-factory/kernel'
+import type { GitHubInstallationRepository, VcsProvider } from '@cat-factory/kernel'
 import type { TaskCredentials, TaskSourceProvider, TaskSourceRegistry } from '@cat-factory/kernel'
 import type {
   TaskConnection,
@@ -35,10 +35,11 @@ export interface TaskConnectionServiceDependencies {
   workspaceRepository: WorkspaceRepository
   clock: Clock
   /**
-   * Resolves the workspace's installed GitHub App, used to decide whether the
-   * credentialless GitHub Issues source is available (it rides that App). Absent
-   * when the GitHub integration isn't wired, in which case GitHub Issues — if its
-   * provider is even registered — is reported unavailable.
+   * Resolves the workspace's ONE VCS connection, used to decide whether a credentialless
+   * VCS-backed source is available: GitHub Issues rides an installed GitHub App, GitLab Issues
+   * rides a per-workspace PAT connection, and the row's own `provider` says which. Absent when
+   * no VCS integration is wired, in which case those sources, if their providers are registered
+   * at all, are reported unavailable.
    */
   installations?: GitHubInstallationRepository
   /**
@@ -52,24 +53,64 @@ export interface TaskConnectionServiceDependencies {
 }
 
 /**
- * A credentialless provider carries no connection to make: there are no credential
- * fields to fill in. Today the only such provider is GitHub Issues, which rides the
- * workspace's installed GitHub App. `connect()` and the import credential resolver
- * use this to skip the connection lookup; it does NOT by itself decide availability
- * (see `listSourceStates`, where the App-presence check is keyed on the GitHub source).
+ * A credentialless provider carries no connection to make: there are no credential fields to
+ * fill in, because it authenticates out-of-band (the two VCS-backed sources ride the workspace's
+ * VCS connection). `connect()` and the import credential resolver use this to skip the
+ * connection lookup; it does NOT by itself decide availability, nor WHICH out-of-band
+ * connection is meant (see {@link ridesVcsConnection}).
  */
 function isCredentialless(provider: TaskSourceProvider): boolean {
   return provider.descriptor.credentialFields.length === 0
 }
 
 /**
- * The credentialless source whose availability is the installed GitHub App's
- * presence. Keyed on the source kind (not just "is credentialless") so a future
- * credentialless source with a different out-of-band auth path is forced to add its
- * own availability branch rather than silently inheriting the App check.
+ * The VCS connection a credentialless source rides, or null for a source that authenticates
+ * some other way. GitHub Issues rides the workspace's installed GitHub App and GitLab Issues
+ * rides its per-workspace GitLab connection; both are rows of the same one-per-workspace
+ * connection table, told apart by the row's `provider`.
+ *
+ * Keyed on the source kind (not just "is credentialless") so a future credentialless source
+ * with a different out-of-band auth path is forced to add its own availability branch rather
+ * than silently inheriting this one. Reading the row's provider (rather than merely its
+ * existence) is what stops the two VCS sources standing in for each other: a workspace
+ * connected to GitLab would otherwise report GitHub Issues as available, and the import
+ * would then resolve an empty App projection.
  */
-function ridesGitHubApp(provider: TaskSourceProvider): boolean {
-  return provider.kind === 'github' && isCredentialless(provider)
+function ridesVcsConnection(provider: TaskSourceProvider): VcsProvider | null {
+  if (!isCredentialless(provider)) return null
+  if (provider.kind === 'github') return 'github'
+  if (provider.kind === 'gitlab') return 'gitlab'
+  return null
+}
+
+/**
+ * How the connection a VCS-backed source rides is described to an operator, per provider.
+ *
+ * Split into the thing it rides and the remedy for its absence because the two messages that
+ * need this say different halves: the setup check has a MISSING connection to explain, while the
+ * connect refusal is explaining that there is nothing to connect HERE (the connection exists, or
+ * will, somewhere else). Composing both from one `Record` is what keeps them naming the same
+ * integration: the earlier single string was written for the setup check and read as "GitHub App"
+ * from the refusal too, which pointed a GitLab operator at an integration their deployment does
+ * not run.
+ */
+interface VcsConnectCopy {
+  /** What the source authenticates through, as a noun phrase. */
+  rides: string
+  /** Why it cannot answer yet and where to fix it, continuing from {@link rides}. */
+  absentRemedy: string
+}
+
+const VCS_CONNECT_COPY: Record<VcsProvider, VcsConnectCopy> = {
+  github: {
+    rides: "this workspace's GitHub App",
+    absentRemedy: "which isn't installed yet. Install it under Integrations → GitHub",
+  },
+  gitlab: {
+    rides: "this workspace's GitLab connection",
+    absentRemedy:
+      "which doesn't exist yet. Connect one with a personal access token under Integrations → GitLab",
+  },
 }
 
 /** A provider that can list Linear teams (only {@link LinearTaskProvider} today). */
@@ -99,8 +140,9 @@ export class TaskConnectionService {
    * Every configured source with the workspace's live state for it (drives the
    * settings + import UI): each source's descriptor plus whether it is available
    * now and whether the workspace has it enabled. Availability is connection
-   * presence for credentialed sources, and the installed GitHub App for the
-   * credentialless GitHub Issues source.
+   * presence for a credentialed source, and a matching VCS connection for a
+   * VCS-backed one (which provider it needs rides along, so the UI can name the
+   * right remedy without a per-source branch of its own).
    */
   async listSourceStates(workspaceId: string): Promise<TaskSourceState[]> {
     const settings = await this.deps.taskSourceSettingsRepository.getByWorkspace(workspaceId)
@@ -108,22 +150,28 @@ export class TaskConnectionService {
     // Resolve availability inputs ONCE up front rather than a per-provider repository read
     // (N+1): the App presence is workspace-wide, and the credentialed connections are one
     // listByWorkspace indexed by source.
-    const hasInstallation = this.deps.installations
-      ? (await this.deps.installations.getByWorkspace(workspaceId)) !== null
-      : false
+    const vcsConnection = this.deps.installations
+      ? await this.deps.installations.getByWorkspace(workspaceId)
+      : null
     const connectedSources = new Set(
       (await this.deps.taskConnectionRepository.listByWorkspace(workspaceId)).map((c) => c.source),
     )
     const states: TaskSourceState[] = []
     for (const provider of this.deps.registry.list()) {
-      const available = ridesGitHubApp(provider)
-        ? hasInstallation
+      const ridesVcs = ridesVcsConnection(provider)
+      const available = ridesVcs
+        ? vcsConnection?.provider === ridesVcs
         : connectedSources.has(provider.kind)
       states.push({
         ...provider.descriptor,
         available,
+        ridesVcsProvider: ridesVcs,
         // No row ⇒ default enabled, so a source is offered as soon as it's available.
         enabled: enabledBySource.get(provider.kind) ?? true,
+        // Asked of the provider, not of its descriptor: a source with no predicate search cannot
+        // back a recurring intake, and offering it in the schedule form produces a schedule that
+        // saves and then never fires.
+        supportsIntake: typeof provider.searchIssues === 'function',
       })
     }
     return states
@@ -149,16 +197,17 @@ export class TaskConnectionService {
     }
     const label = provider.descriptor.label
 
-    if (ridesGitHubApp(provider)) {
-      const installed =
-        !!this.deps.installations &&
-        (await this.deps.installations.getByWorkspace(workspaceId)) !== null
-      if (!installed) {
+    const ridesVcs = ridesVcsConnection(provider)
+    if (ridesVcs) {
+      const connection = this.deps.installations
+        ? await this.deps.installations.getByWorkspace(workspaceId)
+        : null
+      if (connection?.provider !== ridesVcs) {
         return {
           source,
           ok: false,
           status: 'not_installed',
-          message: `${label} rides this workspace's GitHub App, which isn't installed yet. Install it under Integrations → GitHub, then re-check.`,
+          message: `${label} rides ${VCS_CONNECT_COPY[ridesVcs].rides}, ${VCS_CONNECT_COPY[ridesVcs].absentRemedy}, then re-check.`,
         }
       }
       return this.runProviderDiagnose(provider, { workspaceId, credentials: null }, label)
@@ -254,10 +303,16 @@ export class TaskConnectionService {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     const provider = this.requireProvider(source)
     if (isCredentialless(provider)) {
-      // A credentialless source has no connection to make: it rides the workspace's
-      // installed GitHub App and is toggled via setEnabled, not connected.
+      // A credentialless source has no connection to make: it authenticates out-of-band and is
+      // toggled via setEnabled, not connected. WHERE it authenticates is the provider's own
+      // answer, so the refusal names the integration this source actually rides. A credentialless
+      // source riding neither VCS connection (a deployment-registered one authenticating some
+      // other way) says only what is true: there are no credentials to configure here.
+      const ridesVcs = ridesVcsConnection(provider)
       throw new ValidationError(
-        `The ${source} source has no connection to configure; it uses the workspace's installed GitHub App. Enable or disable it instead.`,
+        ridesVcs
+          ? `The ${source} source has no connection to configure; it rides ${VCS_CONNECT_COPY[ridesVcs].rides}. Enable or disable it instead.`
+          : `The ${source} source has no credentials to configure. Enable or disable it instead.`,
       )
     }
     const normalized = provider.normalizeConnection(credentials)

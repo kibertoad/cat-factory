@@ -345,6 +345,7 @@
       "intake": "קליטת תקלות",
       "intakeHint": "כל הרצה בוחרת תקלה פתוחה תואמת אחת מהמעקב ומטפלת בה מקצה לקצה.",
       "intakeNoSources": "חבר תחילה מקור משימות כדי למשוך ממנו תקלות.",
+      "intakeNoIntakeSources": "מקור משימות מחובר, אך אף אחד מהמקורות המחוברים אינו יכול עדיין להריץ חיפוש תקלות מתוזמן.",
       "intakeGithubRepo": "מאגר",
       "intakeBoardId": "מזהה לוח",
       "intakeBoardIdHelp": "הלוח, הפרויקט או התור שאליהם מערכת המעקב מגבילה את הקליטה. התבנית נקבעת על ידי מערכת המעקב.",
@@ -2900,27 +2901,21 @@
         "linearTeamSearchPlaceholder": "חיפוש צוותים…"
       },
       "vendor": {
-        "github": "GitHub Issues",
-        "jira": "Jira",
-        "linear": "Linear"
+        "github": "GitHub Issues"
       },
       "linking": {
         "heading": "קשר כרטיסים כהקשר",
         "description": "כשמקור מוצע אתה יכול לייבא את הכרטיסים שלו ולצרף אותם למשימה, כך שסוכנים יראו את תיאור הכרטיס וההערות בזמן המימוש. זה בלתי תלוי במעקב ההגשה למעלה.",
-        "github": {
-          "available": "רוכב על אפליקציית ה-GitHub המותקנת שלך — לא נדרשים אישורים.",
-          "unavailable": "התקן את אפליקציית ה-GitHub (אינטגרציות ← GitHub) כדי להציע מקור זה."
-        },
         "checkSetup": "בדוק הגדרה",
-        "install": "התקן",
         "connected": "מחובר.",
-        "jira": {
-          "connectHint": "התחבר עם חשבון Jira ואסימון API."
+        "connect": "התחבר",
+        "state": {
+          "ridesConnected": "משתמש בחיבור {provider} של סביבת העבודה, ולכן אינו זקוק לאישורי גישה משלו.",
+          "ridesMissing": "חבר את {provider} תחת אינטגרציות כדי להציע מקור זה.",
+          "notConnected": "עדיין לא מחובר."
         },
-        "linear": {
-          "connectHint": "התחבר עם מפתח API אישי של Linear."
-        },
-        "connect": "התחבר"
+        "connectProvider": "חבר את {provider}",
+        "none": "בפריסה זו לא מוגדרים מקורות משימות."
       },
       "writeback": {
         "heading": "כתיבה חזרה",
