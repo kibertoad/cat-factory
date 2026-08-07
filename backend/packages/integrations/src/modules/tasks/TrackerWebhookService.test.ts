@@ -111,7 +111,7 @@ function makeService(
     taskRepository: {
       get: async () => ({ linkedBlockId: 'blk_1' }),
     } as never,
-    taskConnectionRepository: {
+    taskConnectionStore: {
       getByWorkspace: async () => ({ credentials: {} }),
     } as never,
     reviewGateways: { requirements: gateway },
@@ -246,7 +246,7 @@ describe('TrackerWebhookService — ticket replies', () => {
     const ack = vi.fn(makeAckSpy)
     const service = makeService(gateway, {
       issueWriteback: { postReviewReplyAck: ack },
-      taskConnectionRepository: {
+      taskConnectionStore: {
         getByWorkspace: async () => ({ credentials: { webhookReplyAllow: 'alice' } }),
       } as never,
     })

@@ -285,8 +285,13 @@ provisions that infrastructure and probes those monitors. Its bound is three thi
   relay made for the same reason.
 - **The account scope, plus a CLOSED source table.** The workspace resolves to its owning account
   and anything outside the token's scope is a uniform 404. Within scope, `SEALED_SECRET_SOURCES`
-  enumerates every readable row: five sources today, each bound to one repository read, one record
+  enumerates every readable row: seven sources today, each bound to one repository read, one record
   field and one HKDF tag. A source not in that table is unreachable, whatever the row is worth.
+  The newest two are the DOCUMENT-source and TRACKER connections. They were the last integration
+  outside this table, and not because the credential was more sensitive: their repositories
+  decrypted INSIDE, so the row exposed no sealed field for a row-addressed unseal to name at all.
+  Giving those rows an envelope is what admitted them, and it also let the connections themselves
+  cross the persistence RPC as ciphertext, like every other connection surface.
 
 Two properties of the answering deployment bound it further, and both are structural rather than
 conventional. **Only a deployment holding its own main database serves the pair at all**, gated on

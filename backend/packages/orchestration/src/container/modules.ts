@@ -266,11 +266,11 @@ export function createDocumentsModule(
   boardService: BoardService,
   caches: AppCaches,
 ): DocumentsModule | undefined {
-  const { documentSourceProviders, documentConnectionRepository, documentRepository } = deps
+  const { documentSourceProviders, documentConnectionStore, documentRepository } = deps
   if (
     !documentSourceProviders ||
     documentSourceProviders.length === 0 ||
-    !documentConnectionRepository ||
+    !documentConnectionStore ||
     !documentRepository
   ) {
     return undefined
@@ -296,11 +296,14 @@ export function createDocumentsModule(
     logger: deps.logger,
   })
   const connectionService = new DocumentConnectionService({
-    documentConnectionRepository,
+    documentConnectionStore,
     registry,
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
     oauthRenewer: oauthService,
+    // Where persisting a renewed OAuth grant reports when it cannot land: a best-effort write, so
+    // without this its failures are invisible and the renewal silently repeats every dispatch.
+    logger: deps.logger,
     // Connecting or disconnecting a source invalidates every freshness verdict it authorised, and
     // a manual re-import invalidates that one document's: the TTL bounds how long a run dispatches
     // against an unnoticed edit, but only invalidation keeps a verdict from outliving the write
@@ -364,16 +367,12 @@ export function createTasksModule(
   boardService: BoardService,
   spend: SpendService,
 ): TasksModule | undefined {
-  const {
-    taskSourceProviders,
-    taskConnectionRepository,
-    taskSourceSettingsRepository,
-    taskRepository,
-  } = deps
+  const { taskSourceProviders, taskConnectionStore, taskSourceSettingsRepository, taskRepository } =
+    deps
   if (
     !taskSourceProviders ||
     taskSourceProviders.length === 0 ||
-    !taskConnectionRepository ||
+    !taskConnectionStore ||
     !taskSourceSettingsRepository ||
     !taskRepository
   ) {
@@ -382,11 +381,15 @@ export function createTasksModule(
 
   const registry = new MapTaskSourceRegistry(taskSourceProviders)
   const connectionService = new TaskConnectionService({
-    taskConnectionRepository,
+    taskConnectionStore,
     taskSourceSettingsRepository,
     registry,
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
+    // Where the three surfaces that DEGRADE on an unopenable credential bag report (a re-connect
+    // that could not carry the webhook secret over, the setup check, the webhook panel). Without
+    // it those gaps are only visible in a panel nobody is looking at.
+    logger: deps.logger,
     // GitHub Issues' availability is the installed GitHub App's presence; absent when
     // the GitHub integration isn't wired (the provider then isn't registered anyway).
     ...(deps.githubInstallationRepository
@@ -423,7 +426,7 @@ export function createTasksModule(
     ? new BugIntakeService({
         pipelineScheduleRepository: deps.pipelineScheduleRepository,
         taskSourceRegistry: registry,
-        taskConnectionRepository,
+        taskConnectionStore,
         importService,
         linkService,
         taskRepository,
@@ -435,7 +438,7 @@ export function createTasksModule(
   // model-less deployment still gets the board read rather than losing the whole surface.
   const bugHuntService = new BugHuntService({
     taskSourceRegistry: registry,
-    taskConnectionRepository,
+    taskConnectionStore,
     taskRepository,
     importService,
     linkService,
@@ -1231,14 +1234,14 @@ export function createTrackerWebhookModule(
     executionService: ExecutionService
   },
 ): TrackerWebhookModule | undefined {
-  const { taskRepository, taskConnectionRepository } = deps
-  if (!taskRepository || !taskConnectionRepository || !input.tasks) return undefined
+  const { taskRepository, taskConnectionStore } = deps
+  if (!taskRepository || !taskConnectionStore || !input.tasks) return undefined
   const requirementsService = input.requirements?.service
   const clarityService = input.clarity?.service
   const recurring = input.recurring
   const service = new TrackerWebhookService({
     taskRepository,
-    taskConnectionRepository,
+    taskConnectionStore,
     ...(recurring
       ? {
           triggerIntake: (workspaceId: string, event: TrackerIssueEvent) =>

@@ -50,9 +50,59 @@ export const ORG_SECRET_SOURCES = [
   'observability_connection',
   /** `incident_enrichment_connections.credentials`: the PagerDuty / incident.io credentials. */
   'incident_enrichment_connection',
+  /** `document_connections.credentials`: a workspace's document-source credential bag. */
+  'document_source_connection',
+  /** `task_connections.credentials`: a workspace's tracker credential bag. */
+  'task_source_connection',
 ] as const
 
 export type OrgSecretSource = (typeof ORG_SECRET_SOURCES)[number]
+
+/**
+ * How many trailing identifier args each source's declared read takes after `workspaceId`.
+ *
+ * It lives HERE, beside the vocabulary, rather than only in the server's `SEALED_SECRET_SOURCES`
+ * bindings, because arity is the one part of a binding the CALLER has to get right and the caller
+ * cannot see that table: `@cat-factory/integrations` does not depend on `@cat-factory/server`.
+ * Stated only there, it was prose a call site could disagree with in silence — the mothership
+ * answers 422 and every open of that source fails on the one deployment shape it exists to serve.
+ * With the numbers here, {@link orgSecretRef} turns the same disagreement into a build failure,
+ * and the server reads these rather than restating them, so the two halves cannot drift.
+ *
+ * `satisfies` (not `:`) so each member keeps its literal type for the tuple maths below while the
+ * `Record` still fails to compile when a source is added without an arity.
+ */
+export const ORG_SECRET_KEY_ARITY = {
+  environment_access: 1,
+  environment_provision_fields: 1,
+  environment_connection: 2,
+  observability_connection: 0,
+  incident_enrichment_connection: 0,
+  document_source_connection: 1,
+  task_source_connection: 1,
+} as const satisfies Record<OrgSecretSource, number>
+
+/** The declared arity of each source, as literal types. */
+export type OrgSecretKeyArity = typeof ORG_SECRET_KEY_ARITY
+
+/**
+ * The sources whose declared read takes exactly `N` trailing args.
+ *
+ * A generic helper that opens a whole FAMILY of rows (the sealed connection store serves both
+ * document and tracker connections) constrains its source to this rather than to
+ * {@link OrgSecretSource}, so the key it builds is checked even though it never names one member.
+ */
+export type OrgSecretSourceOfArity<N extends number> = {
+  [S in OrgSecretSource]: OrgSecretKeyArity[S] extends N ? S : never
+}[OrgSecretSource]
+
+/** A key of exactly `N` row identifiers. */
+type SecretKeyTuple<N extends number, Acc extends (string | null)[] = []> = Acc['length'] extends N
+  ? Acc
+  : SecretKeyTuple<N, [...Acc, string | null]>
+
+/** The key shape one source takes: `[]` for a workspace-keyed read, `[id]`, `[a, b]`, … */
+export type OrgSecretKeyOf<S extends OrgSecretSource> = SecretKeyTuple<OrgSecretKeyArity[S]>
 
 /**
  * Identifies ONE org-owned sealed secret, by row rather than by ciphertext.
@@ -61,12 +111,34 @@ export type OrgSecretSource = (typeof ORG_SECRET_SOURCES)[number]
  * persistence RPC's `workspace` rule does); `key` carries whatever trailing identifiers the
  * source's declared read takes after it (an environment id, a provision type + manifest id, …).
  * A source whose read is workspace-keyed alone passes no `key` at all.
+ *
+ * A UNION over the vocabulary rather than one open shape, so a literal is checked against the
+ * arity its own source declared: a ref for a `(workspace, source)`-keyed row with no `key` matches
+ * no member and fails to compile, where the earlier optional-array shape accepted it and failed at
+ * runtime on the mothership.
  */
-export interface DelegatedSecretRef {
-  source: OrgSecretSource
-  workspaceId: string
-  /** Trailing row-identifier args of the source's declared read, in declaration order. */
-  key?: (string | null)[]
+export type DelegatedSecretRef = {
+  [S in OrgSecretSource]: { source: S; workspaceId: string } & (OrgSecretKeyArity[S] extends 0
+    ? { key?: readonly [] }
+    : { key: OrgSecretKeyOf<S> })
+}[OrgSecretSource]
+
+/**
+ * Build a {@link DelegatedSecretRef}, with the source's own key arity enforced by the signature.
+ *
+ * The door for a caller whose `source` is not a literal, which a union type alone cannot check.
+ * The rest parameter IS the source's declared key tuple, so passing too few (or too many)
+ * identifiers is a build failure at the call site rather than a 422 from the mothership.
+ */
+export function orgSecretRef<S extends OrgSecretSource>(
+  source: S,
+  workspaceId: string,
+  ...key: OrgSecretKeyOf<S>
+): DelegatedSecretRef {
+  // The one assertion in this module, and it is what the function is FOR rather than a hole in
+  // it: the signature above is the guarantee, and the compiler cannot re-derive the
+  // source-to-arity correspondence from a still-generic `S` on the way out.
+  return { source, workspaceId, key } as DelegatedSecretRef
 }
 
 /** Where a delegated seal lands: the source decides which cipher (HKDF `info` tag) is used. */

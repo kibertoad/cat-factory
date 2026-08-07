@@ -343,6 +343,9 @@ export {
 export type {
   DocumentConnectionRecord,
   DocumentConnectionRepository,
+  DocumentConnectionStore,
+  DocumentConnectionSummary,
+  SealedDocumentConnectionRecord,
   DocumentRecord,
   DocumentRef,
   DocumentRepository,
@@ -380,6 +383,9 @@ export {
 export type {
   TaskConnectionRecord,
   TaskConnectionRepository,
+  TaskConnectionStore,
+  TaskConnectionSummary,
+  SealedTaskConnectionRecord,
   TaskSourceSettingsRecord,
   TaskSourceSettingsRepository,
   TaskRecord,
@@ -451,15 +457,25 @@ export type {
   DropSealedSecretResult,
 } from './sealed-secret-inventory.js'
 export type { PersonalSecretCipher } from './personal-secret-cipher.js'
+export type { SealedConnectionOpenResult } from './sealed-connections.js'
+export { openedConnections } from './sealed-connections.js'
 export type {
   OrgSecretSource,
+  OrgSecretKeyArity,
+  OrgSecretKeyOf,
+  OrgSecretSourceOfArity,
   DelegatedSecretRef,
   DelegatedSealRef,
   SecretDelegate,
   OrgSecretCipher,
   OrgSecretCipherOptions,
 } from './secret-delegation.js'
-export { ORG_SECRET_SOURCES, createOrgSecretCipher } from './secret-delegation.js'
+export {
+  ORG_SECRET_SOURCES,
+  ORG_SECRET_KEY_ARITY,
+  createOrgSecretCipher,
+  orgSecretRef,
+} from './secret-delegation.js'
 export type {
   EnvironmentProvider,
   AsyncProvisionCapability,

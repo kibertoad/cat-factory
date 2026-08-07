@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type {
   Clock,
   DocumentConnectionRecord,
-  DocumentConnectionRepository,
+  DocumentConnectionStore,
+  DocumentSourceKind,
   DocumentSourceProvider,
   DocumentSourceRegistry,
+  SealedConnectionOpenResult,
   NormalizedConnection,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
@@ -19,21 +21,44 @@ import { DocumentConnectionService } from './DocumentConnectionService.js'
 
 function makeService(opts: {
   stored?: DocumentConnectionRecord[]
+  /** Stored sources whose sealed bag refuses to open, as a drifted key or corrupt envelope would. */
+  unreadable?: string[]
   /** Whether the GitHub-docs provider reports an implicit connection for the workspace. */
   githubInstalled: boolean
 }) {
   const store = new Map<string, DocumentConnectionRecord>()
   for (const r of opts.stored ?? []) store.set(r.source, r)
+  const unreadable = new Set<string>(opts.unreadable ?? [])
   const reads = { byWorkspace: 0, listed: 0 }
   const invalidatedGroups: string[] = []
-  const documentConnectionRepository: DocumentConnectionRepository = {
+  // Faked at the STORE level: these cases are about the service's stored-⊕-implicit resolution,
+  // and the sealing itself has its own unit test (`sealedConnectionStore.test.ts`).
+  const documentConnectionStore: DocumentConnectionStore = {
     async getByWorkspace(_ws, source) {
       reads.byWorkspace += 1
       return store.get(source) ?? null
     },
-    async listByWorkspace() {
+    async listBySources(_ws, sources) {
       reads.listed += 1
-      return [...store.values()]
+      return sources.flatMap(
+        (source): SealedConnectionOpenResult<DocumentSourceKind, DocumentConnectionRecord>[] => {
+          const row = store.get(source)
+          if (!row) return []
+          if (unreadable.has(source)) {
+            return [{ source, status: 'unreadable', cause: new Error('corrupt envelope') }]
+          }
+          return [{ source, status: 'opened', connection: row }]
+        },
+      )
+    },
+    async listSummaries() {
+      reads.listed += 1
+      return [...store.values()].map(({ workspaceId, source, label, createdAt }) => ({
+        workspaceId,
+        source,
+        label,
+        createdAt,
+      }))
     },
     async upsert(record) {
       store.set(record.source, record)
@@ -66,7 +91,7 @@ function makeService(opts: {
   const clock: Clock = { now: () => 1000 }
 
   const service = new DocumentConnectionService({
-    documentConnectionRepository,
+    documentConnectionStore,
     registry,
     workspaceRepository,
     clock,
@@ -153,9 +178,10 @@ describe('DocumentConnectionService batch resolution', () => {
 
     expect(service.reads.listed).toBe(1)
     expect(service.reads.byWorkspace).toBe(0)
-    expect(resolved.get('confluence')?.credentials).toEqual({ token: 'c' })
+    expect(resolved.get('confluence')).toEqual({ status: 'connected', connection: stored })
     // Only a source with no stored row falls through to its provider's out-of-band credential.
-    expect(resolved.get('github')?.label).toBe('GitHub')
+    const github = resolved.get('github')
+    expect(github?.status === 'connected' && github.connection.label).toBe('GitHub')
   })
 
   it('reads nothing at all for an empty source list', async () => {
@@ -173,7 +199,32 @@ describe('DocumentConnectionService batch resolution', () => {
 
     const resolved = await service.resolveConnections('ws_1', ['confluence'])
 
-    expect(resolved.get('confluence')).toBeNull()
+    expect(resolved.get('confluence')).toEqual({ status: 'not_connected' })
+  })
+
+  it('confines an unopenable bag to ITS source, leaving the rest of the corpus resolvable', async () => {
+    // The property that stopped one drifted shelf entry speaking for a whole run's documents: a
+    // batch-wide rejection reported every source as `credentials_unreadable`, including the ones
+    // that opened fine, so an operator saw a corpus-wide outage where one row had gone bad.
+    const figma: DocumentConnectionRecord = {
+      workspaceId: 'ws_1',
+      source: 'figma',
+      credentials: { token: 'f' },
+      label: 'Figma',
+      createdAt: 1,
+      deletedAt: null,
+    }
+    const confluence: DocumentConnectionRecord = { ...figma, source: 'confluence', label: 'Conf' }
+    const service = makeService({
+      githubInstalled: false,
+      stored: [figma, confluence],
+      unreadable: ['confluence'],
+    })
+
+    const resolved = await service.resolveConnections('ws_1', ['figma', 'confluence'])
+
+    expect(resolved.get('figma')).toEqual({ status: 'connected', connection: figma })
+    expect(resolved.get('confluence')?.status).toBe('unreadable')
   })
 })
 

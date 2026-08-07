@@ -2,12 +2,13 @@ import type { Clock, DocumentSourceProvider, IdGenerator } from '@cat-factory/ke
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import {
   ConfluenceProvider,
+  createDocumentConnectionStore,
   FigmaProvider,
   GitHubDocsProvider,
   LinearDocumentProvider,
   NotionProvider,
-  ZeplinProvider,
   resolveDeploymentDocumentResolver,
+  ZeplinProvider,
 } from '@cat-factory/integrations'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { WebCryptoSecretCipher } from '@cat-factory/server'
@@ -114,14 +115,17 @@ export function selectDocumentsDeps(
   // once-guarded first-request validation in `index.ts`, which reports it exactly once per isolate.
   const deploymentDocuments = deploymentDocumentDeps(env)
   if (providers.length === 0) return deploymentDocuments
+  const documentConnectionRepository = new D1DocumentConnectionRepository({ db })
   return {
     ...deploymentDocuments,
     documentSourceProviders: providers,
-    documentConnectionRepository: new D1DocumentConnectionRepository({
-      db,
-      // The config gate guarantees the key is present when enabled; source
-      // credentials are encrypted at rest under a documents-scoped HKDF info.
-      cipher: new WebCryptoSecretCipher({
+    documentConnectionRepository,
+    documentConnectionStore: createDocumentConnectionStore({
+      documentConnectionRepository,
+      // The config gate guarantees the key is present when enabled; source credentials are sealed
+      // at rest under a documents-scoped HKDF info. No delegate here: a Cloudflare deployment is
+      // always a mothership, so it holds its own key.
+      secretCipher: new WebCryptoSecretCipher({
         masterKeyBase64: config.documents.encryptionKey!,
         info: 'cat-factory:documents',
       }),

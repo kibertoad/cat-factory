@@ -1,11 +1,12 @@
 import type { Clock, IdGenerator, TaskSourceProvider } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import {
+  createTaskConnectionStore,
   GitHubIssuesProvider,
   GitLabIssuesProvider,
+  gitlabWebBaseFromApiBase,
   JiraProvider,
   LinearTaskProvider,
-  gitlabWebBaseFromApiBase,
 } from '@cat-factory/integrations'
 import type { AppConfig } from './config'
 import type { Env } from './env'
@@ -77,13 +78,16 @@ export function selectTasksDeps(
       }),
     )
   }
+  const taskConnectionRepository = new D1TaskConnectionRepository({ db })
   return {
     taskSourceProviders: providers,
-    taskConnectionRepository: new D1TaskConnectionRepository({
-      db,
-      // The config gate guarantees the key is present when enabled; source
-      // credentials are encrypted at rest under a tasks-scoped HKDF info.
-      cipher: new WebCryptoSecretCipher({
+    taskConnectionRepository,
+    taskConnectionStore: createTaskConnectionStore({
+      taskConnectionRepository,
+      // The config gate guarantees the key is present when enabled; source credentials are sealed
+      // at rest under a tasks-scoped HKDF info. No delegate: a Cloudflare deployment holds its own
+      // key (it is the mothership others delegate TO).
+      secretCipher: new WebCryptoSecretCipher({
         masterKeyBase64: config.tasks.encryptionKey!,
         info: 'cat-factory:tasks',
       }),

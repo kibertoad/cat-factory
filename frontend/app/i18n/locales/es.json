@@ -529,7 +529,8 @@
     "unavailable": {
       "description": {
         "binary_generators_unreachable": "No se han podido leer las integraciones generativas de esta instalación en este momento, así que no se ha iniciado la ejecución. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión.",
-        "foundational_builtins_unreachable": "No se han podido leer los servicios fundamentales integrados de esta instalación en este momento. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión."
+        "foundational_builtins_unreachable": "No se han podido leer los servicios fundamentales integrados de esta instalación en este momento. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión.",
+        "connection_credentials_unreadable": "No se han podido leer las credenciales guardadas de esta conexión. Si esta instalación puede acceder al servicio que custodia su clave, vuelve a conectar la fuente para reemplazarlas; si no, inténtalo de nuevo cuando se restablezca esa conexión."
       }
     },
     "action": {

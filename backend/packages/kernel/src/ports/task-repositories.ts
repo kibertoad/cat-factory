@@ -1,5 +1,6 @@
 import type { TaskSourceKind, TaskComment } from '../domain/types.js'
 import type { TaskCredentials } from './task-source.js'
+import type { SealedConnectionOpenResult } from './sealed-connections.js'
 
 // Persistence ports for the task-source integration. The worker implements
 // these against D1 (migration 0014); tests can supply in-memory fakes. All rows
@@ -7,14 +8,20 @@ import type { TaskCredentials } from './task-source.js'
 // tables serves every provider.
 
 /**
- * A workspace's connection to one task source, including its credential bag.
- * Credentials are infrastructure detail (never sent on the wire); they live here
- * so the import path can authenticate against the source for this workspace.
+ * A workspace's connection to one task source AS STORED: the credential bag as a SEALED envelope,
+ * plus the non-secret label. The document-source sibling
+ * ({@link SealedDocumentConnectionRecord}) carries the argument for why the seal is the row's own
+ * representation rather than something the repository hides.
  */
-export interface TaskConnectionRecord {
+export interface SealedTaskConnectionRecord {
   workspaceId: string
   source: TaskSourceKind
-  credentials: TaskCredentials
+  /**
+   * AES-GCM envelope over the JSON credential bag, sealed under the deployment's
+   * `cat-factory:tasks` cipher — the `task_source_connection` entry of the mothership's
+   * `ORG_SECRET_SOURCES` table.
+   */
+  credentialsCipher: string
   /** Human-friendly label for the connection (site URL). */
   label: string
   createdAt: number
@@ -24,10 +31,60 @@ export interface TaskConnectionRecord {
 
 export interface TaskConnectionRepository {
   /** The workspace's live connection for a source, or null if not connected. */
-  getByWorkspace(workspaceId: string, source: TaskSourceKind): Promise<TaskConnectionRecord | null>
+  getByWorkspace(
+    workspaceId: string,
+    source: TaskSourceKind,
+  ): Promise<SealedTaskConnectionRecord | null>
   /** Every live connection the workspace holds, across sources. */
-  listByWorkspace(workspaceId: string): Promise<TaskConnectionRecord[]>
+  listByWorkspace(workspaceId: string): Promise<SealedTaskConnectionRecord[]>
   /** Create or replace the live connection for a (workspace, source). */
+  upsert(record: SealedTaskConnectionRecord): Promise<void>
+  /** Tombstone the workspace's connection to a source. */
+  softDelete(workspaceId: string, source: TaskSourceKind, at: number): Promise<void>
+}
+
+/**
+ * The OPENED view of the same rows: the credential bag the import/webhook paths authenticate
+ * with. Credentials are infrastructure detail and never sent on the wire.
+ */
+export interface TaskConnectionRecord {
+  workspaceId: string
+  source: TaskSourceKind
+  credentials: TaskCredentials
+  label: string
+  createdAt: number
+  deletedAt: number | null
+}
+
+/** A stored connection's non-secret half: everything but the credential bag. */
+export interface TaskConnectionSummary {
+  workspaceId: string
+  source: TaskSourceKind
+  label: string
+  createdAt: number
+}
+
+/**
+ * The credential-bearing view of {@link TaskConnectionRepository}, and the ONE place a tracker
+ * credential is sealed or opened. `DocumentConnectionStore` carries the argument for why the
+ * surface is split by how much each caller needs OPENED; implemented by
+ * `createTaskConnectionStore` (`@cat-factory/integrations`).
+ */
+export interface TaskConnectionStore {
+  /** The workspace's live connection for a source, opened, or null if not connected. */
+  getByWorkspace(workspaceId: string, source: TaskSourceKind): Promise<TaskConnectionRecord | null>
+  /**
+   * The named sources' live connections in ONE stored-row read, each opened INDEPENDENTLY. A
+   * source with no stored row is simply absent from the result; empty input reads nothing; a
+   * source whose bag will not open answers `unreadable` rather than failing the sources beside it.
+   */
+  listBySources(
+    workspaceId: string,
+    sources: readonly TaskSourceKind[],
+  ): Promise<SealedConnectionOpenResult<TaskSourceKind, TaskConnectionRecord>[]>
+  /** Every live connection's non-secret half. Opens no envelope. */
+  listSummaries(workspaceId: string): Promise<TaskConnectionSummary[]>
+  /** Seal `record`'s bag and store it as the live connection for its (workspace, source). */
   upsert(record: TaskConnectionRecord): Promise<void>
   /** Tombstone the workspace's connection to a source. */
   softDelete(workspaceId: string, source: TaskSourceKind, at: number): Promise<void>

@@ -235,11 +235,12 @@ function wirePreviewModule(
  * (`documentRepository`/`taskRepository`.listByBlock/get) on EVERY container agent dispatch, so
  * these are on the board-load + run path even though the document/task INTEGRATIONS are opt-in.
  * The sub-helpers (`selectNodeDocumentsDeps`/`selectNodeTasksDeps`) build them directly over the
- * absent `db`, so re-source the context-builder run-path repos from the remote registry — plus the
- * environment CONNECTION management surface. The document/task connection/provider surfaces they
- * also build stay db-direct (a later integration slice remotes them — their credential rows would
- * ship DECRYPTED over the RPC, an open secrets design point, unlike the sealed-blob environment
- * connection here). Routing is orthogonal to the allow-list: an un-allow-listed remote method
+ * absent `db` and only when their integration is CONFIGURED, so the context-builder run-path repos
+ * are re-sourced here instead: they are read on every dispatch whether or not a workspace ever
+ * connected a source. The integrations' own connection/settings repos need no line here, because
+ * those helpers source them at construction now that a connection row carries its credential bag
+ * SEALED (the mothership opens it by name over `/internal/secrets/unseal`) — plus the environment
+ * CONNECTION management surface below. Routing is orthogonal to the allow-list: an un-allow-listed remote method
  * returns a clean `unknown_method`, never a `db`-undefined `TypeError`. A no-op outside mothership
  * mode (`remoteRepos` undefined). Extracted from {@link buildNodeContainer} to keep it under budget.
  */

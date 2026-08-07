@@ -2,16 +2,17 @@ import type { D1Database } from '@cloudflare/workers-types'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import {
-  type AppConfig,
-  FetchGitHubClient,
-  logger,
-  WebCryptoSecretCipher,
-} from '@cat-factory/server'
-import {
+  createTaskConnectionStore,
+  githubIssuesLogic,
   IssueWritebackService,
   TicketTrackerService,
-  githubIssuesLogic,
 } from '@cat-factory/integrations'
+import {
+  FetchGitHubClient,
+  logger,
+  type AppConfig,
+  WebCryptoSecretCipher,
+} from '@cat-factory/server'
 import type { Env } from './env.js'
 import { buildAppRegistry, buildResolveRepoTarget } from './container.js'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository.js'
@@ -137,15 +138,15 @@ export function selectRecurringDeps(
   // Jira: read the workspace's stored connection credentials (when the tasks
   // integration's encryption key is configured).
   if (config.tasks.encryptionKey) {
-    const taskConnectionRepository = new D1TaskConnectionRepository({
-      db,
-      cipher: new WebCryptoSecretCipher({
+    const taskConnectionStore = createTaskConnectionStore({
+      taskConnectionRepository: new D1TaskConnectionRepository({ db }),
+      secretCipher: new WebCryptoSecretCipher({
         masterKeyBase64: config.tasks.encryptionKey,
         info: 'cat-factory:tasks',
       }),
     })
     const resolveJiraConnection = async (workspaceId: string) => {
-      const connection = await taskConnectionRepository.getByWorkspace(workspaceId, 'jira')
+      const connection = await taskConnectionStore.getByWorkspace(workspaceId, 'jira')
       const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
       if (!baseUrl || !accountEmail || !apiToken) return null
       return { baseUrl, accountEmail, apiToken }
@@ -153,7 +154,7 @@ export function selectRecurringDeps(
     trackerDeps.resolveJiraConnection = resolveJiraConnection
     writebackDeps.resolveJiraConnection = resolveJiraConnection
     const resolveLinearConnection = async (workspaceId: string) => {
-      const connection = await taskConnectionRepository.getByWorkspace(workspaceId, 'linear')
+      const connection = await taskConnectionStore.getByWorkspace(workspaceId, 'linear')
       const { apiKey, token } = connection?.credentials ?? {}
       return apiKey || token ? { apiKey, token } : null
     }
@@ -163,7 +164,7 @@ export function selectRecurringDeps(
     // tells a reporter to answer on the ticket: whether an inbound webhook secret was ever minted
     // for that connection. Without it the reply path fails closed, so the copy offers the API
     // route alone. Mirrored in the Node facade's `buildNodeIssueWriteback`.
-    writebackDeps.taskConnectionRepository = taskConnectionRepository
+    writebackDeps.taskConnectionStore = taskConnectionStore
   }
   return {
     pipelineScheduleRepository: new D1PipelineScheduleRepository({ db }),

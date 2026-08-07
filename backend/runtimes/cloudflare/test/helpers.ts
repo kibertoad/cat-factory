@@ -10,6 +10,7 @@ import type {
 } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import { driveWorkspace } from '@cat-factory/conformance'
+import { createDocumentConnectionStore, createTaskConnectionStore } from '@cat-factory/integrations'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { env } from 'cloudflare:test'
@@ -302,14 +303,16 @@ export function documentsDeps(
   opts: { providers?: DocumentSourceProvider[] } = {},
 ): Partial<CoreDependencies> {
   const db = env.DB
+  const documentConnectionRepository = new D1DocumentConnectionRepository({ db })
   return {
     documentSourceProviders: opts.providers ?? [
       new FakeDocumentSourceProvider('confluence'),
       new FakeDocumentSourceProvider('notion'),
     ],
-    documentConnectionRepository: new D1DocumentConnectionRepository({
-      db,
-      cipher: new WebCryptoSecretCipher({
+    documentConnectionRepository,
+    documentConnectionStore: createDocumentConnectionStore({
+      documentConnectionRepository,
+      secretCipher: new WebCryptoSecretCipher({
         // The shared master key, always set in the test bindings (see vitest.config.ts).
         masterKeyBase64: env.ENCRYPTION_KEY!,
         info: 'cat-factory:documents',
@@ -329,11 +332,13 @@ export function tasksDeps(
   opts: { providers?: TaskSourceProvider[] } = {},
 ): Partial<CoreDependencies> {
   const db = env.DB
+  const taskConnectionRepository = new D1TaskConnectionRepository({ db })
   return {
     taskSourceProviders: opts.providers ?? [new FakeTaskSourceProvider('jira')],
-    taskConnectionRepository: new D1TaskConnectionRepository({
-      db,
-      cipher: new WebCryptoSecretCipher({
+    taskConnectionRepository,
+    taskConnectionStore: createTaskConnectionStore({
+      taskConnectionRepository,
+      secretCipher: new WebCryptoSecretCipher({
         // The shared master key, always set in the test bindings (see vitest.config.ts).
         masterKeyBase64: env.ENCRYPTION_KEY!,
         info: 'cat-factory:tasks',

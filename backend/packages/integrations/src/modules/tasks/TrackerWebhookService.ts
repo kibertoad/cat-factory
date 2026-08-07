@@ -16,7 +16,7 @@ import {
   type ReviewQuestionSubject,
   type ReviewReplyAck,
   type ReviewReplyRejection,
-  type TaskConnectionRepository,
+  type TaskConnectionStore,
   type TaskRepository,
   TRACKER_COMMENT_INGEST_CLAIM_TTL_MS,
   TRACKER_WEBHOOK_REPLY_ALLOW_KEY,
@@ -139,7 +139,7 @@ function namedItemIds(commands: readonly ReviewReplyCommand[]): ReadonlySet<stri
 
 export interface TrackerWebhookServiceDependencies {
   taskRepository: TaskRepository
-  taskConnectionRepository: TaskConnectionRepository
+  taskConnectionStore: TaskConnectionStore
   /**
    * Fire every recurring schedule whose intake configuration this issue event qualifies for,
    * returning how many fired. Bound to `RecurringPipelineService.triggerForIssueEvent`. Absent ⇒
@@ -244,10 +244,7 @@ export class TrackerWebhookService {
     const commands = parseReviewReplyCommands(event.body)
     if (commands.length === 0) return { kind: 'ignored', reason: 'no_commands' }
 
-    const connection = await this.deps.taskConnectionRepository.getByWorkspace(
-      workspaceId,
-      event.source,
-    )
+    const connection = await this.deps.taskConnectionStore.getByWorkspace(workspaceId, event.source)
     const allowList = connection?.credentials?.[TRACKER_WEBHOOK_REPLY_ALLOW_KEY] ?? ''
     if (!isAllowedReplyAuthor(event.author, allowList)) {
       // The one path that leaves NO other trace, so it must leave a log line.

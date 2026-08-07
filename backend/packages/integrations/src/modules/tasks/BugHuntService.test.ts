@@ -51,7 +51,7 @@ function service(options: {
   const registry = { get: () => impl } as unknown as TaskSourceRegistry
   const hunt = new BugHuntService({
     taskSourceRegistry: registry,
-    taskConnectionRepository: {
+    taskConnectionStore: {
       getByWorkspace: async () => ({ credentials: {} }),
     } as never,
     taskRepository: { listByWorkspace: async (): Promise<SourceTask[]> => [] } as never,

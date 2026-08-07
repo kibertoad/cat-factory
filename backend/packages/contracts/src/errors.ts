@@ -234,10 +234,20 @@ export type ConflictReason = (typeof CONFLICT_REASONS)[number]
  *                                        unknown set. Retryable; nothing is misconfigured.
  *  - `foundational_builtins_unreachable` — the same shape for the deployment's `builtin`
  *                                        foundational-services tier.
+ *  - `connection_credentials_unreadable` — a stored document-source or tracker connection exists,
+ *                                        but its sealed credential bag would not open. `details`
+ *                                        carries the `source`. Two causes reach this and the
+ *                                        deployment genuinely cannot tell them apart (the
+ *                                        mothership collapses "no such row" / "out of scope" /
+ *                                        "nothing sealed" into one uniform 404), so the copy names
+ *                                        BOTH remedies rather than picking one: retry if the key
+ *                                        service is unreachable, re-connect the source if the row
+ *                                        itself has drifted.
  */
 export const UNAVAILABLE_REASONS = [
   'binary_generators_unreachable',
   'foundational_builtins_unreachable',
+  'connection_credentials_unreadable',
 ] as const
 
 export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number]

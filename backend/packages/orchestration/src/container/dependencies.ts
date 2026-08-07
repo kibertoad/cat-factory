@@ -58,6 +58,7 @@ import type {
   DeploymentDocumentResolver,
   DocInterviewRepository,
   DocumentConnectionRepository,
+  DocumentConnectionStore,
   DocumentContentResolver,
   DocumentRepository,
   DocumentSourceProvider,
@@ -163,6 +164,7 @@ import type {
   StepResolverRegistry,
   SubscriptionActivationRepository,
   TaskConnectionRepository,
+  TaskConnectionStore,
   TaskRepository,
   TaskSourceProvider,
   TaskSourceSettingsRepository,
@@ -676,7 +678,15 @@ export interface CoreDependencies {
   /** Model the document planner uses (the agents' default model ref). */
   documentPlannerModel?: ModelRef
   documentSourceProviders?: DocumentSourceProvider[]
+  /** The SEALED connection rows (persistence only: this facade may hold no key for them). */
   documentConnectionRepository?: DocumentConnectionRepository
+  /**
+   * The credential-bearing view of the rows above, and the only thing the module's services hold.
+   * Built by the facade beside the repository (`createDocumentConnectionStore`) so a
+   * mothership-mode node composes the mothership delegate in and needs no local key. Absent
+   * whenever the repository is: the two are one wiring decision.
+   */
+  documentConnectionStore?: DocumentConnectionStore
   documentRepository?: DocumentRepository
 
   // ---- Task-source integration (optional; wired only when configured) ------
@@ -687,7 +697,10 @@ export interface CoreDependencies {
   // TaskSourceProvider port. `taskRepository` is additionally consumed by the
   // execution engine to feed issues linked to a block to agents as context.
   taskSourceProviders?: TaskSourceProvider[]
+  /** The SEALED connection rows (persistence only: this facade may hold no key for them). */
   taskConnectionRepository?: TaskConnectionRepository
+  /** Their credential-bearing view; the document-source sibling above carries the rationale. */
+  taskConnectionStore?: TaskConnectionStore
   /** Per-workspace on/off toggle for each task source (absent row ⇒ enabled). */
   taskSourceSettingsRepository?: TaskSourceSettingsRepository
   taskRepository?: TaskRepository
