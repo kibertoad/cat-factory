@@ -92,6 +92,13 @@ Two things to know before minting `decide` or `admin`:
 - Handing out even a `read` key is not free once the debug surface is in play: it reaches prompt
   and response bodies the SPA gates behind workspace RBAC. See the
   [auth section of `debug-api.md`](./debug-api.md#auth).
+- **Each operation's floor is machine-readable**: the OpenAPI document stamps it as
+  `x-min-scope` (spec 1.23.0), beside the document-level `x-public-api-scopes` ladder those
+  floors are ranked against, both read off the same contracts the routes enforce, and
+  `@cat-factory/gatekeeper-bindings` ([`sdk/gatekeeper`](../../sdk/gatekeeper)) ships the whole
+  surface as a policy-annotated table for an integration that fronts a key for callers of its
+  own. The stamp is the STATIC floor only; the dynamic escalations this section describes (a
+  parking pipeline requiring `decide` at start) still apply on top.
 - **A pipeline the board has not adopted yet is a real pipeline for both start paths, and is scoped
   like any other.** Built-ins are copied into a workspace at creation, so a board older than a
   catalog pipeline holds no row for it; a run MATERIALISES the row on first start
@@ -265,7 +272,11 @@ auto-pagination, SSE framing, bounded retries on idempotent requests only, and a
 status class with the machine-readable `code` exposed verbatim.
 
 Details, the design rules the four share, and the Java/Kotlin story:
-[`sdk/README.md`](../../sdk/README.md).
+[`sdk/README.md`](../../sdk/README.md). For a service that holds the key itself and meters what
+its own callers may do (a Cloudflare OS Gatekeeper, a governance proxy), the same generator also
+ships `@cat-factory/gatekeeper-bindings`: every operation as a policy-annotated entry (scope
+floor, mutation and transport metadata, an invoke thunk over the TypeScript client). See
+[its README](../../sdk/gatekeeper/README.md).
 
 ### From an MCP host
 
@@ -395,7 +406,7 @@ mapping, so it always agrees with the field it filters on.
 | `POST /api/v1/services/:serviceId/tasks` | `write`  | Create a task. Body `{ title (1–200), description? (≤2000), taskType?, fields?, ticket?, documents? }` (`taskType` defaults to `feature`; `recurring` is not creatable here). See [Filling a task type's form](#filling-a-task-types-form), [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket) and [Attaching requirements documents](#attaching-requirements-documents). |
 | `GET /api/v1/services/:serviceId/tasks`  | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                                                                                                                                                                                  |
 | `GET /api/v1/tasks/:taskId`              | `read`   | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                                                                                                                                                                                                                                                                          |
-| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                                                                                                                                                                                                                                                                           |
+| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit the task's authored input: `{ title?, description?, fields? }` (an empty patch is a no-op). `fields` is MERGED over what the task already carries, so a caller sends only what it decides; see [Repairing a refused input](#repairing-a-refused-input).                                                                                                                                       |
 | `POST /api/v1/tasks/:taskId/start`       | `write`¹ | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                                                                                                                                                                                   |
 | `POST /api/v1/tasks/:taskId/stop`        | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                                                                                                                                                                                      |
 | `POST /api/v1/tasks/:taskId/retry`       | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                                                                                                                                                                                   |
@@ -532,6 +543,69 @@ what the catalog shows is exactly what creation accepts):
 `GET /api/v1/task-types` lists the built-in kinds plus the operations this deployment registered,
 minus any a workspace admin has hidden on this board: it answers "what may I create **here**", so a
 type it omits is one creation would refuse.
+
+#### Repairing a refused input
+
+The pre-dispatch input gate parks a run for free when the task states nothing an agent could act on,
+and it names exactly which input is missing. Four of its seven codes name a field of the bag above:
+`reproduction_missing`, `review_target_missing`, `success_criteria_missing` and
+`required_field_missing` (whose `field.key` says which). For a release those four named a remedy
+this surface did not offer: `fields` was accepted at CREATE and nowhere else, so the platform could
+accept a task, refuse to run it, say precisely what to go and fix, and leave you with `proceed`
+(waiving the finding) or deleting the task. Deleting is not a workaround: it loses the task id every
+stored reference points at, its ticket claim (which then refuses every future filing of that ticket)
+and its attached documents.
+
+`PATCH /api/v1/tasks/:taskId` now takes `fields`, checked against the same descriptors and refused
+the same way (`422`, `task_type_fields_invalid`, every `problem` at once):
+
+```http
+PATCH /api/v1/tasks/tsk_9
+{ "fields": { "stepsToReproduce": "1. open Reports  2. export an account with 12k rows  3. 500" } }
+```
+
+```http
+POST /api/v1/runs/run_4/decisions/input-gate/resolve
+{ "choice": "recheck" }
+```
+
+The recheck re-evaluates the task as it now stands, so it comes back `passed` only if the gap is
+genuinely closed; a still-blocked recheck is an ordinary `200` with refreshed findings.
+
+Five rules differ from the create call, each for a stated reason:
+
+- **`fields` is MERGED, not substituted.** A key you send is written; a key you omit keeps its
+  stored value. This API does not serve the bag back (a deployment's own type may declare a
+  `password` field, and a read surface cannot tell those from the rest), so a replacing patch would
+  ask you to restate values you have no way to read.
+- **An empty value means "not supplied"**, exactly as at creation, so it leaves the stored value
+  alone. There is no way to CLEAR a field here; nothing has needed one, and adding it later is
+  additive where guessing at it now would not be.
+- **Only the keys you SEND are checked against the descriptors.** A stored value was admitted by
+  another authority: the descriptors for a built-in type restate the platform's internal schema more
+  narrowly (`stepsToReproduce` is 2000 here against the schema's 4000), and a deployment can
+  re-register a custom type's form under tighter bounds than a stored task was filled in under.
+  Judging those on every patch would refuse your write for something it did not do, and refuse each
+  later one identically, leaving the task permanently un-repairable over the surface that exists to
+  repair it. Completeness is still judged on the RESULT, so a `required` field answered by neither
+  the stored bag nor your patch is named.
+- **Two spellings of one value supersede each other rather than merging.** A `review` task's target
+  is `prNumber` or `prUrl`, and the number wins when a single request carries both. Send `prUrl`
+  alone and the stored `prNumber` is dropped rather than merged back in beside it, which would
+  otherwise outrank your URL and silently revert the task to the pull request you were replacing.
+- **The best-practice fragments a task carries are frozen at creation** and are not re-derived from
+  a later edit, matching what an edit through the app does.
+
+A `review` task's target is the one value with resolution behind it, and the patch repeats that
+resolution rather than skipping it: the pull request is verified against the service's linked
+repository (a provider's own "no such PR" is a `422`; an outage is not) and the confirmed reference
+is folded into the description, exactly as at creation. Sending `description` in the same request is
+safe for a read-modify-write client: `GET /api/v1/tasks/:taskId` serves the description with that
+fold already in it, and sending it back replaces the fold rather than stating it a second time.
+Where a STORED description has since been rewritten by hand the platform can no longer tell which
+part of it was that fold, so **changing the target is refused** (with the reason in `problems`)
+rather than leaving a description naming a pull request the run does not review. Send the
+description you want alongside the new target, or edit it on its own first.
 
 #### Filing a task from a tracker ticket
 
@@ -821,7 +895,9 @@ Thirteen decision kinds appear in `decisions[]`, discriminated by `kind`:
   (`description_missing`, `description_placeholder`, `reproduction_missing`,
   `review_target_missing`, and the advisory `description_thin` / `success_criteria_missing`), so map
   them to your own copy rather than parsing prose. To clear it, **fix the task first**
-  (`PATCH /api/v1/tasks/:taskId`) and then `recheck`: the fix is verified, never taken on trust, and
+  (`PATCH /api/v1/tasks/:taskId` — `title`/`description` for the three description codes, `fields`
+  for the four that name a per-type field: see [Repairing a refused input](#repairing-a-refused-input))
+  and then `recheck`: the fix is verified, never taken on trust, and
   a still-blocked recheck comes back as an ordinary `200` with refreshed findings because nothing
   went wrong. `proceed` waives the findings, which stay on the run under an `overridden` verdict.
   This is the one park that depends on the **task** rather than the pipeline, which is why a
@@ -844,9 +920,12 @@ Thirteen decision kinds appear in `decisions[]`, discriminated by `kind`:
   exercise it. `degradedReason` non-null means no environment was provisioned and the change has
   to be tested against the PR branch by hand.
 - **`visual-confirmation`**: the UI tester's screenshots are waiting to be compared against the
-  reference designs. `pairs` carries the artifact ids per view, but **the images are not readable
-  over this API** — resolving an id to an image needs the app, so approving on this projection
-  alone approves screenshots you have not seen.
+  reference designs. `pairs` carries the artifact ids per view, and both halves of a pairing are
+  readable: `GET /api/v1/artifacts/:artifactId/blob` is keyed on the artifact alone, so it serves
+  an uploaded reference design exactly as it serves a captured screenshot. Fetch both and compare
+  them rather than approving on the projection. (This section said the opposite for a release after
+  the blob endpoint shipped. A caveat that outlives its cause is worse than none, because it tells
+  a caller not to attempt something that works.)
 
 - **`follow-ups`**: while the Coder worked it streamed forward-looking `items` (loose ends it
   noticed and deliberately did not act on, and questions it would otherwise have guessed at), and
@@ -928,16 +1007,17 @@ kinds**: a `subscription` row's `costEstimate` is illustrative (flat-rate plans 
 token); only `metered` rows are money. Workspace tier only, by design: a workspace key never learns
 a sibling workspace's spend.
 
-### Run evidence (report + artifacts)
+### Run evidence (report + outcome + artifacts)
 
 What a run PROVED, for a consumer whose job is to judge it rather than debug it: a trial harness
 deciding whether to accept a change, an evaluation pipeline scoring a fleet of runs.
 
-| Method / path                            | Scope  | Behaviour                                                       |
-| ---------------------------------------- | ------ | --------------------------------------------------------------- |
-| `GET /api/v1/runs/:runId/report`         | `read` | The engine's **verification report** for the run.               |
-| `GET /api/v1/runs/:runId/artifacts`      | `read` | The binary artifacts the run captured (metadata; unpaged).      |
-| `GET /api/v1/artifacts/:artifactId/blob` | `read` | One artifact's **bytes**, with its recorded image content type. |
+| Method / path                            | Scope  | Behaviour                                                               |
+| ---------------------------------------- | ------ | ----------------------------------------------------------------------- |
+| `GET /api/v1/runs/:runId/report`         | `read` | The engine's **verification report** for the run.                       |
+| `GET /api/v1/runs/:runId/outcome`        | `read` | The run's **outcome summary**: what it changed, and what backs that up. |
+| `GET /api/v1/runs/:runId/artifacts`      | `read` | The binary artifacts the run captured (metadata; unpaged).              |
+| `GET /api/v1/artifacts/:artifactId/blob` | `read` | One artifact's **bytes**, with its recorded image content type.         |
 
 A run is addressable here on the same terms as the [decision routes](#parked-decisions-apiv1runsruniddecisions)
 that share the `/api/v1/runs/:runId/*` prefix: the runs this key could already read through
@@ -974,6 +1054,45 @@ the complete one: a caller is asking about the RUN, not about one of its pull re
 `scope` means what it always meant, the own-service PR, so a consumer written before 1.12 is
 unaffected.
 
+**The outcome summary is the report's sibling, not a projection of it.** Same evidence, different
+reader: the report is a reviewer's bundle (every failing check by name, every captured log tail, the
+merge assessment), and the outcome is the product-language answer for someone reporting what shipped:
+`disposition`, the requester's own `ask`, every pull request the run opened, requirement coverage,
+the tester's verdict and concerns, the views it captured, and the machine checks that recorded a
+verdict. It is the reduction the app's outcome card renders, served verbatim for the same reason the
+report is: one deployment answering a question two ways is how the app and an integration come to
+disagree about what a run did.
+
+Both are composed by the same code over one read of the run's evidence, so the coverage counts
+(`met` / `notMet` / `notCovered` / `regressions` / `total`) and the regression rule are the same
+numbers on both endpoints and on the pull request. What differs is the SHAPE, deliberately: the
+report is bounded to what FITS IN A PULL-REQUEST BODY, a budget of a few dozen rows, so a tally
+taken off its capped tables would be quietly wrong. The outcome's own caps are a ceiling on a
+pathological producer rather than a routine truncation (500 requirement rows, 200 tester areas or
+concerns, 2000 characters of any one free-text field), so an ordinary run is complete.
+
+Both name what they left out in `truncations`, in one vocabulary
+(`"requirements.entries: showing 500 of 640"`), and **neither endpoint's counts are ever affected**:
+every tally is computed over the whole join before any cap, so a bounded response reports a shorter
+table and never a smaller spec. `requirements.entries` is ordered by SEVERITY, so a cap drops the
+least severe rows and the note says so: a reader assuming the spec's own order would otherwise
+conclude the missing requirements were never ruled on. Free text is scrubbed before it is clamped,
+so a cut can never leave half a credential in the payload.
+
+Every outcome section is `{ status: "reported" } | { status: "absent", gap }` where
+`gap` is a machine-readable CODE (`no_tester_step`, `tester_not_reported`, `no_verdicts`,
+`no_requirements`, `run_unavailable`) rather than prose, since the platform does not localize:
+`requirements.spec` says whether coverage was counted against the service's `spec/` (`joined`) or
+only against the ids the tester reported (`not_read`, a narrower denominator), and
+`unmatchedVerdicts` counts rulings the spec could not place, on both endpoints. A spec that
+declares no requirements is `no_requirements` only when the tester ruled on nothing either;
+with verdicts standing against it the section is `reported` with `total: 0` and every verdict
+unmatched, because a spec that moved under the run is not a run nobody tested.
+
+The `spec/` both endpoints join against is read from the branch the RUN pushed to, falling back to
+the repo default: the spec increment a task wrote has not merged while its pull request is open, so
+the default branch is missing exactly the requirements the tester just ruled on.
+
 The **artifact** rows are `{ artifactId, kind, view, contentType, byteSize, hash, createdAt }`.
 `kind` is `screenshot` (machine-captured during the run) or `reference` (the image a human uploaded
 for it to be judged against); `view` pairs the two. The list is deliberately unpaged: the capture
@@ -996,7 +1115,8 @@ never an empty list, which would say something false about the run.
 
 **What the report costs.** It is composed per request, and for a run whose tester reported it also
 reads the service's `spec/` tree off the run's branch over the VCS API, the only `/api/v1` read
-that reaches outside the deployment. The result is memoised per run inside one process, so a
+that reaches outside the deployment. The outcome read shares that read (and its memo) and costs
+strictly less besides: no linked issues, no provisioning history, no pull-request resolution. The result is memoised per run inside one process, so a
 scaled Node deployment or a cold Worker isolate can repeat it. That is the price of serving the
 pull request's bundle verbatim rather than a second projection that could disagree with it. An
 integration sweeping a fleet should poll per run on settlement rather than on a tight loop; there
@@ -1005,6 +1125,7 @@ is no separate rate limit on this endpoint beyond the key itself.
 ```sh
 # The report a trial harness ingests, and the evidence behind it.
 curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/report" | jq '.ci, .validation, .observability'
+curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/outcome" | jq '.disposition, .requirements, .checks'
 curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/artifacts" | jq '.artifacts[] | {artifactId, view, byteSize}'
 curl -s -H "$AUTH" "$BASE/api/v1/artifacts/$ART/blob" -o login.png
 ```

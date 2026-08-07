@@ -55,6 +55,7 @@ import type {
   CreateSharedStackInput,
   CustomManifestTypeRepository,
   DeployCloneTarget,
+  DeploymentDocumentResolver,
   DocInterviewRepository,
   DocumentConnectionRepository,
   DocumentContentResolver,
@@ -525,6 +526,16 @@ export interface CoreDependencies {
    */
   spendRollupRepository?: SpendRollupRepository
   /**
+   * How long the `token_usage` ledger is retained (`TOKEN_USAGE_RETENTION_DAYS`, in ms). Not a
+   * knob any service applies itself: the retention sweep owns the prune. It is here because a
+   * board DELETE has to fold the board's un-rolled spend into {@link spendRollupRepository}
+   * before the cascade takes the ledger rows, and how far back that fold walks is bounded by how
+   * far back the ledger still holds anything. Wiring the same number both places is what keeps a
+   * board's final fold covering exactly the days a sweep pass would have. 0 or absent ⇒ the
+   * ledger is never pruned and the fold falls back to its own backfill floor.
+   */
+  tokenUsageRetentionMs?: number
+  /**
    * Whether the LLM observability sink persists the full prompt body with each metric.
    * Defaults to true; set false (via `LLM_RECORD_PROMPTS=false`) to keep the numeric
    * telemetry while storing the complete prompts empty. Only meaningful when
@@ -956,6 +967,21 @@ export interface CoreDependencies {
    * document as a fragment is rejected and run resolution uses cached bodies.
    */
   documentContentResolver?: DocumentContentResolver
+  /**
+   * Live document reader for the DEPLOYMENT's own documents: the living standard a code-registered
+   * (`builtin`-tier) prompt fragment names, authenticated with credentials this deployment
+   * configured centrally rather than with any tenant's connection.
+   *
+   * Its own field beside {@link documentContentResolver} because the difference is the CREDENTIAL
+   * HOME, not an argument: that one resolves a workspace's stored connection, this one reads
+   * deployment configuration and caches under one deployment-wide group. In MOTHERSHIP mode it is
+   * REMOTE (the credentials live on the mothership and never reach a node, so the node reads the
+   * resolved body over `/internal/prompt-fragments/document-bodies`).
+   *
+   * Absent ⇒ this deployment configured no document source of its own, and boot validation refuses
+   * a code-registered `documentRef` rather than letting it render as live and fold something stale.
+   */
+  deploymentDocumentResolver?: DeploymentDocumentResolver
 
   // ---- Repo-sourced Claude Skills library (opt-in; ADR 0024) ----
   // An account's catalog of repo-authored Claude skills. The catalog read assembles

@@ -51,12 +51,18 @@ top-level files are the domain contracts.
   `password` by construction). Lives here because the SPA's submit button and the server's create
   check must agree about every one of those rules, including DEFAULT seeding
   (`withDescriptorFieldDefaults`), which moved here from the SPA so a defaulted `required` field is
-  not accepted from a form and refused from a script.
+  not accepted from a form and refused from a script. A PARTIAL write goes through
+  `validatePatchedDescriptorFields` instead, which splits the rules by author: per-VALUE checks
+  apply to the keys the request named, because a stored value was admitted by another authority
+  (a wider internal schema, an earlier descriptor revision) and re-judging it refuses a patch for
+  something the patch did not do; `required` and visibility still read the merged RESULT.
 - `public-task-types.ts`: what `GET /api/v1/task-types` serves and what `createPublicTaskSchema.fields`
   is validated against: ONE table for both directions, so what discovery advertises is exactly what
   creation accepts. `BUILTIN_PUBLIC_TASK_FIELDS` states the built-in types' fields as descriptors
   (they have no registration to read them off); it is a deliberate SUBSET of `taskTypeFieldsSchema`,
-  and widening it is additive.
+  and widening it is additive. `supersededBuiltinFieldKeys` states which of those keys are alternate
+  SPELLINGS of one value (`review`'s `prNumber`/`prUrl`), so a MERGING patch drops the spelling the
+  caller did not send rather than merging it back in to outrank the one it did.
 - `agent-failure-kinds.ts`: the closed run FAILURE-KIND vocabulary plus `isAgentFailureKind`,
   the predicate for a string that may name a RETIRED member. A leaf module (valibot only) so
   every layer that must agree about the set can import it: the operator dashboard's breakdown,
@@ -68,5 +74,18 @@ top-level files are the domain contracts.
   backend's available-repos picker (which resolves a pasted URL by its slug instead of feeding
   it to the provider's name search). Lives here because contracts is the only package both
   sides import.
+
+- `run-evidence.ts` + `run-outcome.ts`: how a finished run's evidence is REDUCED, and the reason
+  those rules are in a leaf package rather than in the engine. Two documents reduce one run: the PR
+  verification report (`pr-report.ts`, composed in orchestration) and the run OUTCOME summary
+  (`composeRunOutcome`, rendered by the SPA card and served at `GET /api/v1/runs/:runId/outcome`).
+  `run-evidence.ts` holds every rule they BOTH state: `isTesterKind`, which tester step a section
+  reports on, the verdict index across every tester step, the spec join, the regression rule, the
+  tallies, the verdicts the join could not place, and `runSpecBranch` (the run's own branch, else
+  the repo default). They lived on each side once and had already drifted on three axes (which
+  testers count, what `not_covered` is counted over, and which BRANCH the spec is read from), so
+  the same run printed different numbers depending on whether you read the pull request or the app. What each surface still owns is presentation and its
+  own absence policy: the report writes prose onto a parsed host surface, the summary emits
+  machine-readable `gap` codes the SPA maps to translated copy.
 
 **See also:** `docs/glossary.md`, `CLAUDE.md` → "Board / service / repo-linkage model".

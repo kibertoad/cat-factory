@@ -447,8 +447,20 @@ export async function buildIr(doc) {
       const success = successResponse(operation)
       const kind = responseKind(id, success)
       const bodySchema = operation.requestBody?.content?.['application/json']?.schema
+      // The key-scope floor the route enforces, stamped by `generate-openapi.mjs` from each
+      // contract's `minScope`. Required rather than defaulted: an operation with no floor would
+      // ship in the gatekeeper bindings as policy metadata that silently says nothing, and the
+      // generator upstream already refuses to produce such a spec.
+      const minScope = operation['x-min-scope']
+      if (typeof minScope !== 'string') {
+        throw new Error(
+          `SDK IR: ${id} (${method.toUpperCase()} ${path}) carries no x-min-scope. Regenerate the ` +
+            'spec (`pnpm gen:openapi`); a public contract without `withMinScope` fails there.',
+        )
+      }
       operations.push({
         id,
+        minScope,
         // `httpMethod`, not `method`: the SDK surface table (scripts/sdk/surface.mjs) names each
         // operation's METHOD on its resource client, and one of the two had to give.
         httpMethod: method.toUpperCase(),
@@ -489,8 +501,22 @@ export async function buildIr(doc) {
     )
   }
 
+  // The scope vocabulary the per-operation floors are drawn from, ordered least to greatest, as
+  // `generate-openapi.mjs` stamps it from the contracts' `PUBLIC_API_SCOPES`. Required rather
+  // than defaulted, for the reason `x-min-scope` is: an emitter that fell back to a restated copy
+  // would rank a key against a ladder the deployment may have moved past, and the failure is
+  // SILENT (an unknown rung ranks -1, so every capability filters out and the caller sees a key
+  // with no permissions rather than an error).
+  const scopeLadder = spec['x-public-api-scopes']
+  if (!Array.isArray(scopeLadder) || scopeLadder.length === 0) {
+    throw new Error(
+      'SDK IR: the spec carries no x-public-api-scopes ladder. Regenerate it (`pnpm gen:openapi`).',
+    )
+  }
+
   return {
     info: spec.info,
+    scopeLadder,
     security: spec.components?.securitySchemes ?? {},
     tags: spec.tags ?? [],
     types: [...registry.types.values()]

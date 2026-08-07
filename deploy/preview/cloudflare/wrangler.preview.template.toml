@@ -1,10 +1,10 @@
 # Per-PR preview Worker — the TEMPLATE the preview workflow renders (envsubst) into
 # `deploy/backend/wrangler.pr.toml` before deploying. See ../README.md.
 #
-# It lives beside the production `deploy/backend/wrangler.toml` once rendered, so every
-# relative path (`main`, `migrations_dir`) resolves exactly as production's does. Keep the
+# It lives beside the `deploy/backend/wrangler.toml` template once rendered, so every
+# relative path (`main`, `migrations_dir`) resolves exactly as that template's does. Keep the
 # BINDING SHAPE in step with that file: the Worker code resolves bindings by name, so a
-# binding production gained and this template didn't is a preview that boots misconfigured.
+# binding the template gained and this file didn't is a preview that boots misconfigured.
 #
 # Placeholders (all substituted by the workflow; a missing one fails the render):
 #   ${PR_NUMBER}          the pull request number — the isolation key for every named resource
@@ -13,7 +13,8 @@
 #   ${D1_SANDBOX_ID}      per-PR sandbox D1 database id
 #   ${D1_AUDIT_ID}        per-PR audit-log D1 database id
 #   ${WORKERS_SUBDOMAIN}  the account's workers.dev subdomain (for WORKER_PUBLIC_URL)
-#   ${EXECUTOR_IMAGE}     the executor-harness image, read out of the production wrangler.toml
+#   ${EXECUTOR_IMAGE}     the executor image: the preview account's managed registry plus the
+#                         tag pinned in deploy/backend/wrangler.toml (composed by the workflow)
 #   ${GITHUB_APP_ID}      the preview GitHub App's id (a THROWAWAY app — see ../README.md)
 #
 # Everything a preview deliberately does NOT get, and what each omission costs:

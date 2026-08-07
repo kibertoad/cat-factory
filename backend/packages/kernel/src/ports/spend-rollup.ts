@@ -66,6 +66,37 @@ export interface SpendRollupRepository {
    */
   rollupSpendDays(fromEpochMs: number, toEpochMs: number): Promise<number>
   /**
+   * The same fold, narrowed to ONE workspace: the LAST one a board ever gets, run inside its own
+   * deletion while its ledger rows are still there to be folded.
+   *
+   * {@link rollupSpendDays} deliberately reaches only boards that still exist, which keeps a
+   * sweep from reclaiming a deleted board's frozen rows but leaves the mirror-image gap: the
+   * board's spend SINCE the last completed rollup day was never folded, and `token_usage` IS in
+   * the workspace-delete cascade, so those rows go before any pass sees them. The loss is
+   * bounded by the sweep interval and permanent, and a TCO table that silently drops the final
+   * hours of every board that was ever tidied up is understating exactly the boards an operator
+   * deleted because they were expensive. So the delete folds them itself, BEFORE the cascade.
+   *
+   * Two properties make it safe to call and are not optional:
+   *
+   * - It is still bounded to workspaces that EXIST, for the same reason the sweep is. Called
+   *   after the cascade it would delete its window and re-fold nothing, reclaiming the very rows
+   *   the exclusion in `WORKSPACE_CASCADE_SPECIAL_TABLES` exists to keep. The bound
+   *   makes that a no-op rather than a data loss, so the ordering is enforced by the query and
+   *   not only by the call site.
+   * - It does NOT touch the coverage marker. {@link spendRollupWatermark} is deployment-scoped
+   *   and answers "how far has the SWEEP got" for every board at once; one board's final fold
+   *   covers no other board's days, so advancing it would present days nothing folded as
+   *   covered, and the marker only ever moves forward, so nothing could walk it back.
+   *
+   * Returns the number of buckets written.
+   */
+  rollupWorkspaceSpendDays(
+    workspaceId: string,
+    fromEpochMs: number,
+    toEpochMs: number,
+  ): Promise<number>
+  /**
    * The newest COMPLETE UTC day the rollup SWEEP has covered (epoch ms, midnight), or null
    * when no pass has ever completed. Read from the sweep's own recorded coverage,
    * deployment-scoped, for the reasons on `PlatformMetricsRepository.dailyRollupWatermark`.

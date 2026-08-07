@@ -1,5 +1,252 @@
 # @cat-factory/orchestration
 
+## 0.232.0
+
+### Minor Changes
+
+- be9b8dc: Let a headless caller repair the input the platform itself refused.
+
+  `PATCH /api/v1/tasks/:taskId` accepts `fields`, the task's per-type bag, checked against the same
+  descriptors `GET /api/v1/task-types` serves and refused the same way (`422`,
+  `details.reason: 'task_type_fields_invalid'`, every problem at once). Four of the pre-dispatch input
+  gate's seven issue codes name a field of that bag, and it was accepted at creation and nowhere else,
+  so the platform could accept a task, refuse to run it, name precisely what to go and fix, and leave
+  a caller with `proceed` (waiving the finding) or deleting a task whose id every stored reference
+  points at. OpenAPI `info.version` 1.24.0; all four SDKs and the MCP facade regenerated.
+
+  The public `fields` MERGES over what the task carries where the internal patch keys replace, because
+  this API does not serve the bag back: a deployment's own type may declare a `password` field, so
+  there is no read surface to restate values from. Three rules keep that merge from judging or
+  rewriting what the caller never sent:
+
+  - Only the keys a request NAMES are checked against the descriptors. A stored value was admitted by
+    another authority (the public descriptors for a built-in type restate `taskTypeFieldsSchema` more
+    narrowly, and a deployment may re-register a custom type under tighter bounds), so re-judging it
+    refuses the patch for something it did not do, identically every time. Completeness (`required`)
+    is still judged on the merged result.
+  - Alternate SPELLINGS of one value supersede each other. A `review` task's target is `prNumber` or
+    `prUrl`; merging the stored number back in beside a caller's URL would outrank it and silently
+    revert the target.
+  - A description arriving with the patch has the fold it already carries REPLACED rather than
+    prepended to. The read surface serves the folded description, so a read-modify-write client
+    returns it, and prepending left the task naming two different pull requests.
+
+  Internally the per-type bag is now patched through two keys that each replace their own half:
+  `customTaskTypeFields` (unchanged) and a new `builtinTaskTypeFields`, validated by the schema rather
+  than by a deployment's descriptor. A `review` task's target repeats creation's own resolution on the
+  patch path (the pull request is verified against the provider and the confirmed reference re-folded
+  into the description); where the description has since been rewritten by hand, moving the target is
+  refused rather than left naming a pull request the run does not review.
+
+  Also retires a stale caveat on the visual-confirmation decision, which told callers the screenshots
+  and reference designs were not readable over `/api/v1`. They have been readable since the artifact
+  blob endpoint shipped: it is keyed on the artifact alone, so it serves both anchors.
+
+### Patch Changes
+
+- Updated dependencies [be9b8dc]
+  - @cat-factory/contracts@0.264.0
+  - @cat-factory/agents@0.117.2
+  - @cat-factory/integrations@0.141.2
+  - @cat-factory/kernel@0.262.2
+  - @cat-factory/prompt-fragments@1.0.12
+  - @cat-factory/sandbox@0.11.89
+  - @cat-factory/spend@0.15.30
+  - @cat-factory/workspaces@0.26.2
+  - @cat-factory/caching@0.18.3
+
+## 0.231.0
+
+### Minor Changes
+
+- e5f7eb0: Serve the run outcome summary over `/api/v1`, and compose it from the same code as the PR
+  verification report.
+
+  `GET /api/v1/runs/:runId/outcome` answers the summary the app's outcome card renders: what the run
+  changed and what backs that up, for a reader who will not open a diff. It is the report's sibling on
+  the evidence surface, not a projection of it.
+
+  Serving it moved `composeRunOutcome` out of the SPA into `@cat-factory/contracts`, and moved the
+  rules it shares with the verification report (which tester steps count, the spec join, the
+  regression rule, the tallies) into `contracts/src/run-evidence.ts`, where both reductions call them.
+
+  **Behaviour change, and the reason for the whole change.** The two reductions had drifted. The
+  report unions every tester step's verdicts and counts coverage over the service's in-repo `spec/`;
+  the outcome summary read only the last tester that reported and counted over the verdicts that
+  tester happened to return. One run produced different `met` / `not covered` / `total` numbers
+  depending on whether you read the pull request or the app. The summary now follows the report's
+  semantics on both axes, so a requirement nobody looked at is reported as unchecked instead of being
+  invisible.
+
+  **Second behaviour change: the app's outcome card now joins against the spec on the RUN's branch.**
+  It fetched the enclosing service's spec from the repo's default branch, so while a pull request was
+  open every verdict naming a requirement the run itself added joined against a spec that does not
+  carry it yet and rendered as "not checked", and the card's counts then contradicted the endpoint,
+  which reads the run's branch. `GET /workspaces/:ws/executions/:executionId/spec` serves the card the
+  same read, through the same loader and the same branch rule.
+
+  Additive on the public surface (OpenAPI `1.22.0`): the new endpoint, plus
+  `requirements.unmatchedVerdicts` on the verification report, which counts tester verdicts against
+  ids the spec does not carry. Those used to be dropped silently, which made the section report fewer
+  rulings than the tester made with nothing to explain the gap. The report now RENDERS that count in
+  its prose rather than only carrying it in the JSON, and a spec that declares no requirements while
+  the tester did return verdicts is reported (0 requirements, every verdict unmatched) instead of
+  being called an absence, on both documents: it is a spec that moved under the run, and calling it
+  "nothing to rule on" discarded every ruling the tester made.
+
+  The outcome payload also gains `truncations`, in the verification report's own vocabulary. Served
+  over `/api/v1` it is scrubbed with `redactSecrets` and bounded, which the report has always done for
+  the same tester text on its way onto a pull request; unbounded, its size was set by how much a model
+  chose to write. The counts are computed before any cap, so a bounded response still reports the true
+  totals. The SPA composes the same reduction locally and caps nothing, so `truncations` is empty
+  there.
+
+  Internally: `TESTER_AGENT_KIND` and `isTesterKind` are now defined in `@cat-factory/contracts` and
+  re-exported by `@cat-factory/agents` and the engine (the SPA had a hand-written copy with the slugs
+  as literals), and the block + `spec/` reads both documents need are shared through a new
+  `RunEvidenceLoader`. The outcome summary's `spec` join vocabulary loses `unmatched` (a joined
+  section now carries every spec requirement, so a titleless row inside one cannot occur) and gains a
+  `no_requirements` gap.
+
+### Patch Changes
+
+- Updated dependencies [1025674]
+- Updated dependencies [e5f7eb0]
+  - @cat-factory/contracts@0.263.0
+  - @cat-factory/agents@0.117.1
+  - @cat-factory/integrations@0.141.1
+  - @cat-factory/kernel@0.262.1
+  - @cat-factory/prompt-fragments@1.0.11
+  - @cat-factory/sandbox@0.11.88
+  - @cat-factory/spend@0.15.29
+  - @cat-factory/workspaces@0.26.1
+  - @cat-factory/caching@0.18.2
+
+## 0.230.0
+
+### Minor Changes
+
+- 8cbd518: Let a code-registered prompt fragment name a LIVING document.
+
+  A `documentRef` on a deployment-registered fragment used to be refused at boot, because every
+  document source authenticated per workspace and there was no deployment-wide credential to read one
+  with. A deployment now configures its own (`DOC_SOURCE_<SOURCE>_<FIELD>`, the field names taken from
+  each provider's existing connect-form declaration), and a `builtin`-tier `documentRef` resolves
+  through a new `DeploymentDocumentResolver` port, version-probed and cached under one
+  deployment-wide group so a hundred workspaces folding one standard cost one fetch and one
+  invalidation.
+
+  The deployment's own credentials are read from the environment and nothing else. `DOCUMENT_SOURCES`
+  governs which sources a WORKSPACE may connect, and `DOCUMENTS_ENABLED` and the connection encryption
+  key govern whether tenant connections are stored at all; none of the three has any bearing on a
+  standard the deployment configured centrally, whose credentials live in plaintext variables and are
+  never persisted. So setting `DOC_SOURCE_NOTION_API_TOKEN` is the whole configuration, with no
+  unrelated prerequisite to discover.
+
+  `github` is the exception and it is declared, not inferred: its credential is a workspace's App
+  installation, so the new `deploymentScoped` source trait is false for it and both boot validation
+  and the provider refuse the scope. Boot now refuses only a `documentRef` this deployment cannot
+  serve, naming which of the two causes applies.
+
+  An unreachable source still degrades to the fragment's registered body, but no longer silently: the
+  fallback logs a warning naming the fragment, tier and source, because the prompt is byte-identical
+  either way and nothing downstream could otherwise tell a stale standard from a current one.
+
+  In mothership mode the credential stays on the mothership and the node reads the resolved body over
+  `POST /internal/prompt-fragments/document-bodies`.
+
+  `DocumentSourceProvider.fetchDocument` / `probeVersion` now take `workspaceId: string | null`, where
+  `null` is the deployment scope. An internal interface with no external consumers.
+
+- 8cbd518: Make a runtime facade the whole extension surface a deployment needs.
+
+  Each facade now re-exports the CONSTRUCTOR and the types for every app-owned registry it lets a
+  deployment inject, not only the option that takes one. `gateRegistry`, `judgeRegistry`,
+  `stepResolverRegistry`, `vcsRegistry` and `promptFragmentRegistry` were reachable options with no
+  exported way to build a value, so the only route was a direct dependency on `@cat-factory/kernel` /
+  `@cat-factory/gates` / `@cat-factory/prompt-fragments`, which publish at exact versions, so
+  floating one past what the facade pins resolves a second physical copy and the registration lands
+  where nothing reads it. The reusable-operation authoring types (`CustomTaskType`,
+  `TaskTypePresentation`, `TaskTypeFieldDescriptor`, `TaskTypeFieldOption`, the shared
+  `DescriptorField*` shapes, `PromptFragment`), the four descriptor helpers, the built-in
+  `*_PIPELINE_ID` constants and `RegistrationProblem` come with them.
+
+  `start()` / `startLocal()` / `createWorker()` take an `escalateRegistrationWarning` predicate,
+  raising selected boot-validation warnings to errors. Boot must WARN on an unresolvable
+  `defaultFragmentIds` id because it cannot tell a typo from an account/workspace-tier id that merges
+  per workspace at run time; a deployment whose operations reference only fragments it registers
+  itself knows that second cause does not apply, and can now say so instead of re-deriving the check
+  in its own test suite.
+
+  Additive throughout: no existing registration, option or export changes shape.
+
+- 7a2730a: Fold a board's un-rolled spend inside its own delete, so the durable record ends where the board did
+
+  `spend_days` is deliberately outside the workspace-delete cascade: money already spent is an
+  account-level fact, and reclaiming it would shrink last quarter's TCO retroactively and silently.
+  Keeping it out of that list was made real by bounding the sweep's rewrite to boards that still
+  exist, because `token_usage` IS cascaded and an unbounded window DELETE would otherwise re-fold
+  nothing and reclaim the deleted board's most recent days on the sweep's own schedule.
+
+  That bound left the mirror-image gap, which this closes. The sweep reaches only boards that still
+  exist, so a board's spend SINCE the last completed rollup day has never been folded when its delete
+  begins, and its ledger rows go with the cascade before any later pass could see them. The loss was
+  bounded by the sweep interval, permanent, and skewed worst for exactly the boards an operator
+  deleted because they were expensive. `WorkspaceService.delete` now runs one final per-workspace fold
+  before the cascade, beside the binary-artifact purge and for the same reason: afterwards there is
+  nothing left to read.
+
+  Three things make that fold a different shape from a sweep pass, and each was a decision rather than
+  a detail:
+
+  - **It walks to now in chunks instead of capping its window.** A sweep can leave a wide catch-up for
+    its next pass; this board has no next pass, so the span cap becomes a chunk size rather than a
+    truncation. Truncating would have introduced a second, quieter version of the same loss.
+  - **It walks newest-first, on a budget, and one bad chunk does not end it.** The walk is unbounded
+    by construction (a watermark left stale by an outage plans a ledger-retention's worth of chunks)
+    and it runs inside a user's delete request rather than on a cron. Unbounded, on the Worker, it
+    stops preserving the board's spend and starts preventing its deletion: the invocation dies before
+    the cascade, and the retry reads the same watermark and plans the same walk. So the walk stops at
+    `FINAL_SPEND_FOLD_BUDGET_MS` and a failing chunk costs only itself, which makes the ORDER decide
+    what survives: newest-first, because every report window this rollup serves is anchored at now
+    while the far end of a stale catch-up falls outside even the 90-day one.
+  - **It does not touch the coverage marker.** `rolledUpThrough` is deployment-scoped and states how
+    far the SWEEP has covered every board at once. One board's final fold covers no other board's
+    days, and the marker only ever moves forward, so advancing it there would permanently present
+    days nothing folded as covered.
+  - **It keeps the still-exists guard anyway.** Called after the cascade the fold reads nothing, and
+    an unguarded window DELETE would then reclaim the frozen rows the exclusion exists to keep. The
+    guard makes the fold-then-cascade ordering a property of the query rather than of the call site,
+    so both halves of "a rewrite may only delete what it can reproduce" live in the same statement.
+
+  The resume point and the ledger-retention horizon are the sweep's own, which is why the pure walk
+  (`spendRollupWindow` plus the new `finalSpendFoldPlan`) moved from `@cat-factory/orchestration` into
+  kernel: the two callers sit in different layers and restating the horizon rule per caller is exactly
+  how the delete path would end up stepping over days a sweep would still have folded. Facades now
+  wire `tokenUsageRetentionMs` onto `CoreDependencies` so both derive it from one number.
+
+  The fold is best-effort, which is a trade worth reviewing: refusing the delete on a sick rollup query
+  would keep the spend foldable for a retry, but it would also render a reporting outage as a board
+  that cannot be deleted. So the delete proceeds and what was not folded is named on one `warn`, whose
+  fields keep the causes apart because they need different responses: what the ledger no longer holds
+  (already unfoldable before the delete began), what the store refused, what the budget never reached,
+  and a resume point that could not be read at all.
+
+### Patch Changes
+
+- Updated dependencies [8cbd518]
+- Updated dependencies [8cbd518]
+- Updated dependencies [7a2730a]
+  - @cat-factory/contracts@0.262.0
+  - @cat-factory/kernel@0.262.0
+  - @cat-factory/integrations@0.141.0
+  - @cat-factory/agents@0.117.0
+  - @cat-factory/workspaces@0.26.0
+  - @cat-factory/prompt-fragments@1.0.10
+  - @cat-factory/sandbox@0.11.87
+  - @cat-factory/spend@0.15.28
+  - @cat-factory/caching@0.18.1
+
 ## 0.229.0
 
 ### Minor Changes

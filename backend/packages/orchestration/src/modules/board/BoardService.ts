@@ -73,6 +73,8 @@ import { PublicBoardReads } from './publicBoardReads.js'
 import { buildReviewDescription, resolveReviewTaskTarget } from './reviewTaskTarget.js'
 import type { BlockPatchNarrowing } from './blockPatchNarrowing.js'
 import { createBlockPatchNarrowing } from './blockPatchNarrowing.js'
+import { applyTaskTypeFieldsPatch } from './taskTypeFieldsPatch.js'
+import type { TaskTypeFieldsPatchDeps } from './taskTypeFieldsPatch.js'
 import type { TaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
 import { createTaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
 import type { RiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
@@ -273,6 +275,7 @@ export class BoardService {
    */
   private readonly taskTypeDefaults: TaskTypeCreationDefaults
   private readonly patchNarrowing: BlockPatchNarrowing
+  private readonly taskTypeFieldsPatch: TaskTypeFieldsPatchDeps
   /**
    * Refuses a task's merge-preset selection that would relax what the EDITOR's own role is held
    * to (ADR 0037). Lives on the service rather than in a controller so every door enforces it:
@@ -339,8 +342,8 @@ export class BoardService {
       logger: this.log,
     })
     this.riskPolicySelection = createRiskPolicySelectionGuard({ riskPolicyRepository })
-    // Bound callbacks rather than the service, so the narrowing depends on the two reads and the
-    // one validator it actually uses instead of on everything `BoardService` can do.
+    // Bound callbacks rather than the service, so the narrowing depends on the two reads it
+    // actually uses instead of on everything `BoardService` can do.
     this.patchNarrowing = createBlockPatchNarrowing({
       listByWorkspace: (homeWorkspaceId) => blockRepository.listByWorkspace(homeWorkspaceId),
       // The cross-home resolve is BEST-EFFORT here on purpose: an id that cannot be reached is
@@ -351,9 +354,22 @@ export class BoardService {
           (found) => found.block,
           () => null,
         ),
+    })
+    // The per-type fields patch reaches for creation's OWN two collaborators rather than
+    // re-stating either: the same validator the create form runs, and the same review-target
+    // resolution `addServiceTask` makes.
+    this.taskTypeFieldsPatch = {
       validatedFields: (taskType, fields) =>
         this.taskTypeDefaults.validatedFields(taskType, fields),
-    })
+      resolveReviewTarget: (workspaceId, blockId, taskType, fields) =>
+        resolveReviewTaskTarget(
+          { resolveRunRepoContext: this.resolveRunRepoContext, logger: this.log },
+          workspaceId,
+          blockId,
+          taskType,
+          fields,
+        ),
+    }
     this.layout = createBoardLayoutWrites({
       blockRepository,
       workspaceMountRepository,
@@ -1163,13 +1179,14 @@ export class BoardService {
     // AFTER both of its inputs have settled: the branch invariants are cross-field, so they read
     // the effective branch list against the effective involved set.
     narrow.aprioriBranchInvariants(effective, block)
-    // LAST, because it is the one narrowing that changes the patch's SHAPE: the request names
-    // `customTaskTypeFields` (the half that may be patched) and the row stores the whole
-    // `taskTypeFields`, so this is where the request type becomes the repository's.
+    // LAST, because it is the one step that changes the patch's SHAPE: the request names the two
+    // HALVES of the per-type bag and the row stores it whole, so this is where the request type
+    // becomes the repository's (and, for a review task whose target moved, where the description
+    // is re-folded). See `taskTypeFieldsPatch.ts`.
     await this.blockRepository.update(
       homeWorkspaceId,
       id,
-      narrow.customTaskTypeFields(effective, block),
+      await applyTaskTypeFieldsPatch(this.taskTypeFieldsPatch, effective, block, homeWorkspaceId),
     )
     const updated = assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id)
     // Origin = the block's HOME so editing a shared block fans out to every board mounting it.

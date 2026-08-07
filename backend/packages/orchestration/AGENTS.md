@@ -86,7 +86,23 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   spill the rest of the report — including the machine-readable JSON block — into the body as prose.
   Its teardown leg is closed out of band by `ExecutionService.refreshVerificationReport`, wired
   to the teardown service's teardown-recorded hook (which fires on a failed attempt too), since
-  the TTL sweep reclaims an environment long after the run's last step settled. The step-selection
+  the TTL sweep reclaims an environment long after the run's last step settled. The controller also
+  answers the run OUTCOME summary (`composeOutcomeForRun`, behind
+  `GET /api/v1/runs/:runId/outcome`), which is the SAME evidence reduced for a reader who will not
+  open a diff: the reduction is `composeRunOutcome` in `@cat-factory/contracts` (shared with the SPA
+  card, which composes it live off its own store) and the rules the two documents both state live in
+  that package's `run-evidence.ts`. Both read one run's block and `spec/` through the shared
+  `RunEvidenceLoader`, because sharing composition rules while reading the evidence twice would move
+  the drift one layer down rather than removing it; `runOutcome.parity.test.ts` pins that the two
+  count one run identically. The loader reads the RUN's branch (`runSpecBranch`), and serves that
+  same read to the SPA card over `GET /workspaces/:ws/executions/:executionId/spec`: the card
+  composes locally so it can react to pushed updates, and fetching the SERVICE's default-branch spec
+  instead showed every requirement the run itself added as "not checked". On its way out over
+  `/api/v1` the summary goes through `runOutcome.boundary.ts`, which scrubs and bounds it (the
+  report has always done the same for the same text on its way onto a pull request) and names every
+  drop in `truncations`; the counts are computed before any cap. `RunEvidenceReads` owns the three
+  read paths resolved by run id, so nothing forms a second opinion about what "this run" is. The
+  step-selection
   rule both halves share lives under both in `prReport.steps.ts`, beside `absentNote`, the ONE
   renderer for an absent section's note (through `hostMarkdown`, since a note now names a pull
   request and `owner/repo#12` is a reference the host resolves). Every untrusted value it
@@ -147,6 +163,16 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   suppression read PROPAGATES its failures where the snapshot's read of the same rows is
   best-effort: this one decides whether a row is written. See
   `backend/docs/reusable-operations.md`.
+- `board/taskTypeFieldsPatch.ts`: the same bag written by an EDIT rather than a creation. The
+  request carries the two halves separately (`customTaskTypeFields` checked against the
+  deployment's descriptor, `builtinTaskTypeFields` schema-typed) and each replaces its own, so
+  naming one can never clear the other. It is what makes a run parked on the pre-dispatch input
+  gate recoverable: four of that gate's codes name a field here. The trap is the `review` task,
+  whose target is verified against the provider AND folded into the description at creation: both
+  repeat here, and the fold is made idempotent by RECOMPUTING the old preamble and byte-comparing
+  it, refusing (never guessing) once a human has rewritten the description around it. A description
+  arriving IN the patch is refolded too, not prepended to: the read surfaces serve the folded text,
+  so a read-modify-write caller hands it straight back, and prepending named two pull requests.
 - `board/reparentWrite.ts`: moving a block into a new container, split from `BoardService` because
   the cross-home case is a migration rather than a layout write: it carries the subtree's rows and
   executions to the destination service's home, re-stamps the service scope key, prunes the edges

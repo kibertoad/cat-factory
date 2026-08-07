@@ -1,5 +1,138 @@
 # @cat-factory/app
 
+## 0.242.2
+
+### Patch Changes
+
+- Updated dependencies [be9b8dc]
+  - @cat-factory/contracts@0.264.0
+
+## 0.242.1
+
+### Patch Changes
+
+- 7782751: Three tutorial usability fixes, all found by walking the board-basics tour on a real deployment.
+
+  Coach-mark text was unselectable exactly on the steps that point into an open modal, which
+  includes the one string a user reliably tries to copy: the sample repo slug in the add-service
+  tour. The card is click-focusable (`tabindex="-1"` for `focusCard`), so a press on its text moved
+  focus out of the modal, the modal's focus trap yanked it back, and Chromium abandoned the
+  selection it was starting before `selectstart` ever fired. `preventDefault` on the press cannot
+  fix that (cancelling pointerdown or mousedown cancels the selection itself), so the attribute is
+  no longer standing: the card is focusable only across the window where it actually holds focus,
+  applied just before `focusCard` focuses it and dropped again when focus leaves. Outside that
+  window a press moves focus nowhere, on every input type, with no timing window to lose.
+
+  The command-palette step told the user they "can restart this tutorial from there at any time"
+  without saying how. It now names the palette entry to pick, via a linked i18n message
+  (`@:{'nav.tutorials'}`) so the copy tracks the entry's real label in each locale; the delimited
+  form matters because a bare `@:key` link swallows the closing quotation mark into the key in
+  every quoting convention the catalogs use except French's spaced guillemets.
+
+  The board's top overlay surfaces now have a single owner, `BoardTopOverlays`. The toolbar, the
+  compact-viewport nav trigger, the connection/spend/GitHub-PAT banners and the four advisory
+  banners each used to anchor themselves at the top of the board with their own z-index, so which
+  one you could see came down to who picked the higher number: any standing advisory covered the
+  zoom and fit controls outright, and the toolbar tour step then ringed a control nobody could
+  see. They now render as members of one flex column that owns placement and stacking, which makes
+  the overlap unrepresentable rather than tuned, and leaves no offset constant to go stale when the
+  toolbar pill wraps or grows a scrollbar. The translation-warning strip moves into normal flow at
+  the top of the shell for the same reason: page chrome that takes its own height cannot cover the
+  app beneath it.
+
+  Two visible consequences beyond the fix. The advisory cards now centre over the board rather than
+  over the whole window, so on a wide viewport they sit right of centre by half the sidebar. The
+  local-mode GitHub PAT prompt renders with the board rather than during the brief probe that
+  precedes it.
+
+## 0.242.0
+
+### Minor Changes
+
+- e5f7eb0: Serve the run outcome summary over `/api/v1`, and compose it from the same code as the PR
+  verification report.
+
+  `GET /api/v1/runs/:runId/outcome` answers the summary the app's outcome card renders: what the run
+  changed and what backs that up, for a reader who will not open a diff. It is the report's sibling on
+  the evidence surface, not a projection of it.
+
+  Serving it moved `composeRunOutcome` out of the SPA into `@cat-factory/contracts`, and moved the
+  rules it shares with the verification report (which tester steps count, the spec join, the
+  regression rule, the tallies) into `contracts/src/run-evidence.ts`, where both reductions call them.
+
+  **Behaviour change, and the reason for the whole change.** The two reductions had drifted. The
+  report unions every tester step's verdicts and counts coverage over the service's in-repo `spec/`;
+  the outcome summary read only the last tester that reported and counted over the verdicts that
+  tester happened to return. One run produced different `met` / `not covered` / `total` numbers
+  depending on whether you read the pull request or the app. The summary now follows the report's
+  semantics on both axes, so a requirement nobody looked at is reported as unchecked instead of being
+  invisible.
+
+  **Second behaviour change: the app's outcome card now joins against the spec on the RUN's branch.**
+  It fetched the enclosing service's spec from the repo's default branch, so while a pull request was
+  open every verdict naming a requirement the run itself added joined against a spec that does not
+  carry it yet and rendered as "not checked", and the card's counts then contradicted the endpoint,
+  which reads the run's branch. `GET /workspaces/:ws/executions/:executionId/spec` serves the card the
+  same read, through the same loader and the same branch rule.
+
+  Additive on the public surface (OpenAPI `1.22.0`): the new endpoint, plus
+  `requirements.unmatchedVerdicts` on the verification report, which counts tester verdicts against
+  ids the spec does not carry. Those used to be dropped silently, which made the section report fewer
+  rulings than the tester made with nothing to explain the gap. The report now RENDERS that count in
+  its prose rather than only carrying it in the JSON, and a spec that declares no requirements while
+  the tester did return verdicts is reported (0 requirements, every verdict unmatched) instead of
+  being called an absence, on both documents: it is a spec that moved under the run, and calling it
+  "nothing to rule on" discarded every ruling the tester made.
+
+  The outcome payload also gains `truncations`, in the verification report's own vocabulary. Served
+  over `/api/v1` it is scrubbed with `redactSecrets` and bounded, which the report has always done for
+  the same tester text on its way onto a pull request; unbounded, its size was set by how much a model
+  chose to write. The counts are computed before any cap, so a bounded response still reports the true
+  totals. The SPA composes the same reduction locally and caps nothing, so `truncations` is empty
+  there.
+
+  Internally: `TESTER_AGENT_KIND` and `isTesterKind` are now defined in `@cat-factory/contracts` and
+  re-exported by `@cat-factory/agents` and the engine (the SPA had a hand-written copy with the slugs
+  as literals), and the block + `spec/` reads both documents need are shared through a new
+  `RunEvidenceLoader`. The outcome summary's `spec` join vocabulary loses `unmatched` (a joined
+  section now carries every spec requirement, so a titleless row inside one cannot occur) and gains a
+  `no_requirements` gap.
+
+### Patch Changes
+
+- Updated dependencies [1025674]
+- Updated dependencies [e5f7eb0]
+  - @cat-factory/contracts@0.263.0
+
+## 0.241.3
+
+### Patch Changes
+
+- 8cbd518: Make a runtime facade the whole extension surface a deployment needs.
+
+  Each facade now re-exports the CONSTRUCTOR and the types for every app-owned registry it lets a
+  deployment inject, not only the option that takes one. `gateRegistry`, `judgeRegistry`,
+  `stepResolverRegistry`, `vcsRegistry` and `promptFragmentRegistry` were reachable options with no
+  exported way to build a value, so the only route was a direct dependency on `@cat-factory/kernel` /
+  `@cat-factory/gates` / `@cat-factory/prompt-fragments`, which publish at exact versions, so
+  floating one past what the facade pins resolves a second physical copy and the registration lands
+  where nothing reads it. The reusable-operation authoring types (`CustomTaskType`,
+  `TaskTypePresentation`, `TaskTypeFieldDescriptor`, `TaskTypeFieldOption`, the shared
+  `DescriptorField*` shapes, `PromptFragment`), the four descriptor helpers, the built-in
+  `*_PIPELINE_ID` constants and `RegistrationProblem` come with them.
+
+  `start()` / `startLocal()` / `createWorker()` take an `escalateRegistrationWarning` predicate,
+  raising selected boot-validation warnings to errors. Boot must WARN on an unresolvable
+  `defaultFragmentIds` id because it cannot tell a typo from an account/workspace-tier id that merges
+  per workspace at run time; a deployment whose operations reference only fragments it registers
+  itself knows that second cause does not apply, and can now say so instead of re-deriving the check
+  in its own test suite.
+
+  Additive throughout: no existing registration, option or export changes shape.
+
+- Updated dependencies [8cbd518]
+  - @cat-factory/contracts@0.262.0
+
 ## 0.241.2
 
 ### Patch Changes

@@ -8,7 +8,7 @@ import {
   mountRequestLogging,
   registerCoreControllers,
 } from '@cat-factory/server'
-import type { CoreDependencies } from '@cat-factory/orchestration'
+import type { CoreDependencies, RegistrationProblem } from '@cat-factory/orchestration'
 import type { ToolSecretResolver } from '@cat-factory/kernel'
 import type { Env } from './infrastructure/env'
 import { Hono } from 'hono'
@@ -65,6 +65,19 @@ export interface CreateAppOptions {
    * `createToolSecretResolver` is set, which replaces the chain outright.
    */
   capabilityCredentialEnvironmentFallback?: boolean
+  /**
+   * Raise selected registration-validation WARNINGS to errors (parity with the Node/local facades'
+   * `start()` / `startLocal()` option of the same name).
+   *
+   * The severities are set by what the PLATFORM can know, and for one warning the DEPLOYMENT knows
+   * more: `task_type_unknown_fragment` cannot separate a typo in a code-owned fragment id from a
+   * legitimate account/workspace-tier id that only merges per workspace at run time. A deployment
+   * whose operations reference only fragments it registers itself has no second cause.
+   *
+   * Read by {@link createWorker}, which owns the once-guarded validation; an app assembled by
+   * `createApp` alone never validates, so setting it there has no effect.
+   */
+  escalateRegistrationWarning?: (problem: RegistrationProblem) => boolean
 }
 
 // The Worker builds its container per request, so a persistent misconfiguration would throw on

@@ -674,9 +674,13 @@ func (s *TasksService) Stream(ctx context.Context, taskID string) (*EventStream,
 	return s.client.stream(ctx, req)
 }
 
-// Update edit a task's title/description
-// Edit a task’s human-authored fields (title/description) before it runs. Both fields are
-// optional.
+// Update edit a task's inputs
+// Edit a task’s human-authored inputs before it runs: its title, its description, and `fields`,
+// the per-case values for its own task type (checked against the descriptors `GET
+// /api/v1/task-types` serves). All are optional. `fields` is MERGED over what the task already
+// carries — a key you send is written, a key you omit keeps its stored value — because this API
+// does not serve the bag back. This is what makes an input the pre-dispatch gate refused
+// repairable: supply the value it named, then recheck the parked run.
 // PATCH /api/v1/tasks/{taskId} (operation updatePublicTask).
 func (s *TasksService) Update(ctx context.Context, taskID string, body UpdatePublicTask) (*PublicTask, error) {
 	req := requestSpec{
@@ -2020,8 +2024,8 @@ func (s *DebugService) ListToolCallsAll(ctx context.Context, runID string, query
 	}
 }
 
-// EvidenceService what a run proved: the engine's verification report and the artifacts it captured, bytes
-// included.
+// EvidenceService what a run proved: the engine's verification report, the outcome summary behind it, and the
+// artifacts it captured, bytes included.
 type EvidenceService struct {
 	client *Client
 }
@@ -2039,6 +2043,29 @@ func (s *EvidenceService) DownloadArtifact(ctx context.Context, artifactID strin
 		Path:   fmt.Sprintf("/api/v1/artifacts/%s/blob", pathEscape(artifactID)),
 	}
 	return s.client.requestBytes(ctx, req)
+}
+
+// GetOutcome get a run's outcome summary
+// What the run changed and what backs that up, in product language, for a reader who will not
+// open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined
+// to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, and the
+// machine checks that ran. The same reduction the app’s outcome card renders, over the same
+// evidence the verification report is built from, so the two cannot state different totals for
+// one run. Nothing here is asserted by a model: every count is derived from recorded verdicts.
+// Prefer the verification report when you need a reviewer’s full bundle; prefer this when you
+// need to say what shipped. Sections state `reported` or `absent` with a machine-readable gap
+// code, and `truncations` names any list the response had to bound.
+// GET /api/v1/runs/{runId}/outcome (operation getPublicRunOutcome).
+func (s *EvidenceService) GetOutcome(ctx context.Context, runID string) (*GetPublicRunOutcomeResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/outcome", pathEscape(runID)),
+	}
+	var out GetPublicRunOutcomeResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // GetReport get a run's verification report

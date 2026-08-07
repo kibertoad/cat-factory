@@ -27,7 +27,7 @@ export function publicDiscoveryController(): Hono<AppEnv> {
     // `read` is the FLOOR, not a judgement about sensitivity: an integration's startup check must
     // work whatever rung it holds, and everything answered here is a property of the credential
     // the caller just presented.
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, getPublicIdentityContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const { keyId, accountId, workspaceId, scope, label, createdAt } = gate.auth
     // Straight off the auth result: `authenticate` already loaded the row, so self-description
@@ -38,7 +38,7 @@ export function publicDiscoveryController(): Hono<AppEnv> {
   buildHonoRoute(app, listPublicTaskTypesContract, async (c) => {
     // `read`, like every other discovery call: knowing what may be created is not creating it, and
     // an integration's startup check must work on whatever rung it holds.
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, listPublicTaskTypesContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const container = c.get('container')
     // The board's own hide-list applies, so this answers "what may I create HERE" rather than "what

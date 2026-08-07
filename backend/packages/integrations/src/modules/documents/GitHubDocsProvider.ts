@@ -78,8 +78,9 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
   async fetchDocument(
     _credentials: DocumentCredentials,
     externalId: string,
-    workspaceId: string,
+    scope: string | null,
   ): Promise<DocumentContent> {
+    const workspaceId = this.requireWorkspaceScope(scope)
     const id = githubDocsLogic.parseGitHubDocExternalId(externalId)
     if (!id) {
       throw new ValidationError(`"${externalId}" is not a valid GitHub doc reference`)
@@ -132,8 +133,9 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
   async probeVersion(
     _credentials: DocumentCredentials,
     externalId: string,
-    workspaceId: string,
+    scope: string | null,
   ): Promise<string> {
+    const workspaceId = this.requireWorkspaceScope(scope)
     const id = githubDocsLogic.parseGitHubDocExternalId(externalId)
     if (!id) {
       throw new ValidationError(`"${externalId}" is not a valid GitHub doc reference`)
@@ -188,15 +190,37 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
   }
 
   /**
+   * Narrow a read's scope to a WORKSPACE, refusing the deployment scope (`null`).
+   *
+   * This is the whole reason this source's `deploymentScoped` trait is false. Its credential IS a
+   * workspace's App installation, so serving a deployment-wide read would mean picking one
+   * tenant's installation to fetch on every tenant's behalf. Boot validation refuses such a
+   * registration before a run can reach here; this is the second door, for a caller that resolved
+   * a source some other way. It refuses rather than substituting, which is why the port spells the
+   * deployment scope `null` instead of a sentinel id this method could not tell from a real one.
+   */
+  private requireWorkspaceScope(workspaceId: string | null): string {
+    if (workspaceId === null) {
+      throw new ValidationError(
+        "GitHub docs cannot serve a deployment-scoped read: its credential is a WORKSPACE's " +
+          'App installation, not a value a deployment configures centrally. Use a source whose ' +
+          'credentials are self-contained (Confluence, Notion, Linear, Figma, Zeplin), or create ' +
+          'the fragment at the account tier with a fetch-via workspace.',
+      )
+    }
+    return workspaceId
+  }
+
+  /**
    * Resolve the installation whose token this workspace reads GitHub docs with, scoped to
    * THIS workspace via `getByWorkspace` (never a deployment-wide `listActive` scan). That
    * scoping is what enforces tenant isolation: a crafted `externalId` can only ever ride
-   * the caller's OWN installation token, which GitHub limits to what it may read — its
+   * the caller's OWN installation token, which GitHub limits to what it may read: its
    * account's granted repos plus public repos. So a foreign OR crafted `owner/repo:path`
    * for another tenant's PRIVATE repo simply 404s at the read (classified by
    * {@link fetchFailure}); there is no need to precheck the owner against the installation
-   * account. Dropping that precheck is deliberate — it used to reject a repo the token can
-   * genuinely reach (a PAT that spans accounts in local mode, or a PUBLIC guidelines repo
+   * account. Dropping that precheck is deliberate, because it used to reject a repo the token
+   * can genuinely reach (a PAT that spans accounts in local mode, or a PUBLIC guidelines repo
    * owned by someone else that a hosted App can still read), which is a legitimate thing to
    * link. Reachability is decided by the token, not by matching the owner string.
    */

@@ -6206,11 +6206,8 @@
       "notCovered": "Non verificati: {count}",
       "regressions": "Regressioni: {count}",
       "regressionTag": "Regressione",
-      "idOnly": "solo id",
-      "idOnlyHint": "Questo identificatore non è nella specifica del servizio, quindi non c'è alcun titolo da mostrare.",
       "spec": {
-        "not_read": "La specifica del servizio non è stata letta, quindi questi sono gli identificatori dei requisiti riportati dal tester, senza i loro titoli.",
-        "unmatched": "Nessuno di questi identificatori di requisito compare nella specifica del servizio che è stata letta, quindi vengono mostrati solo gli identificatori riportati dal tester."
+        "not_read": "La specifica del servizio non è stata letta, quindi questi conteggi coprono solo ciò su cui il tester si è pronunciato, per identificatore."
       },
       "verdict": {
         "met": "Verificato",
@@ -6220,8 +6217,10 @@
       "gap": {
         "no_tester_step": "Questa pipeline non ha un passo di test, quindi non è stato verificato alcun requisito.",
         "tester_not_reported": "Il tester non ha ancora riportato nulla, quindi nessun requisito è stato deciso.",
-        "no_verdicts": "Il tester ha riportato senza pronunciarsi su alcun requisito della specifica."
-      }
+        "no_verdicts": "Il tester ha riportato senza pronunciarsi su alcun requisito della specifica.",
+        "no_requirements": "La specifica del servizio non registra alcun requisito, quindi non c'era nulla su cui il tester potesse pronunciarsi."
+      },
+      "unmatchedVerdicts": "Il tester si è pronunciato anche su {count} identificatore/i che questa specifica non contiene, quindi il suo conteggio è più alto di quelli sopra."
     },
     "tests": {
       "title": "Come è stato testato",
@@ -7060,7 +7059,7 @@
           },
           "commandBar": {
             "title": "La palette dei comandi",
-            "body": "Il modo più rapido per raggiungere qualsiasi azione: aprila e inizia a digitare. Da lì puoi riavviare questo tutorial in qualsiasi momento."
+            "body": "Il modo più rapido per raggiungere qualsiasi azione: aprila e inizia a digitare. Per riavviare questo tutorial in qualsiasi momento, scegli lì \"@:{'nav.tutorials'}\"."
           },
           "toolbar": {
             "title": "Controlli della board",

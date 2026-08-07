@@ -87,12 +87,26 @@ describe('applyGateProviders', () => {
     expect(registry.get(CI_STATUS_PROVIDER)).toEqual({ marker: 'from-test' })
   })
 
-  it('leaves an absent key exactly as the build wired it', () => {
-    const registry = defaultProviderRegistry()
-    wireCiStatusProvider(registry, fake('from-config'))
-    applyGateProviders(registry, { docQuality: fake('docQuality') })
-    expect(registry.get(CI_STATUS_PROVIDER)).toEqual({ marker: 'from-config' })
-    expect(wired(registry).sort()).toEqual(['ciStatus', 'docQuality'])
+  it('leaves EVERY absent key exactly as the build wired it, for each key in turn', () => {
+    // The presence check is per key, so asserting it for one of them leaves the other five free
+    // to drop theirs. That failure is not a missing wiring but a CLEARED one: a key absent from
+    // the bag reaches `wire(token, undefined)`, which DELETES the entry, so a single-key override
+    // from a test or embedder would silently unwire the five providers the facade's config had
+    // already supplied and turn those gates into pass-throughs.
+    for (const { key: present } of TOKENS) {
+      const registry = defaultProviderRegistry()
+      applyGateProviders(
+        registry,
+        Object.fromEntries(TOKENS.map(({ key }) => [key, fake('from-config')])),
+      )
+      applyGateProviders(registry, { [present]: fake('from-test') })
+      expect(wired(registry).sort(), present).toEqual(TOKENS.map(({ key }) => key).sort())
+      for (const { key, token } of TOKENS) {
+        expect(registry.get(token), `${present} present, ${key} untouched`).toEqual({
+          marker: key === present ? 'from-test' : 'from-config',
+        })
+      }
+    }
   })
 
   it('is a no-op for no overrides and for an empty bag', () => {

@@ -99,7 +99,7 @@ public abstract class Resources {
         return debug;
     }
 
-    /** What a run proved: the engine's verification report and the artifacts it captured, bytes included. */
+    /** What a run proved: the engine's verification report, the outcome summary behind it, and the artifacts it captured, bytes included. */
     public EvidenceClient evidence() {
         return evidence;
     }

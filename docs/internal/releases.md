@@ -10,17 +10,33 @@ so it doesn't ship as an empty shell.
 **Any change to what goes into the runner image** (harness `src/**`, `Dockerfile`,
 `tsconfig.json`, the pinned `PI_*` args) MUST bump `@cat-factory/executor-harness`'s version AND
 the matching tag in `deploy/backend/package.json`, `deploy/backend/wrangler.toml`, and
-`RECOMMENDED_HARNESS_IMAGE` in `backend/runtimes/local/src/harnessImage.ts`; then
-`pnpm image:publish` + `pnpm deploy` from `deploy/backend`. The deployment serves the Cloudflare
-managed-registry image, not GHCR, so the GHCR auto-publish does not roll it out.
+`RECOMMENDED_HARNESS_IMAGE` in `backend/runtimes/local/src/harnessImage.ts`.
 
-**Reusing a tag does NOT deploy** (`wrangler deploy` diffs by tag string), leaving new containers
-on stale code; the symptom is `Container dispatch failed (HTTP 404)`. Only a fresh immutable tag
-forces the rollout.
+This repository publishes the image (`docker-publish.yml`, to GHCR + Docker Hub) but operates no
+production deployment: `deploy/backend` is a template, and the real deployments live in their own
+repositories. Those pins are therefore a DECLARATION of the supported tag, which is what a
+deployment reads to decide what to run. `scripts/check-runner-image-tag.mjs` guards them on every
+PR, and `docker-publish.yml` re-runs the same guard against the pushed range before publishing, so
+a direct-to-main change cannot republish over a live tag either.
+
+A Cloudflare deployment serves the managed-registry image rather than GHCR (Cloudflare Containers
+cannot pull from GHCR), so it republishes the tag into its own registry with `image:publish` before
+`wrangler deploy`. **Reusing a tag does NOT deploy** there (`wrangler deploy` diffs by tag string),
+leaving new containers on stale code; the symptom is `Container dispatch failed (HTTP 404)`. Only a
+fresh immutable tag forces the rollout, which is why the pin bump above is mandatory rather than
+tidy.
+
+The per-PR preview environments are the one in-repo consumer of that managed-registry shape:
+`docker-publish.yml`'s `mirror-preview-registry` job pushes each newly pinned executor tag into the
+preview account automatically, so previews need no manual mirror. The exception is first-time
+preview setup on a tree whose pinned tag predates it: that tag was published before the mirror
+existed for the account, so run `image:publish` once against the preview account (see
+`deploy/preview/README.md`).
 
 The release PR re-syncs the pins automatically, so don't hand-fix a red release PR. Consequence:
-the released tag may differ from the one the feature PR published; content is identical, but the
-managed-registry image for the released tag is only built at the next `image:publish` + `deploy`.
+the released tag may differ from the one the feature PR published; content is identical, but a
+deployment's managed-registry copy of the released tag only exists after its operator's next
+`image:publish` (the preview account receives it automatically from the mirror job).
 `pnpm sync:image-tags` reconciles by hand; `scripts/check-runner-image-tag.mjs` is the CI guard.
 
 ## Adding a new published package

@@ -82,6 +82,14 @@ else imports its **ports** and domain types from here.
   finest grain and every coarser view (a step's per-kind rollup, the run's per-phase burn
   breakdown, the run totals) is derived here, so the numbers on a surface can't disagree with the
   totals beside them. A new consumer folds; it does not add a second `GROUP BY` on the emit path.
+- `domain/spend-rollup-window.ts`: how much of the ledger one fold of the durable spend rollup
+  (`spend_days`) covers, for the sweep's periodic pass (`spendRollupWindow`) and for the FINAL
+  pass a board takes inside its own delete (`finalSpendFoldPlan`). Here rather than beside the
+  sweep because those two callers sit in different layers and must agree that the catch-up
+  horizon is the LEDGER's retention; the delete's plan differs in having no next pass to leave a
+  remainder to, so the span cap becomes a chunk size, and in running inside a request rather than
+  a cron, so its chunks are ordered NEWEST FIRST against `FINAL_SPEND_FOLD_BUDGET_MS`. See
+  `backend/docs/storage-and-retention.md` §1c.
 - `domain/infra-reachability.ts`: the pure decision behind the **infrastructure-reachability
   watcher**: `decideReachability` (what to record + which transitions to announce, from this pass's
   probes and the set the open `infra_unreachable` card recorded), `recordedUnreachableAreas`, and

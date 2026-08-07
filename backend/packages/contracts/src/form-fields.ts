@@ -505,10 +505,50 @@ export function validateDescriptorFields(
   fields: readonly DescriptorField[],
   values: DescriptorFieldValues,
 ): string[] {
+  return descriptorProblems(fields, values, null)
+}
+
+/**
+ * Validate a PARTIAL write against a field list: the same rules, split by who authored each value.
+ *
+ * `values` is the MERGED bag (what is stored, with this request's keys written over it, defaults
+ * applied) and `named` is the keys this request actually supplied. Two classes of rule fall out of
+ * that split, and conflating them is what makes a patch door refuse writes it has no business
+ * judging:
+ *
+ * - **Per-VALUE rules** (unknown key, value type, options, `maxLength`, path safety) apply to the
+ *   NAMED keys only. A stored value was admitted by another authority: a wider internal schema (the
+ *   public descriptors for a built-in type restate `taskTypeFieldsSchema` and are deliberately
+ *   narrower), an earlier revision of a descriptor a deployment has since re-registered, or a create
+ *   door that carried an unregistered type's bag verbatim. Re-judging it here refuses a patch for
+ *   something the patch did not do, and since the same bound then refuses EVERY patch, the task is
+ *   permanently un-repairable over the surface whose whole purpose is repair.
+ * - **Whole-BAG rules** (`required`, and the `showWhen` visibility every check reads) apply to the
+ *   merged bag, because those are facts about the RESULT rather than about one write. A required
+ *   field the request does not restate is answered by what is stored, and one answered by neither is
+ *   named, which is actionable: supply it.
+ */
+export function validatePatchedDescriptorFields(
+  fields: readonly DescriptorField[],
+  values: DescriptorFieldValues,
+  named: readonly string[],
+): string[] {
+  return descriptorProblems(fields, values, new Set(named))
+}
+
+/**
+ * The shared body of both validators. `named` is the keys whose VALUES this call may judge, or
+ * `null` when every key in the bag was authored by the caller (creation).
+ */
+function descriptorProblems(
+  fields: readonly DescriptorField[],
+  values: DescriptorFieldValues,
+  named: ReadonlySet<string> | null,
+): string[] {
   const problems: string[] = []
   const byKey = new Map(fields.map((f) => [f.key, f]))
 
-  for (const key of Object.keys(values)) {
+  for (const key of named ?? Object.keys(values)) {
     if (!byKey.has(key)) problems.push(`Unknown field "${key}".`)
   }
 
@@ -524,6 +564,7 @@ export function validateDescriptorFields(
       if (field.required) problems.push(`Field "${field.key}" is required.`)
       continue
     }
+    if (named && !named.has(field.key)) continue
     if (!valueMatchesFieldType(field, value)) {
       problems.push(`Field "${field.key}" has the wrong type for a ${field.type ?? 'text'} field.`)
       continue

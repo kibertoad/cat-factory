@@ -465,5 +465,52 @@ function defineCustomTaskTypeInputGateConformance(harness: ConformanceHarness): 
       const stored = after.body.blocks.find((b) => b.id === blockId)
       expect(stored?.taskTypeFields?.custom).toEqual({ sev: 'high' })
     })
+
+    it('clears a BUILT-IN field’s park the same way, through the other half of the bag', async () => {
+      // The sibling of the custom-bag repair above, and it belongs beside it rather than in a
+      // unit test: the two halves land in ONE json column, so a facade mapping the top-level keys
+      // differently from the `custom` sub-bag fails only where a real repository round-trips them.
+      //
+      // `reproduction_missing` is the finding the gate's own doc calls the single most expensive
+      // input gap there is, and until the patch carried the built-in half the only exits were a
+      // human waiving it or deleting the task.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+      const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+        title: 'Export breaks',
+        description: 'The CSV export returns a 500 for accounts with more than 10k rows.',
+        taskType: 'bug',
+        taskTypeFields: { severity: 'high' },
+      })
+      const blockId = task.body.id
+
+      await app.call('POST', `/workspaces/${wsId}/blocks/${blockId}/executions`, {
+        pipelineId: 'pl_simple',
+      })
+      const parked = (await app.drive(wsId)).find((e) => e.blockId === blockId)!
+      expect(parked.status).toBe('blocked')
+
+      const patched = await app.call<Block>('PATCH', `/workspaces/${wsId}/blocks/${blockId}`, {
+        builtinTaskTypeFields: {
+          severity: 'high',
+          stepsToReproduce: '1. open Reports 2. export an account with 12k rows 3. observe the 500',
+        },
+      })
+      expect(patched.status).toBe(200)
+      expect(patched.body.taskTypeFields?.stepsToReproduce).toContain('12k rows')
+
+      const released = await app.call<RunInputGate>(
+        'POST',
+        `/workspaces/${wsId}/executions/${parked.id}/input-gate/resolve`,
+        { choice: 'recheck' },
+      )
+      expect(released.status).toBe(200)
+      // `passed`, not `overridden`: the gate read the repaired input back out of storage.
+      expect(released.body.status).toBe('passed')
+      expect(released.body.issues).toEqual([])
+      const resumed = (await app.drive(wsId)).find((e) => e.blockId === blockId)!
+      expect(resumed.status).not.toBe('blocked')
+    })
   })
 }

@@ -135,8 +135,11 @@ const decisionItems = computed(() =>
 </script>
 
 <template>
+  <!-- Positioning and stacking are owned by `BoardTopOverlays`, the one component that lays out
+       the board's top overlay region; this renders only the pill and re-enables pointer events
+       on it. Self-anchoring here is what let a banner cover the toolbar outright. -->
   <div
-    class="absolute left-1/2 top-3 z-20 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-slate-700 bg-slate-900/90 px-2 py-1.5 shadow-xl backdrop-blur"
+    class="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-slate-700 bg-slate-900/90 px-2 py-1.5 shadow-xl backdrop-blur"
   >
     <!-- zoom controls -->
     <IconButton

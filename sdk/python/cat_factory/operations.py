@@ -26,6 +26,7 @@ from .models import (
     DebugLlmCall,
     DebugRunOverview,
     GetDebugLlmCallView,
+    GetPublicRunOutcomeResponse,
     ListDebugAgentContextResponse,
     ListDebugLlmCallsOrder,
     ListDebugLlmCallsResponse,
@@ -365,9 +366,14 @@ class TasksResource:
         )
 
     def update(self, task_id: str, body: UpdatePublicTask, timeout: float | None = None) -> PublicTask:
-        """Edit a task's title/description
-        Edit a task’s human-authored fields (title/description) before it runs. Both fields
-        are optional.
+        """Edit a task's inputs
+        Edit a task’s human-authored inputs before it runs: its title, its description, and
+        `fields`, the per-case values for its own task type (checked against the descriptors
+        `GET /api/v1/task-types` serves). All are optional. `fields` is MERGED over what the
+        task already carries — a key you send is written, a key you omit keeps its stored
+        value — because this API does not serve the bag back. This is what makes an input
+        the pre-dispatch gate refused repairable: supply the value it named, then recheck
+        the parked run.
         `PATCH /api/v1/tasks/{taskId}` (operation `updatePublicTask`).
         """
         raw = self._transport.request(
@@ -1532,8 +1538,8 @@ class DebugResource:
 
 
 class EvidenceResource:
-    """What a run proved: the engine's verification report and the artifacts it captured, bytes
-    included.
+    """What a run proved: the engine's verification report, the outcome summary behind it, and
+    the artifacts it captured, bytes included.
     """
 
     def __init__(self, transport: Transport) -> None:
@@ -1555,6 +1561,29 @@ class EvidenceResource:
             query=None,
             timeout=timeout,
         )
+
+    def get_outcome(self, run_id: str, timeout: float | None = None) -> GetPublicRunOutcomeResponse:
+        """Get a run's outcome summary
+        What the run changed and what backs that up, in product language, for a reader who
+        will not open the diff: the run’s disposition, the pull requests it opened,
+        requirement coverage joined to the service’s `spec/`, the tester’s verdict and
+        concerns, the views it captured, and the machine checks that ran. The same reduction
+        the app’s outcome card renders, over the same evidence the verification report is
+        built from, so the two cannot state different totals for one run. Nothing here is
+        asserted by a model: every count is derived from recorded verdicts. Prefer the
+        verification report when you need a reviewer’s full bundle; prefer this when you
+        need to say what shipped. Sections state `reported` or `absent` with a
+        machine-readable gap code, and `truncations` names any list the response had to
+        bound.
+        `GET /api/v1/runs/{runId}/outcome` (operation `getPublicRunOutcome`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/runs/{_quote(run_id)}/outcome",
+            query=None,
+            timeout=timeout,
+        )
+        return GetPublicRunOutcomeResponse.from_dict(raw)
 
     def get_report(self, run_id: str, timeout: float | None = None) -> PrVerificationReport:
         """Get a run's verification report

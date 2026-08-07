@@ -59,6 +59,16 @@ over the WebSocket. How that sync works is written up in
 | `types/`          | TypeScript domain unions (`domain.ts`) and wire types mirroring the contracts.                                                                        |
 | `utils/`          | Small pure helpers.                                                                                                                                   |
 
+### The board's top overlay region has ONE owner
+
+**A surface that appears at the top of the board renders as a member of `BoardTopOverlays`, and places nothing itself.** No `absolute`/`fixed`, no `top-*`, no z-index of its own: the band is a flex column, and it owns placement and stacking for everything in it. A member contributes only its card plus `pointer-events-auto` (the column is click-through, so its empty strip never intercepts clicks on the board underneath).
+
+The reason this is a rule is that the alternative failed exactly once per surface. Each of the toolbar, the spend/connection/PAT banners and the four advisory banners used to anchor itself at `top-0` with its own z-index, so which one you could see came down to who picked the higher number: a standing advisory covered the zoom and fit controls outright, and the board-basics tour then ringed a control nobody could see. Tuning an offset onto one of them (`top-16`, sized against the toolbar pill) fixes the pair that was noticed and leaves the rest, and it goes stale the first time the pill wraps or grows a scrollbar. In one column the overlap is not tuned, it is unrepresentable, and a toolbar that grows pushes the banners down by exactly what it grew.
+
+Order within the column is by what the user loses by not reading it now; the toolbar stays first so a tour anchor and the everyday zoom controls do not move as advisories come and go. Full-width page chrome (the translation-warning strip) is a different surface: it sits in NORMAL FLOW at the top of the shell, so it takes its own height rather than covering the row beneath it.
+
+`app/components/layout/BoardTopOverlays.spec.ts` enforces the no-self-placement half, reading the member list from the component's own imports.
+
 ### A store must be instantiable outside a component `setup`
 
 A Pinia setup store runs its body on the FIRST `useStore()` anywhere in the app, and that

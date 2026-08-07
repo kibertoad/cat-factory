@@ -101,7 +101,9 @@ export async function gateDecisionAction<E extends AppEnv>(
 ): Promise<{ workspaceId: string; scoped: ScopedRun; auth: PublicApiKeyAuth } | GateFailure> {
   // `decide` — the same rung that admits a parking pipeline in the first place. Answering injects
   // caller-supplied prose into the requirements every downstream agent then implements, so it sits
-  // above ordinary `write` task authoring.
+  // above ordinary `write` task authoring. This literal is the ONE public-API scope check not read
+  // off a contract's `minScope` (every decision mutation shares this preamble); the contracts
+  // publish the same floor per route, and `routes/public-api-scope.test.ts` pins the two together.
   const gate = await authorize(c, 'decide')
   if ('fail' in gate) return gate
   const { workspaceId } = gate.auth

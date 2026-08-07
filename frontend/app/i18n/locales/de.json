@@ -6206,11 +6206,8 @@
       "notCovered": "Nicht geprüft: {count}",
       "regressions": "Regressionen: {count}",
       "regressionTag": "Regression",
-      "idOnly": "nur ID",
-      "idOnlyHint": "Diese ID steht nicht in der Service-Spezifikation, deshalb gibt es dafür keinen Titel.",
       "spec": {
-        "not_read": "Die Service-Spezifikation wurde nicht gelesen, deshalb stehen hier die vom Tester gemeldeten Anforderungs-IDs ohne ihre Titel.",
-        "unmatched": "Keine dieser Anforderungs-IDs steht in der gelesenen Service-Spezifikation, deshalb werden nur die vom Tester gemeldeten IDs gezeigt."
+        "not_read": "Die Service-Spezifikation wurde nicht gelesen, deshalb decken diese Zahlen nur das ab, worüber der Tester entschieden hat, nach ID."
       },
       "verdict": {
         "met": "Bestätigt",
@@ -6220,8 +6217,10 @@
       "gap": {
         "no_tester_step": "Diese Pipeline hat keinen Test-Schritt, daher wurde keine Anforderung geprüft.",
         "tester_not_reported": "Der Tester hat noch nicht berichtet, daher wurde über keine Anforderung entschieden.",
-        "no_verdicts": "Der Tester hat berichtet, ohne über eine Anforderung der Spezifikation zu entscheiden."
-      }
+        "no_verdicts": "Der Tester hat berichtet, ohne über eine Anforderung der Spezifikation zu entscheiden.",
+        "no_requirements": "Die Service-Spezifikation enthält keine Anforderungen, daher gab es für den Tester nichts zu entscheiden."
+      },
+      "unmatchedVerdicts": "Der Tester hat zusätzlich über {count} ID(s) entschieden, die in dieser Spezifikation nicht vorkommen; seine eigene Zählung liegt deshalb höher als die Zahlen oben."
     },
     "tests": {
       "title": "Wie getestet wurde",
@@ -7060,7 +7059,7 @@
           },
           "commandBar": {
             "title": "Die Befehlspalette",
-            "body": "Der schnellste Weg zu jeder Aktion: öffnen und lostippen. Von dort kannst du dieses Tutorial jederzeit neu starten."
+            "body": "Der schnellste Weg zu jeder Aktion: öffnen und lostippen. Um dieses Tutorial jederzeit neu zu starten, wähle dort „@:{'nav.tutorials'}“."
           },
           "toolbar": {
             "title": "Board-Steuerung",
