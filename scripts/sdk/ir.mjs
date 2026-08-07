@@ -447,8 +447,20 @@ export async function buildIr(doc) {
       const success = successResponse(operation)
       const kind = responseKind(id, success)
       const bodySchema = operation.requestBody?.content?.['application/json']?.schema
+      // The key-scope floor the route enforces, stamped by `generate-openapi.mjs` from each
+      // contract's `minScope`. Required rather than defaulted: an operation with no floor would
+      // ship in the gatekeeper bindings as policy metadata that silently says nothing, and the
+      // generator upstream already refuses to produce such a spec.
+      const minScope = operation['x-min-scope']
+      if (typeof minScope !== 'string') {
+        throw new Error(
+          `SDK IR: ${id} (${method.toUpperCase()} ${path}) carries no x-min-scope. Regenerate the ` +
+            'spec (`pnpm gen:openapi`); a public contract without `withMinScope` fails there.',
+        )
+      }
       operations.push({
         id,
+        minScope,
         // `httpMethod`, not `method`: the SDK surface table (scripts/sdk/surface.mjs) names each
         // operation's METHOD on its resource client, and one of the two had to give.
         httpMethod: method.toUpperCase(),

@@ -110,7 +110,7 @@ export function publicEvidenceController(): Hono<AppEnv> {
   // The run's verification report: the same bundle the pull request carries, for the runs that
   // have a pull request AND the ones that never opened one.
   buildHonoRoute(app, getPublicRunReportContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, getPublicRunReportContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const { workspaceId } = gate.auth
     const runId = c.req.valid('param').runId
@@ -127,7 +127,7 @@ export function publicEvidenceController(): Hono<AppEnv> {
   // The run's captured artifacts (metadata). Unpaged: the capture path caps how many one run may
   // store, so the response size is computable before the request.
   buildHonoRoute(app, listPublicRunArtifactsContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, listPublicRunArtifactsContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const { workspaceId } = gate.auth
     const runId = c.req.valid('param').runId

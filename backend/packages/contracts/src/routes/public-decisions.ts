@@ -21,7 +21,7 @@ import {
   publicResolveExceededSchema,
   publicSetFindingStatusSchema,
 } from '../public-decisions.js'
-import { errorResponses, singleStringParam } from './_shared.js'
+import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Public-API route contracts for a run's PARKED HUMAN DECISIONS — the external counterpart of
@@ -53,96 +53,123 @@ const runStageItemParams = withObjectKeys(
 )
 
 /** List a run's currently-parked decisions (findings, fork options) — `read`. */
-export const listPublicRunDecisionsContract = defineApiContract({
-  method: 'get',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions`,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const listPublicRunDecisionsContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions`,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 // ---- requirements review ---------------------------------------------------
 
 /** Answer one reviewer finding. */
-export const replyPublicRunFindingContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runItemParams,
-  pathResolver: ({ runId, itemId }) =>
-    `/api/v1/runs/${runId}/decisions/requirements/findings/${itemId}/reply`,
-  requestBodySchema: publicReplyFindingSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const replyPublicRunFindingContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runItemParams,
+    pathResolver: ({ runId, itemId }) =>
+      `/api/v1/runs/${runId}/decisions/requirements/findings/${itemId}/reply`,
+    requestBodySchema: publicReplyFindingSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Dismiss a finding as not applicable, or reopen one dismissed by mistake. */
-export const setPublicRunFindingStatusContract = defineApiContract({
-  method: 'patch',
-  requestPathParamsSchema: runItemParams,
-  pathResolver: ({ runId, itemId }) =>
-    `/api/v1/runs/${runId}/decisions/requirements/findings/${itemId}`,
-  requestBodySchema: publicSetFindingStatusSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const setPublicRunFindingStatusContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'patch',
+    requestPathParamsSchema: runItemParams,
+    pathResolver: ({ runId, itemId }) =>
+      `/api/v1/runs/${runId}/decisions/requirements/findings/${itemId}`,
+    requestBodySchema: publicSetFindingStatusSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /**
  * Fold the recorded answers into the standardized requirements document. ASYNCHRONOUS — the
  * durable driver folds and re-reviews in the background, so the response shows the review
  * `incorporating`; poll (or watch the SSE stream) for the next round or convergence.
  */
-export const incorporatePublicRunRequirementsContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/requirements/incorporate`,
-  requestBodySchema: publicIncorporateSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const incorporatePublicRunRequirementsContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/requirements/incorporate`,
+    requestBodySchema: publicIncorporateSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Run one more reviewer pass over the incorporated document. */
-export const reReviewPublicRunRequirementsContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/requirements/re-review`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const reReviewPublicRunRequirementsContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/requirements/re-review`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Settle the requirements phase and advance the parked run (used when nothing is outstanding). */
-export const proceedPublicRunRequirementsContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/requirements/proceed`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const proceedPublicRunRequirementsContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/requirements/proceed`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Resolve a review that hit its iteration cap (extra round / proceed / stop and reset). */
-export const resolvePublicRunRequirementsExceededContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/requirements/resolve-exceeded`,
-  requestBodySchema: publicResolveExceededSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const resolvePublicRunRequirementsExceededContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/requirements/resolve-exceeded`,
+    requestBodySchema: publicResolveExceededSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 // ---- implementation fork ---------------------------------------------------
 
 /** Choose an implementation approach (a proposed fork id or a custom approach). */
-export const choosePublicRunForkContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/fork/choose`,
-  requestBodySchema: publicChooseForkSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const choosePublicRunForkContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/fork/choose`,
+    requestBodySchema: publicChooseForkSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 // ---- judge ------------------------------------------------------------------
 
 /** Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run. */
-export const resolvePublicRunJudgeContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/judge/resolve`,
-  requestBodySchema: publicResolveJudgeSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const resolvePublicRunJudgeContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/judge/resolve`,
+    requestBodySchema: publicResolveJudgeSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 // ---- pre-dispatch input gate ---------------------------------------------------
 
@@ -157,13 +184,16 @@ export const resolvePublicRunJudgeContract = defineApiContract({
  * `recheck` then verifies rather than takes the claim on trust, and a still-blocked verdict comes
  * back as an ordinary 200 with refreshed findings, because nothing went wrong.
  */
-export const resolvePublicRunInputGateContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/input-gate/resolve`,
-  requestBodySchema: publicResolveInputGateSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const resolvePublicRunInputGateContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/input-gate/resolve`,
+    requestBodySchema: publicResolveInputGateSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 // ---- approval gates ---------------------------------------------------------
 //
@@ -174,34 +204,43 @@ export const resolvePublicRunInputGateContract = defineApiContract({
 // a slow integration would approve a step nobody looked at.
 
 /** Approve a parked gate's proposal (optionally replacing it with an edited one). */
-export const approvePublicRunStepContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runApprovalParams,
-  pathResolver: ({ runId, approvalId }) =>
-    `/api/v1/runs/${runId}/decisions/approvals/${approvalId}/approve`,
-  requestBodySchema: publicApproveStepSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const approvePublicRunStepContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runApprovalParams,
+    pathResolver: ({ runId, approvalId }) =>
+      `/api/v1/runs/${runId}/decisions/approvals/${approvalId}/approve`,
+    requestBodySchema: publicApproveStepSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Request changes on a parked gate: the step re-runs with the supplied guidance. */
-export const requestPublicRunStepChangesContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runApprovalParams,
-  pathResolver: ({ runId, approvalId }) =>
-    `/api/v1/runs/${runId}/decisions/approvals/${approvalId}/request-changes`,
-  requestBodySchema: publicRequestStepChangesSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const requestPublicRunStepChangesContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runApprovalParams,
+    pathResolver: ({ runId, approvalId }) =>
+      `/api/v1/runs/${runId}/decisions/approvals/${approvalId}/request-changes`,
+    requestBodySchema: publicRequestStepChangesSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Reject a parked gate: the run stops entirely (a terminal, retryable failure). */
-export const rejectPublicRunStepContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runApprovalParams,
-  pathResolver: ({ runId, approvalId }) =>
-    `/api/v1/runs/${runId}/decisions/approvals/${approvalId}/reject`,
-  requestBodySchema: publicRejectStepSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const rejectPublicRunStepContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runApprovalParams,
+    pathResolver: ({ runId, approvalId }) =>
+      `/api/v1/runs/${runId}/decisions/approvals/${approvalId}/reject`,
+    requestBodySchema: publicRejectStepSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /**
  * Resolve a companion gate parked at its automatic-rework cap (extra round / proceed / stop and
@@ -209,14 +248,17 @@ export const rejectPublicRunStepContract = defineApiContract({
  * asking a different question, and letting the generic approve settle it would ship output the
  * companion never passed.
  */
-export const resolvePublicRunStepExceededContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runApprovalParams,
-  pathResolver: ({ runId, approvalId }) =>
-    `/api/v1/runs/${runId}/decisions/approvals/${approvalId}/resolve-exceeded`,
-  requestBodySchema: publicResolveStepExceededSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const resolvePublicRunStepExceededContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runApprovalParams,
+    pathResolver: ({ runId, approvalId }) =>
+      `/api/v1/runs/${runId}/decisions/approvals/${approvalId}/resolve-exceeded`,
+    requestBodySchema: publicResolveStepExceededSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 // ---- agent-raised decisions -------------------------------------------------
 
@@ -224,14 +266,17 @@ export const resolvePublicRunStepExceededContract = defineApiContract({
  * Answer a decision an agent raised mid-work. Resolving RE-RUNS the asking step with the choice
  * folded in, rather than advancing past it — the difference from an approval gate.
  */
-export const resolvePublicRunAgentDecisionContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runDecisionParams,
-  pathResolver: ({ runId, decisionId }) =>
-    `/api/v1/runs/${runId}/decisions/questions/${decisionId}/answer`,
-  requestBodySchema: publicResolveAgentDecisionSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const resolvePublicRunAgentDecisionContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runDecisionParams,
+    pathResolver: ({ runId, decisionId }) =>
+      `/api/v1/runs/${runId}/decisions/questions/${decisionId}/answer`,
+    requestBodySchema: publicResolveAgentDecisionSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 // ---- clarity review (bug-report triage) -------------------------------------
 //
@@ -241,120 +286,158 @@ export const resolvePublicRunAgentDecisionContract = defineApiContract({
 // caller thread through a review id it never chose.
 
 /** Answer one clarity finding. */
-export const replyPublicRunClarityFindingContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runItemParams,
-  pathResolver: ({ runId, itemId }) =>
-    `/api/v1/runs/${runId}/decisions/clarity/findings/${itemId}/reply`,
-  requestBodySchema: publicReplyFindingSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const replyPublicRunClarityFindingContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runItemParams,
+    pathResolver: ({ runId, itemId }) =>
+      `/api/v1/runs/${runId}/decisions/clarity/findings/${itemId}/reply`,
+    requestBodySchema: publicReplyFindingSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Dismiss a clarity finding as not applicable, or reopen one dismissed by mistake. */
-export const setPublicRunClarityFindingStatusContract = defineApiContract({
-  method: 'patch',
-  requestPathParamsSchema: runItemParams,
-  pathResolver: ({ runId, itemId }) => `/api/v1/runs/${runId}/decisions/clarity/findings/${itemId}`,
-  requestBodySchema: publicSetFindingStatusSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const setPublicRunClarityFindingStatusContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'patch',
+    requestPathParamsSchema: runItemParams,
+    pathResolver: ({ runId, itemId }) =>
+      `/api/v1/runs/${runId}/decisions/clarity/findings/${itemId}`,
+    requestBodySchema: publicSetFindingStatusSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Fold the recorded answers into the standardized bug report. ASYNCHRONOUS, as requirements. */
-export const incorporatePublicRunClarityContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/clarity/incorporate`,
-  requestBodySchema: publicIncorporateSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const incorporatePublicRunClarityContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/clarity/incorporate`,
+    requestBodySchema: publicIncorporateSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Run one more triage pass over the clarified report. */
-export const reReviewPublicRunClarityContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/clarity/re-review`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const reReviewPublicRunClarityContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/clarity/re-review`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Settle the clarity phase and advance the parked run. */
-export const proceedPublicRunClarityContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/clarity/proceed`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const proceedPublicRunClarityContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/clarity/proceed`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Resolve a clarity review that hit its iteration cap (extra round / proceed / stop and reset). */
-export const resolvePublicRunClarityExceededContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/clarity/resolve-exceeded`,
-  requestBodySchema: publicResolveExceededSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const resolvePublicRunClarityExceededContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/clarity/resolve-exceeded`,
+    requestBodySchema: publicResolveExceededSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 // ---- brainstorm dialogues ---------------------------------------------------
 
 /** Respond to one proposed option (pick it, or steer it). */
-export const replyPublicRunBrainstormOptionContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runStageItemParams,
-  pathResolver: ({ runId, stage, itemId }) =>
-    `/api/v1/runs/${runId}/decisions/brainstorm/${stage}/options/${itemId}/reply`,
-  requestBodySchema: publicReplyFindingSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const replyPublicRunBrainstormOptionContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runStageItemParams,
+    pathResolver: ({ runId, stage, itemId }) =>
+      `/api/v1/runs/${runId}/decisions/brainstorm/${stage}/options/${itemId}/reply`,
+    requestBodySchema: publicReplyFindingSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Dismiss a proposed option, or reopen one dismissed by mistake. */
-export const setPublicRunBrainstormOptionStatusContract = defineApiContract({
-  method: 'patch',
-  requestPathParamsSchema: runStageItemParams,
-  pathResolver: ({ runId, stage, itemId }) =>
-    `/api/v1/runs/${runId}/decisions/brainstorm/${stage}/options/${itemId}`,
-  requestBodySchema: publicSetFindingStatusSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const setPublicRunBrainstormOptionStatusContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'patch',
+    requestPathParamsSchema: runStageItemParams,
+    pathResolver: ({ runId, stage, itemId }) =>
+      `/api/v1/runs/${runId}/decisions/brainstorm/${stage}/options/${itemId}`,
+    requestBodySchema: publicSetFindingStatusSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Fold the picks into one converged direction. ASYNCHRONOUS, as requirements. */
-export const incorporatePublicRunBrainstormContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runStageParams,
-  pathResolver: ({ runId, stage }) =>
-    `/api/v1/runs/${runId}/decisions/brainstorm/${stage}/incorporate`,
-  requestBodySchema: publicIncorporateSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const incorporatePublicRunBrainstormContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runStageParams,
+    pathResolver: ({ runId, stage }) =>
+      `/api/v1/runs/${runId}/decisions/brainstorm/${stage}/incorporate`,
+    requestBodySchema: publicIncorporateSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Run one more brainstorm pass against the converged direction. */
-export const reReviewPublicRunBrainstormContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runStageParams,
-  pathResolver: ({ runId, stage }) =>
-    `/api/v1/runs/${runId}/decisions/brainstorm/${stage}/re-review`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const reReviewPublicRunBrainstormContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runStageParams,
+    pathResolver: ({ runId, stage }) =>
+      `/api/v1/runs/${runId}/decisions/brainstorm/${stage}/re-review`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Settle the brainstorm (the last converged direction wins downstream) and advance the run. */
-export const proceedPublicRunBrainstormContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runStageParams,
-  pathResolver: ({ runId, stage }) => `/api/v1/runs/${runId}/decisions/brainstorm/${stage}/proceed`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const proceedPublicRunBrainstormContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runStageParams,
+    pathResolver: ({ runId, stage }) =>
+      `/api/v1/runs/${runId}/decisions/brainstorm/${stage}/proceed`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Resolve a brainstorm that hit its iteration cap (extra round / proceed / stop and reset). */
-export const resolvePublicRunBrainstormExceededContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runStageParams,
-  pathResolver: ({ runId, stage }) =>
-    `/api/v1/runs/${runId}/decisions/brainstorm/${stage}/resolve-exceeded`,
-  requestBodySchema: publicResolveExceededSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const resolvePublicRunBrainstormExceededContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runStageParams,
+    pathResolver: ({ runId, stage }) =>
+      `/api/v1/runs/${runId}/decisions/brainstorm/${stage}/resolve-exceeded`,
+    requestBodySchema: publicResolveExceededSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 // ---- PR deep review ---------------------------------------------------------
 
@@ -364,33 +447,42 @@ export const resolvePublicRunBrainstormExceededContract = defineApiContract({
  * an effect outside the platform — reachable only for a board task run, since a `pr-reviewer` step
  * is container-backed and the jobs surface is inline-only.
  */
-export const resolvePublicRunPrReviewContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/pr-review/resolve`,
-  requestBodySchema: publicResolvePrReviewSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const resolvePublicRunPrReviewContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/pr-review/resolve`,
+    requestBodySchema: publicResolvePrReviewSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Drop one finding from the parked review entirely (curation; the run stays parked). */
-export const dismissPublicRunPrReviewFindingContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runFindingParams,
-  pathResolver: ({ runId, findingId }) =>
-    `/api/v1/runs/${runId}/decisions/pr-review/findings/${findingId}/dismiss`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const dismissPublicRunPrReviewFindingContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runFindingParams,
+    pathResolver: ({ runId, findingId }) =>
+      `/api/v1/runs/${runId}/decisions/pr-review/findings/${findingId}/dismiss`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Challenge one finding: a read-only investigator re-examines it against the full source. */
-export const challengePublicRunPrReviewFindingContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runFindingParams,
-  pathResolver: ({ runId, findingId }) =>
-    `/api/v1/runs/${runId}/decisions/pr-review/findings/${findingId}/challenge`,
-  requestBodySchema: publicChallengePrReviewFindingSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const challengePublicRunPrReviewFindingContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runFindingParams,
+    pathResolver: ({ runId, findingId }) =>
+      `/api/v1/runs/${runId}/decisions/pr-review/findings/${findingId}/challenge`,
+    requestBodySchema: publicChallengePrReviewFindingSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 // ---- human-verdict gates ----------------------------------------------------
 //
@@ -401,40 +493,52 @@ export const challengePublicRunPrReviewFindingContract = defineApiContract({
 // A caller that needs a fresh environment requests a fix or stops the run.
 
 /** Confirm the change works in the ephemeral environment: tear it down and advance the run. */
-export const confirmPublicRunHumanTestContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/human-test/confirm`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const confirmPublicRunHumanTestContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/human-test/confirm`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Submit findings against the tested environment and dispatch a fixer. */
-export const requestPublicRunHumanTestFixContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/human-test/request-fix`,
-  requestBodySchema: publicRequestGateFixSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const requestPublicRunHumanTestFixContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/human-test/request-fix`,
+    requestBodySchema: publicRequestGateFixSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Approve the reviewed screenshots and advance the run. */
-export const approvePublicRunVisualConfirmContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/visual-confirmation/approve`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const approvePublicRunVisualConfirmContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/visual-confirmation/approve`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Submit findings against the reviewed screenshots and dispatch a fixer. */
-export const requestPublicRunVisualConfirmFixContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/visual-confirmation/request-fix`,
-  requestBodySchema: publicRequestGateFixSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const requestPublicRunVisualConfirmFixContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/visual-confirmation/request-fix`,
+    requestBodySchema: publicRequestGateFixSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 // ---- follow-up triage -------------------------------------------------------
 //
@@ -450,44 +554,56 @@ export const requestPublicRunVisualConfirmFixContract = defineApiContract({
 // is what a caller reads back.
 
 /** File a `follow_up` item as a tracker issue, recording the ticket ref on the item. */
-export const filePublicRunFollowUpContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runItemParams,
-  pathResolver: ({ runId, itemId }) =>
-    `/api/v1/runs/${runId}/decisions/follow-ups/items/${itemId}/file`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const filePublicRunFollowUpContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runItemParams,
+    pathResolver: ({ runId, itemId }) =>
+      `/api/v1/runs/${runId}/decisions/follow-ups/items/${itemId}/file`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Send a `follow_up` item back to the Coder: it is folded into another pass (status `queued`). */
-export const sendBackPublicRunFollowUpContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runItemParams,
-  pathResolver: ({ runId, itemId }) =>
-    `/api/v1/runs/${runId}/decisions/follow-ups/items/${itemId}/send-back`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const sendBackPublicRunFollowUpContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runItemParams,
+    pathResolver: ({ runId, itemId }) =>
+      `/api/v1/runs/${runId}/decisions/follow-ups/items/${itemId}/send-back`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Answer a `question` item; the answer steers the Coder's next pass. */
-export const answerPublicRunFollowUpContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runItemParams,
-  pathResolver: ({ runId, itemId }) =>
-    `/api/v1/runs/${runId}/decisions/follow-ups/items/${itemId}/answer`,
-  requestBodySchema: publicAnswerFollowUpSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const answerPublicRunFollowUpContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runItemParams,
+    pathResolver: ({ runId, itemId }) =>
+      `/api/v1/runs/${runId}/decisions/follow-ups/items/${itemId}/answer`,
+    requestBodySchema: publicAnswerFollowUpSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Wave one item off without acting on it. Valid for either item kind. */
-export const dismissPublicRunFollowUpContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runItemParams,
-  pathResolver: ({ runId, itemId }) =>
-    `/api/v1/runs/${runId}/decisions/follow-ups/items/${itemId}/dismiss`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const dismissPublicRunFollowUpContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runItemParams,
+    pathResolver: ({ runId, itemId }) =>
+      `/api/v1/runs/${runId}/decisions/follow-ups/items/${itemId}/dismiss`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 // ---- interview gates --------------------------------------------------------
 //
@@ -507,32 +623,41 @@ export const dismissPublicRunFollowUpContract = defineApiContract({
 // irrelevant answers it saying so or proceeds past it.
 
 /** Record an answer to one interview question. Does NOT resume the run. */
-export const answerPublicRunInterviewContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/interview/answer`,
-  requestBodySchema: publicAnswerInterviewSchema,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const answerPublicRunInterviewContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/interview/answer`,
+    requestBodySchema: publicAnswerInterviewSchema,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /**
  * Submit the recorded answers and resume: the interviewer runs again and may ask follow-ups.
  * ASYNCHRONOUS: the pass runs in the durable driver, so the response shows the interview as it
  * stands and the next round's questions arrive on a later read.
  */
-export const continuePublicRunInterviewContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/interview/continue`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const continuePublicRunInterviewContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/interview/continue`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)
 
 /** Stop asking: the interviewer converges on the answers so far and the run advances. */
-export const proceedPublicRunInterviewContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/interview/proceed`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
-})
+export const proceedPublicRunInterviewContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/interview/proceed`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+  }),
+)

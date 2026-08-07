@@ -7,7 +7,9 @@
 // guard), exactly like `gen:openapi` ⇄ `check:openapi`.
 //
 // A fifth emitter renders the MCP facade's tool table (`sdk/mcp`), which is not a client: it is
-// the same operations projected as MCP tools over the TypeScript SDK.
+// the same operations projected as MCP tools over the TypeScript SDK. A sixth renders the
+// gatekeeper bindings (`sdk/gatekeeper`): the same operations as a policy-annotated table for
+// credential-holding front-ends.
 //
 // What is generated is deliberately narrow — the wire MODELS and the operation methods. Each
 // SDK's transport, error hierarchy, retry policy, pagination helper and SSE reader are
@@ -29,6 +31,7 @@ import * as python from './sdk/emit-python.mjs'
 import * as go from './sdk/emit-go.mjs'
 import * as java from './sdk/emit-java.mjs'
 import * as mcp from './sdk/emit-mcp.mjs'
+import * as gatekeeper from './sdk/emit-gatekeeper.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SDK_ROOT = resolve(repoRoot, 'sdk')
@@ -53,6 +56,11 @@ const EMITTERS = [
   // SDK. It rides this generator because it must not be able to drift from the surface it
   // exposes, which is the whole reason the four clients ride it.
   { dir: 'mcp', emit: mcp.emit, generatedDirs: [] },
+  // Nor is this: the gatekeeper bindings render the same IR as a POLICY-ANNOTATED operation
+  // table (scope floors, mutation and transport metadata, invoke thunks) for credential-holding
+  // front-ends. Same reason it rides this generator: the policy table must not be able to drift
+  // from the surface it meters.
+  { dir: 'gatekeeper', emit: gatekeeper.emit, generatedDirs: [] },
 ]
 
 /** Build every SDK's generated files, keyed by repo-relative path. */

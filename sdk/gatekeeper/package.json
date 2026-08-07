@@ -1,0 +1,51 @@
+{
+  "name": "@cat-factory/gatekeeper-bindings",
+  "version": "0.0.0",
+  "description": "Policy-annotated operation table for the cat-factory public API (/api/v1): per-operation scope floors, mutation and transport metadata, and invoke thunks over @cat-factory/sdk, generated from the same OpenAPI spec the SDKs are. Built for credential-holding front-ends such as a Cloudflare OS Gatekeeper.",
+  "keywords": [
+    "cat-factory",
+    "cloudflare-os",
+    "gatekeeper",
+    "openapi"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/cat-factory.git",
+    "directory": "sdk/gatekeeper"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.dev.json --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@cat-factory/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "typescript": "7.0.2",
+    "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -92,6 +92,12 @@ Two things to know before minting `decide` or `admin`:
 - Handing out even a `read` key is not free once the debug surface is in play: it reaches prompt
   and response bodies the SPA gates behind workspace RBAC. See the
   [auth section of `debug-api.md`](./debug-api.md#auth).
+- **Each operation's floor is machine-readable**: the OpenAPI document stamps it as
+  `x-min-scope` (spec 1.22.0), read off the same contract field the route enforces, and
+  `@cat-factory/gatekeeper-bindings` ([`sdk/gatekeeper`](../../sdk/gatekeeper)) ships the whole
+  surface as a policy-annotated table for an integration that fronts a key for callers of its
+  own. The stamp is the STATIC floor only; the dynamic escalations this section describes (a
+  parking pipeline requiring `decide` at start) still apply on top.
 - **A pipeline the board has not adopted yet is a real pipeline for both start paths, and is scoped
   like any other.** Built-ins are copied into a workspace at creation, so a board older than a
   catalog pipeline holds no row for it; a run MATERIALISES the row on first start
@@ -265,7 +271,11 @@ auto-pagination, SSE framing, bounded retries on idempotent requests only, and a
 status class with the machine-readable `code` exposed verbatim.
 
 Details, the design rules the four share, and the Java/Kotlin story:
-[`sdk/README.md`](../../sdk/README.md).
+[`sdk/README.md`](../../sdk/README.md). For a service that holds the key itself and meters what
+its own callers may do (a Cloudflare OS Gatekeeper, a governance proxy), the same generator also
+ships `@cat-factory/gatekeeper-bindings`: every operation as a policy-annotated entry (scope
+floor, mutation and transport metadata, an invoke thunk over the TypeScript client). See
+[its README](../../sdk/gatekeeper/README.md).
 
 ### From an MCP host
 

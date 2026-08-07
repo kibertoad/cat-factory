@@ -1,7 +1,7 @@
 import { defineApiContract } from '@toad-contracts/valibot'
 import { prVerificationReportSchema } from '../pr-report.js'
 import { publicRunArtifactListSchema } from '../public-evidence.js'
-import { errorResponses, singleStringParam } from './_shared.js'
+import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Route contracts for the public run-EVIDENCE surface: absolute `/api/v1` paths,
@@ -29,17 +29,23 @@ const runIdParams = singleStringParam('runId')
  * A consumer that scraped the fenced JSON block out of a PR body can read it here instead, and
  * gets it for the runs that never opened a pull request at all.
  */
-export const getPublicRunReportContract = defineApiContract({
-  method: 'get',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/report`,
-  responsesByStatusCode: { 200: prVerificationReportSchema, ...errorResponses },
-})
+export const getPublicRunReportContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/report`,
+    responsesByStatusCode: { 200: prVerificationReportSchema, ...errorResponses },
+  }),
+)
 
 /** The binary artifacts the run captured (metadata; the bytes are a second, per-artifact fetch). */
-export const listPublicRunArtifactsContract = defineApiContract({
-  method: 'get',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/artifacts`,
-  responsesByStatusCode: { 200: publicRunArtifactListSchema, ...errorResponses },
-})
+export const listPublicRunArtifactsContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/artifacts`,
+    responsesByStatusCode: { 200: publicRunArtifactListSchema, ...errorResponses },
+  }),
+)

@@ -1,6 +1,5 @@
 import {
   createPublicKeyContract,
-  HEADLESS_KEY_MINT_SCOPE,
   listPublicKeysContract,
   revokePublicKeyContract,
   type PublicApiKey,
@@ -77,14 +76,14 @@ export function publicKeyController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
   buildHonoRoute(app, listPublicKeysContract, async (c) => {
-    const gate = await authorize(c, HEADLESS_KEY_MINT_SCOPE)
+    const gate = await authorize(c, listPublicKeysContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const keys = keyStore(c)
     return c.json({ keys: (await keys.list(gate.auth.workspaceId)).map(publicApiKeyToWire) }, 200)
   })
 
   buildHonoRoute(app, createPublicKeyContract, async (c) => {
-    const gate = await authorize(c, HEADLESS_KEY_MINT_SCOPE)
+    const gate = await authorize(c, createPublicKeyContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const keys = keyStore(c)
     const { label, scope } = c.req.valid('json')
@@ -107,7 +106,7 @@ export function publicKeyController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, revokePublicKeyContract, async (c) => {
-    const gate = await authorize(c, HEADLESS_KEY_MINT_SCOPE)
+    const gate = await authorize(c, revokePublicKeyContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     // Scoped to the caller's workspace by the service, and idempotent, so an unknown id is a 204
     // rather than a 404: this surface must not become an oracle for which key ids exist.

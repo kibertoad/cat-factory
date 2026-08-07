@@ -120,7 +120,14 @@ const API_PREFIX = '/api/v1'
 // `extras` bag, which keeps serving them until the window in `public-api.md` closes, so no
 // consumer has to move on this version. 1.20.0 is main's published number as of this branch's last
 // merge; re-read this line after any merge rather than trusting that the VERSION auto-merged clean.
-const API_VERSION = '1.21.0'
+// 1.22.0: every operation gains `x-min-scope`, the key-scope floor its route enforces (read off
+// each contract's `minScope`; see `withMinScope` in the contracts routes). Additive metadata: no
+// path, shape or vocabulary moves, and a consumer that ignores the extension sees the surface it
+// always saw. It is the floor only: a run-starting operation can still escalate to `decide` at
+// request time when the named pipeline can park. 1.21.0 is main's published number as of this
+// branch's last merge; re-read this line after any merge rather than trusting that the VERSION
+// auto-merged clean.
+const API_VERSION = '1.22.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -900,10 +907,22 @@ export async function buildOpenApiDoc() {
     const docs = OPERATION_DOCS[operationId] ?? { tag: 'Public API', summary: operationId }
     tags.add(docs.tag)
 
+    // The scope FLOOR is part of the published surface: it rides the contract (`withMinScope`,
+    // the same value the controller enforces) and is stamped per operation so the SDK projections
+    // can carry it as policy metadata. Failing here is the totality guard: a public contract with
+    // no floor would otherwise publish an operation whose admission rule a consumer cannot see.
+    if (typeof contract.minScope !== 'string') {
+      throw new Error(
+        `Public contract '${exportName}' (${contract.method.toUpperCase()} ${template}) declares ` +
+          'no minScope. Wrap it in withMinScope(...) in backend/packages/contracts/src/routes/.',
+      )
+    }
+
     const operation = {
       operationId,
       tags: [docs.tag],
       summary: docs.summary,
+      'x-min-scope': contract.minScope,
       responses: {},
     }
     if (docs.description) operation.description = docs.description
@@ -955,6 +974,9 @@ export async function buildOpenApiDoc() {
   paths[`${API_PREFIX}/jobs/{id}/events`] = {
     get: {
       operationId: 'streamPublicJobEvents',
+      // Hand-documented route: the handler's own `authorize(c, 'read')` literal, restated here
+      // because there is no contract to read it off. Keep the two in step.
+      'x-min-scope': 'read',
       tags: ['Jobs'],
       summary: 'Stream a job (SSE)',
       description:
@@ -978,6 +1000,9 @@ export async function buildOpenApiDoc() {
   paths[`${API_PREFIX}/tasks/{taskId}/events`] = {
     get: {
       operationId: 'streamPublicTaskRun',
+      // Hand-documented route: the handler's own `authorize(c, 'read')` literal, restated here
+      // because there is no contract to read it off. Keep the two in step.
+      'x-min-scope': 'read',
       tags: ['Tasks'],
       summary: 'Stream a task run (SSE)',
       description:
@@ -1005,6 +1030,9 @@ export async function buildOpenApiDoc() {
   paths[`${API_PREFIX}/artifacts/{artifactId}/blob`] = {
     get: {
       operationId: 'getPublicArtifactBlob',
+      // Hand-documented route: the handler's own `authorize(c, 'read')` literal, restated here
+      // because there is no contract to read it off. Keep the two in step.
+      'x-min-scope': 'read',
       tags: ['Evidence'],
       summary: "Download an artifact's bytes",
       description:
