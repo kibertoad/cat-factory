@@ -31,25 +31,50 @@ consume through the kernel `AppCaches` port, implemented on
   only the in-memory machinery. The Redis notification classes are loaded dynamically
   by the Node facade alone, behind `REDIS_URL`.
 
-## The Cloudflare Worker profile (`ISOLATE_SAFE_APP_CACHES_PROFILE`)
+## The Cloudflare Worker profiles
 
-A Worker isolate has no cross-isolate invalidation bus and no Redis, so a TTL'd
+A Worker isolate has no cross-isolate invalidation bus and no Redis, so a bare TTL'd
 in-isolate cache over **mutable cross-instance state** would serve stale data after a
-write processed by another isolate: a correctness bug, not an optimization. The
-Worker therefore wires the isolate-safe profile: caches of mutable state are
-configured **pass-through** (`enabled: false`; every read runs its load), and only
-caches of immutable or self-verifying entries (sha-pinned repo reads, static
-catalogs) get real TTLs. Distributed invalidation is a
-genuine Node-only concern, not a facade-parity gap: the Worker's cross-instance state
-already lives in globally-addressed Durable Objects / D1. Revisit only if a
-per-isolate staleness bug actually surfaces.
+write processed by another isolate: a correctness bug, not an optimization. Push is
+structurally unavailable there (an isolate holds no subscription between requests), so
+the Worker has two stances, selected by whether its `CACHE_GENERATIONS` Durable Object
+binding exists:
+
+- **`ISOLATE_SAFE_APP_CACHES_PROFILE`** (the fallback, and prior behaviour): caches of
+  mutable state are **pass-through** (`enabled: false`; every read runs its load), and
+  only caches of immutable or self-verifying entries (sha-pinned repo reads, external
+  documents re-validated by a version probe) get real TTLs.
+- **`ISOLATE_COHERENT_APP_CACHES_PROFILE`**: the isolate-safe profile plus
+  **pull-coherent** caches. A coherent cache keeps a real TTL, and its profile entry
+  carries a `coherencyWindowMsecs`: a read whose group snapshot is older than the
+  window re-reads the injected `CacheGenerationStore` (one monotonic counter per
+  (cache, group), one round trip per group serving every coherent cache) and, on a
+  moved counter, applies layered-loader 16.1's local, fencing, non-publishing
+  `applyRemoteInvalidation*` primitives before serving. Every invalidation site bumps
+  the directory right after its local invalidation, awaited by the write path.
+  Cross-isolate staleness is bounded by the window (5s on the pilot), instead of
+  indefinite (a bare TTL) or zero-at-the-cost-of-every-read (pass-through).
+
+Error posture, deliberately asymmetric: a probe failure fails CLOSED (the read
+invalidates locally and loads fresh, so a directory outage degrades to pass-through
+performance, never staleness); a bump failure fails OPEN (the write and its local
+invalidation already happened; peers heal at the TTL, and
+`cache.coherency_bump_failure` is the visible trace). `createAppCaches` refuses a
+profile that sets a window on an enabled cache with no `generationStore` wired.
+
+On isolate runtimes the loaders' detached background work (preemptive refreshes,
+probes) must be adopted by the current request: pass `scheduleBackgroundWork` and hand
+the promise to `ctx.waitUntil` (the Worker reads the ambient ExecutionContext off an
+AsyncLocalStorage; see `runtimes/cloudflare/src/infrastructure/appCachesHost.ts`).
 
 `fragmentDocumentBody` is the first self-verifying cache that stays **enabled** on the
-Worker: its entries are external Confluence/Notion/GitHub/… page content re-validated
-by the source's cheap version probe (`ttlLeftBeforeRefreshInMsecs` + `isStillCurrent`),
-so a peer isolate's cached body self-heals within the refresh window without an
-invalidation bus: its staleness is bounded by the probe, exactly like a sha-pinned
-read. Only `fragmentCatalog`, which mirrors our own mutable D1 rows, passes through.
+Worker even without the directory: its entries are external Confluence/Notion/GitHub/…
+page content re-validated by the source's cheap version probe
+(`ttlLeftBeforeRefreshInMsecs` + `isStillCurrent`), so a peer isolate's cached body
+self-heals within the refresh window without an invalidation bus.
+`workspaceSettings` is the pull-coherency pilot (one invalidation site, no
+`invalidateAll`, hot on the Worker); further flips are one profile row each, in their
+own slice.
 
 ## Named caches
 
@@ -68,8 +93,14 @@ import { createAppCaches } from '@cat-factory/caching'
 // Node facade (multi-node): inject the Redis-backed notification pair factory.
 const caches = createAppCaches({ notificationPairFactory, logger })
 
-// Cloudflare Worker: the isolate-safe profile.
-const caches = createAppCaches({ profile: ISOLATE_SAFE_APP_CACHES_PROFILE })
+// Cloudflare Worker: the module-scope host picks the coherent profile when the
+// CACHE_GENERATIONS Durable Object is bound, else the isolate-safe fallback
+// (runtimes/cloudflare/src/infrastructure/appCachesHost.ts).
+const caches = createAppCaches({
+  profile: ISOLATE_COHERENT_APP_CACHES_PROFILE,
+  generationStore, // DO-backed on the Worker; any CacheGenerationStore elsewhere
+  scheduleBackgroundWork, // adopt detached refreshes onto ctx.waitUntil
+})
 
 // A consuming service reads through its named handle…
 const catalog = await caches.fragmentCatalog.get(key, workspaceId, () => loadCatalog())

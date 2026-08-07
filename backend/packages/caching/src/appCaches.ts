@@ -27,10 +27,13 @@ import { noopOperationalMetrics } from '@cat-factory/kernel'
 import { GroupLoader } from 'layered-loader/core'
 import type {
   AbstractNotificationConsumer,
+  BackgroundWorkScheduler,
   GroupNotificationPublisher,
   InMemoryGroupCache,
   Logger as LayeredLoaderLogger,
 } from 'layered-loader/core'
+import { CACHE_EPOCH_GROUP, GroupGenerationTracker } from './generationCoherency.js'
+import type { CacheGenerationStore } from './generationCoherency.js'
 
 /**
  * layered-loader logs its background failures through a pino-shaped `error(obj, msg?)`.
@@ -79,6 +82,17 @@ export interface GroupCacheProfile {
    * cost as much as the load).
    */
   ttlLeftBeforeRefreshInMsecs?: number
+  /**
+   * Pull-coherency probe cadence, for an enabled cache of our own mutable state on a runtime
+   * with no push bus (the Worker): a read whose group snapshot in the injected
+   * {@link CacheGenerationStore} is older than this re-reads the directory before serving,
+   * applying the group invalidation locally on a moved counter. Bounds cross-isolate staleness
+   * at roughly this window. Requires `generationStore`: {@link createAppCaches} REFUSES a
+   * profile that sets it on an enabled cache without one, because an enabled TTL'd cache of
+   * mutable state with no coherency mechanism is the exact bug the isolate-safe profile
+   * exists to prevent.
+   */
+  coherencyWindowMsecs?: number
 }
 
 /** One profile entry per named cache in the kernel {@link AppCaches} bag. */
@@ -324,6 +338,28 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
 }
 
 /**
+ * The isolate-safe profile plus the caches the generation directory makes coherent: selected
+ * by the Worker ONLY when its `CACHE_GENERATIONS` Durable Object binding exists (and so a
+ * {@link CacheGenerationStore} is injected); with no binding the Worker keeps the pass-through
+ * stance above. Flipping a cache here means giving it a real TTL on the Worker with a
+ * generation probe bounding its cross-isolate staleness at `coherencyWindowMsecs`; the cache's
+ * EVERY invalidation site then also bumps the directory (the handle does both together).
+ *
+ * `workspaceSettings` is the pilot: exactly one invalidation site
+ * (`WorkspaceSettingsService.update`), no `invalidateAll`, and hot on the Worker (read per
+ * recorded LLM call, per task-limit guard, per pricing resolution, each a live D1 read
+ * today). Further flips are one profile row each, in their own slice
+ * (docs/initiatives/caching-layer.md).
+ */
+export const ISOLATE_COHERENT_APP_CACHES_PROFILE: AppCachesProfile = {
+  ...ISOLATE_SAFE_APP_CACHES_PROFILE,
+  workspaceSettings: {
+    ...DEFAULT_APP_CACHES_PROFILE.workspaceSettings,
+    coherencyWindowMsecs: 5_000,
+  },
+}
+
+/**
  * A per-cache invalidation-notification pair (layered-loader's group publisher +
  * consumer). Produced by the facade's factory — Redis-backed in a multi-node Node
  * deployment, a fake sharing an in-memory bus in tests.
@@ -356,6 +392,19 @@ export interface CreateAppCachesOptions {
    * two states with identical latency graphs and opposite fixes. Absent ⇒ uncounted.
    */
   operationalMetrics?: OperationalMetrics
+  /**
+   * The shared generation directory backing every profile entry with a
+   * `coherencyWindowMsecs` (see that field's doc). One directory serves the whole bag, so all
+   * coherent caches share each group's probe. Absent ⇒ no entry may set a window.
+   */
+  generationStore?: CacheGenerationStore
+  /**
+   * Adopter for the work the loaders start and do not await (preemptive refreshes, staleness
+   * probes, notification publishes). On Node the default detached run is correct; an isolate
+   * runtime hands the promise to the current request's `ctx.waitUntil` instead, because I/O
+   * there is scoped to the request that created it. The promise always settles fulfilled.
+   */
+  scheduleBackgroundWork?: BackgroundWorkScheduler
 }
 
 /**
@@ -368,16 +417,29 @@ interface GroupLoadParams<T> {
   isStillCurrent?: (cached: T) => Promise<boolean>
 }
 
+/** The optional collaborators one handle may be built with, besides its name and profile. */
+interface GroupCacheHandleDeps<T> {
+  notifications?: GroupCacheNotifications<T>
+  logger?: Logger
+  metrics?: OperationalMetrics
+  /** Present only for an enabled cache whose profile carries a `coherencyWindowMsecs`. */
+  coherency?: { tracker: GroupGenerationTracker; windowMsecs: number }
+  scheduleBackgroundWork?: BackgroundWorkScheduler
+}
+
 class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
   private readonly loader: GroupLoader<T, GroupLoadParams<T>>
+  /** Set only for an enabled cache whose profile carries a `coherencyWindowMsecs`. */
+  private readonly coherency: GroupGenerationTracker | undefined
+  private readonly metrics: OperationalMetrics
 
   constructor(
     private readonly name: string,
     profile: GroupCacheProfile,
-    notifications: GroupCacheNotifications<T> | undefined,
-    logger: Logger | undefined,
-    private readonly metrics: OperationalMetrics = noopOperationalMetrics,
+    deps: GroupCacheHandleDeps<T>,
   ) {
+    const { notifications, logger, coherency, scheduleBackgroundWork } = deps
+    this.metrics = deps.metrics ?? noopOperationalMetrics
     this.loader = new GroupLoader<T, GroupLoadParams<T>>({
       inMemoryCache: profile.enabled
         ? {
@@ -425,6 +487,18 @@ class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
           }
         : {}),
       ...(logger ? { logger: asLayeredLoaderLogger(logger) } : {}),
+      ...(scheduleBackgroundWork ? { scheduleBackgroundWork } : {}),
+    })
+    this.coherency = coherency?.tracker
+    // The 16.1 apply-remote primitives are handed over BOUND: synchronous, purely local,
+    // non-publishing, and fencing (an in-flight load cannot write its pre-invalidation
+    // snapshot back), which is exactly what a probe-detected peer change must apply.
+    coherency?.tracker.register({
+      cacheName: name,
+      windowMsecs: coherency.windowMsecs,
+      applyRemoteInvalidationForGroup: (group) =>
+        this.loader.applyRemoteInvalidationForGroup(group),
+      applyRemoteInvalidation: () => this.loader.applyRemoteInvalidation(),
     })
   }
 
@@ -440,6 +514,11 @@ class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
     // that lands inside a probe-refresh window can trigger a BACKGROUND reload, and if that
     // reload's load closure runs before this await resolves it is attributed to this read. So
     // the hit rate on a probe-refreshed cache is a floor, never an overstatement.
+    // Pull coherency runs BEFORE the loader read: inside the window it resolves with no I/O,
+    // past it one shared probe re-reads the generation directory and locally invalidates what
+    // moved, so the loader read below never serves an entry a peer already invalidated more
+    // than the window ago. Never rejects (probe failure fails closed inside the tracker).
+    if (this.coherency) await this.coherency.ensureFresh(this.name, group)
     let loaderRan = false
     const countedLoad = () => {
       loaderRan = true
@@ -453,16 +532,27 @@ class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
     return value
   }
 
-  invalidate(key: string, group: string): Promise<void> {
-    return this.loader.invalidateCacheFor(key, group)
+  // Each invalidation bumps the generation directory AFTER the local invalidation resolves,
+  // and the write path awaits both, so "invalidate right after the write commits" spans the
+  // peers' view too. A single-key invalidation bumps its whole GROUP's counter: coarser than
+  // the local drop (peers re-load the group once), but the directory then never needs per-key
+  // state, and every coherent cache today keys group == key anyway. A bump failure fails open
+  // inside the tracker (peers heal at the TTL), so none of these can turn a committed write
+  // into a thrown request.
+
+  async invalidate(key: string, group: string): Promise<void> {
+    await this.loader.invalidateCacheFor(key, group)
+    await this.coherency?.noteLocalInvalidation(this.name, group)
   }
 
-  invalidateGroup(group: string): Promise<void> {
-    return this.loader.invalidateCacheForGroup(group)
+  async invalidateGroup(group: string): Promise<void> {
+    await this.loader.invalidateCacheForGroup(group)
+    await this.coherency?.noteLocalInvalidation(this.name, group)
   }
 
-  invalidateAll(): Promise<void> {
-    return this.loader.invalidateCache()
+  async invalidateAll(): Promise<void> {
+    await this.loader.invalidateCache()
+    await this.coherency?.noteLocalInvalidation(this.name, CACHE_EPOCH_GROUP)
   }
 
   /** Releases the notification pair's resources along with the loader. */
@@ -479,87 +569,121 @@ class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
  */
 export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches {
   const profile: AppCachesProfile = { ...DEFAULT_APP_CACHES_PROFILE, ...options.profile }
+  assertCoherencyWirable(profile, options)
+  // One tracker serves the whole bag, so every coherent cache shares each group's probe.
+  const tracker = options.generationStore
+    ? new GroupGenerationTracker(options.generationStore, {
+        ...(options.logger ? { logger: options.logger } : {}),
+        ...(options.operationalMetrics ? { metrics: options.operationalMetrics } : {}),
+      })
+    : undefined
   const fragmentCatalog = buildGroupCache<ResolvedCatalogEntry[]>(
     'fragment-catalog',
     profile.fragmentCatalog,
     options,
+    tracker,
   )
   const skillCatalog = buildGroupCache<AccountSkillRecord[]>(
     'skill-catalog',
     profile.skillCatalog,
     options,
+    tracker,
   )
   const foundationalServiceCatalog = buildGroupCache<ResolvedFoundationalService[]>(
     'foundational-service-catalog',
     profile.foundationalServiceCatalog,
     options,
+    tracker,
   )
   const fragmentDocumentBody = buildGroupCache<DocumentContent>(
     'fragment-document-body',
     profile.fragmentDocumentBody,
     options,
+    tracker,
   )
   const linkedDocumentVersion = buildGroupCache<LinkedDocumentRefreshOutcome>(
     'linked-document-version',
     profile.linkedDocumentVersion,
     options,
+    tracker,
   )
   const repoProjection = buildGroupCache<GitHubRepo[]>(
     'repo-projection',
     profile.repoProjection,
     options,
+    tracker,
   )
-  const repoFiles = buildGroupCache<CachedRepoRead>('repo-files', profile.repoFiles, options)
+  const repoFiles = buildGroupCache<CachedRepoRead>(
+    'repo-files',
+    profile.repoFiles,
+    options,
+    tracker,
+  )
   const accountModelPolicy = buildGroupCache<AccountModelPolicyCacheValue>(
     'account-model-policy',
     profile.accountModelPolicy,
     options,
+    tracker,
   )
   const accountSettings = buildGroupCache<ResolvedAccountSettings>(
     'account-settings',
     profile.accountSettings,
     options,
+    tracker,
   )
   const workspaceSettings = buildGroupCache<WorkspaceSettingsCacheValue>(
     'workspace-settings',
     profile.workspaceSettings,
     options,
+    tracker,
   )
   const accountBudgetLimit = buildGroupCache<BudgetLimitCacheValue>(
     'account-budget-limit',
     profile.accountBudgetLimit,
     options,
+    tracker,
   )
   const userBudgetLimit = buildGroupCache<BudgetLimitCacheValue>(
     'user-budget-limit',
     profile.userBudgetLimit,
     options,
+    tracker,
   )
-  const viewerRepos = buildGroupCache<GitHubRepo[]>('viewer-repos', profile.viewerRepos, options)
+  const viewerRepos = buildGroupCache<GitHubRepo[]>(
+    'viewer-repos',
+    profile.viewerRepos,
+    options,
+    tracker,
+  )
   const patInstallationRepos = buildGroupCache<GitHubRepo[]>(
     'pat-installation-repos',
     profile.patInstallationRepos,
     options,
+    tracker,
   )
   const riskPolicy = buildGroupCache<RiskPolicyCacheValue>(
     'risk-policy',
     profile.riskPolicy,
     options,
+    tracker,
   )
   const modelPreset = buildGroupCache<ModelPresetCacheValue>(
     'model-preset',
     profile.modelPreset,
     options,
+    tracker,
   )
   const workspaceAccess = buildGroupCache<WorkspaceAccessCacheValue>(
     'workspace-access',
     profile.workspaceAccess,
     options,
+    tracker,
   )
   const ssoDiscovery = buildGroupCache<SsoDiscoveryDocument>(
     'sso-discovery',
     profile.ssoDiscovery,
     options,
+    tracker,
   )
   return {
     fragmentCatalog,
@@ -605,17 +729,42 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
   }
 }
 
+/**
+ * An enabled cache with a coherency window but no directory to probe would be a TTL'd cache
+ * of mutable state with no invalidation reaching it, the exact bug the isolate-safe profile
+ * exists to prevent, so the combination is refused at construction, not degraded.
+ */
+function assertCoherencyWirable(profile: AppCachesProfile, options: CreateAppCachesOptions): void {
+  if (options.generationStore) return
+  for (const [name, entry] of Object.entries(profile)) {
+    if (entry.enabled && entry.coherencyWindowMsecs !== undefined) {
+      throw new Error(
+        `cache '${name}' sets coherencyWindowMsecs but createAppCaches got no generationStore; ` +
+          `wire one or drop the window (an enabled TTL'd cache of mutable state with no ` +
+          `coherency mechanism would serve stale data after a peer's write)`,
+      )
+    }
+  }
+}
+
 function buildGroupCache<T>(
   name: string,
   profile: GroupCacheProfile,
   options: CreateAppCachesOptions,
+  tracker: GroupGenerationTracker | undefined,
 ): LayeredGroupCacheHandle<T> {
   const notifications = profile.enabled ? options.notificationPairFactory?.<T>(name) : undefined
-  return new LayeredGroupCacheHandle<T>(
-    name,
-    profile,
-    notifications,
-    options.logger,
-    options.operationalMetrics,
-  )
+  const coherency =
+    tracker && profile.enabled && profile.coherencyWindowMsecs !== undefined
+      ? { tracker, windowMsecs: profile.coherencyWindowMsecs }
+      : undefined
+  return new LayeredGroupCacheHandle<T>(name, profile, {
+    ...(notifications ? { notifications } : {}),
+    ...(options.logger ? { logger: options.logger } : {}),
+    ...(options.operationalMetrics ? { metrics: options.operationalMetrics } : {}),
+    ...(coherency ? { coherency } : {}),
+    ...(options.scheduleBackgroundWork
+      ? { scheduleBackgroundWork: options.scheduleBackgroundWork }
+      : {}),
+  })
 }

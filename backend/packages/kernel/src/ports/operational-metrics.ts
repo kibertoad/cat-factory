@@ -78,6 +78,33 @@ export type OperationalCounter =
   /** An app-cache read that had to run its loader. Dimensioned by cache name. */
   | 'cache.miss'
   /**
+   * A pull-coherency probe read the shared generation directory (one round trip serving every
+   * coherent cache's view of one group). Dimensioned by `scope` (`group` | `epoch`), a closed
+   * pair; the group ids themselves are unbounded and ride the log line, not the dimension.
+   * The rate is the probe traffic an isolate fleet actually puts on the directory, which is
+   * the number that decides whether further caches can afford to become coherent.
+   */
+  | 'cache.coherency_probe'
+  /**
+   * A probe found a moved generation and applied the local invalidation. Dimensioned by cache
+   * name. Together with `cache.hit`/`cache.miss` this separates a cache that is coherent and
+   * quiet from one being invalidated so often it never serves anything.
+   */
+  | 'cache.coherency_invalidation'
+  /**
+   * A pull-coherency probe failed (directory unreachable). Dimensioned by `scope`, like the
+   * probe itself. Reads FAIL CLOSED on this path (the cache degrades to pass-through), so a
+   * standing rate here is a performance regression in progress, never a staleness risk.
+   */
+  | 'cache.coherency_probe_failure'
+  /**
+   * A generation bump after a local invalidation failed (directory unreachable). Dimensioned
+   * by cache name. Writes FAIL OPEN here: the write and the local invalidation already
+   * happened, and peer isolates heal at the cache TTL, so this counter is the only visible
+   * trace of that widened staleness window, which is why it is counted and not just logged.
+   */
+  | 'cache.coherency_bump_failure'
+  /**
    * A password-endpoint attempt was refused by the throttle (SEC-4). The log line names the
    * bucket; only this answers whether refusals are climbing, which is the difference between
    * one forgetful user and a credential-stuffing sweep.

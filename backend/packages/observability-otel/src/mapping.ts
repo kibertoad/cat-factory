@@ -737,6 +737,10 @@ export const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
   'notification.delivery_failed': 'cat_factory.platform.notification_delivery_failures',
   'cache.hit': 'cat_factory.platform.cache_hits',
   'cache.miss': 'cat_factory.platform.cache_misses',
+  'cache.coherency_probe': 'cat_factory.platform.cache_coherency_probes',
+  'cache.coherency_invalidation': 'cat_factory.platform.cache_coherency_invalidations',
+  'cache.coherency_probe_failure': 'cat_factory.platform.cache_coherency_probe_failures',
+  'cache.coherency_bump_failure': 'cat_factory.platform.cache_coherency_bump_failures',
   'auth.throttle.limited': 'cat_factory.platform.auth_throttle_limited',
   'auth.throttle.store_unavailable': 'cat_factory.platform.auth_throttle_store_unavailable',
   'tutorial.tour_started': 'cat_factory.platform.tutorial_tours_started',
@@ -774,6 +778,12 @@ const OPERATIONAL_UNIT: Record<OperationalCounter, string> = {
   'notification.delivery_failed': '{failure}',
   'cache.hit': '{read}',
   'cache.miss': '{read}',
+  // One directory round trip, not one read: many reads amortise onto one probe, and the
+  // probe rate (not the read rate) is what the generation directory actually serves.
+  'cache.coherency_probe': '{probe}',
+  'cache.coherency_invalidation': '{invalidation}',
+  'cache.coherency_probe_failure': '{failure}',
+  'cache.coherency_bump_failure': '{failure}',
   'auth.throttle.limited': '{refusal}',
   'auth.throttle.store_unavailable': '{failure}',
   // A walkthrough, not a run: three counters over the same unit so a dashboard can divide

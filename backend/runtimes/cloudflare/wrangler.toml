@@ -133,6 +133,13 @@ class_name = "DeployContainer"
 name = "WORKSPACE_EVENTS"
 class_name = "WorkspaceEventsHub"
 
+# Cross-isolate cache-coherency directory (per-group generation counters). Its presence
+# selects the COHERENT app-cache profile; without it the Worker keeps the pass-through
+# stance for caches of mutable state (see src/infrastructure/appCachesHost.ts).
+[[durable_objects.bindings]]
+name = "CACHE_GENERATIONS"
+class_name = "CacheGenerationDirectory"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ImplementationContainer"]
@@ -148,3 +155,7 @@ renamed_classes = [{ from = "ImplementationContainer", to = "ExecutionContainer"
 [[migrations]]
 tag = "v4"
 new_sqlite_classes = ["DeployContainer"]
+
+[[migrations]]
+tag = "v5"
+new_sqlite_classes = ["CacheGenerationDirectory"]
