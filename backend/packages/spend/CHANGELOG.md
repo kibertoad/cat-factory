@@ -1,5 +1,48 @@
 # @cat-factory/spend
 
+## 0.15.27
+
+### Patch Changes
+
+- Updated dependencies [f7882cf]
+- Updated dependencies [e6aa37d]
+- Updated dependencies [aabfb4d]
+  - @cat-factory/contracts@0.261.1
+  - @cat-factory/kernel@0.261.0
+
+## 0.15.26
+
+### Patch Changes
+
+- Updated dependencies [9d6bce0]
+  - @cat-factory/kernel@0.260.0
+
+## 0.15.25
+
+### Patch Changes
+
+- Updated dependencies [24f76f1]
+- Updated dependencies [964cfa6]
+  - @cat-factory/contracts@0.261.0
+  - @cat-factory/kernel@0.259.0
+
+## 0.15.24
+
+### Patch Changes
+
+- Updated dependencies [ae44914]
+- Updated dependencies [4be3510]
+  - @cat-factory/contracts@0.260.0
+  - @cat-factory/kernel@0.258.0
+
+## 0.15.23
+
+### Patch Changes
+
+- Updated dependencies [11dae5b]
+  - @cat-factory/contracts@0.259.0
+  - @cat-factory/kernel@0.257.0
+
 ## 0.15.22
 
 ### Patch Changes

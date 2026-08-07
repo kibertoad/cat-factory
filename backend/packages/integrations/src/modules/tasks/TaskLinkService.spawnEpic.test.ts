@@ -1,4 +1,4 @@
-import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import type { Block, TaskContent, TaskDependencyLink } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { TaskLinkService } from './TaskLinkService.js'
@@ -126,7 +126,7 @@ describe('TaskLinkService.spawnEpic dependency seeding', () => {
       source: 'jira',
       epicRef: 'EPIC',
       containerId: container.id,
-      editor: UNATTRIBUTED_BLOCK_EDITOR,
+      editor: UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     })
 
     // Tasks are titled `${externalId}: ${title}` ("A: A" / "B: B").
@@ -159,7 +159,7 @@ describe('TaskLinkService.spawnEpic dependency seeding', () => {
       source: 'jira',
       epicRef: 'EPIC',
       containerId: container.id,
-      editor: UNATTRIBUTED_BLOCK_EDITOR,
+      editor: UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     })
     expect(board.blocks.get(tasks[0]!.id)!.dependsOn).toEqual([])
   })

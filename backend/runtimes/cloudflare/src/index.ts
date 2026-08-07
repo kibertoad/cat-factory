@@ -12,7 +12,7 @@ import type {
   GitHubSyncMessage,
   TrackerSyncMessage,
 } from './infrastructure/env'
-import { requireTelemetryDb } from './infrastructure/env'
+import { requireAuditDb, requireTelemetryDb } from './infrastructure/env'
 import { D1AgentRunRepository } from './infrastructure/repositories/D1AgentRunRepository'
 import { D1CommitProjectionRepository } from './infrastructure/repositories/D1CommitProjectionRepository'
 import { D1LiveContainerRepository } from './infrastructure/repositories/D1LiveContainerRepository'
@@ -33,6 +33,7 @@ import { D1PasswordResetTokenRepository } from './infrastructure/repositories/D1
 import { D1GateOutcomeRepository } from './infrastructure/repositories/D1GateOutcomeRepository'
 import { D1NotificationRepository } from './infrastructure/repositories/D1NotificationRepository'
 import { D1PlatformMetricsRepository } from './infrastructure/repositories/D1PlatformMetricsRepository'
+import { D1AuditEventRepository } from './infrastructure/repositories/D1AuditEventRepository'
 import { D1SpendRollupRepository } from './infrastructure/repositories/D1SpendRollupRepository'
 import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
 import {
@@ -66,12 +67,11 @@ import {
 } from './infrastructure/github/sync-consumer'
 import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
+import { runWithExecutionContext } from './infrastructure/requestContext'
 import { runPlatformMetricsSweep } from './infrastructure/observability/platformMetrics'
 import { flushOperationalMetricsForIsolate } from './infrastructure/observability/operationalFlush'
-import {
-  flushOtelLogsForIsolate,
-  installOtelLogSink,
-} from './infrastructure/observability/logExport'
+import { flushOtelLogsForIsolate } from './infrastructure/observability/logExport'
+import { applyLogSettings } from './infrastructure/observability/logSettings'
 import { loadOtelConfig } from './infrastructure/config/otel'
 import { SweepTick } from './infrastructure/observability/cronSweep'
 import {
@@ -98,8 +98,6 @@ import { D1KeyFingerprintStore } from './infrastructure/repositories/D1KeyFinger
 import {
   WebCryptoSecretCipher,
   checkKeyFingerprint,
-  parseLogLevel,
-  setLogLevel,
   sweepKeyDriftAndRaise,
 } from '@cat-factory/server'
 
@@ -120,6 +118,8 @@ export { ExecutionContainer } from './infrastructure/containers/ExecutionContain
 export { DeployContainer } from './infrastructure/containers/DeployContainer'
 // Per-workspace WebSocket fan-out hub (real-time execution/board events).
 export { WorkspaceEventsHub } from './infrastructure/durable-objects/WorkspaceEventsHub'
+// Cross-isolate cache-coherency directory (per-group generation counters; see appCachesHost.ts).
+export { CacheGenerationDirectory } from './infrastructure/durable-objects/CacheGenerationDirectory'
 
 // Installation-level AI provisioning extension point: a deployment registers extra
 // model-provider registries at startup (e.g. AWS Bedrock from
@@ -371,6 +371,10 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
       // (they are account-scoped through the same `workspaces` sub-select).
       gateOutcomeRepository: new D1GateOutcomeRepository({ db: env.DB }),
       platformMetricsRepository: new D1PlatformMetricsRepository({ db: env.DB }),
+      // The account audit log lives in its OWN database (AUDIT_DB), which is why this is the one
+      // prune here that does not read `env.DB`: audit retention is measured in years and must not
+      // compete with live transactional state for the per-database ceiling.
+      auditEventRepository: new D1AuditEventRepository({ db: requireAuditDb(env) }),
       // The durable cost-attribution rollup: this sweep is its only writer, and prunes it
       // nowhere (see `RetentionDeps`).
       spendRollupRepository: new D1SpendRollupRepository({ db: env.DB }),
@@ -796,6 +800,16 @@ async function handleScheduled(
   env: Env,
   ctx: ExecutionContext,
 ): Promise<void> {
+  // The ambient ExecutionContext (requestContext.ts): the module-scope cache bag's background
+  // work adopts the CURRENT invocation's `waitUntil` through it.
+  return runWithExecutionContext(ctx, () => runScheduled(controller, env, ctx))
+}
+
+async function runScheduled(
+  controller: ScheduledController,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<void> {
   applyLogSettings(env)
   const clock = new SystemClock()
   const tick = new SweepTick(ctx)
@@ -817,21 +831,6 @@ async function handleScheduled(
   // tick drained an empty collector and left its own counters waiting for a next tick in the
   // same isolate — which for the daily retention cron is a tick that never comes.
   flushTelemetryAfter(tick.settled(), env, ctx, clock)
-}
-
-/**
- * Apply this isolate's logging settings from `env`: the emit threshold, and the opt-in OTLP
- * log sink the lines are copied to. Every entry point calls it FIRST, because a fresh isolate
- * can start on any of them and both settings are module state inside `@cat-factory/server`.
- * Idempotent and cheap (an env parse plus a null check), so it is not once-guarded.
- *
- * Reads `loadOtelConfig` rather than the whole `loadConfig`: this runs before the handler, and
- * a deployment whose config validation fails must still serve its misconfiguration fallback
- * with logging intact.
- */
-function applyLogSettings(env: Env): void {
-  setLogLevel(parseLogLevel(env.LOG_LEVEL))
-  installOtelLogSink(loadOtelConfig(env))
 }
 
 /**
@@ -873,10 +872,13 @@ async function handleQueue(
   env: Env,
   ctx: ExecutionContext,
 ): Promise<void> {
-  applyLogSettings(env)
-  const work = routeQueueBatch(batch, env)
-  flushTelemetryAfter(work, env, ctx, new SystemClock())
-  await work
+  // Same ambient-ExecutionContext bracket as `handleScheduled` (requestContext.ts).
+  return runWithExecutionContext(ctx, async () => {
+    applyLogSettings(env)
+    const work = routeQueueBatch(batch, env)
+    flushTelemetryAfter(work, env, ctx, new SystemClock())
+    await work
+  })
 }
 
 /** The routing half of {@link handleQueue}, split out so the flush can bracket the whole batch. */
@@ -971,7 +973,12 @@ export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
         registries,
         onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
       })
-      const response = Promise.resolve(app.fetch(request, env, ctx))
+      // The ambient-ExecutionContext bracket (requestContext.ts): background work the
+      // module-scope cache bag starts while serving this request adopts THIS request's
+      // `waitUntil` through it, resolved at spawn time.
+      const response = Promise.resolve(
+        runWithExecutionContext(ctx, () => app.fetch(request, env, ctx)),
+      )
       // Flush whatever THIS isolate counted while serving the request, after the response.
       flushTelemetryAfter(response, env, ctx, new SystemClock())
       return response

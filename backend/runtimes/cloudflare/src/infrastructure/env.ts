@@ -10,6 +10,7 @@ import { ENV_HELP, configProblem } from '@cat-factory/server'
 import type { TrackerWebhookEvent } from '@cat-factory/kernel'
 import type { DeployContainer } from './containers/DeployContainer'
 import type { ExecutionContainer } from './containers/ExecutionContainer'
+import type { CacheGenerationDirectory } from './durable-objects/CacheGenerationDirectory'
 import type { WorkspaceEventsHub } from './durable-objects/WorkspaceEventsHub'
 
 /** Message enqueued to bound the rate at which durable runs are started. */
@@ -172,6 +173,16 @@ export interface Env {
    * nothing (clients still get state on connect / refresh).
    */
   WORKSPACE_EVENTS?: DurableObjectNamespace<WorkspaceEventsHub>
+  /**
+   * Cross-isolate cache-coherency directory (Durable Object): one generation counter per
+   * (cache, group), sharded by group. Its presence is what selects the COHERENT app-cache
+   * profile: caches of our own mutable state get a real in-isolate TTL with a generation
+   * probe bounding cross-isolate staleness (see `appCachesHost.ts`). When absent, the
+   * Worker keeps the isolate-safe pass-through stance for those caches: prior behaviour,
+   * no boot failure, which is the safe direction for a deployment whose wrangler.toml
+   * predates the binding.
+   */
+  CACHE_GENERATIONS?: DurableObjectNamespace<CacheGenerationDirectory>
 
   // ---- Container-based implementation (see config.ts; opt-in) --------------
   /**
@@ -748,6 +759,13 @@ export interface Env {
   GATE_OUTCOME_RETENTION_DAYS?: string
   /** Daily run rollup (`platform_run_days`) retention, in days. Default 400; 0 disables. */
   PLATFORM_RUN_DAY_RETENTION_DAYS?: string
+  /**
+   * Days of account AUDIT LOG (`audit_events`, in AUDIT_DB) history to keep. The longest window
+   * of the lot by design — the log answers a compliance question long after anyone stopped
+   * watching. Default 730 (~2 years); 0 disables pruning entirely, for a deployment that exports
+   * the log elsewhere and wants nothing dropped locally.
+   */
+  AUDIT_EVENT_RETENTION_DAYS?: string
 }
 
 /**

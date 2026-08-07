@@ -68,8 +68,8 @@ runtimes symmetric"):
 1. **Contracts** (`@cat-factory/contracts`): `cacheReadTokens` + `cacheWriteTokens` on
    `llmCallMetricSchema`, `llmCallActivitySchema`, `stepMetricsSchema`, and the
    export/summary schemas (`llmExportInsightSchema`, `llmMetricsExportSchema.totals`). **Drop
-   `cachedPromptTokens`** (backwards-compat is a non-goal; telemetry is 3-day retention, so stale
-   rows churn out within the window). `cacheHitRate` becomes `(read + write) / (prompt + read + write)`.
+   `cachedPromptTokens`** (backwards-compat is a non-goal; telemetry is pruned to
+   `LLM_CALL_METRICS_RETENTION_DAYS`, so stale rows churn out within the window). `cacheHitRate` becomes `(read + write) / (prompt + read + write)`.
 2. **Kernel ports**: `LlmCallMetric` + `LlmCallMetricSummary` (`ports/llm-metrics.ts`); the
    external `LlmGenerationEvent` (`ports/llm-trace-sink.ts`) gains the two fields so Langfuse
    traces carry them.
@@ -115,8 +115,9 @@ runtimes symmetric"):
   (`harnessInline.ts`, which previously summed the buckets into one figure) and the container
   `inline` job (whose `InlineResult.usage` folds the split out of its per-call metrics). A new
   inline runner that reports one lumped input count leaves that path blind again.
-- **Telemetry ≠ spend ledger, but ONE price table serves both.** `llm_call_metrics` (3-day,
-  per-run) is separate from the durable `token_usage` ledger (`SpendService`, ~395-day, with
+- **Telemetry ≠ spend ledger, but ONE price table serves both.** `llm_call_metrics` (per-run,
+  pruned to `LLM_CALL_METRICS_RETENTION_DAYS`) is separate from the durable `token_usage` ledger
+  (`SpendService`, ~395-day, with
   cost), and they stay separate stores. Slice 2 revised the "telemetry only" scope above: the
   ledger was pricing every input token at the FRESH rate, so the same cache-dominated run this
   initiative exists to describe was ALSO being metered at roughly ten times its cost and
@@ -124,7 +125,7 @@ runtimes symmetric"):
   fixing it in the telemetry layer alone would have left the two surfaces disagreeing about the
   same run. So `estimateClassedCost` prices both, from `DEFAULT_MODEL_PRICES`.
 - **Backwards-compat is a non-goal.** Drop `cached_prompt_tokens` cleanly rather than dual-writing;
-  the 3-day retention window makes the break invisible within days.
+  the telemetry retention window makes the break invisible within a fortnight.
 
 ### Carried out of Slice 1
 

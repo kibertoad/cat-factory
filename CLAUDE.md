@@ -258,14 +258,14 @@ patterns: [`backend/docs/logging.md`](./backend/docs/logging.md).
   every error envelope), `containerJobLog` (the workflow↔container seam; the same ids ride the job body so
   the harness binds them beside `jobId`), and the durable drivers. A request line logs the PATHNAME only,
   because a query string carries the WS `?ticket=` and OAuth `?code=`.
-- **`LOG_LEVEL`** is applied FIRST in each boot path and an unrecognised value falls back to `info`. The
-  threshold is checked in the adapter, not on the pino instance, because pino children snapshot their
-  parent's level at creation.
+- **`LOG_LEVEL`** is applied FIRST in each boot path, an unrecognised value falling back to `info`; the
+  threshold is checked in the adapter, because a pino CHILD snapshots its parent's level at creation.
 - **Assert the evidence in tests** with kernel's `createRecordingLogger()`.
 - **A SECOND destination is a kernel `LogSink` installed with `setLogSink`** (today the opt-in
   OTLP log export), never a second logger. It gets the `child`-bound fields folded in and sits
-  behind the same level gate; `record` may not throw or block and `flush` may not reject, and
-  DRAINING is the facade's job (Node timer + shutdown flush ⇄ Worker per-invocation `waitUntil`).
+  behind the same level gate; `record` may not throw or block and `flush` may not reject, and the
+  facade DRAINS wherever the buffer's HOLDER can vanish: Node timer + shutdown flush ⇄ Worker
+  per-invocation `waitUntil` ⇄ each isolate-ending wait in a workflow wake, a failed `step.do` too.
 
 ## Operational EVENTS are counted, not just logged
 
@@ -355,9 +355,9 @@ Register a new entry on the interface, in `AppCachesProfile` plus both profiles,
 
 - **Invalidate on EVERY write** right after it commits. Invalidation, not the TTL, is the coherence story;
   a cached read with no invalidation on its write path is a bug.
-- **Pass-through on the Worker for OUR OWN mutable state** (`enabled: false` in the isolate-safe profile):
-  an isolate has no cross-isolate invalidation bus, so only immutable or sha/version-probed entries keep a
-  real TTL there.
+- **On the Worker, our mutable state is pass-through or GENERATION-PROBED** (`coherencyWindowMsecs`
+  and the `CACHE_GENERATIONS` DO directory), never a bare TTL. The bag is per ISOLATE, so no in-flight
+  promise may cross invocations (workerd kills the joiner UNCATCHABLY): `currentInvocation`.
 - **Wrap a nullable value** (`{ value: T | null }`): layered-loader treats bare `null` as unresolved.
 
 ## Concurrency, idempotency, replay

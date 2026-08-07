@@ -18,6 +18,9 @@ const RETENTION: RetentionConfig = {
   gateOutcomesMs: 90 * 24 * 60 * 60_000,
   runDaysMs: 400 * 24 * 60 * 60_000,
   notificationsMs: 0,
+  // The audit log is never in the LOCAL telemetry store (it is org state the mothership owns),
+  // so a window here reaches nothing; named so the config stays exhaustive.
+  auditEventsMs: 0,
 }
 
 const NOW = 100 * 24 * 60 * 60 * 1000

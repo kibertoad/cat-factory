@@ -12,7 +12,7 @@ import {
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import type { DocumentConnectionService } from './DocumentConnectionService.js'
-import { buildExcerpt, probeCacheKey } from './documents.logic.js'
+import { buildExcerpt, probeCacheKey, sameAgentVisibleProjection } from './documents.logic.js'
 
 // DocumentImportService: gets a document's text into the workspace's local projection, from
 // either direction. `import` FETCHES a page from a connected source (ref parsing and fetching
@@ -222,26 +222,20 @@ export class DocumentImportService {
     // Preserve any existing block link across a re-import.
     const existing = await this.deps.documentRepository.get(workspaceId, source, content.externalId)
     const hash = contentHash(content.body)
-    // Idempotent re-import: skip the write only when NOTHING that reaches an agent has
-    // changed — the body (by hash) AND the title/url metadata (which feed the prompt's
-    // summary index and the materialised file's `Source:` header). A renamed/moved page
-    // whose body is unchanged still re-projects so the stale title/url don't linger.
-    //
-    // `sourceVersion` is part of that comparison even though no agent reads it, because it is what
-    // the refresh COMPARES: a page whose version bumped without changing a byte of its Markdown (a
-    // Figma file version moves on any edit in the file, including a frame this document doesn't
-    // cover) would otherwise keep the old token on the row and be re-fetched on every single
-    // dispatch forever, which is the cost the version probe exists to avoid.
-    if (
-      existing &&
+    // Idempotent re-import: skip the write entirely when NOTHING that reaches an agent has changed
+    // (`sameAgentVisibleProjection` owns what that means) AND the version token the refresh compares
+    // against is the one already on the row. A renamed/moved page whose body is unchanged still
+    // re-projects, so the stale title/url don't linger.
+    const unchangedForReaders =
+      !!existing &&
       existing.deletedAt === null &&
-      existing.contentHash === hash &&
-      existing.title === content.title &&
-      existing.url === content.url &&
-      existing.sourceVersion === version
-    ) {
-      return existing
-    }
+      sameAgentVisibleProjection(existing, { ...content, contentHash: hash })
+    if (existing && unchangedForReaders && existing.sourceVersion === version) return existing
+    // The write that remains, when `unchangedForReaders` still holds, exists ONLY to record the
+    // moved token: a page whose version bumped without changing a byte (a Figma file version moves
+    // on any edit in the file, including frames this document does not cover) would otherwise keep
+    // the old token and be re-fetched on every dispatch forever, which is the cost the version probe
+    // exists to avoid.
     const record: DocumentRecord = {
       workspaceId,
       source,
@@ -259,7 +253,10 @@ export class DocumentImportService {
       // any existing tag across a re-import (the repo's upsert also leaves these columns alone).
       role: existing?.role ?? null,
       docKind: existing?.docKind ?? null,
-      syncedAt: this.deps.clock.now(),
+      // `syncedAt` is "when the body was last written", which is what every reader renders it as,
+      // so a token-only write must NOT move it. Moving it would put a fresh timestamp on bytes
+      // nobody changed, and the person reading it would conclude their edit had landed.
+      syncedAt: unchangedForReaders ? existing.syncedAt : this.deps.clock.now(),
       deletedAt: null,
     }
     await this.deps.documentRepository.upsert(record)

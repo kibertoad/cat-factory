@@ -345,6 +345,24 @@ export interface UnavailableToolServer {
    *   `oauth_not_connected` because "never connected" and "the connection stopped working" send an
    *   operator to different places, and only the second is ever transient.
    *
+   * ONE MEMBER IS NOT ONE CAUSE, and anyone writing operator-facing copy off this list has to
+   * read the whole of a member before naming a fix for it. Three of them are reached from more
+   * than one place, so a remedy addressing only the obvious cause is a dead end for whoever hit
+   * the other:
+   *
+   * - `harness_unsupported` covers a CLI with no MCP client (Pi), a definition whose `harnesses`
+   *   excludes the resolved one, AND an ambient-auth Codex run, which is reached only AFTER both
+   *   of those tests passed. There the CLI does speak MCP and is allowed; what is missing is a
+   *   per-run `CODEX_HOME`, so widening the list or switching CLI fixes nothing and only a leased
+   *   credential in place of the developer's own login does.
+   * - `missing_secret` is one answer from a COMPOSED resolver. The deployment-environment
+   *   resolver is what both facades wire by default and a per-workspace credential store sits in
+   *   front of it only where one is wired, so copy naming just the store sends a store-less
+   *   deployment to a surface it does not have.
+   * - `oauth_not_connected` covers a workspace that holds no grant AND a deployment with no grant
+   *   store at all (no `ENCRYPTION_KEY`), where there is nowhere to keep one and connecting
+   *   cannot be the whole answer.
+   *
    * The member LIST itself lives in `@cat-factory/contracts`, not here, because the run surface
    * has to state the same judgement to a human and the SPA cannot see kernel: a union restated on
    * both sides drifts into a member that renders as a blank chip. Which member a dispatch picks is

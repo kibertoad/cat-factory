@@ -1,4 +1,4 @@
-import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block, Service, WorkspaceMount } from '@cat-factory/kernel'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
@@ -82,7 +82,7 @@ describe('BoardService — frame responses carry this board’s layout override'
       WS,
       'frame_1',
       { size: { w: 900, h: 700 } },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
 
     expect(updated.position).toEqual(MOUNTED_AT)
@@ -98,7 +98,7 @@ describe('BoardService — frame responses carry this board’s layout override'
       WS,
       'frame_1',
       { title: 'renamed' },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
 
     expect(updated.title).toBe('renamed')
@@ -113,7 +113,7 @@ describe('BoardService — frame responses carry this board’s layout override'
       WS,
       'task_1',
       { title: 'renamed' },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
 
     expect(updated.position).toEqual(CREATED_AT)

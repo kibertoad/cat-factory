@@ -104,6 +104,24 @@ export class StepGraph {
     // — this one can legitimately go present → absent (a looped-back `repro-test` step has its
     // `custom` cleared above, so the re-dispatch resolves no spec and nothing overwrites it).
     step.reproduction = undefined
+    // Drop the previous dispatch's tool-server (MCP) resolution, so a re-armed step stops naming
+    // servers nothing has asked for yet. The record is attempt-scoped by construction (one harness,
+    // one secret resolver, one set of OAuth grants), and `stepToolServersSchema` is where its
+    // absence is defined: clearing here is what makes "re-armed, not yet re-dispatched" one of the
+    // cases that definition names, alongside the counters above, which keep answering "did this
+    // step run before".
+    //
+    // Safe to clear because it is the ONE field `recordDispatchAttribution` pins that no
+    // settle-time path consumes. `model`, `subscriptionTokenId` and `initiatedByUserId` ARE read
+    // back when the job's usage lands, which is why they are guarded on presence there and why
+    // clearing them here would put every re-run's `token_usage` row back to provider "unknown".
+    // `skillVersions` and `promptRevision` need no line at all: both are assigned UNCONDITIONALLY
+    // at dispatch (to `undefined` when there is nothing to pin), so they self-clear. This field
+    // cannot, because only a CONTAINER re-dispatch rewrites it. Without this line the stale record
+    // survives a step left sitting `pending`, one re-dispatched INLINE (whose handle carries no
+    // resolution, so the guard in `recordDispatchAttribution` would preserve the container round's),
+    // and one whose run is abandoned before it redispatches at all.
+    step.toolServers = undefined
     step.rework = undefined
     // Clear the live container handle + the deployer fan-out state, so a re-run of a `deployer`
     // step re-provisions from scratch (a stale `deployEnvs` would otherwise let it skip straight to

@@ -601,6 +601,11 @@ describe('deriveSignals', () => {
     const loop = signals.find((s) => s.code === 'tool_retry_loop')
     expect(loop).toMatchObject({ severity: 'warning', count: 8, agentKind: 'ci-fixer' })
     expect(loop!.message).toContain('apply_patch')
+    // The drill-down it hands the reader must be a query the endpoint still takes. An unknown
+    // param is IGNORED rather than refused, so a stale spelling here does not fail anywhere: it
+    // silently answers with the whole trajectory, which a follower reads as all-failures. This
+    // signal shipped with `?ok=false` for a release after that param was replaced.
+    expect(loop!.message).toContain('order=trajectory&outcome=error')
 
     // Both conditions are load-bearing. A single failing command is not a loop…
     const oneFailure = deriveSignals({

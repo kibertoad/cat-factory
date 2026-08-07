@@ -178,8 +178,9 @@ export function toDebugRunStep(step: PipelineStep, index: number): DebugRunStep 
     hasStructuredResult: step.custom != null,
     evictionRecoveries: step.evictionRecoveries ?? 0,
     firstEvictionDetail: detail ? sliceText(detail, MAX_EVICTION_DETAIL_CHARS) : null,
-    // Carried through on PRESENCE, never normalised to an empty record: absent means no container
-    // dispatch recorded one, and both lists empty means a dispatch ran under a kind that declares
+    // Carried through on PRESENCE, never normalised to an empty record: absent means the step's
+    // current attempt holds no resolution (never container-dispatched, or re-armed for a re-run and
+    // not yet re-dispatched), and both lists empty means a dispatch ran under a kind that declares
     // no tool servers. Collapsing them would tell a diagnosing reader that a step which lost every
     // server it declared simply never had any.
     ...(step.toolServers ? { toolServers: step.toolServers } : {}),
@@ -501,7 +502,7 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
     push(
       'tool_retry_loop',
       'warning',
-      `${retryLoop.agentKind}'s '${retryLoop.tool}' call failed ${retryLoop.failures} of ${retryLoop.calls} time(s): the agent kept retrying one tool that mostly did not work. Read that loop in order with GET /debug/runs/:runId/tool-calls?order=trajectory&ok=false.`,
+      `${retryLoop.agentKind}'s '${retryLoop.tool}' call failed ${retryLoop.failures} of ${retryLoop.calls} time(s): the agent kept retrying one tool that mostly did not work. Read that loop in order with GET /debug/runs/:runId/tool-calls?order=trajectory&outcome=error.`,
       { count: retryLoop.failures, agentKind: retryLoop.agentKind },
     )
   }

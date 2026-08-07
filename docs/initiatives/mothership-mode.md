@@ -1270,7 +1270,7 @@ Each PR adds a changeset and updates this checklist.
   fold is built for that drift: it is VALUE-authoritative, so a stale or absent registration costs
   labels, never data. The per-workspace SUPPRESSION of an operation is the opposite call and is
   `remote`, because it is pure data with no co-registered code: the catalog is code and the hide-list
-  is a row. Full argument: [`reusable-operations.md`](./reusable-operations.md) (D11);
+  is a row. Full argument: [ADR 0042](../../backend/docs/adr/0042-reusable-operations.md);
   behaviour: [`backend/docs/reusable-operations.md`](../../backend/docs/reusable-operations.md).
 - **The PIPELINE registry stays node-local too, and for a DIFFERENT reason than task types.** It is
   not inseparability (a pipeline definition is data): it is that the failure is already LOUD.

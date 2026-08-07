@@ -1832,6 +1832,7 @@
         "within_thresholds": "Jede Bewertung liegt innerhalb der {preset}-Schwellenwerte, daher wurde der PR automatisch gemergt.",
         "exceeded_thresholds": "{axes} überschritt die {preset}-Schwellenwerte, daher wartet der PR darauf, dass ein Mensch mergt.",
         "auto_merge_disabled": "Das {preset}-Preset sendet jeden PR an einen Menschen, daher wartet dieser auf Prüfung.",
+        "no_policy_configured": "Für diesen Lauf galt keine Merge-Richtlinie, daher wird kein PR selbstständig gemergt. Diese Installation hat keine Merge-Preset-Bibliothek eingerichtet; das kann nur ein Betreiber ändern.",
         "no_rationale": "Der Merger hat den PR bewertet, aber keine Begründung gegeben, daher konnte dem Urteil zum automatischen Mergen nicht vertraut werden; der PR wartet darauf, dass ein Mensch mergt.",
         "no_assessment": "Der Merger hat keine parsbare Bewertung zurückgegeben, daher wartet der PR darauf, dass ein Mensch mergt.",
         "merge_failed": "Die Bewertungen lagen innerhalb der {preset}-Schwellenwerte, aber der automatische Merge konnte nicht abgeschlossen werden (zum Beispiel Branch-Schutz oder ein Konflikt), daher wartet der PR darauf, dass ein Mensch mergt.",
@@ -1997,6 +1998,15 @@
           "oauthTokenFailed": "war nicht verfügbar: die Verbindung liefert kein Zugriffstoken mehr.",
           "overBudget": "war nicht verfügbar: dieser Agent deklariert mehr Tool-Server, als ein Lauf mitführt.",
           "unknown": "war nicht verfügbar ({reason})."
+        },
+        "remedy": {
+          "harnessUnsupported": "Führen Sie den Schritt auf einer Agenten-CLI mit MCP aus, oder erweitern Sie die Harness-Liste des Servers. Ein Codex-Lauf mit Ihrer eigenen CLI-Anmeldung hat keinen laufspezifischen Ablageort für den Server; verwenden Sie stattdessen Zugangsdaten der Plattform.",
+          "transportUnsupported": "Deklarieren Sie dafür einen stdio-Server, oder führen Sie den Schritt auf einer Agenten-CLI aus, die HTTP-Server erreicht.",
+          "missingSecret": "Hinterlegen Sie die genannte Zugangsinformation entweder als Umgebungsvariable des Deployments oder im Infrastruktur-Fenster unter den Capability-Zugangsdaten.",
+          "reservedSecret": "Ändern Sie die Deklaration auf einen anderen Schlüssel; das Setzen dieser Variablen hilft gerade nicht.",
+          "oauthNotConnected": "Verbinden Sie dieses Board im Infrastruktur-Fenster damit. Ein Deployment ohne ENCRYPTION_KEY hat keinen Ort für eine Berechtigung, das muss ein Betreiber also zuerst setzen.",
+          "oauthTokenFailed": "Verbinden Sie es im Infrastruktur-Fenster neu, oder warten Sie die Störung des Anbieters ab.",
+          "overBudget": "Kürzen Sie, was der Agent deklariert, damit ein Lauf alles mitführen kann."
         }
       },
       "adherence": {
@@ -2204,7 +2214,9 @@
       },
       "members": {
         "title": "Mitglieder",
-        "empty": "Noch keine Mitglieder."
+        "empty": "Noch keine Mitglieder.",
+        "revokeSessions": "Auf allen Geräten abmelden",
+        "sessionsRevoked": "Auf allen Geräten abgemeldet"
       },
       "invite": {
         "title": "Ein Teammitglied einladen",
@@ -2243,7 +2255,8 @@
         "sendInvite": "Einladung konnte nicht gesendet werden",
         "revokeInvite": "Einladung konnte nicht widerrufen werden",
         "connectEmail": "E-Mail-Absender konnte nicht verbunden werden",
-        "disconnectEmail": "E-Mail-Absender konnte nicht getrennt werden"
+        "disconnectEmail": "E-Mail-Absender konnte nicht getrennt werden",
+        "revokeSessions": "Mitglied konnte nicht abgemeldet werden"
       },
       "emailNoun": "E-Mail-Versand"
     },
@@ -2653,6 +2666,39 @@
     },
     "accountFoundational": {
       "intro": "Die gemeinsamen Fähigkeiten, die diese Organisation bereits betreibt - Dateiablage, Benachrichtigungen, Audit - samt ihren API-Verträgen. Jedes Board erbt sie, und einem Architekten wird gesagt, sie zu nutzen statt einen Neubau vorzuschlagen. Dienste, die dieses Deployment im Code registriert, werden hier ebenfalls geerbt und können per ID überschrieben oder unten abgewählt werden."
+    },
+    "auditLog": {
+      "title": "Prüfprotokoll",
+      "description": "Wer in diesem Konto was und wann geändert hat. Einträge werden nur angehängt und können weder bearbeitet noch gelöscht werden.",
+      "empty": "Für dieses Konto wurde bisher nichts aufgezeichnet.",
+      "loadMore": "Ältere Einträge laden",
+      "refresh": "Aktualisieren",
+      "retiredAction": "hat eine Aktion ausgeführt, die diese Version nicht mehr kennt ({action})",
+      "actors": {
+        "system": "Das System",
+        "apiKey": "API-Schlüssel {id}"
+      },
+      "values": {
+        "none": "keine"
+      },
+      "actions": {
+        "accountMemberAdded": "hat {target} als {roles} zum Konto hinzugefügt",
+        "accountMemberRolesChanged": "hat die Rollen von {target} von {previousRoles} zu {roles} geändert",
+        "accountBudgetChanged": "hat das monatliche Ausgabenlimit auf {limit} gesetzt",
+        "accountSettingsChanged": "hat den Standard-Cloud-Anbieter auf {defaultCloudProvider} gesetzt",
+        "accountInvitationCreated": "hat {email} als {roles} eingeladen",
+        "accountInvitationRevoked": "hat die Einladung für {email} zurückgezogen",
+        "accountInvitationAccepted": "hat die Einladung für {email} als {roles} angenommen",
+        "accountMemberSessionsRevoked": "hat {target} auf allen Geräten abgemeldet",
+        "workspaceMemberAdded": "hat {target} als {role} zu einem Board hinzugefügt",
+        "workspaceMemberRoleChanged": "hat die Board-Rolle von {target} von {previousRole} zu {role} geändert",
+        "workspaceMemberRemoved": "hat {target} aus einem Board entfernt (war {role})",
+        "workspaceAccessModeChanged": "hat den Board-Zugriff auf {accessMode} gesetzt"
+      },
+      "errors": {
+        "load": "Das Prüfprotokoll konnte nicht geladen werden.",
+        "loadMore": "Ältere Einträge konnten nicht geladen werden"
+      }
     }
   },
   "board": {
@@ -2670,7 +2716,12 @@
       "archived": "Archiviert: „{name}“",
       "restored": "Wiederhergestellt: „{name}“",
       "archiveFailed": "Dienst konnte nicht archiviert werden",
-      "restoreFailed": "Dienst konnte nicht wiederhergestellt werden"
+      "restoreFailed": "Dienst konnte nicht wiederhergestellt werden",
+      "moveRefused": {
+        "relaxes_role_sandbox": "Die Ausführungen dieser Aufgabe laufen an ihrem jetzigen Ort für deine Rolle isoliert, die Merge-Richtlinie am Zielort jedoch nicht. Bitte eine Workspace-Administration, sie zu verschieben.",
+        "relaxes_role_submission_allowlist": "Die Merge-Richtlinie am Zielort würde dich Änderungsarten mergen lassen, die dir hier verwehrt sind. Bitte eine Workspace-Administration, sie zu verschieben.",
+        "relaxes_role_class_rule": "Die Merge-Richtlinie am Zielort merged Änderungen automatisch, die du hier prüfen musst. Bitte eine Workspace-Administration, sie zu verschieben."
+      }
     },
     "repoTypes": {
       "service": "Service",
@@ -3839,6 +3890,25 @@
       "noneImported": "Noch keine Dokumente importiert.",
       "imported": "\"{title}\" importiert",
       "importFailed": "Import fehlgeschlagen"
+    },
+    "freshness": {
+      "updated": "Aktualisiert am {when}",
+      "refresh": "Auf Änderungen prüfen",
+      "change": {
+        "unchanged": "Stimmt mit der Quelle überein",
+        "reimported": "Neuere Fassung übernommen",
+        "revision_only": "Die Quelle hat sich geändert, diese Kopie jedoch nicht"
+      },
+      "checkedAt": "Geprüft am {when}",
+      "revision": "Revision {version}",
+      "notApplicable": "Diese Installation hat keinen Leser für diese Quelle, es gibt also nichts zum Abgleichen.",
+      "gap": {
+        "not_connected": "Nicht geprüft: dieser Workspace ist nicht mehr mit der Quelle verbunden.",
+        "credentials_unreadable": "Nicht geprüft: diese Installation kann die Zugangsdaten der Quelle nicht lesen.",
+        "unversioned": "Nicht geprüft: die Quelle veröffentlicht keine Revision zum Vergleich.",
+        "source_unreachable": "Nicht geprüft: die Quelle war nicht erreichbar."
+      },
+      "refreshFailed": "Prüfung auf Änderungen fehlgeschlagen"
     },
     "connect": {
       "title": "Quelle verbinden",

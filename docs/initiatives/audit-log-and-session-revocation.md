@@ -1,7 +1,8 @@
 # Initiative: account audit log & user-session revocation
 
-**Status:** in progress (slices 1 + 2 landed: the store, the write seam, and the tenancy writers) ·
-**Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (slices 1, 2, 4, 5, 6, 7 landed: the store, the write seam, the tenancy
+writers, the admin viewer, session revocation and retention — slice 3's run-lifecycle half is the
+only thing left) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -79,15 +80,15 @@ revocation via a per-user session-generation check.
 
 ## Prioritized checklist
 
-| #   | Slice                                                                                                                | Status  | PR      |
-| --- | -------------------------------------------------------------------------------------------------------------------- | ------- | ------- |
-| 1   | `AuditAction` contracts union + kernel port + `audit_events` D1 ⇄ Drizzle + conformance                              | ✅ done | this PR |
-| 2   | `AuditService.record` + instrumentation of the membership/role/invitation + budget/policy paths                      | ✅ done | this PR |
-| 3   | Instrument run lifecycle (start/stop/retry, notification `act`) + credential/API-key metadata events                 | ⬜ todo |         |
-| 4   | Paginated `GET /accounts/:id/audit-events` + admin viewer UI (i18n all locales; action labels via exhaustive Record) | ⬜ todo |         |
-| 5   | `sessionGeneration` claim + middleware check + "sign out all devices" (self-serve)                                   | ⬜ todo |         |
-| 6   | Admin-forced revocation on member removal / role downgrade (auto-increment); audited, naturally                      | ⬜ todo |         |
-| 7   | Retention sweep + env knob (both runtimes)                                                                           | ⬜ todo |         |
+| #   | Slice                                                                                                                | Status              | PR      |
+| --- | -------------------------------------------------------------------------------------------------------------------- | ------------------- | ------- |
+| 1   | `AuditAction` contracts union + kernel port + `audit_events` D1 ⇄ Drizzle + conformance                              | ✅ done             | this PR |
+| 2   | `AuditService.record` + instrumentation of the membership/role/invitation + budget/policy paths                      | ✅ done             | this PR |
+| 3   | Instrument run lifecycle (start/stop/retry, notification `act`) + credential/API-key metadata events                 | ⬜ todo (see below) |         |
+| 4   | Paginated `GET /accounts/:id/audit-events` + admin viewer UI (i18n all locales; action labels via exhaustive Record) | ✅ done             | this PR |
+| 5   | `sessionGeneration` claim + middleware check + "sign out all devices" (self-serve)                                   | ✅ done             | this PR |
+| 6   | Admin-forced revocation on offboarding; audited, naturally                                                           | ✅ done             | this PR |
+| 7   | Retention sweep + env knob (both runtimes)                                                                           | ✅ done             | this PR |
 
 ## Conventions & gotchas
 
@@ -120,7 +121,7 @@ revocation via a per-user session-generation check.
 
   _Not telemetry_: the profile is the mirror image. Volume is admin actions, single digits per
   account per month, against telemetry's row per LLM CALL, and retention is the opposite
-  requirement (`LLM_CALL_METRICS_RETENTION_DAYS` defaults to **3**). Decisively, the `telemetry`
+  requirement (`LLM_CALL_METRICS_RETENTION_DAYS` defaults to **14**). Decisively, the `telemetry`
   mothership bucket is written AND read on the LAPTOP, which would scatter the trail across nodes
   and leave it readable and deletable by the person it audits.
 
@@ -128,7 +129,7 @@ revocation via a per-user session-generation check.
   Node), for RETENTION rather than write profile. After the run-lifecycle slice this is the only
   table in the platform that grows monotonically with run volume AND wants a multi-year window
   (`token_usage` grows with runs but prunes at ~395 days; the telemetry sinks grow far faster but
-  prune at 3), and D1's ceiling is 10 GB PER DATABASE. Measured **~500 B/row** on Postgres (~260
+  prune at 14), and D1's ceiling is 10 GB PER DATABASE. Measured **~500 B/row** on Postgres (~260
   heap + ~245 index, the index as expensive as the data because the keyset carries `id` as its
   tie-break): 1,000 runs/day ≈ 550 MB/year, 10,000 ≈ 5.5 GB/year. Full arithmetic in
   [`storage-and-retention.md`](../../backend/docs/storage-and-retention.md).
@@ -198,6 +199,120 @@ revocation via a per-user session-generation check.
   `deploy/backend`'s `db:migrate:*` scripts. Miss the last one and slice 7's retention migration is
   never applied by a deployment copying that template: the Worker ships against a schema that never
   moved, which surfaces as a repository error rather than as a failed deploy.
-- **Slice 7 is still owed and the table is unbounded until it lands.** `deleteOlderThan` was
-  deliberately NOT added in slice 1: an unwired repository method is dead surface, and adding it
-  means classifying it (`sweeper`) and wiring both facades' retention sweeps, which IS slice 7.
+
+## What slices 4-7 settled (carry these forward)
+
+- **The generation check is a NEW per-request read, and slice 5 paid for it rather than avoiding
+  it.** The correction above was right: nothing on the request path read the user row. The two
+  options were a cached read or short TTLs plus a bump; the cached read won, because a bounded
+  revocation WINDOW is the one property an offboarding story cannot advertise ("we disabled them
+  and they lost access, within the hour" is not the claim). `userSessionGeneration` is modelled on
+  `workspaceAccess` down to the isolate-safe pass-through, and the Worker's real per-request D1
+  read is the accepted cost, stated here rather than discovered in production.
+
+- **Three refusals, each closing a hole the obvious version leaves.** A token with NO `gen` claim
+  is refused, not admitted: absent-means-current would be a permanent bypass and the one an
+  attacker aims at, and the cost is one re-login for everybody. A claim ABOVE the row is refused
+  too, not only a stale one, because no mint can produce it — a database restored from backup
+  would otherwise re-admit every session it had revoked. And a user with NO row is refused, which
+  is what ends a deleted user's unexpired bearer; `sessionGeneration` returns `null` rather than
+  `0` precisely so those two cannot be flattened.
+
+- **The bump is evaluated IN THE STORE and returns the new value.** `current + 1` computed in the
+  repository passes every sequential test and is wrong the moment two admins offboard the same
+  person, which is exactly when it is being used. The conformance suite races three bumps and
+  asserts the returned values are a permutation of 1..N.
+
+- **Revoke ORDER is store-then-cache, and reversing it is silent.** A concurrent request would
+  otherwise re-populate the cache from the pre-bump row and go on admitting the revoked bearer for
+  a full TTL. `UserService.revokeSessions` owns both steps, which is why `AccountService` takes it
+  as a bound callback rather than reaching for the repository itself.
+
+- **A MINT reads past the cache; the per-request CHECK reads through it.** The bounded stale window
+  the cache exists for is right for verification (it gates one request, and the next re-asks) and
+  wrong for a mint, whose value is stamped into a bearer that outlives the entry. A login landing
+  on a replica that missed the invalidation would stamp the pre-bump number and issue a token every
+  replica refuses for a full TTL — and the refusal SPREADS rather than heals, as the caches that
+  still agreed with it expire, so the user is in a sign-in loop no waiting fixes. Hence two methods:
+  `sessionGeneration` (cached) and `refreshSessionGeneration` (invalidate, then read through, so the
+  cache is left holding the authoritative value and the minting replica does not refuse its own
+  freshly issued token).
+
+- **A role DOWNGRADE deliberately does NOT revoke**, despite the original checklist wording. The
+  RBAC gate re-reads roles on the next request (through its own cache, invalidated on the write),
+  so nothing about a downgrade survives in the token — it carries no roles. Bumping the generation
+  would sign a person out of every board because their role on one was adjusted. Revocation
+  withdraws AUTHENTICATION; roles withdraw permission, and the two are separate levers on purpose.
+
+- **There is no account-member REMOVAL path in the product**, which is why slice 6 landed as an
+  explicit admin action plus the SSO refusal rather than as a hook on a removal. If a removal path
+  is ever added, it should call the same `revokeMemberSessions`.
+
+- **The SSO refusal revocation is best-effort and says so in the log.** The refusal has already
+  succeeded by then, so a store failure must not turn a correct denial into a 500 that reads as a
+  broken SSO configuration. `sessionsRevoked` on the `sso.refused` line separates "refused them and
+  cut their sessions" from "refused them and they still hold a live bearer" — different security
+  outcomes, and only the first is the offboarding this feature claims. Four outcomes rather than a
+  boolean (`revoked` / `no_account` / `failed` / `withheld`): a revocation that THREW and a person
+  who never had an account here are opposite facts about whether somebody is still holding a live
+  bearer, and only one of them needs an operator to go and revoke by hand.
+
+- **Only a refusal the DIRECTORY evidenced revokes.** `judgeSsoAdmission` returns what its refusal
+  is evidence of (`SsoRefusalEvidence`) alongside which rule fired, because the reason code cannot
+  answer it: `group_required` is the directory excluding somebody when groups WERE released and
+  none matched, and merely a claim that never arrived when none were. The second is equally
+  consistent with a dropped `groups` scope, a renamed `groupsClaim` and a userinfo endpoint that
+  stopped answering — and treating it as an offboarding turns one configuration regression into a
+  deployment-wide forced sign-out, since every returning employee is refused on that release and
+  every refusal would cut all of their sessions, the admin who has to fix it included. The login is
+  still refused either way; only the irreversible half is withheld. The judge decides this rather
+  than the route, because the route would have to know which claims the judge looked at.
+
+- **Self-serve "sign out everywhere" is deliberately NOT audited.** The account audit log records
+  what an account ADMIN is answerable for; a person acting on their own sessions belongs to no
+  account in particular (they may be in several, or only their own), and filing it under a guess is
+  the misattribution the actor model exists to prevent.
+
+- **The viewer resolves names at RENDER time, in one batched read.** Rows store ids because names
+  change and a row must go on meaning what it meant; an admin reading `usr_01j…` learns nothing.
+  One `listByIds` per page, never a lookup per row. An unresolved name stays `null` and the id is
+  rendered, which is the honest answer for the case the log most needs to survive: the person is
+  gone, and their having been here is what the row records.
+
+- **A failed READ renders differently from an empty log**, in the store, the controller and the
+  component alike. An audit viewer that shows an outage as "nothing happened" tells an admin the
+  exact opposite of the truth.
+
+- **Retention got its OWN knob (`AUDIT_EVENT_RETENTION_DAYS`, default 730 days)**, which is the
+  governance half of the separate store: audit retention cannot be shortened as a side effect of
+  tuning a telemetry window, because nothing else lives behind that name. `deleteOlderThan` takes
+  a cutoff and NOTHING else — no account, actor or action predicate — so the sweep can never be
+  used to remove the record of one inconvenient thing. The boundary is strict (`at < cutoff`), and
+  conformance pins it: an off-by-one there silently shortens every deployment's window.
+
+## What slice 3 still owes, and the problem it has to solve first
+
+The credential/API-key half is ordinary instrumentation. The RUN-LIFECYCLE half is not, and the
+reason is the mothership rule already recorded above: `auditEventRepository.append` is `admin`, so
+a node cannot write audit rows, and a run started on a mothership-mode node is started by the
+ENGINE running there. Instrumenting `RunLifecycleController` would therefore audit run starts on
+every hosted deployment and silently record nothing on the one deployment shape where the engine
+runs beside no database.
+
+Three things are settled, so the next iteration does not re-argue them:
+
+- **Do not proxy `append`.** The event names its own ACTOR, so a role-blind machine token that
+  could reach it could attribute any action to any user in its account scope.
+- **Do not fall back to a `system` actor for a node-driven run.** A human started it, and an event
+  blaming the engine for a human's action is a defect in the log rather than a gap in it.
+- **The mothership's only observation of a node's run is `executionRepository.insertLive`**, whose
+  payload already carries `initiatedByUserId` (the platform trusts it for merge policy, ADR 0037).
+  Deriving the audit row mothership-side from that write is the shape most likely to be right, and
+  it is a persistence-layer side effect that needs designing rather than adding.
+
+Until that lands, run lifecycle is unaudited on every runtime — not just mothership mode — because
+landing it only where it happens to work is exactly the facade-parity gap the repo bans.
+
+- **Slice 7's `deleteOlderThan` is now wired** (classified `sweeper`, both facades' retention
+  passes, both configs). The note it replaces read: `deleteOlderThan` was deliberately NOT added in
+  slice 1, because an unwired repository method is dead surface.

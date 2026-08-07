@@ -12,7 +12,7 @@
  * back here type-only), so the value dependency is one-way `container.ts` → this file.
  */
 
-import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import type {
   AppCaches,
   BugHuntAssessor,
@@ -1333,7 +1333,7 @@ export function createRecurringModule(
               // A ticket arriving on a schedule or a webhook is filed by nobody: there is no
               // session, so no workspace tier, and inventing one would scope the whole
               // integration to a role no operator granted (ADR 0037).
-              editor: UNATTRIBUTED_BLOCK_EDITOR,
+              editor: UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
               createdBy: null,
               shape: { pipelineId: input.pipelineId },
             })

@@ -50,22 +50,27 @@ export function resetPerBoardCaches() {
 }
 
 /**
+ * The live-write watermarks a refresh captured BEFORE its snapshot fetch, one per store whose
+ * `hydrate` REPLACES a list that live events also write to. Each store preserves whatever it
+ * was handed after its own baseline, so a slower refresh can't clobber newer live state (see
+ * `useBoardStore().hydrate` and `useNotificationsStore().hydrate`). Omitted by fresh loads
+ * (init / board switch / create), where there is no in-flight race to guard.
+ */
+export type LiveWriteBaselines = { board: number; notifications: number }
+
+/**
  * Fan a workspace snapshot out into the per-feature data stores. Extracted verbatim from the
  * `workspace` store's `hydrate` (which keeps the workspace-scoped state it owns + the
  * board-switch cache reset) so the ordering of the hydrate calls is preserved exactly — a
  * size-only split, not a new seam.
- *
- * `boardSince` (captured BEFORE this snapshot's fetch) lets the board store preserve any block
- * live-`upsert`ed while the fetch was in flight, so a slower refresh can't clobber a newer live
- * status (see `useBoardStore().hydrate`).
  */
-export function applySnapshotToStores(snapshot: WorkspaceSnapshot, boardSince?: number) {
+export function applySnapshotToStores(snapshot: WorkspaceSnapshot, baselines?: LiveWriteBaselines) {
   useUserSettingsStore().hydrate(snapshot.userSettings ?? null)
   // The signed-in user's tutorial progress MERGES rather than replaces (see the store): both id
   // lists are grow-only sets, so a snapshot must never un-say a walkthrough this browser finished
   // while the mirror write was failing. Absent ⇒ no server copy, and the local one stands.
   useTutorialStore().mergeServerProgress(snapshot.tutorialProgress ?? null)
-  useBoardStore().hydrate(snapshot.blocks, boardSince)
+  useBoardStore().hydrate(snapshot.blocks, baselines?.board)
   useBoardStore().hydrateArchived(snapshot.archivedServices ?? [])
   usePipelinesStore().hydrate(
     snapshot.pipelines,
@@ -77,7 +82,7 @@ export function applySnapshotToStores(snapshot: WorkspaceSnapshot, boardSince?: 
   useAgentRunsStore().hydrate(snapshot.bootstrapJobs ?? [], snapshot.workspace.id)
   useAgentRunsStore().hydrateEnvConfigRepair(snapshot.envConfigRepairJobs ?? [])
   useEnvironmentTestStore().hydrate(snapshot.environmentTestRuns ?? [], snapshot.workspace.id)
-  useNotificationsStore().hydrate(snapshot.notifications ?? [])
+  useNotificationsStore().hydrate(snapshot.notifications ?? [], baselines?.notifications)
   useRiskPoliciesStore().hydrate(snapshot.riskPolicies ?? [], snapshot.riskPolicyCatalogVersions)
   useSharedStacksStore().hydrate(snapshot.sharedStacks ?? [])
   useWorkspaceSettingsStore().hydrate(snapshot.settings)

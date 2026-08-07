@@ -210,6 +210,14 @@ class_name = "DeployContainer"
 name = "WORKSPACE_EVENTS"
 class_name = "WorkspaceEventsHub"
 
+# Cross-isolate cache-coherency directory (CacheGenerationDirectory). One tiny shard per
+# group (workspace/account/user id), holding a generation counter per cache name; its
+# presence is what turns on the COHERENT app-cache profile, so removing this binding
+# safely reverts the Worker to the pass-through stance for caches of mutable state.
+[[durable_objects.bindings]]
+name = "CACHE_GENERATIONS"
+class_name = "CacheGenerationDirectory"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ImplementationContainer"]
@@ -225,6 +233,10 @@ renamed_classes = [{ from = "ImplementationContainer", to = "ExecutionContainer"
 [[migrations]]
 tag = "v4"
 new_sqlite_classes = ["DeployContainer"]
+
+[[migrations]]
+tag = "v5"
+new_sqlite_classes = ["CacheGenerationDirectory"]
 
 # Dead-letter queues (docs/initiatives/observability-logging-gaps.md, B5). Every consumer
 # below names one, so a delivery that exhausts `max_retries` is COPIED there instead of

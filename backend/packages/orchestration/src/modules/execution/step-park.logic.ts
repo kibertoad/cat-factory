@@ -29,8 +29,8 @@ import {
 // (The SPA's `dedicatedParkView` answers the adjacent question of which OVERLAY a step click
 // opens, and still carries its own copy of the shared cases. It cannot import this: the kind
 // constants live in this package and the frontend cannot see it. Converging the two means moving
-// the built-in gate kinds into `@cat-factory/contracts` first — tracked in
-// `docs/initiatives/public-api-additions.md`.)
+// the built-in gate kinds into `@cat-factory/contracts` first, which is a change worth making on
+// its own rather than smuggled in behind a decision-surface slice.)
 // ---------------------------------------------------------------------------
 
 /**

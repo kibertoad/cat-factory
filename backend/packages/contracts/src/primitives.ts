@@ -96,6 +96,29 @@ export type BlockStatus = v.InferOutput<typeof blockStatusSchema>
 export const blockLevelSchema = v.picklist(['frame', 'module', 'task', 'epic', 'initiative'])
 export type BlockLevel = v.InferOutput<typeof blockLevelSchema>
 
+/**
+ * Which levels a PIPELINE RUN can be started on, and therefore which blocks' `riskPolicyId`
+ * resolves into a merge policy.
+ *
+ * A total `Record` over the picklist rather than a `level === 'task'` test at each reader: the
+ * answer is consulted by the preset-selection guard, which refuses a board write that would put a
+ * block under a policy the editor's own role may not have, and a reader that quietly assumed
+ * "tasks only" is a hole rather than a wrong answer. `initiative` is the case that already proved
+ * it: an initiative block starts its own planning chain (`assertInitiativeShapeAllowed`), so its
+ * pinned preset governs real runs, and a task-only filter saw nothing to judge.
+ *
+ * `frame` / `module` / `epic` are structure, not work: nothing starts a run on one, so no preset
+ * of theirs is ever resolved. Adding a level fails this typecheck until it is classified, which is
+ * the point.
+ */
+export const BLOCK_LEVEL_RUNS_PIPELINES: Record<BlockLevel, boolean> = {
+  frame: false,
+  module: false,
+  task: true,
+  epic: false,
+  initiative: true,
+}
+
 /** The BUILT-IN task types, in display order (the closed set before any deployment widening). */
 export const BUILTIN_TASK_TYPES = [
   'feature',

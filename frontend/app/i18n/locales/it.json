@@ -1832,6 +1832,7 @@
         "within_thresholds": "Ogni punteggio rientra nelle soglie {preset}, quindi la PR e' stata unita automaticamente.",
         "exceeded_thresholds": "{axes} ha superato le soglie {preset}, quindi la PR e' in attesa che un umano la unisca.",
         "auto_merge_disabled": "Il preset {preset} invia ogni PR a un umano, quindi questa e' in attesa di revisione.",
+        "no_policy_configured": "Nessuna policy di merge ha governato questa esecuzione, quindi nessuna PR viene unita da sola. Questo deployment non ha una libreria di preset di merge configurata, cosa che solo un operatore può correggere.",
         "no_rationale": "Il merger ha valutato la PR ma non ha fornito alcuna motivazione, quindi il verdetto non poteva essere ritenuto affidabile per l'unione automatica; la PR e' in attesa che un umano la unisca.",
         "no_assessment": "Il merger non ha restituito una valutazione analizzabile, quindi la PR e' in attesa che un umano la unisca.",
         "merge_failed": "I punteggi rientravano nelle soglie {preset}, ma l'unione automatica non e' riuscita a completarsi (ad esempio protezione del branch o un conflitto), quindi la PR e' in attesa che un umano la unisca.",
@@ -1997,6 +1998,15 @@
           "oauthTokenFailed": "non era disponibile: la connessione ha smesso di produrre un token di accesso.",
           "overBudget": "non era disponibile: questo agente dichiara più server di strumenti di quanti ne porti una singola esecuzione.",
           "unknown": "non era disponibile ({reason})."
+        },
+        "remedy": {
+          "harnessUnsupported": "Esegui il passo su una CLI dell'agente che parla MCP, oppure amplia l'elenco di harness del server. Un'esecuzione Codex con il tuo login della CLI non ha dove tenere il server per quell'esecuzione, quindi usa una credenziale della piattaforma.",
+          "transportUnsupported": "Dichiara un server stdio al suo posto, oppure esegui il passo su una CLI dell'agente che raggiunge i server HTTP.",
+          "missingSecret": "Imposta la credenziale che indica, come variabile d'ambiente del deployment oppure nelle credenziali delle capability, dalla finestra Infrastruttura.",
+          "reservedSecret": "Cambia la dichiarazione perché chieda un'altra chiave; impostare quella variabile è proprio ciò che non aiuterà.",
+          "oauthNotConnected": "Collega questa lavagna al server dalla finestra Infrastruttura. Un deployment senza ENCRYPTION_KEY non ha dove conservare una concessione, quindi un operatore deve impostarla prima.",
+          "oauthTokenFailed": "Ricollegalo dalla finestra Infrastruttura, oppure attendi la fine del disservizio del fornitore.",
+          "overBudget": "Riduci ciò che l'agente dichiara, così una singola esecuzione può portarlo tutto."
         }
       },
       "adherence": {
@@ -2204,7 +2214,9 @@
       },
       "members": {
         "title": "Membri",
-        "empty": "Ancora nessun membro."
+        "empty": "Ancora nessun membro.",
+        "revokeSessions": "Disconnetti da tutti i dispositivi",
+        "sessionsRevoked": "Disconnesso da tutti i dispositivi"
       },
       "invite": {
         "title": "Invita un collega",
@@ -2243,7 +2255,8 @@
         "sendInvite": "Impossibile inviare l'invito",
         "revokeInvite": "Impossibile revocare l'invito",
         "connectEmail": "Impossibile connettere il mittente email",
-        "disconnectEmail": "Impossibile disconnettere il mittente email"
+        "disconnectEmail": "Impossibile disconnettere il mittente email",
+        "revokeSessions": "Impossibile disconnettere il membro"
       },
       "emailNoun": "invio di email"
     },
@@ -2653,6 +2666,39 @@
     },
     "accountFoundational": {
       "intro": "Le capacità condivise che questa organizzazione già gestisce - archiviazione file, notifiche, audit - con i loro contratti API. Ogni bacheca le eredita, e a un architetto viene detto di utilizzarle invece di proporre di ricostruirle. Anche i servizi che questa distribuzione registra nel codice vengono ereditati qui, e possono essere sovrascritti per id o esclusi qui sotto."
+    },
+    "auditLog": {
+      "title": "Registro di controllo",
+      "description": "Chi ha modificato cosa in questo account, e quando. Le voci vengono solo aggiunte e non possono essere modificate né eliminate.",
+      "empty": "Per questo account non è ancora stato registrato nulla.",
+      "loadMore": "Carica voci precedenti",
+      "refresh": "Aggiorna",
+      "retiredAction": "ha eseguito un’azione che questa versione non riconosce più ({action})",
+      "actors": {
+        "system": "Il sistema",
+        "apiKey": "Chiave API {id}"
+      },
+      "values": {
+        "none": "nessuno"
+      },
+      "actions": {
+        "accountMemberAdded": "ha aggiunto {target} all’account come {roles}",
+        "accountMemberRolesChanged": "ha cambiato i ruoli di {target} da {previousRoles} a {roles}",
+        "accountBudgetChanged": "ha impostato il limite di spesa mensile a {limit}",
+        "accountSettingsChanged": "ha impostato il provider cloud predefinito su {defaultCloudProvider}",
+        "accountInvitationCreated": "ha invitato {email} come {roles}",
+        "accountInvitationRevoked": "ha revocato l’invito per {email}",
+        "accountInvitationAccepted": "ha accettato l’invito per {email} come {roles}",
+        "accountMemberSessionsRevoked": "ha disconnesso {target} da tutti i dispositivi",
+        "workspaceMemberAdded": "ha aggiunto {target} a una board come {role}",
+        "workspaceMemberRoleChanged": "ha cambiato il ruolo su board di {target} da {previousRole} a {role}",
+        "workspaceMemberRemoved": "ha rimosso {target} da una board (era {role})",
+        "workspaceAccessModeChanged": "ha impostato l’accesso alla board su {accessMode}"
+      },
+      "errors": {
+        "load": "Impossibile caricare il registro di controllo.",
+        "loadMore": "Impossibile caricare le voci precedenti"
+      }
     }
   },
   "board": {
@@ -2670,7 +2716,12 @@
       "archived": "Archiviato \"{name}\"",
       "restored": "Ripristinato \"{name}\"",
       "archiveFailed": "Impossibile archiviare il servizio",
-      "restoreFailed": "Impossibile ripristinare il servizio"
+      "restoreFailed": "Impossibile ripristinare il servizio",
+      "moveRefused": {
+        "relaxes_role_sandbox": "Le esecuzioni di questa attività sono isolate per il tuo ruolo dove si trova ora, mentre il criterio di merge che la governerebbe a destinazione non lo è. Chiedi a un’amministrazione dello spazio di lavoro di spostarla.",
+        "relaxes_role_submission_allowlist": "Il criterio di merge a destinazione ti permetterebbe di unire tipi di modifica che qui ti sono preclusi. Chiedi a un’amministrazione dello spazio di lavoro di spostarla.",
+        "relaxes_role_class_rule": "Il criterio di merge a destinazione unisce automaticamente modifiche che qui devi revisionare. Chiedi a un’amministrazione dello spazio di lavoro di spostarla."
+      }
     },
     "repoTypes": {
       "service": "Servizio",
@@ -3839,6 +3890,25 @@
       "noneImported": "Nessun documento ancora importato.",
       "imported": "Importato \"{title}\"",
       "importFailed": "Importazione non riuscita"
+    },
+    "freshness": {
+      "updated": "Aggiornato il {when}",
+      "refresh": "Verifica le modifiche",
+      "change": {
+        "unchanged": "Corrisponde alla fonte",
+        "reimported": "Recuperata la versione più recente",
+        "revision_only": "La fonte è cambiata, ma questa copia è invariata"
+      },
+      "checkedAt": "Verificato il {when}",
+      "revision": "Revisione {version}",
+      "notApplicable": "Questa installazione non ha un lettore per quella sorgente, quindi non c'è nulla con cui confrontare.",
+      "gap": {
+        "not_connected": "Non verificato: questo workspace non è più collegato alla sorgente.",
+        "credentials_unreadable": "Non verificato: questa installazione non riesce a leggere le credenziali della sorgente.",
+        "unversioned": "Non verificato: la sorgente non pubblica alcuna revisione da confrontare.",
+        "source_unreachable": "Non verificato: la sorgente non è raggiungibile."
+      },
+      "refreshFailed": "Impossibile verificare le modifiche"
     },
     "connect": {
       "title": "Collega sorgente",

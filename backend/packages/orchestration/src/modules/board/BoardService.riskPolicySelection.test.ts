@@ -1,4 +1,8 @@
-import { UNATTRIBUTED_BLOCK_EDITOR, type BlockEditActor } from '@cat-factory/contracts'
+import {
+  UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+  type BlockEditActor,
+  type BlockEditAuthority,
+} from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block, RiskPolicy } from '@cat-factory/kernel'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
@@ -12,8 +16,12 @@ import { BoardService, type BoardServiceDependencies } from './BoardService.js'
  */
 describe('BoardService: merge-preset selection is judged against the editor', () => {
   const WS = 'ws_1'
-  const MEMBER: BlockEditActor = { role: 'member', managesPolicy: false }
-  const ADMIN: BlockEditActor = { role: 'admin', managesPolicy: true }
+  /** An editor who holds the same tier in every workspace, which is what these single-home cases are. */
+  const everywhere = (actor: BlockEditActor): BlockEditAuthority => ({
+    in: () => Promise.resolve(actor),
+  })
+  const MEMBER = everywhere({ role: 'member', managesPolicy: false })
+  const ADMIN = everywhere({ role: 'admin', managesPolicy: true })
 
   const preset = (id: string, over: Partial<RiskPolicy> = {}): RiskPolicy =>
     ({
@@ -81,8 +89,10 @@ describe('BoardService: merge-preset selection is judged against the editor', ()
         },
       },
       riskPolicyRepository: {
-        get: async (_ws: string, id: string) => [SANDBOXED, OPEN].find((p) => p.id === id) ?? null,
-        getDefault: async () => SANDBOXED,
+        // The guard reads the library WHOLE (one query however many pins it has to judge), so
+        // the fake serves it that way; `resolveRiskPolicy` still picks the pinned row or the
+        // `isDefault` one out of it, exactly as it does off a live repository.
+        list: async () => [SANDBOXED, OPEN],
       },
       idGenerator: { next: (prefix: string) => `${prefix}_new` },
       clock: { now: () => 0 },
@@ -140,7 +150,12 @@ describe('BoardService: merge-preset selection is judged against the editor', ()
     // tier whose restrictions could be dropped, which is the same reading an unattributed RUN gets.
     const { service } = build([task({ riskPolicyId: SANDBOXED.id })])
     await expect(
-      service.updateBlock(WS, 'task_1', { riskPolicyId: OPEN.id }, UNATTRIBUTED_BLOCK_EDITOR),
+      service.updateBlock(
+        WS,
+        'task_1',
+        { riskPolicyId: OPEN.id },
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+      ),
     ).resolves.toMatchObject({ riskPolicyId: OPEN.id })
   })
 })

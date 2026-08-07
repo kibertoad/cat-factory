@@ -1007,8 +1007,10 @@ export const pipelineStepSchema = v.object({
    * question about a run, not an opt-in debugging artifact. And a step outlives a snapshot, which is
    * pruned on the telemetry retention window.
    *
-   * Absent for every non-container step. See {@link stepToolServersSchema} for why the two lists
-   * are separate, why both-empty is its own state, and why the record names the DISPATCHED kind.
+   * Absent for every non-container step, and for a step re-armed by a re-run until its next
+   * dispatch answers. See {@link stepToolServersSchema} for why the two lists are separate, why
+   * both-empty is its own state, why absent does not mean the step never ran, and why the record
+   * names the DISPATCHED kind.
    */
   toolServers: v.optional(stepToolServersSchema),
   /**

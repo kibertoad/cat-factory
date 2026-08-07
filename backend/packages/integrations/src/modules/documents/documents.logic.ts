@@ -37,6 +37,35 @@ export function probeCacheKey(source: DocumentSourceKind, externalId: string): s
   return `${source}:${externalId}`
 }
 
+/** The part of a stored document projection that an agent (or a reader of the board) actually sees. */
+export interface AgentVisibleProjection {
+  readonly contentHash: string
+  readonly title: string
+  readonly url: string
+}
+
+/**
+ * Whether two projections of the same page carry the same thing for a reader.
+ *
+ * ONE definition, because two callers have to agree about it and they reach opposite conclusions
+ * from disagreeing. `DocumentImportService.reimport` uses it to decide whether a fetch is worth a
+ * WRITE (and therefore whether `syncedAt`, "when the body was last written", may move);
+ * `LinkedDocumentRefreshService` uses it to classify a confirmed check as `reimported` or
+ * `revision_only`. A second copy that drifted would render "pulled the newer version" over a row
+ * whose bytes the import path had just decided were identical.
+ *
+ * `sourceVersion` is deliberately NOT part of it. The token is bookkeeping the refresh compares
+ * against and no reader ever sees, and the whole point of the `revision_only` verdict is that a
+ * moved token with an unmoved body is a real, common state (a Figma file version bumps on any edit
+ * in the file). Both callers add their own `sourceVersion` rule around this.
+ */
+export function sameAgentVisibleProjection(
+  a: AgentVisibleProjection,
+  b: AgentVisibleProjection,
+): boolean {
+  return a.contentHash === b.contentHash && a.title === b.title && a.url === b.url
+}
+
 /** A trivial in-memory provider registry built from the wired providers. */
 export class MapDocumentSourceRegistry
   extends MapSourceRegistry<DocumentSourceKind, DocumentSourceProvider>

@@ -1,4 +1,4 @@
-import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import type { Block, CreatePublicTaskInput } from '@cat-factory/contracts'
 import type { Logger } from '@cat-factory/kernel'
 import type { ServerContainer } from '../../http/env.js'
@@ -80,7 +80,7 @@ export async function createTaskWithAttachments(
     workspaceId,
     serviceId,
     input,
-    UNATTRIBUTED_BLOCK_EDITOR,
+    UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
   )
 
   if (attachment) {

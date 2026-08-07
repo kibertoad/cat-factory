@@ -1,5 +1,150 @@
 # @cat-factory/caching
 
+## 0.18.0
+
+### Minor Changes
+
+- aabfb4d: Worker cache-coherency pilot on layered-loader 16.1: caches of our own mutable state can
+  now hold a real TTL on Cloudflare, with cross-isolate staleness bounded by a pull
+  generation probe instead of being indefinite.
+
+  - `@cat-factory/caching`: new `CacheGenerationStore` seam + `coherencyWindowMsecs` profile
+    field (a probe of a shared per-(cache, group) generation directory before serving, with
+    layered-loader 16.1's fencing `applyRemoteInvalidation*` applied on a moved counter, and
+    a bump after every local invalidation; reads fail closed to pass-through, bumps fail
+    open onto the TTL backstop). New `ISOLATE_COHERENT_APP_CACHES_PROFILE` flips
+    `workspaceSettings` as the pilot. `scheduleBackgroundWork` is threaded to every loader.
+    layered-loader bumped to ^16.1.0 (ESM package; also bumped in the Node facade).
+  - `@cat-factory/caching`: a coherent cache declares `cacheWideInvalidation` when its
+    service calls `invalidateAll`; only those probe the reserved `'*'` epoch shard (one
+    globally placed Durable Object), and an undeclared `invalidateAll` on a coherent cache
+    throws rather than dropping entries locally while peers serve them to the TTL.
+  - `@cat-factory/caching`: new `currentInvocation` option for ISOLATE runtimes. Where it is
+    supplied, a cache MISS (and a coherency probe) never joins an in-flight promise created
+    by a different invocation, because Cloudflare destroys the joining invocation with an
+    uncatchable "Cannot perform I/O on behalf of a different request"; coalescing within one
+    invocation is unchanged, as is Node, which supplies nothing.
+  - `@cat-factory/worker`: new `CacheGenerationDirectory` sqlite Durable Object (migration
+    tag v5) behind the OPTIONAL `CACHE_GENERATIONS` binding; the app-cache bag is now one
+    per isolate (module scope) instead of one per invocation, with loader background work
+    adopted onto the current invocation's `ctx.waitUntil` and per-invocation load scoping
+    (above) via an ambient ExecutionContext.
+    Deployers: add the binding + v5 migration (see `deploy/backend/wrangler.toml`) to turn
+    the coherent profile on; without the wrangler edit the Worker keeps the previous
+    pass-through behaviour.
+  - `@cat-factory/kernel` + `@cat-factory/observability-otel`: four new operational
+    counters (`cache.coherency_probe`, `cache.coherency_invalidation`,
+    `cache.coherency_probe_failure`, `cache.coherency_bump_failure`) with their OTel names
+    and units.
+
+  Behaviour changes worth calling out beyond the Worker:
+
+  - `WorkspaceSettingsService.update` now reads its merge base from the repository instead of
+    through the cache. It is a read-modify-write of the whole settings row, so a base stale by
+    even one bounded-staleness window silently reverted a field a peer had committed inside it.
+  - On the ISOLATE profiles, `repoFiles` and `fragmentDocumentBody` widen their preemptive
+    refresh window to cover the whole TTL. Their entries now live that full TTL across requests
+    (the bag used to be rebuilt per invocation), and the claim that keeps them enabled on the
+    Worker at all is that their probe bounds staleness, so the window has to be the lifetime.
+  - The coherent `workspaceSettings` entry carries a 60s TTL rather than the Node profile's five
+    minutes: with bumps failing open, the TTL is the real bound when a bump fails, and that row
+    carries `allowInitiatorPat`, `storeAgentContext` and the spend caps.
+
+### Patch Changes
+
+- Updated dependencies [e6aa37d]
+- Updated dependencies [aabfb4d]
+  - @cat-factory/kernel@0.261.0
+
+## 0.17.1
+
+### Patch Changes
+
+- Updated dependencies [9d6bce0]
+  - @cat-factory/kernel@0.260.0
+
+## 0.17.0
+
+### Minor Changes
+
+- 24f76f1: Make the audit log readable, and make revoking a session actually end it
+
+  **Breaking for existing sessions: everyone signs in again once after this deploys.** A session
+  token now carries a `gen` claim, and one that carries none is refused rather than admitted. That is
+  the deliberate choice: treating an absent claim as "current" would be a permanent bypass of the
+  whole revocation mechanism, and it is the hole an attacker would aim at. The cost is a single
+  re-login; the alternative is a dual-read path that never goes away. Internal wire shape, pre-1.0,
+  per the repo's compatibility policy.
+
+  Two enterprise loose ends, and they are the same story from both ends.
+
+  The audit log has been WRITE-ONLY in the product since it landed. Privileged actions were recorded
+  faithfully and there was no way to read them back: no route, no viewer, and no retention, so the
+  one table designed to be kept for years was also the one growing without a bound. It now serves a
+  keyset-paginated page to account admins and renders in an admin panel, as translated sentences
+  composed from the row's machine-readable fields rather than from stored prose — which is what lets
+  a row written today read correctly for somebody in another language years later, and what makes an
+  action this build no longer declares render as "unrecognised" instead of splicing `undefined` into
+  an operator's screen. Names are resolved at render time in one batched read per page, and a name
+  that no longer resolves stays null so the id shows: the person being gone is exactly the thing the
+  row is kept to record. A failed READ is rendered differently from an empty log at every layer,
+  because an audit viewer that reports an outage as "nothing happened" tells an admin the reverse of
+  the truth. Retention arrives with its own knob (`AUDIT_EVENT_RETENTION_DAYS`, default 730 days),
+  which is the governance half of keeping the log in its own store: it cannot be shortened as a side
+  effect of tuning a telemetry window, and the prune takes a cutoff and nothing else, so it can never
+  be used to remove the record of one inconvenient thing.
+
+  The other end is enterprise SSO, whose whole offboarding promise is "we disabled them in the
+  identity provider and they lost access". A stateless signed session could not deliver that: group
+  membership was already re-read on every sign-in, so a removed person could not get a NEW session,
+  but the one they were already holding stayed valid until it expired. Each user row now carries a
+  session generation that every token is stamped with, so ending every session a person holds is one
+  write with nothing to enumerate. An SSO sign-in the directory refuses now cuts their live sessions
+  as well as withholding a new one; an admin can do the same for a member who has left or lost a
+  laptop (recorded in the audit log, naturally); and anyone can sign themselves out everywhere.
+
+  An SSO refusal only ends existing sessions when the DIRECTORY is what refused. A refusal caused by
+  a claim that never arrived (a dropped `groups` scope, a renamed claim name, a provider that stopped
+  marking an address verified) still blocks the login, but withholds the revocation: those refusals
+  are indistinguishable from "removed from every group", and they fire for everybody at once, so
+  treating them as offboardings would turn one configuration regression into a deployment-wide forced
+  sign-out.
+
+  Two decisions worth knowing. A role change deliberately does NOT revoke: the RBAC gate re-reads
+  roles on the next request and the token carries none, so coupling them would sign a person out of
+  every board because their role on one was adjusted. And the check is a NEW read on a path that
+  previously touched no store at all — served through the app cache with invalidation on every bump,
+  which means the Worker (whose isolates share no invalidation bus, so the entry passes through
+  there) pays a real per-request read. That is accepted rather than discovered: a cache with a TTL
+  would go on admitting a bearer a peer isolate had already revoked, and "they lost access, within
+  the minute" is not the claim an offboarding story can make.
+
+  Still open, and stated so nobody assumes otherwise: run start/stop/retry are not yet audited. That
+  half needs the mothership to derive the row from what it observes rather than accept it from a
+  node's say-so, since a node cannot be allowed to write events that name their own actor — the
+  design question is written up in `docs/initiatives/audit-log-and-session-revocation.md`.
+
+### Patch Changes
+
+- Updated dependencies [24f76f1]
+- Updated dependencies [964cfa6]
+  - @cat-factory/kernel@0.259.0
+
+## 0.16.7
+
+### Patch Changes
+
+- Updated dependencies [ae44914]
+- Updated dependencies [4be3510]
+  - @cat-factory/kernel@0.258.0
+
+## 0.16.6
+
+### Patch Changes
+
+- Updated dependencies [11dae5b]
+  - @cat-factory/kernel@0.257.0
+
 ## 0.16.5
 
 ### Patch Changes

@@ -171,7 +171,12 @@
       "archived": "Archived \"{name}\"",
       "restored": "Restored \"{name}\"",
       "archiveFailed": "Couldn't archive the service",
-      "restoreFailed": "Couldn't restore the service"
+      "restoreFailed": "Couldn't restore the service",
+      "moveRefused": {
+        "relaxes_role_sandbox": "This task’s runs are sandboxed for your role where it is now, and the merge policy governing it where you are moving it is not. Ask a workspace admin to move it.",
+        "relaxes_role_submission_allowlist": "The merge policy where you are moving this task would let you land kinds of change it holds you back from here. Ask a workspace admin to move it.",
+        "relaxes_role_class_rule": "The merge policy where you are moving this task auto-merges changes you are held to review on it here. Ask a workspace admin to move it."
+      }
     },
     "repoTypes": {
       "service": "Service",
@@ -1351,6 +1356,7 @@
         "within_thresholds": "Every score is within the {preset} thresholds, so the PR was merged automatically.",
         "exceeded_thresholds": "{axes} exceeded the {preset} thresholds, so the PR is waiting for a human to merge.",
         "auto_merge_disabled": "The {preset} preset sends every PR to a human, so this one is waiting for review.",
+        "no_policy_configured": "No merge policy governed this run, so no PR merges on its own. This deployment has no merge preset library set up, which an operator has to fix.",
         "no_rationale": "The merger scored the PR but gave no rationale, so the verdict could not be trusted to auto-merge; the PR is waiting for a human to merge.",
         "no_assessment": "The merger did not return a parseable assessment, so the PR is waiting for a human to merge.",
         "merge_failed": "The scores were within the {preset} thresholds, but the automatic merge could not complete (for example branch protection or a conflict), so the PR is waiting for a human to merge.",
@@ -1519,6 +1525,15 @@
           "oauthTokenFailed": "was not available: the connection stopped producing an access token.",
           "overBudget": "was not available: this agent declares more tool servers than one run carries.",
           "unknown": "was not available ({reason})."
+        },
+        "remedy": {
+          "harnessUnsupported": "Run the step on an agent CLI that speaks MCP, or widen the server's harness list. A Codex run signed in with your own CLI login has nowhere per-run to keep the server, so use a platform credential instead.",
+          "transportUnsupported": "Declare a stdio server for it, or run the step on an agent CLI that reaches HTTP servers.",
+          "missingSecret": "Set the credential it names, either as a deployment environment variable or under capability credentials in the Infrastructure window.",
+          "reservedSecret": "Change the declaration to ask for another key; setting that variable is exactly what will not help.",
+          "oauthNotConnected": "Connect this board to it from the Infrastructure window. A deployment with no ENCRYPTION_KEY has nowhere to keep a grant, so an operator has to set that first.",
+          "oauthTokenFailed": "Reconnect it from the Infrastructure window, or wait out the vendor's outage.",
+          "overBudget": "Trim what the agent declares, so one run can carry all of it."
         }
       },
       "adherence": {
@@ -2127,7 +2142,9 @@
       },
       "members": {
         "title": "Members",
-        "empty": "No members yet."
+        "empty": "No members yet.",
+        "revokeSessions": "Sign out of every device",
+        "sessionsRevoked": "Signed out of every device"
       },
       "invite": {
         "title": "Invite a teammate",
@@ -2166,7 +2183,8 @@
         "sendInvite": "Could not send invitation",
         "revokeInvite": "Could not revoke invitation",
         "connectEmail": "Could not connect email sender",
-        "disconnectEmail": "Could not disconnect email sender"
+        "disconnectEmail": "Could not disconnect email sender",
+        "revokeSessions": "Could not sign the member out"
       },
       "emailNoun": "email sending"
     },
@@ -2576,6 +2594,39 @@
     },
     "accountFoundational": {
       "intro": "The shared capabilities this organisation already runs - file storage, notifications, audit - with their API contracts. Every board inherits them, and an architect is told to consume them instead of proposing a rebuild. Services this deployment registers in code are inherited here too, and can be overridden by id or opted out of below."
+    },
+    "auditLog": {
+      "title": "Audit log",
+      "description": "Who changed what in this account, and when. Records are append-only and cannot be edited or deleted.",
+      "empty": "Nothing has been recorded for this account yet.",
+      "loadMore": "Load older entries",
+      "refresh": "Refresh",
+      "retiredAction": "performed an action this version no longer recognises ({action})",
+      "actors": {
+        "system": "The system",
+        "apiKey": "API key {id}"
+      },
+      "values": {
+        "none": "none"
+      },
+      "actions": {
+        "accountMemberAdded": "added {target} to the account as {roles}",
+        "accountMemberRolesChanged": "changed the roles of {target} from {previousRoles} to {roles}",
+        "accountBudgetChanged": "set the monthly spending limit to {limit}",
+        "accountSettingsChanged": "set the default cloud provider to {defaultCloudProvider}",
+        "accountInvitationCreated": "invited {email} as {roles}",
+        "accountInvitationRevoked": "revoked the invitation for {email}",
+        "accountInvitationAccepted": "accepted the invitation for {email} as {roles}",
+        "accountMemberSessionsRevoked": "signed {target} out of every device",
+        "workspaceMemberAdded": "added {target} to a board as {role}",
+        "workspaceMemberRoleChanged": "changed the board role of {target} from {previousRole} to {role}",
+        "workspaceMemberRemoved": "removed {target} from a board (they were {role})",
+        "workspaceAccessModeChanged": "set board access to {accessMode}"
+      },
+      "errors": {
+        "load": "The audit log could not be loaded.",
+        "loadMore": "Could not load older entries"
+      }
     }
   },
   "settings": {
@@ -4359,6 +4410,25 @@
       "noneImported": "No documents imported yet.",
       "imported": "Imported \"{title}\"",
       "importFailed": "Import failed"
+    },
+    "freshness": {
+      "updated": "Updated {when}",
+      "refresh": "Check for changes",
+      "change": {
+        "unchanged": "Matches the source",
+        "reimported": "Pulled the newer version",
+        "revision_only": "The source moved on, but this copy is unchanged"
+      },
+      "checkedAt": "Checked {when}",
+      "revision": "Revision {version}",
+      "notApplicable": "This deployment has no reader for that source, so there is nothing to check against.",
+      "gap": {
+        "not_connected": "Not checked: this workspace is no longer connected to the source.",
+        "credentials_unreadable": "Not checked: this deployment cannot read the source credentials.",
+        "unversioned": "Not checked: the source publishes no revision to compare against.",
+        "source_unreachable": "Not checked: the source could not be reached."
+      },
+      "refreshFailed": "Could not check for changes"
     },
     "connect": {
       "title": "Connect source",

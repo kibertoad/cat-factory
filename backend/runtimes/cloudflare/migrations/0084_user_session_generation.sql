@@ -1,0 +1,22 @@
+-- Per-user SESSION GENERATION: the one row write that revokes every bearer a person holds.
+--
+-- Sessions are stateless HMAC-signed tokens, so before this column there was nothing to revoke:
+-- logout dropped the token client-side and a leaked (or offboarded) bearer stayed valid until it
+-- expired. That is the gap enterprise SSO cannot close on its own — the whole offboarding promise
+-- is "we disabled them in the IdP and they lost access", and re-reading the directory on sign-in
+-- only stops a NEW session being minted, never the one they already hold.
+--
+-- A GENERATION rather than a token blocklist. The token carries the generation it was minted
+-- under; verification compares that claim against this column and refuses a mismatch. Revoking
+-- every session is therefore `session_generation + 1`, one write, with nothing to enumerate and no
+-- second table to grow and prune. A blocklist would need a row per outstanding token, a retention
+-- sweep of its own, and would still be unable to answer for a token it never saw minted.
+--
+-- DEFAULT 0 so every existing row is valid without a backfill. Note that existing TOKENS are not:
+-- they carry no generation claim at all and are refused after this ships, which logs everyone out
+-- once. That is the deliberate pre-1.0 internal break (CLAUDE.md → "Internals: backwards
+-- compatibility is NOT a goal") rather than a dual-read that would leave a permanent
+-- claim-less-means-valid hole — precisely the hole an attacker would aim at.
+--
+-- Mirrors the Drizzle `users.session_generation` column on the Node facade.
+ALTER TABLE users ADD COLUMN session_generation INTEGER NOT NULL DEFAULT 0;

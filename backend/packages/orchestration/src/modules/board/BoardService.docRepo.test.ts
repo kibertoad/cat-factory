@@ -1,4 +1,4 @@
-import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block } from '@cat-factory/kernel'
 import { registryPromptFragmentSource } from '@cat-factory/kernel'
@@ -64,7 +64,7 @@ describe('BoardService document-repository task gating', () => {
         WS,
         'frame_docs',
         { title: 'Ship it', taskType: 'feature' },
-        UNATTRIBUTED_BLOCK_EDITOR,
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       ),
     ).rejects.toThrow(/document repository only accepts document or spike/i)
   })
@@ -78,7 +78,7 @@ describe('BoardService document-repository task gating', () => {
         title: 'Write the RFC',
         taskType: 'document',
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.taskType).toBe('document')
   })
@@ -94,7 +94,7 @@ describe('BoardService document-repository task gating', () => {
         title: 'Write the RFC',
         taskType: 'document',
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.fragmentIds).toEqual(['style.anti-llmisms', 'style.concise-actionable'])
   })
@@ -108,7 +108,7 @@ describe('BoardService document-repository task gating', () => {
         title: 'Investigate',
         taskType: 'spike',
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.taskType).toBe('spike')
     // A non-document task carries no default style pins.
@@ -126,7 +126,7 @@ describe('BoardService document-repository task gating', () => {
         title: 'Write the RFC',
         taskType: 'document',
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.pipelineId).toBe('pl_document')
   })
@@ -141,7 +141,7 @@ describe('BoardService document-repository task gating', () => {
         taskType: 'document',
         pipelineId: 'pl_document_quick',
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.pipelineId).toBe('pl_document_quick')
   })
@@ -155,7 +155,7 @@ describe('BoardService document-repository task gating', () => {
         title: 'Add endpoint',
         taskType: 'feature',
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.taskType).toBe('feature')
     expect(task.fragmentIds).toBeUndefined()
@@ -232,13 +232,23 @@ describe('BoardService document-repository reparent gating', () => {
   it('rejects dragging a feature task into a document repository', async () => {
     const { service } = build('feature')
     await expect(
-      service.reparent(WS, 'task_1', { parentId: 'frame_docs', position: { x: 1, y: 1 } }),
+      service.reparent(
+        WS,
+        'task_1',
+        { parentId: 'frame_docs', position: { x: 1, y: 1 } },
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+      ),
     ).rejects.toThrow(/document repository only accepts document or spike/i)
   })
 
   it('allows a document task into a document repository and re-stamps its type', async () => {
     const { service, patches } = build('document')
-    await service.reparent(WS, 'task_1', { parentId: 'frame_docs', position: { x: 1, y: 1 } })
+    await service.reparent(
+      WS,
+      'task_1',
+      { parentId: 'frame_docs', position: { x: 1, y: 1 } },
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+    )
     const patch = patches.find((p) => p.id === 'task_1')?.patch
     expect(patch?.parentId).toBe('frame_docs')
     expect(patch?.type).toBe('document')

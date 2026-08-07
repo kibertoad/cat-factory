@@ -35,7 +35,7 @@ import { authorize } from './publicApiAuth.js'
 // had no answerer, and a parked run waits for a human INDEFINITELY. These routes are the answerer,
 // and their existence is what lets `PublicApiController` admit a parking pipeline for a
 // `decide`-scope key. See `docs/initiatives/headless-clarification-loop.md` for the original loop
-// and `docs/initiatives/public-api-additions.md` for the surfaces added since.
+// and `backend/docs/adr/0043-public-decision-surface.md` for the surfaces added since.
 //
 // Three rules shape everything here:
 //
