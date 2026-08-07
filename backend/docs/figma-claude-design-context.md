@@ -3,8 +3,8 @@
 > How **design context** (component structure, layout, design tokens, visual intent) is fed
 > into the UI/frontend coding agents.
 >
-> **Supported backend sources:** **Figma** (`FigmaProvider`, per-workspace PAT) and **Zeplin**
-> (`ZeplinProvider`, per-workspace PAT). Both are real, server-fetchable REST integrations that
+> **Supported backend sources:** **Figma** (`FigmaProvider`, a per-workspace OAuth grant or PAT)
+> and **Zeplin** (`ZeplinProvider`, per-workspace PAT). Both are real, server-fetchable REST integrations that
 > ride the shared, **source-neutral** `DesignContext` model + `renderDesignContext` renderer, so
 > the abstraction is not Figma-shaped.
 >
@@ -199,7 +199,13 @@ review's and the first dispatch's) free to disagree.
 
 ## Figma
 
-- **Auth:** a per-workspace Figma PAT (`X-Figma-Token`), sealed like Notion/Confluence.
+- **Auth:** whichever credential the workspace connected, sealed like Notion/Confluence. An OAuth
+  grant (`Authorization: Bearer`, `file_content:read` + `file_variables:read`) or a personal access
+  token (`X-Figma-Token`). Which header is sent is decided by which key the bag carries, and a
+  grant WINS when both are present: it is the credential the platform can renew, and a PAT an
+  earlier connect left behind must not outlive the rotation it was replaced by. The grant flow, the
+  registered app it needs, and where renewal happens are in
+  [`document-sources.md`](./document-sources.md).
 - **Fetch (node link):** `GET /v1/files/:key/nodes` returns the referenced frame's subtree, bounded
   by the same `depth=` the whole-file path uses.
 - **Fetch (whole file):** `GET /v1/files/:key?depth=2` is an OUTLINE read (pages plus their
@@ -280,6 +286,10 @@ This is why the earlier per-user-PAT Claude Design provider (and its `user_docum
 store + `credentialScope` plumbing) was removed: it targeted a service-token API that does not exist.
 
 ## Next drop-in: Penpot
+
+The Figma OAuth half is what makes connecting a designer-doable step rather than "go and mint a
+personal access token": the PAT path stays for deployments that prefer it, and for one that has
+registered no Figma app it remains the only way in.
 
 The next provider to add is **Penpot** (open-source, self-hostable, personal access tokens, W3C-DTCG
 design tokens). It's the natural stress-test of the remaining abstraction seam: being self-hosted, it

@@ -20,8 +20,12 @@ import type {
 export interface DelegatedUnsealRequest {
   source: OrgSecretSource
   workspaceId: string
-  /** Trailing identifier args of the source's declared read (see `SEALED_SECRET_SOURCES`). */
-  key?: (string | null)[]
+  /**
+   * Trailing identifier args of the source's declared read, in declaration order. How many the
+   * source takes is kernel's `ORG_SECRET_KEY_ARITY`, which both halves read: the node builds this
+   * through `orgSecretRef` and the endpoint rejects a list that disagrees.
+   */
+  key?: readonly (string | null)[]
 }
 
 export interface DelegatedUnsealResponse {

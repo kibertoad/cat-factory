@@ -27,7 +27,19 @@ export { canCreateRepo } from './modules/github/provisioning.logic.js'
 export {
   DocumentConnectionService,
   type DocumentConnectionServiceDependencies,
+  type DocumentOAuthRenewer,
 } from './modules/documents/DocumentConnectionService.js'
+// The ONE place a document-source credential bag is sealed or opened — over the deployment's own
+// key, or over the mothership's when this node holds none.
+export {
+  createDocumentConnectionStore,
+  type DocumentConnectionStoreDependencies,
+} from './modules/documents/documentConnectionStore.js'
+export {
+  DocumentSourceOAuthService,
+  type DocumentOAuthClient,
+  type DocumentSourceOAuthServiceDependencies,
+} from './modules/documents/DocumentSourceOAuthService.js'
 export {
   DocumentContentResolverService,
   type DocumentContentResolverServiceDependencies,
@@ -60,6 +72,7 @@ export {
   DocumentPlannerService,
   type DocumentPlannerServiceDependencies,
 } from './modules/documents/DocumentPlannerService.js'
+export type { PlanTarget } from './modules/documents/documents.logic.js'
 export {
   DocumentLinkService,
   type DocumentLinkServiceDependencies,
@@ -76,7 +89,7 @@ export * as designLogic from './modules/documents/design.logic.js'
 export { CONFLUENCE_DESCRIPTOR } from './modules/documents/confluence.logic.js'
 export { NOTION_DESCRIPTOR } from './modules/documents/notion.logic.js'
 export { GITHUB_DOCS_DESCRIPTOR } from './modules/documents/github-docs.logic.js'
-export { FIGMA_DESCRIPTOR } from './modules/documents/figma.logic.js'
+export { FIGMA_DESCRIPTOR, FIGMA_OAUTH } from './modules/documents/figma.logic.js'
 export { ZEPLIN_DESCRIPTOR } from './modules/documents/zeplin.logic.js'
 // Shared host-pinned HTTP helpers reused by the fixed-host document providers.
 export {
@@ -112,6 +125,11 @@ export {
   TaskConnectionService,
   type TaskConnectionServiceDependencies,
 } from './modules/tasks/TaskConnectionService.js'
+// The ONE place a tracker credential bag is sealed or opened; the document-source sibling above.
+export {
+  createTaskConnectionStore,
+  type TaskConnectionStoreDependencies,
+} from './modules/tasks/taskConnectionStore.js'
 export {
   TaskImportService,
   type TaskImportServiceDependencies,

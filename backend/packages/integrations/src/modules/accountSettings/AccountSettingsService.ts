@@ -94,6 +94,7 @@ export class AccountSettingsService {
       config,
       ...(secrets.slackOAuth ? { slackOAuth: secrets.slackOAuth } : {}),
       ...(secrets.linearOAuth ? { linearOAuth: secrets.linearOAuth } : {}),
+      ...(secrets.figmaOAuth ? { figmaOAuth: secrets.figmaOAuth } : {}),
       ...(secrets.webSearch ? { webSearch: secrets.webSearch } : {}),
       ...(config.contentStorage ? { contentStorage: config.contentStorage } : {}),
       ...(secrets.s3 ? { s3Credentials: secrets.s3 } : {}),
@@ -152,7 +153,7 @@ export class AccountSettingsService {
           allowHosts: [],
         })
       }
-      for (const key of ['slackOAuth', 'linearOAuth', 'webSearch', 's3'] as const) {
+      for (const key of ['slackOAuth', 'linearOAuth', 'figmaOAuth', 'webSearch', 's3'] as const) {
         if (!(key in input.secrets)) continue
         const value = input.secrets[key]
         if (value == null) delete merged[key]
@@ -160,7 +161,7 @@ export class AccountSettingsService {
       }
     }
     const hasSecrets = Boolean(
-      merged.slackOAuth || merged.linearOAuth || merged.webSearch || merged.s3,
+      merged.slackOAuth || merged.linearOAuth || merged.figmaOAuth || merged.webSearch || merged.s3,
     )
     const summary = accountSettingsSummary(merged, config)
     await this.repo.upsert({
@@ -213,6 +214,7 @@ function parseSummary(raw: string): AccountSettingsSummary {
       return {
         slackOAuthConfigured: Boolean(o.slackOAuthConfigured),
         linearOAuthConfigured: Boolean(o.linearOAuthConfigured),
+        figmaOAuthConfigured: Boolean(o.figmaOAuthConfigured),
         webSearch: o.webSearch === 'brave' || o.webSearch === 'searxng' ? o.webSearch : null,
         contentStorage: {
           backend,

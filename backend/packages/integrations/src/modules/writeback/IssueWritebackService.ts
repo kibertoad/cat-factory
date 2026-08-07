@@ -14,7 +14,7 @@ import {
   type ReviewQuestionPost,
   type ReviewQuestionPostOutcome,
   type ReviewQuestionPostRepository,
-  type TaskConnectionRepository,
+  type TaskConnectionStore,
   type TaskRecord,
   type TaskRepository,
   type TaskSourceKind,
@@ -119,7 +119,7 @@ export interface IssueWritebackServiceDependencies {
    * `trackerCommentIngestRepository`, which both runtimes wire unconditionally and the tracker
    * webhook conformance suite proves end to end.
    */
-  taskConnectionRepository?: TaskConnectionRepository
+  taskConnectionStore?: TaskConnectionStore
   /**
    * Wall clock for the marker rows and their abandonment window. The facade's shared `Clock`,
    * like every other service here; defaults to the real clock so a test can pin time without
@@ -343,30 +343,47 @@ export class IssueWritebackService implements IssueWritebackProvider {
    * An unreadable connection resolves to `false` and is REPORTED, never guessed at: the failure
    * mode of guessing `true` is a reporter told to reply where nothing listens, which is the exact
    * thing this resolution exists to prevent.
+   *
+   * Unreadable is scoped to the SOURCE that was unreadable. The block's issues can span trackers,
+   * and a corrupt Linear envelope is no evidence at all about the workspace's Jira connection —
+   * so a batch-wide catch would take a working reply channel away from a healthy ticket and tell
+   * its reporter to use the API path instead.
    */
   private async resolveTicketReplyChannels(
     workspaceId: string,
     issues: readonly Pick<TaskRecord, 'source'>[],
   ): Promise<Map<TaskSourceKind, boolean>> {
     const wired = new Map<TaskSourceKind, boolean>()
-    const connections = this.deps.taskConnectionRepository
+    const connections = this.deps.taskConnectionStore
     if (!connections) return wired
     const sources = [...new Set(issues.map((issue) => issue.source))]
-    await Promise.all(
-      sources.map(async (source) => {
-        try {
-          const connection = await connections.getByWorkspace(workspaceId, source)
-          wired.set(source, trackerWebhookSecret(connection?.credentials) !== '')
-        } catch (error) {
-          this.log.warn('tracker connection unreadable; offering the API answer path only', {
-            workspaceId,
-            source,
-            ...describeError(error),
-          })
-          wired.set(source, false)
-        }
-      }),
-    )
+    // Default FALSE for every source asked about, then raise the ones that answered: a source with
+    // no stored connection is simply absent from the result, and it has no reply channel.
+    for (const source of sources) wired.set(source, false)
+    let opened: Awaited<ReturnType<typeof connections.listBySources>>
+    try {
+      opened = await connections.listBySources(workspaceId, sources)
+    } catch (error) {
+      // The stored-row READ itself failed, before any source was opened, so nothing was learned
+      // about any of them and the whole set stays false.
+      this.log.warn('tracker connections unreadable; offering the API answer path only', {
+        workspaceId,
+        sources,
+        ...describeError(error),
+      })
+      return wired
+    }
+    for (const result of opened) {
+      if (result.status === 'unreadable') {
+        this.log.warn('tracker connection unreadable; offering the API answer path only', {
+          workspaceId,
+          source: result.source,
+          ...describeError(result.cause),
+        })
+        continue
+      }
+      wired.set(result.source, trackerWebhookSecret(result.connection.credentials) !== '')
+    }
     return wired
   }
 

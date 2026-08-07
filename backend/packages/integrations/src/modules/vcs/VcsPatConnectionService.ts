@@ -6,6 +6,7 @@ import type {
   SecretCipher,
   VcsIdentityResolver,
   VcsProvider,
+  VcsWebUrls,
 } from '@cat-factory/kernel'
 import { requireWorkspace, ValidationError, VcsIdentityError } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
@@ -36,9 +37,17 @@ export interface VcsPatConnectionServiceDependencies {
   /** Seals the PAT at rest; the per-connection token source decrypts it at call time. */
   cipher: SecretCipher
   clock: Clock
+  /**
+   * The browser-facing host of each provider's configured instance, so the connection states
+   * where its projects can be opened. Keyed by provider (rather than taking this service's own
+   * provider's host directly) so it is the SAME value the App connect path and the connect-
+   * capability route read. Absent for this provider ⇒ a null host, and its readers withhold the
+   * links that needed one.
+   */
+  webUrls?: VcsWebUrls
 }
 
-function toConnection(installation: GitHubInstallation): GitHubConnection {
+function toConnection(installation: GitHubInstallation, webUrls: VcsWebUrls): GitHubConnection {
   return {
     installationId: installation.installationId,
     accountLogin: installation.accountLogin,
@@ -48,6 +57,7 @@ function toConnection(installation: GitHubInstallation): GitHubConnection {
     // A pasted token, so none of the GitHub-App affordances apply: there is no installation
     // whose repo access can be edited, and nothing for the UI to link to.
     method: 'pat',
+    webUrl: webUrls[installation.provider] ?? null,
     // A per-workspace PAT connect does not (yet) drive in-app repo creation — the connect +
     // browse + link flow is the value; provisioning is a later slice. GitLab has no
     // GitHub-App-style `workflows: write` gate (a PAT with `api` scope pushes CI config), so
@@ -127,7 +137,7 @@ export class VcsPatConnectionService {
       deletedAt: null,
     }
     await this.deps.installations.upsert(installation)
-    return toConnection(installation)
+    return toConnection(installation, this.deps.webUrls ?? {})
   }
 
   /** The workspace's current connection for this provider, or null when not connected. */
@@ -136,7 +146,7 @@ export class VcsPatConnectionService {
     if (!installation || installation.deletedAt || installation.provider !== this.deps.provider) {
       return null
     }
-    return toConnection(installation)
+    return toConnection(installation, this.deps.webUrls ?? {})
   }
 
   /** Disconnect the workspace's connection for this provider (tombstones the binding). */

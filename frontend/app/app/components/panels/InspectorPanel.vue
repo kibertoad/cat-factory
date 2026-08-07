@@ -7,6 +7,7 @@ import { inspectorPanels } from '~/modular/panels/inspector.logic'
 import IconButton from '~/components/common/IconButton.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
+import { VCS_PROVIDER_ICONS } from '~/utils/vcs'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -163,19 +164,23 @@ const serviceRepo = computed(() =>
 const serviceRepoUrl = computed(() =>
   serviceRepo.value ? github.repoUrl(serviceRepo.value.githubId) : null,
 )
+// The repo link wears its own provider's mark, off the projection row rather than the
+// workspace connection, so a row is never labelled with a brand it does not belong to.
+const serviceRepoIcon = computed(() => VCS_PROVIDER_ICONS[serviceRepo.value?.provider ?? 'github'])
 
-// A task's work branch on GitHub, once the agent has pushed one (a PR branch is
-// recorded on the block). Repo linkage lives on the owning service frame, not the
-// task, so resolve the repo by walking up to the frame; fall back to deriving the
-// repo base from the PR url when the projection hasn't loaded. Null until a branch
-// exists, so the link only appears after one is created.
+// A task's work branch on the connected host, once the agent has pushed one (a PR branch is
+// recorded on the block). Repo linkage lives on the owning service frame, not the task, so
+// resolve the repo by walking up to the frame, and let the store build the branch path for the
+// repo's own provider (GitLab addresses a tree under `/-/`). Null until a branch exists, so the
+// link only appears after one is created, and null while the projection has not loaded: the
+// former fallback sliced `/pull/<n>` off the PR url, which silently yields nothing on a GitLab
+// merge-request url and would need a second provider guess to fix.
 const taskBranchUrl = computed(() => {
   const pr = isTask.value ? block.value?.pullRequest : undefined
   if (!pr?.branch || !block.value) return null
   const frame = board.serviceOf(block.value)
   const repo = frame ? github.repoForBlock(frame.id) : undefined
-  const base = repo ? github.repoUrl(repo.githubId) : pr.url.replace(/\/pull\/\d+$/, '')
-  return base ? `${base}/tree/${pr.branch}` : null
+  return repo ? github.branchUrl(repo.githubId, pr.branch) : null
 })
 
 // The run MODE, shared with the focus view's Run picker so the two surfaces offer (and force)
@@ -470,7 +475,7 @@ const showOriginalDescription = ref(false)
           color="neutral"
           variant="soft"
           size="xs"
-          icon="i-lucide-github"
+          :icon="serviceRepoIcon"
           trailing-icon="i-lucide-external-link"
         >
           {{ serviceRepo!.owner }}/{{ serviceRepo!.name }}

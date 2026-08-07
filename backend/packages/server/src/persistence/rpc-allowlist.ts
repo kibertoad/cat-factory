@@ -420,12 +420,19 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     suppress: { scope: { kind: 'workspace', arg: 0 } },
     restore: { scope: { kind: 'workspace', arg: 0 } },
   },
-  // --- Agent-context run-path reads -----------------------------------------------
+  // --- Document / task integration (run-path reads + the management surface) ---------
   // `AgentContextBuilder` resolves a block's LINKED docs/tasks for EVERY container agent step
-  // (it builds the agent context on each dispatch), so these reads are on the run path, not just
-  // the opt-in document/task integrations' own surfaces. arg0 is the workspaceId → `workspace`
-  // rule. The document/task SOURCE-PROVIDER + connection surfaces (connect/list/disconnect) are
-  // NOT exposed here — they are a later integration slice; only the block-scoped context reads are.
+  // (it builds the agent context on each dispatch), so the block-scoped reads are on the run path,
+  // not just the opt-in document/task integrations' own surfaces. arg0 is the workspaceId →
+  // `workspace` rule.
+  //
+  // The rest of both integrations — import/link writes, the role-link surface, and the source
+  // CONNECTIONS themselves — is here now too. What unblocked it is the connection row: it used to
+  // be decrypted INSIDE the repository, so it could not cross this RPC at all (a plaintext tracker
+  // token on the wire) and no `/internal/secrets/unseal` entry could name it either, because a
+  // decrypt-inside repository exposes no sealed field to address. The row now carries its
+  // `credentialsCipher` and the node opens it by NAMING the row, exactly as it does for the
+  // environment / observability / Slack / runner-pool connections that crossed here before it.
   documentRepository: {
     listByBlock: { scope: { kind: 'workspace', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
@@ -441,10 +448,34 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // Document-authoring run path (WS1): for a doc-aware kind, `AgentContextBuilder` resolves the
     // workspace's linked TEMPLATE (singular) + EXEMPLAR (list) for the block's `docKind` on each
     // dispatch, so both reads are on the run path exactly like `listByBlock`/`getByUrl`. arg0 is
-    // the workspaceId → the `workspace` rule. (The role-link WRITE surface + the whole-workspace
-    // list back the management UI, not the run path — they stay mothership-internal for now.)
+    // the workspaceId → the `workspace` rule.
     getRoleLink: { scope: { kind: 'workspace', arg: 0 } },
     listRoleLinks: { scope: { kind: 'workspace', arg: 0 } },
+    // The import + link WRITE surface, and the whole-workspace list behind the documents panel.
+    // `upsert(record)` binds on the record's `workspaceId` FIELD (`workspaceField`); everything
+    // else takes it positionally. The batched `linkBlockMany`/`detachBlocks` move WITH `linkBlock`
+    // rather than behind it: they are the same write (a task created with a list of documents, and
+    // the block-delete cascade), so opening one alone would leave the cascade unable to detach what
+    // the create attached.
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    linkBlock: { scope: { kind: 'workspace', arg: 0 } },
+    linkBlockMany: { scope: { kind: 'workspace', arg: 0 } },
+    detachBlocks: { scope: { kind: 'workspace', arg: 0 } },
+    // The role-link management surface, whose run-path READ halves are two lines up.
+    listRoleLinksByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    setRole: { scope: { kind: 'workspace', arg: 0 } },
+    clearRole: { scope: { kind: 'workspace', arg: 0 } },
+    clearRoleForKind: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // The workspace's document-source connections. The row carries its credential bag SEALED, so
+  // only ciphertext crosses here and the node opens it over `/internal/secrets/unseal` — the same
+  // shape as `environmentConnectionRepository` and `slackConnectionRepository`.
+  documentConnectionRepository: {
+    getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    softDelete: { scope: { kind: 'workspace', arg: 0 } },
   },
   taskRepository: {
     listByBlock: { scope: { kind: 'workspace', arg: 0 } },
@@ -459,6 +490,31 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // — omit it and EVERY such build fails the run with `unknown_method`. arg0 is the
     // workspaceId → the `workspace` rule.
     listByRefs: { scope: { kind: 'workspace', arg: 0 } },
+    // The import + link write surface. `claimBlockLink` is `linkBlock`'s conditional form — the
+    // atomic claim that holds one-task-per-ticket when two filings of an issue race — and it moves
+    // WITH the import that takes it, because a claim whose `upsert` cannot land buys nothing.
+    // `unlinkAllFromBlock(s)` are the recurring intake's replace-link write and the block-delete
+    // cascade's batched detach: the same write keyed by one block or a set.
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    linkBlock: { scope: { kind: 'workspace', arg: 0 } },
+    claimBlockLink: { scope: { kind: 'workspace', arg: 0 } },
+    unlinkAllFromBlock: { scope: { kind: 'workspace', arg: 0 } },
+    unlinkAllFromBlocks: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // The workspace's tracker connections; the document-source sibling above carries the argument.
+  taskConnectionRepository: {
+    getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    softDelete: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // The per-workspace on/off toggle for each task source (no row ⇒ enabled). No secrets, and it
+  // is read on the settings + import surfaces the connections above serve.
+  taskSourceSettingsRepository: {
+    getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
   },
   // The agent context resolves the block's provisioned environment per step
   // (`resolveForBlock`/`get`, both workspace-keyed), and, since the secrets-delegation slice,

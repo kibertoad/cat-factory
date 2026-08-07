@@ -430,7 +430,8 @@
       "accessDenied": {
         "title": "Brak uprawnień",
         "hint": "Nie masz dostępu do repozytorium powiązanego z tą usługą."
-      }
+      },
+      "startFromDesignTitle": "Zacznij od projektu"
     },
     "decisionBadge": {
       "decisionNeeded": "Wymagana decyzja",
@@ -460,7 +461,6 @@
       "noPipelineBody": "Najpierw utwórz go w kreatorze.",
       "pr": "PR",
       "prNumber": "PR #{number}",
-      "openPrOnGithub": "Otwórz {pr} na GitHub",
       "readOutcome": "Wynik",
       "readOutcomeHint": "Przeczytaj, co się zmieniło, wraz z dowodami",
       "review": "Przejrzyj",
@@ -478,7 +478,8 @@
       "startedToast": {
         "title": "Uruchomiono",
         "body": "Trwa wykonywanie \"{name}\"."
-      }
+      },
+      "openPrLink": "Otwórz {pr}"
     },
     "dryRunToast": {
       "title": "Uruchomiono próbnie",
@@ -502,7 +503,11 @@
     "attachIssueDisabledConnect": "Najpierw połącz system zgłoszeń (Integracje)",
     "attachIssueDisabledEnable": "Najpierw włącz integrację systemu zgłoszeń",
     "importsOnAdd": "importowane przy dodaniu",
-    "unreadable": "Nie udało się pobrać: {error}"
+    "unreadable": "Nie udało się pobrać: {error}",
+    "pastedLink": {
+      "offer": "Ten opis zawiera odnośnik do strony {source}. Dołączyć ją jako kontekst?",
+      "attach": "Dołącz"
+    }
   },
   "errors": {
     "generic": {
@@ -524,7 +529,8 @@
     "unavailable": {
       "description": {
         "binary_generators_unreachable": "Nie udało się teraz odczytać integracji generatywnych tego wdrożenia, więc uruchomienie nie wystartowało. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
-        "foundational_builtins_unreachable": "Nie udało się teraz odczytać wbudowanych usług podstawowych tego wdrożenia. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci."
+        "foundational_builtins_unreachable": "Nie udało się teraz odczytać wbudowanych usług podstawowych tego wdrożenia. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
+        "connection_credentials_unreadable": "Nie udało się odczytać zapisanych poświadczeń tego połączenia. Jeśli to wdrożenie ma dostęp do usługi przechowującej jego klucz, połącz źródło ponownie, aby je zastąpić; w przeciwnym razie spróbuj ponownie, gdy to połączenie wróci."
       }
     },
     "action": {
@@ -596,7 +602,7 @@
         "agent_backend_unconfigured": "Brak dostępnego zaplecza runnera do uruchamiania agentów w kontenerach. Zarejestruj samodzielnie hostowaną pulę runnerów lub włącz Cloudflare Containers w swoim wdrożeniu.",
         "run_not_retryable": "Ponowić można tylko nieudane lub zakończone uruchomienie. To uruchomienie jest wciąż aktywne albo w stanie, który nie pozwala na ponowienie.",
         "no_pr_to_merge": "To uruchomienie nie otworzyło jeszcze pull requesta, więc nie ma czego scalić.",
-        "github_not_connected": "Połącz tę przestrzeń roboczą z GitHubem, aby agenci mogli klonować repozytorium, wysyłać zmiany i otwierać pull requesty.",
+        "github_not_connected": "Połącz tę przestrzeń roboczą z hostem repozytoriów, aby agenci mogli klonować repozytorium, wypychać zmiany i otwierać pull requesty.",
         "bootstrap_not_retryable": "Tego zadania inicjującego nie można ponowić w obecnym stanie (wciąż trwa lub już zakończyło się pomyślnie).",
         "bootstrap_reference_missing": "Repozytorium referencyjne, które adaptuje to zadanie inicjujące, nie jest już dostępne. Zostało usunięte lub odebrano do niego dostęp. Wybierz inne repozytorium referencyjne albo utwórz od zera.",
         "preset_unsatisfiable": "Model kroku wbudowanego nie może działać wbudowany w tym wdrożeniu (model wyłącznie subskrypcyjny bez obsługi trybu wbudowanego). Wybierz model lub preset obsługujący tryb wbudowany.",
@@ -2031,6 +2037,18 @@
         "keysValidation": "Wprowadź identyfikator klucza dostępu i sekret S3",
         "saved": "Zapisano przechowywanie treści",
         "saveFailed": "Nie udało się zapisać przechowywania treści"
+      },
+      "figma": {
+        "title": "Aplikacja Figma (OAuth)",
+        "description": "Włącza przepływ „Połącz przez Figmę”. Bez niego przestrzenie robocze nadal mogą połączyć Figmę, wklejając osobisty token dostępu.",
+        "clientId": "Identyfikator klienta",
+        "clientSecret": "Sekret klienta",
+        "redirectUrl": "Adres przekierowania",
+        "validation": "Podaj identyfikator klienta, sekret i adres przekierowania",
+        "saved": "Zapisano OAuth Figmy",
+        "saveFailed": "Nie udało się zapisać OAuth Figmy",
+        "cleared": "Usunięto OAuth Figmy",
+        "clearFailed": "Nie udało się usunąć OAuth Figmy"
       }
     },
     "accountFragments": {
@@ -4037,14 +4055,11 @@
       "loading": "Ładowanie…",
       "tabs": {
         "repos": "Repozytoria",
-        "pulls": "Pull requesty",
         "issues": "Zgłoszenia"
       },
       "linkedToBoard": "Powiązane z tą tablicą",
       "manageRepos": "Zarządzaj repozytoriami",
-      "manageHint": "Wybierz repozytoria, które ta tablica ma śledzić. Połączenie z GitHub jest współdzielone w obrębie konta, a każda tablica wiąże własne repozytoria.",
       "loadingRepos": "Ładowanie repozytoriów…",
-      "noAvailableRepos": "Instalacja nie ma jeszcze dostępu do żadnych repozytoriów.",
       "private": "prywatne",
       "saveSelection": "Zapisz wybór",
       "noLinkedRepos": "Nie powiązano jeszcze żadnych repozytoriów. Użyj opcji Zarządzaj repozytoriami, aby wybrać, które repozytoria śledzi ta tablica.",
@@ -4054,15 +4069,11 @@
       "fromSha": "Z SHA",
       "commitShaPlaceholder": "sha commita",
       "createBranch": "Utwórz gałąź",
-      "openPr": "Otwórz PR",
       "repository": "Repozytorium",
       "chooseRepository": "Wybierz repozytorium",
       "prTitle": "Tytuł",
       "headBranch": "Gałąź źródłowa",
       "baseBranch": "Gałąź bazowa",
-      "openPullRequest": "Otwórz pull request",
-      "noPulls": "Nie zsynchronizowano żadnych pull requestów.",
-      "mergePr": "Scal pull request",
       "noIssues": "Nie zsynchronizowano żadnych zgłoszeń.",
       "prState": {
         "open": "otwarty",
@@ -4076,9 +4087,7 @@
       "toast": {
         "resync": "Ponowna synchronizacja {status}",
         "reposUpdated": "Zaktualizowano powiązane repozytoria",
-        "branchCreated": "Utworzono gałąź {name}",
-        "prOpened": "Otwarto pull request",
-        "prMerged": "PR #{number} scalony"
+        "branchCreated": "Utworzono gałąź {name}"
       },
       "errors": {
         "disconnect": "Nie udało się rozłączyć",
@@ -4087,7 +4096,6 @@
         "updateRepos": "Nie udało się zaktualizować repozytoriów",
         "loadBranches": "Nie udało się załadować gałęzi",
         "createBranch": "Nie udało się utworzyć gałęzi",
-        "openPr": "Nie udało się otworzyć pull requesta",
         "merge": "Nie udało się scalić"
       }
     },
@@ -4306,13 +4314,19 @@
     "connect": {
       "title": "Połącz źródło",
       "sourceFallback": "Źródło",
-      "intro": "Połącz {source}, aby importować wymagania, dokumenty RFC i PRD, a następnie utworzyć strukturę tablicy lub dołączyć je do zadań jako kontekst dla agentów.",
+      "intro": "Połącz {source}, aby przenieść jego strony i projekty na tę tablicę: zaimportuj je, rozwiń w strukturę tablicy albo dołącz do zadania jako kontekst dla agentów.",
       "disconnect": "Rozłącz",
       "connect": "Połącz",
       "update": "Zaktualizuj połączenie",
       "connected": "Połączono {source}",
       "disconnected": "Rozłączono {source}",
-      "connectFailed": "Nie udało się połączyć"
+      "connectFailed": "Nie udało się połączyć",
+      "oauth": {
+        "action": "Połącz przez {source}",
+        "scopes": "Zostaniesz poproszony o uprawnienia: {scopes}",
+        "fallback": "Wolisz token? Skorzystaj z pól poniżej.",
+        "failed": "Nie udało się rozpocząć logowania do {source}"
+      }
     },
     "spawn": {
       "title": "Podgląd struktury",
@@ -4327,7 +4341,15 @@
       "summary": "{frames} · {modules} · {tasks}",
       "frameCount": "{count} ramka | {count} ramki | {count} ramek",
       "moduleCount": "{count} moduł | {count} moduły | {count} modułów",
-      "taskCount": "{count} zadanie | {count} zadania | {count} zadań"
+      "taskCount": "{count} zadanie | {count} zadania | {count} zadań",
+      "reusedCount": "ponownie użyto {count} modułu | ponownie użyto {count} modułów | ponownie użyto {count} modułów",
+      "intoService": "wewnątrz wybranej usługi",
+      "target": {
+        "label": "Dodaj do usługi",
+        "help": "Projekt opisuje ekrany, a nie architekturę, więc plan proponuje pracę wewnątrz usługi, która już istnieje.",
+        "placeholder": "Wybierz usługę",
+        "required": "Wybierz usługę, do której należy ten projekt."
+      }
     },
     "taskDocs": {
       "heading": "Dokumenty kontekstowe",
@@ -4360,6 +4382,20 @@
       "remove": "Usuń",
       "linkFailed": "Nie udało się zaktualizować powiązania dokumentu",
       "loadFailed": "Nie udało się wczytać szablonów dokumentów"
+    },
+    "startFromDesign": {
+      "title": "Zacznij od projektu",
+      "intro": "Wklej link do ramki lub całego pliku. Zostanie dołączony do nowego zadania, a agent odczyta układ, teksty, komponenty i tokeny.",
+      "noSource": "Nie podłączono jeszcze żadnego źródła projektów. Administrator może połączyć Figmę lub Zeplin w integracjach.",
+      "linkLabel": "Link do projektu",
+      "linkPlaceholder": "https://www.figma.com/design/…?node-id=1-2",
+      "checking": "Sprawdzanie linku…",
+      "trimmed": "Skrócono do obsługiwanej postaci tego linku.",
+      "widened": "Nie udało się odczytać ramki {scope}, więc dołączony jest cały plik.",
+      "unchecked": "Linku nie udało się teraz sprawdzić. Zostanie pobrany przy tworzeniu zadania.",
+      "uncheckedAmbiguous": "Linku nie udało się sprawdzić, a podłączone jest więcej niż jedno źródło projektów, więc nie wiadomo, do którego należy. Spróbuj ponownie.",
+      "rejected": "Żadne podłączone źródło projektów nie rozpoznaje tego linku.",
+      "continue": "Dalej"
     }
   },
   "tasks": {
@@ -4832,7 +4868,7 @@
       "suffixFixing": "· korektor obsługuje komentarze…",
       "suffixFailing": "· komentarze recenzji do obsłużenia",
       "suffixAwaiting": "· oczekiwanie na recenzję",
-      "reviewPr": "Przejrzyj pull request na GitHub",
+      "reviewPr": "Przejrzyj pull request",
       "requestFixHeading": "Poproś o poprawkę",
       "requestFixDescription": "Opisz zmianę, którą korektor ma teraz wprowadzić na gałęzi PR (poza komentarzami recenzji, które obsługuje automatycznie).",
       "requestFixPlaceholder": "np. zmień nazwę helpera i dodaj test jednostkowy dla przypadku pustego wejścia",
@@ -4846,12 +4882,12 @@
     },
     "conflicts": {
       "mergeability": "Możliwość scalenia",
-      "viewPr": "Zobacz pull request na GitHub"
+      "viewPr": "Zobacz pull request"
     },
     "docQuality": {
       "findings": "Problemy dokumentu",
       "findingsFallback": "Dokument przeszedł kontrole strukturalne.",
-      "viewPr": "Zobacz pull request na GitHub"
+      "viewPr": "Zobacz pull request"
     },
     "attemptsHeading": "Próby: {helper}",
     "attempt": "Próba {number}",
@@ -6861,7 +6897,33 @@
       },
       "toast": {
         "disconnected": "Rozłączono z {provider}"
-      }
+      },
+      "pulls": {
+        "github": {
+          "tab": "Pull requesty",
+          "open": "Otwórz PR",
+          "openSubmit": "Otwórz pull request",
+          "merge": "Scal ten pull request",
+          "none": "Brak zsynchronizowanych pull requestów.",
+          "opened": "Pull request otwarty",
+          "mergedToast": "PR #{number} scalony",
+          "openFailed": "Nie udało się otworzyć pull requesta"
+        },
+        "gitlab": {
+          "tab": "Merge requesty",
+          "open": "Otwórz MR",
+          "openSubmit": "Otwórz merge request",
+          "merge": "Scal ten merge request",
+          "none": "Brak zsynchronizowanych merge requestów.",
+          "opened": "Merge request otwarty",
+          "mergedToast": "MR !{number} scalony",
+          "openFailed": "Nie udało się otworzyć merge requesta"
+        }
+      },
+      "manageHintApp": "Wybierz repozytoria, które ma śledzić ta tablica. Instalacja aplikacji jest współdzielona w koncie, a każda tablica podłącza własne repozytoria.",
+      "manageHintToken": "Wybierz repozytoria, które ma śledzić ta tablica. Lista pokazuje, do czego sięga podłączony token, a każda tablica podłącza własne repozytoria.",
+      "noAvailableReposApp": "Instalacja aplikacji nie ma jeszcze dostępu do żadnego repozytorium.",
+      "noAvailableReposToken": "Podłączony token nie sięga jeszcze żadnego repozytorium. Sprawdź jego zakres i swój dostęp do nich."
     },
     "connect": {
       "or": "lub",
@@ -6969,7 +7031,8 @@
       "library": "Włączona w tym wdrożeniu biblioteka fragmentów kontekstu",
       "failedRun": "Nieudane uruchomienie",
       "infrastructure": "Backend wykonawczy podłączony do tego workspace’u",
-      "advancedTier": "Zaawansowany tryb interfejsu"
+      "advancedTier": "Zaawansowany tryb interfejsu",
+      "designSource": "Podłączone źródło projektów"
     },
     "overlay": {
       "next": "Dalej",
@@ -7347,6 +7410,36 @@
           "finish": {
             "title": "Kroki projektowe to czytają",
             "body": "Projekt, który zadeklaruje, które z nich używa, dostaje w następnym kroku ich pełne kontrakty. Taki, który nie deklaruje nic, nie dostaje nic: utrzymywanie tego na bieżąco jest warunkiem, żeby to działało."
+          }
+        }
+      },
+      "startFromDesign": {
+        "title": "Zacznij od projektu",
+        "description": "Zamień ramkę projektu w zadanie, które agent może zrealizować.",
+        "steps": {
+          "intro": {
+            "title": "Praca od projektu",
+            "body": "Gdy praca zaczyna się w narzędziu projektowym, ramka jest briefem. Ten przewodnik dołącza ją do nowego zadania."
+          },
+          "open": {
+            "title": "Zacznij od projektu",
+            "body": "Każda ramka usługi ma ten przycisk, gdy tylko podłączone jest źródło projektów."
+          },
+          "paste": {
+            "title": "Wklej link",
+            "body": "Skopiuj w narzędziu projektowym link do ramki lub całego pliku i wklej go tutaj."
+          },
+          "resolved": {
+            "title": "Sprawdź, co dołączono",
+            "body": "Link zostaje skrócony do obsługiwanej postaci. Jeśli samej ramki nie dało się odczytać, dołączany jest cały plik i jest to tutaj napisane."
+          },
+          "continue": {
+            "title": "Przejdź do zadania",
+            "body": "Projekt czeka przy nowym zadaniu. Opisz oczekiwany rezultat i utwórz je."
+          },
+          "finish": {
+            "title": "Gotowe do uruchomienia",
+            "body": "Agent czyta układ, teksty, komponenty i tokeny projektu, a każdy przebieg porównuje je na nowo ze źródłem."
           }
         }
       }

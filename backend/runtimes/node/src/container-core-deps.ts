@@ -14,6 +14,7 @@ import {
   NotionProvider,
   EMAIL_CIPHER_INFO,
   createEmailSender,
+  createDocumentConnectionStore,
   TicketTrackerService,
   AuditService,
 } from '@cat-factory/integrations'
@@ -38,6 +39,7 @@ import {
   logger,
   operationalMetrics,
   resolveUrlSafetyPolicy,
+  resolveVcsWebUrls,
   resolveWorkspaceCapabilities,
 } from '@cat-factory/server'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
@@ -482,10 +484,10 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
       trackerSettingsRepository: repos.trackerSettingsRepository,
       fetchImpl: fetch,
       ...(fileGitHubIssue ? { fileGitHubIssue } : {}),
-      ...(tasks.taskConnectionRepository
+      ...(tasks.taskConnectionStore
         ? {
             resolveJiraConnection: async (workspaceId) => {
-              const connection = await tasks.taskConnectionRepository!.getByWorkspace(
+              const connection = await tasks.taskConnectionStore!.getByWorkspace(
                 workspaceId,
                 'jira',
               )
@@ -494,7 +496,7 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
               return { baseUrl, accountEmail, apiToken }
             },
             resolveLinearConnection: async (workspaceId) => {
-              const connection = await tasks.taskConnectionRepository!.getByWorkspace(
+              const connection = await tasks.taskConnectionStore!.getByWorkspace(
                 workspaceId,
                 'linear',
               )
@@ -561,6 +563,10 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     // the LLM proxy on. The verification report builds direct links to captured artifacts' bytes
     // from it; unset ⇒ the report lists artifact ids with no link, never a link to nowhere.
     apiBaseUrl: env.PUBLIC_URL?.trim() || undefined,
+    // The browser-facing host of each provider's configured instance, stamped onto every VCS
+    // connection + connect option so the SPA links to the instance a workspace is bound to.
+    // Derived by the shared resolver both facades call, so they cannot name different hosts.
+    vcsWebUrls: resolveVcsWebUrls(config),
     spendPricing: config.spend,
     // Price metered dynamic OpenRouter models at their real per-model rate (not the
     // bare-`openrouter` fallback) using this workspace's enabled catalog.
@@ -645,7 +651,14 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     // Document sources (Confluence / Notion / GitHub docs): wired from the shared
     // integration providers exactly like the Worker, so a workspace can connect a
     // source and import requirement/PRD/RFC pages as agent context.
-    ...selectNodeDocumentsDeps(config, db, githubClient, githubInstallationRepository),
+    ...selectNodeDocumentsDeps(
+      config,
+      db,
+      githubClient,
+      githubInstallationRepository,
+      sourced,
+      options.secretDelegate,
+    ),
     // Ephemeral environments (opt-in): a workspace registers its own environment
     // management API; the tester provisions/destroys per-run environments from it. A
     // trusted in-house adapter can replace the default HTTP provider via the seam.
@@ -833,6 +846,8 @@ function selectNodeDocumentsDeps(
   db: DrizzleDb,
   githubClient: GitHubClient | undefined,
   installations: GitHubInstallationRepository,
+  sourced: <T>(name: string, build: (d: DrizzleDb) => T) => T,
+  secretDelegate: CoreDependencies['secretDelegate'],
 ): Partial<CoreDependencies> {
   // The DEPLOYMENT's own document credentials, read from this process's environment (never from a
   // tenant's stored connection) so a code-registered prompt fragment may name a living standard.
@@ -853,16 +868,27 @@ function selectNodeDocumentsDeps(
     providers.push(new GitHubDocsProvider({ githubClient, installations, logger }))
   }
   if (providers.length === 0) return deploymentDocuments
+  // Both repos ride the `pickRepoSource` seam: their rows are org state, and since the connection
+  // row now carries its credential bag SEALED (opened below, or by the mothership when this node
+  // holds no key), the whole integration is serveable over the persistence RPC.
+  const documentConnectionRepository = sourced(
+    'documentConnectionRepository',
+    (d) => new DrizzleDocumentConnectionRepository(d),
+  )
   return {
     ...deploymentDocuments,
     documentSourceProviders: providers,
-    documentConnectionRepository: new DrizzleDocumentConnectionRepository(
-      db,
-      new WebCryptoSecretCipher({
+    documentConnectionRepository,
+    documentConnectionStore: createDocumentConnectionStore({
+      documentConnectionRepository,
+      // Source credentials are sealed at rest under a documents-scoped HKDF info, keyed by the
+      // shared ENCRYPTION_KEY.
+      secretCipher: new WebCryptoSecretCipher({
         masterKeyBase64: config.documents.encryptionKey,
         info: 'cat-factory:documents',
       }),
-    ),
+      ...(secretDelegate ? { secretDelegate } : {}),
+    }),
     documentRepository: new DrizzleDocumentRepository(db),
     ...(config.documents.planner === 'llm'
       ? { documentPlannerModel: config.agents.routing.default.ref }

@@ -160,11 +160,13 @@ const providerLabel = computed(() =>
 // must be empty or hold only a prepopulated README/.gitignore/license — the push
 // force-overwrites that boilerplate. The convenience link opens the host's own new-repo page,
 // prefilled, and is ABSENT for any host `~/utils/vcs` can't name (an unresolved provider, or a
-// GitLab whose instance nothing on the wire states); the copy and the button both key off it,
-// so what the intro promises and what renders cannot disagree.
+// deployment whose API base does not invert to a web host); the copy and the button both key off
+// it, so what the intro promises and what renders cannot disagree. The host now comes off the
+// connection (or, before one exists, off the connect option), so a GitLab deployment that states
+// one gets the button back rather than losing it to the provider alone.
 const repoOwner = computed(() => github.connection?.accountLogin ?? '')
 const createRepoUrl = computed(() =>
-  newRepoUrl(hostProvider.value, {
+  newRepoUrl(hostProvider.value, github.surfaceWebUrl, {
     owner: repoOwner.value,
     name: repoName.value.trim(),
     description: description.value.trim(),

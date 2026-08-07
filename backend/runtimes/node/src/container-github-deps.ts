@@ -5,6 +5,7 @@ import {
   JiraProvider,
   LinearTaskProvider,
   VcsPatConnectionService,
+  createTaskConnectionStore,
   githubIssuesLogic,
   gitlabWebBaseFromApiBase,
 } from '@cat-factory/integrations'
@@ -20,7 +21,7 @@ import type {
   RateLimitRepository,
   RateLimitSnapshot,
   RepoProjectionRepository,
-  TaskConnectionRepository,
+  TaskConnectionStore,
   TaskSourceProvider,
   TrackerSettingsRepository,
   WorkspaceRepository,
@@ -45,6 +46,7 @@ import {
   PatPreferringAppRegistry,
   ProviderRoutingGitHubClient,
   logger,
+  resolveVcsWebUrls,
   WebCryptoSecretCipher,
   WebCryptoWebhookVerifier,
   makeResolveRepoFilesForCoords,
@@ -88,10 +90,14 @@ class NoopRateLimitRepository implements RateLimitRepository {
   }
 }
 
-/** The result shape of {@link selectNodeTasksDeps}: the module deps plus the raw connection repo. */
+/**
+ * The result shape of {@link selectNodeTasksDeps}: the module deps plus the connection STORE the
+ * facade's own tracker/writeback closures read credentials through (the repository beside it holds
+ * only sealed rows).
+ */
 export interface NodeTasksDeps {
   deps: Partial<CoreDependencies>
-  taskConnectionRepository?: TaskConnectionRepository
+  taskConnectionStore?: TaskConnectionStore
 }
 
 /**
@@ -101,13 +107,17 @@ export interface NodeTasksDeps {
  * workspace OFFERS a source is the per-workspace toggle (task_source_settings), not a deployment
  * env gate.
  */
-function selectNodeTasksDeps(
-  config: AppConfig,
-  db: DrizzleDb,
-  githubClient: GitHubClient | undefined,
-  gitlabClient: GitHubClient | undefined,
-  installations: GitHubInstallationRepository,
-): NodeTasksDeps {
+function selectNodeTasksDeps(input: {
+  config: AppConfig
+  db: DrizzleDb
+  githubClient: GitHubClient | undefined
+  /** Whichever client can read the workspace's GitLab connection (the caller resolves which). */
+  gitlabClient: GitHubClient | undefined
+  installations: GitHubInstallationRepository
+  sourced: NodeGitHubDepsInput['sourced']
+  secretDelegate: CoreDependencies['secretDelegate']
+}): NodeTasksDeps {
+  const { config, db, githubClient, gitlabClient, installations, sourced, secretDelegate } = input
   if (!config.tasks.enabled || !config.tasks.encryptionKey) return { deps: {} }
   // Jira and Linear are always registered (their credentials are per-workspace, entered in the UI).
   const providers: TaskSourceProvider[] = [new JiraProvider(), new LinearTaskProvider()]
@@ -126,32 +136,44 @@ function selectNodeTasksDeps(
       new GitLabIssuesProvider({
         gitlabClient,
         installations,
-        webBaseUrl: gitlabWebBaseFromApiBase(config.gitlab?.apiBase),
+        webBaseUrl: gitlabWebBaseFromApiBase(config.gitlab.apiBase),
       }),
     )
   }
 
-  const taskConnectionRepository = new DrizzleTaskConnectionRepository(
-    db,
-    // Source credentials are encrypted at rest under a tasks-scoped HKDF info (the
-    // same domain the Cloudflare facade uses), keyed by the shared ENCRYPTION_KEY.
-    new WebCryptoSecretCipher({
+  // Every repo here rides the `pickRepoSource` seam: these rows are org state, and since the
+  // connection row now carries its credential bag SEALED, the whole integration is serveable over
+  // the persistence RPC. A mothership-mode node opens the bag by naming the row.
+  const taskConnectionRepository = sourced(
+    'taskConnectionRepository',
+    (d) => new DrizzleTaskConnectionRepository(d),
+  )
+  const taskConnectionStore = createTaskConnectionStore({
+    taskConnectionRepository,
+    // Source credentials are sealed at rest under a tasks-scoped HKDF info (the same domain the
+    // Cloudflare facade uses), keyed by the shared ENCRYPTION_KEY.
+    secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64: config.tasks.encryptionKey,
       info: 'cat-factory:tasks',
     }),
-  )
+    ...(secretDelegate ? { secretDelegate } : {}),
+  })
   return {
     deps: {
       taskSourceProviders: providers,
       taskConnectionRepository,
-      taskSourceSettingsRepository: new DrizzleTaskSourceSettingsRepository(db),
+      taskConnectionStore,
+      taskSourceSettingsRepository: sourced(
+        'taskSourceSettingsRepository',
+        (d) => new DrizzleTaskSourceSettingsRepository(d),
+      ),
       taskRepository: new DrizzleTaskRepository(db),
       // Idempotency markers for INBOUND tracker comments. Wired alongside the task module rather
       // than the writeback, because it guards the INGEST half (a redelivered comment applying its
       // answers twice), which exists only when the task projection does.
       trackerCommentIngestRepository: new DrizzleTrackerCommentIngestRepository(db),
     },
-    taskConnectionRepository,
+    taskConnectionStore,
   }
 }
 
@@ -163,6 +185,12 @@ export interface NodeGitHubDepsInput {
   remoteRepos: Record<string, unknown> | undefined
   /** Source one org/durable repo from the remote registry (mothership) else the Drizzle db. */
   sourced: <T>(name: string, build: (d: DrizzleDb) => T) => T
+  /**
+   * Present ONLY on a mothership-mode node: opens a tracker connection sealed under the
+   * MOTHERSHIP's key, which this process holds none of. The tracker step files a ticket on the
+   * RUN path, so without it a mothership-mode run reaches that step and fails there.
+   */
+  secretDelegate?: CoreDependencies['secretDelegate']
   idGenerator: IdGenerator
   clock: Clock
   appRegistry: GitHubAppRegistry | undefined
@@ -306,13 +334,15 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
   // tracker resolves each workspace's own credentials from this same store. GitHub and GitLab
   // issues reuse the workspace's own VCS connection, so each wires only when its client is
   // available — kept here, after the clients are built, for parity with the Worker.
-  const tasks = selectNodeTasksDeps(
+  const tasks = selectNodeTasksDeps({
     config,
     db,
     githubClient,
-    gitlabTasksClient,
-    githubInstallationRepository,
-  )
+    gitlabClient: gitlabTasksClient,
+    installations: githubInstallationRepository,
+    sourced,
+    secretDelegate: input.secretDelegate,
+  })
 
   // Issue-tracker writeback (comment-on-PR-open + close-on-merge of a task's linked
   // issue), gated per workspace + per task inside the provider.
@@ -322,7 +352,7 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
     trackerSettingsRepository,
     sourced,
     clock,
-    taskConnectionRepository: tasks.taskConnectionRepository,
+    taskConnectionStore: tasks.taskConnectionStore,
   })
 
   let githubGateDeps: Partial<CoreDependencies> = {}
@@ -444,7 +474,7 @@ function selectVcsConnectDeps(input: {
 }): { client: GitHubClient; service: VcsPatConnectionService } | undefined {
   const { config, installations, workspaceRepository, clock } = input
   const gitlab = config.gitlab
-  if (!gitlab?.enabled || !gitlab.encryptionKey) return undefined
+  if (!gitlab.enabled || !gitlab.encryptionKey) return undefined
   // One cipher seals (connect) and unseals (token source) under the same domain, so the two
   // instances the client + service build from the same key + info interoperate.
   const cipher = new WebCryptoSecretCipher({
@@ -465,6 +495,9 @@ function selectVcsConnectDeps(input: {
     identityResolver: new GitLabIdentityResolver({ apiBase: gitlab.apiBase }),
     cipher,
     clock,
+    // Where this connection's projects can be opened in a browser, from the SAME resolver the
+    // App connect path and the connect-capability route read.
+    webUrls: resolveVcsWebUrls(config),
   })
   return { client, service }
 }
@@ -599,7 +632,7 @@ function buildNodeIssueWriteback(args: {
   trackerSettingsRepository: TrackerSettingsRepository
   sourced: NodeGitHubDepsInput['sourced']
   clock: Clock
-  taskConnectionRepository: TaskConnectionRepository | undefined
+  taskConnectionStore: TaskConnectionStore | undefined
 }): IssueWritebackService {
   const {
     githubClient,
@@ -607,7 +640,7 @@ function buildNodeIssueWriteback(args: {
     trackerSettingsRepository,
     sourced,
     clock,
-    taskConnectionRepository,
+    taskConnectionStore,
   } = args
   // Wired whenever the tracker-settings repo exists (always on Node) so the engine can write
   // back when a tracker is set; the GitHub half resolves the workspace's installation per issue.
@@ -672,16 +705,16 @@ function buildNodeIssueWriteback(args: {
           },
         }
       : {}),
-    ...(taskConnectionRepository
+    ...(taskConnectionStore
       ? {
           resolveJiraConnection: async (workspaceId: string) => {
-            const connection = await taskConnectionRepository.getByWorkspace(workspaceId, 'jira')
+            const connection = await taskConnectionStore.getByWorkspace(workspaceId, 'jira')
             const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
             if (!baseUrl || !accountEmail || !apiToken) return null
             return { baseUrl, accountEmail, apiToken }
           },
           resolveLinearConnection: async (workspaceId: string) => {
-            const connection = await taskConnectionRepository.getByWorkspace(workspaceId, 'linear')
+            const connection = await taskConnectionStore.getByWorkspace(workspaceId, 'linear')
             const { apiKey, token } = connection?.credentials ?? {}
             return apiKey || token ? { apiKey, token } : null
           },
@@ -689,7 +722,7 @@ function buildNodeIssueWriteback(args: {
           // it tells a reporter to answer on the ticket: whether an inbound webhook secret was ever
           // minted for that connection. Without it the reply path fails closed, so the copy offers
           // the API route alone. Mirrored in the Worker's `selectRecurringDeps`.
-          taskConnectionRepository,
+          taskConnectionStore,
         }
       : {}),
   })

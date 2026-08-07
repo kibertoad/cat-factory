@@ -5,6 +5,7 @@ import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
 import { logger } from '../../observability/logger.js'
 import {
+  type SealedSecretSourceBinding,
   type SealedSecretSourceSpec,
   sealedSecretSourceSpec,
 } from '../../secrets/sealedSecretSources.js'
@@ -236,7 +237,7 @@ async function accountInScope(
 async function callRepositoryRead(
   container: ServerContainer,
   spec: SealedSecretSourceSpec,
-  args: (string | null)[],
+  args: readonly (string | null)[],
 ): Promise<unknown> {
   const repositories = container.repositories as
     | Record<string, Record<string, unknown> | undefined>
@@ -246,7 +247,7 @@ async function callRepositoryRead(
   if (typeof method !== 'function') {
     throw new Error(`${spec.repo}.${spec.method} is not wired on this mothership`)
   }
-  return (method as (...a: unknown[]) => Promise<unknown>).apply(repo, args)
+  return (method as (...a: unknown[]) => Promise<unknown>).apply(repo, [...args])
 }
 
 /**
@@ -255,13 +256,16 @@ async function callRepositoryRead(
  * declared read: a short list silently reads a different row than the caller named, and a long
  * one passes an argument the port never declared.
  */
-function readKey(raw: unknown, spec: SealedSecretSourceSpec): (string | null)[] | undefined {
+function readKey(
+  raw: unknown,
+  spec: SealedSecretSourceBinding,
+): readonly (string | null)[] | undefined {
   const key = raw === undefined ? [] : raw
   if (!Array.isArray(key) || key.length !== spec.keyArity) return undefined
   for (const value of key) {
     if (value !== null && typeof value !== 'string') return undefined
   }
-  return key as (string | null)[]
+  return key as readonly (string | null)[]
 }
 
 async function readJson<T>(c: DelegationContext): Promise<T | undefined> {

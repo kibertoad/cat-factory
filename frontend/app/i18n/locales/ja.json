@@ -430,7 +430,8 @@
       "accessDenied": {
         "title": "アクセスが拒否されました",
         "hint": "このサービスの基盤となるリポジトリにアクセスする権限がありません。"
-      }
+      },
+      "startFromDesignTitle": "デザインから始める"
     },
     "decisionBadge": {
       "decisionNeeded": "判断が必要",
@@ -460,7 +461,6 @@
       "noPipelineBody": "まずビルダーで作成してください。",
       "pr": "PR",
       "prNumber": "PR #{number}",
-      "openPrOnGithub": "{pr} を GitHub で開く",
       "readOutcome": "成果",
       "readOutcomeHint": "何が変わったかを、その根拠とともに読む",
       "review": "レビュー",
@@ -478,7 +478,8 @@
       "startedToast": {
         "title": "実行を開始しました",
         "body": "「{name}」を実行中です。"
-      }
+      },
+      "openPrLink": "{pr} を開く"
     },
     "dryRunToast": {
       "title": "ドライランを開始しました",
@@ -502,7 +503,11 @@
     "attachIssueDisabledConnect": "まず issue トラッカーを接続してください（連携）",
     "attachIssueDisabledEnable": "まず issue トラッカー連携を有効にしてください",
     "importsOnAdd": "追加時にインポート",
-    "unreadable": "取得できませんでした: {error}"
+    "unreadable": "取得できませんでした: {error}",
+    "pastedLink": {
+      "offer": "この説明は {source} のページにリンクしています。コンテキストとして添付しますか？",
+      "attach": "添付"
+    }
   },
   "errors": {
     "generic": {
@@ -524,7 +529,8 @@
     "unavailable": {
       "description": {
         "binary_generators_unreachable": "このデプロイメントの生成系インテグレーションを現在読み取れなかったため、実行は開始されませんでした。設定に誤りはなく、変更も不要です。接続が回復してからもう一度お試しください。",
-        "foundational_builtins_unreachable": "このデプロイメントの組み込み基盤サービスを現在読み取れませんでした。設定に誤りはなく、変更も不要です。接続が回復してからもう一度お試しください。"
+        "foundational_builtins_unreachable": "このデプロイメントの組み込み基盤サービスを現在読み取れませんでした。設定に誤りはなく、変更も不要です。接続が回復してからもう一度お試しください。",
+        "connection_credentials_unreadable": "この接続に保存されている認証情報を読み取れませんでした。このデプロイメントが鍵を保持しているサービスに到達できる場合は、ソースを接続し直して認証情報を置き換えてください。到達できない場合は、その接続が回復してからもう一度お試しください。"
       }
     },
     "action": {
@@ -596,7 +602,7 @@
         "agent_backend_unconfigured": "コンテナエージェントを実行できるランナーバックエンドがありません。セルフホストのランナープールを登録するか、デプロイで Cloudflare Containers を有効にしてください。",
         "run_not_retryable": "再試行できるのは失敗または完了した実行のみです。この実行はまだ実行中か、再試行できない状態です。",
         "no_pr_to_merge": "この実行はまだプルリクエストを開いていないため、マージするものがありません。",
-        "github_not_connected": "エージェントがリポジトリのクローン、変更のプッシュ、プルリクエストのオープンを行えるように、このワークスペースを GitHub に接続してください。",
+        "github_not_connected": "エージェントがリポジトリをクローンし、変更をプッシュし、プルリクエストを作成できるように、このワークスペースをリポジトリホストに接続してください。",
         "bootstrap_not_retryable": "このブートストラップジョブは現在の状態では再試行できません（まだ実行中か、すでに正常に完了しています）。",
         "bootstrap_reference_missing": "このブートストラップが利用する参照リポジトリにアクセスできなくなりました。削除されたか、アクセス権が取り消されています。別の参照を選択するか、最初から作成してください。",
         "preset_unsatisfiable": "インラインステップのモデルは、このデプロイではインラインで実行できません（インライン非対応のサブスクリプション専用モデル）。インライン対応のモデルまたはプリセットを選択してください。",
@@ -2031,6 +2037,18 @@
         "keysValidation": "S3 のアクセスキー ID とシークレットを入力してください",
         "saved": "コンテンツストレージを保存しました",
         "saveFailed": "コンテンツストレージを保存できませんでした"
+      },
+      "figma": {
+        "title": "Figma アプリ (OAuth)",
+        "description": "「Figma で接続」の流れを有効にします。設定しなくても、ワークスペースはパーソナルアクセストークンを貼り付けて Figma に接続できます。",
+        "clientId": "クライアント ID",
+        "clientSecret": "クライアントシークレット",
+        "redirectUrl": "リダイレクト URL",
+        "validation": "クライアント ID、シークレット、リダイレクト URL を入力してください",
+        "saved": "Figma の OAuth を保存しました",
+        "saveFailed": "Figma の OAuth を保存できませんでした",
+        "cleared": "Figma の OAuth を削除しました",
+        "clearFailed": "Figma の OAuth を削除できませんでした"
       }
     },
     "accountFragments": {
@@ -4037,14 +4055,11 @@
       "loading": "読み込み中…",
       "tabs": {
         "repos": "リポジトリ",
-        "pulls": "プルリクエスト",
         "issues": "イシュー"
       },
       "linkedToBoard": "このボードにリンク済み",
       "manageRepos": "リポジトリを管理",
-      "manageHint": "このボードで追跡するリポジトリを選択します。GitHub 接続はアカウント全体で共有され、各ボードがそれぞれのリポジトリをリンクします。",
       "loadingRepos": "リポジトリを読み込み中…",
-      "noAvailableRepos": "このインストールはまだどのリポジトリにもアクセスできません。",
       "private": "プライベート",
       "saveSelection": "選択を保存",
       "noLinkedRepos": "リンクされたリポジトリはまだありません。このボードが追跡するリポジトリを選ぶには「リポジトリの管理」を使用してください。",
@@ -4054,15 +4069,11 @@
       "fromSha": "SHAから",
       "commitShaPlaceholder": "コミットsha",
       "createBranch": "ブランチを作成",
-      "openPr": "PRを開く",
       "repository": "リポジトリ",
       "chooseRepository": "リポジトリを選択",
       "prTitle": "タイトル",
       "headBranch": "ヘッドブランチ",
       "baseBranch": "ベースブランチ",
-      "openPullRequest": "プルリクエストを開く",
-      "noPulls": "同期されたプルリクエストはありません。",
-      "mergePr": "プルリクエストをマージ",
       "noIssues": "同期されたイシューはありません。",
       "prState": {
         "open": "オープン",
@@ -4076,9 +4087,7 @@
       "toast": {
         "resync": "{status}を再同期",
         "reposUpdated": "リンクされたリポジトリを更新しました",
-        "branchCreated": "ブランチ{name}を作成しました",
-        "prOpened": "プルリクエストを開きました",
-        "prMerged": "PR #{number}をマージしました"
+        "branchCreated": "ブランチ{name}を作成しました"
       },
       "errors": {
         "disconnect": "接続を解除できませんでした",
@@ -4087,7 +4096,6 @@
         "updateRepos": "リポジトリを更新できませんでした",
         "loadBranches": "ブランチを読み込めませんでした",
         "createBranch": "ブランチを作成できませんでした",
-        "openPr": "プルリクエストを開けませんでした",
         "merge": "マージできませんでした"
       }
     },
@@ -4306,13 +4314,19 @@
     "connect": {
       "title": "ソースを接続",
       "sourceFallback": "ソース",
-      "intro": "{source} を接続すると、要件、RFC、PRD をインポートし、ボード構造を生成したり、エージェントのコンテキストとしてタスクに添付したりできます。",
+      "intro": "{source} を接続して、ページやデザインをこのボードに取り込みます。インポートしてボード構造に展開したり、タスクにエージェント用のコンテキストとして添付したりできます。",
       "disconnect": "切断",
       "connect": "接続",
       "update": "接続を更新",
       "connected": "{source} を接続しました",
       "disconnected": "{source} を切断しました",
-      "connectFailed": "接続できませんでした"
+      "connectFailed": "接続できませんでした",
+      "oauth": {
+        "action": "{source} で接続",
+        "scopes": "次の権限が求められます: {scopes}",
+        "fallback": "トークンを使いますか？下のフィールドをご利用ください。",
+        "failed": "{source} へのサインインを開始できませんでした"
+      }
     },
     "spawn": {
       "title": "構造をプレビュー",
@@ -4327,7 +4341,15 @@
       "summary": "{frames} · {modules} · {tasks}",
       "frameCount": "{count} フレーム | {count} フレーム",
       "moduleCount": "{count} モジュール | {count} モジュール",
-      "taskCount": "{count} タスク | {count} タスク"
+      "taskCount": "{count} タスク | {count} タスク",
+      "reusedCount": "{count} 個のモジュールを再利用 | {count} 個のモジュールを再利用",
+      "intoService": "選択したサービスの中に",
+      "target": {
+        "label": "サービスに追加",
+        "help": "デザインが表すのはアーキテクチャではなく画面です。そのため計画は、すでに存在するサービスの中の作業を提案します。",
+        "placeholder": "サービスを選択",
+        "required": "このデザインが属するサービスを選んでください。"
+      }
     },
     "taskDocs": {
       "heading": "コンテキストドキュメント",
@@ -4360,6 +4382,20 @@
       "remove": "削除",
       "linkFailed": "ドキュメントのリンクを更新できませんでした",
       "loadFailed": "ドキュメントテンプレートを読み込めませんでした"
+    },
+    "startFromDesign": {
+      "title": "デザインから始める",
+      "intro": "フレームまたはファイル全体のリンクを貼り付けてください。新しいタスクに添付され、エージェントがレイアウト・テキスト・コンポーネント・トークンを読み取ります。",
+      "noSource": "デザインソースがまだ接続されていません。管理者が連携画面から Figma または Zeplin を接続できます。",
+      "linkLabel": "デザインのリンク",
+      "linkPlaceholder": "https://www.figma.com/design/…?node-id=1-2",
+      "checking": "リンクを確認しています…",
+      "trimmed": "このリンクのサポートされた形式に整形しました。",
+      "widened": "フレーム {scope} を読み取れなかったため、ファイル全体を添付しました。",
+      "unchecked": "今はリンクを確認できませんでした。タスク作成時に取得されます。",
+      "uncheckedAmbiguous": "リンクを確認できず、デザインソースが複数接続されているため、どれに属するか判断できません。もう一度お試しください。",
+      "rejected": "接続済みのデザインソースはどれもこのリンクを認識できません。",
+      "continue": "続ける"
     }
   },
   "tasks": {
@@ -4832,7 +4868,7 @@
       "suffixFixing": "· fixer がコメントに対応中…",
       "suffixFailing": "· 対応すべきレビューコメントあり",
       "suffixAwaiting": "· レビュー待ち",
-      "reviewPr": "GitHub でプルリクエストをレビュー",
+      "reviewPr": "プルリクエストをレビュー",
       "requestFixHeading": "修正をリクエスト",
       "requestFixDescription": "fixer に今すぐ PR ブランチで行わせる変更を記述してください(自動的に対応されるレビューコメントに加えて)。",
       "requestFixPlaceholder": "例: ヘルパーの名前を変更し、空入力ケースのユニットテストを追加する",
@@ -4846,12 +4882,12 @@
     },
     "conflicts": {
       "mergeability": "マージ可能性",
-      "viewPr": "GitHub でプルリクエストを表示"
+      "viewPr": "プルリクエストを表示"
     },
     "docQuality": {
       "findings": "文書の問題",
       "findingsFallback": "文書は構造チェックに合格しました。",
-      "viewPr": "GitHub でプルリクエストを表示"
+      "viewPr": "プルリクエストを表示"
     },
     "attemptsHeading": "{helper} の試行",
     "attempt": "試行 {number}",
@@ -6861,7 +6897,33 @@
       },
       "toast": {
         "disconnected": "{provider} の接続を解除しました"
-      }
+      },
+      "pulls": {
+        "github": {
+          "tab": "プルリクエスト",
+          "open": "PR を作成",
+          "openSubmit": "プルリクエストを作成",
+          "merge": "このプルリクエストをマージ",
+          "none": "同期済みのプルリクエストはありません。",
+          "opened": "プルリクエストを作成しました",
+          "mergedToast": "PR #{number} をマージしました",
+          "openFailed": "プルリクエストを作成できませんでした"
+        },
+        "gitlab": {
+          "tab": "マージリクエスト",
+          "open": "MR を作成",
+          "openSubmit": "マージリクエストを作成",
+          "merge": "このマージリクエストをマージ",
+          "none": "同期済みのマージリクエストはありません。",
+          "opened": "マージリクエストを作成しました",
+          "mergedToast": "MR !{number} をマージしました",
+          "openFailed": "マージリクエストを作成できませんでした"
+        }
+      },
+      "manageHintApp": "このボードが追跡するリポジトリを選びます。App のインストールはアカウント全体で共有され、各ボードは自分のリポジトリを紐づけます。",
+      "manageHintToken": "このボードが追跡するリポジトリを選びます。一覧は接続中のトークンが到達できる範囲で、各ボードは自分のリポジトリを紐づけます。",
+      "noAvailableReposApp": "App のインストールはまだどのリポジトリにもアクセスできません。",
+      "noAvailableReposToken": "接続中のトークンはまだどのリポジトリにも到達できません。スコープと自分のアクセス権を確認してください。"
     },
     "connect": {
       "or": "または",
@@ -6969,7 +7031,8 @@
       "library": "この環境で有効なコンテキストフラグメントのライブラリ",
       "failedRun": "失敗した実行",
       "infrastructure": "このワークスペースに接続された実行バックエンド",
-      "advancedTier": "詳細インターフェースモード"
+      "advancedTier": "詳細インターフェースモード",
+      "designSource": "接続済みのデザインソース"
     },
     "overlay": {
       "next": "次へ",
@@ -7347,6 +7410,36 @@
           "finish": {
             "title": "設計ステップがこれを読みます",
             "body": "どれを使うか宣言した設計は、次のステップでその完全な契約を受け取ります。何も宣言しなければ何も受け取りません。ここを最新に保つことが、これが機能する条件です。"
+          }
+        }
+      },
+      "startFromDesign": {
+        "title": "デザインから始める",
+        "description": "デザインのフレームを、エージェントが実装できるタスクに変えます。",
+        "steps": {
+          "intro": {
+            "title": "デザインから進める",
+            "body": "デザインツールから仕事が始まるとき、フレームそのものが指示書です。このツアーではフレームを新しいタスクに添付します。"
+          },
+          "open": {
+            "title": "デザインから始める",
+            "body": "デザインソースを接続すると、すべてのサービスフレームにこのボタンが表示されます。"
+          },
+          "paste": {
+            "title": "リンクを貼り付ける",
+            "body": "デザインツールでフレームまたはファイル全体のリンクをコピーし、ここに貼り付けてください。"
+          },
+          "resolved": {
+            "title": "添付された内容を確認する",
+            "body": "リンクはサポートされた形式に整形されます。フレーム自体を読み取れなかった場合はファイル全体が添付され、その旨がここに表示されます。"
+          },
+          "continue": {
+            "title": "タスクへ進む",
+            "body": "デザインは新しいタスクに用意されています。望む結果を書いて作成してください。"
+          },
+          "finish": {
+            "title": "実行の準備ができました",
+            "body": "エージェントはデザインのレイアウト・テキスト・コンポーネント・トークンを読み取り、実行のたびにソースと照合し直します。"
           }
         }
       }

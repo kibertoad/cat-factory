@@ -54,6 +54,44 @@ Almost everything here is WORKSPACE-scoped: a tenant connects its own Confluence
 the app, the credential is sealed per workspace, and `DocumentContentResolverService` resolves it
 per read. That is the model for documents people import onto their board.
 
+## Two ways in: a credential someone TYPES, and a grant someone MAKES
+
+Every source is connected with a credential bag. Where the bag comes from is a second question,
+and a source may answer it twice: a `credentialFields` form (an API token, an email + token pair)
+and, when the source declares an `oauth` half, an `authorization_code` grant.
+
+- **The provider DECLARES, it does not implement.** `DocumentSourceProvider.oauth`
+  (`DocumentSourceOAuthSpec`) is four constants: the authorize endpoint, the token endpoint, the
+  refresh endpoint or `null`, and the scopes. The protocol itself lives once, in
+  `DocumentSourceOAuthService`, so the second source to gain OAuth adds a declaration rather than
+  a second copy of the flow. Figma is the first, and the only one today.
+- **The credential bag is PLATFORM-owned** (`DOCUMENT_OAUTH_CREDENTIAL_KEYS`: an access token, a
+  refresh token, an absolute expiry). A provider's only job at the other end is to notice a token
+  in the bag it was handed and authenticate with it instead of with the typed credential. That is
+  what keeps the whole token lifecycle out of every provider.
+- **Declaring an OAuth half is not offering one.** Running the flow needs a registered app, which
+  is deployment configuration (`figmaOAuth` in the account's settings, beside the Slack and Linear
+  clients: an OAuth client IS per vendor, registered in that vendor's own console against a
+  redirect URL it holds). So `GET /document-sources` answers both questions separately: the
+  descriptors say what each source SUPPORTS, and `oauthSources` says what this deployment can
+  actually run. Folded into one, a board with no registered Figma app would render a "Connect with
+  Figma" button that can only 503.
+- **ONE public callback serves every source**, at `GET /documents/oauth/callback`, because a
+  deployment registers one redirect URL per vendor app and the source cannot ride the path. It
+  therefore rides the signed `state`, and the callback REFUSES a state whose `source` is not one
+  of its own: the GitHub install, Slack and Linear flows mint no `source`, so a state from one of
+  them cannot be presented here even though the signing secret is shared.
+- **Renewal happens on ONE seam.** `DocumentConnectionService.resolveConnection` /
+  `resolveConnections` is where every read resolves a credential (import, search, the content
+  resolver, the dispatch-time refresher), so an access token inside its expiry skew is renewed and
+  re-stored there. A renewal that cannot be made answers `null` rather than throwing: the read
+  must fail on the source call that follows, where it is reported as the outage it looks like, not
+  on the resolution. What could not be renewed is logged with WHICH of the three causes applies (no
+  refresh token, no refresh endpoint, the refresh call failed), because each needs a different fix.
+  The renewal is deliberately unguarded against a lost race, which is only safe while the supported
+  endpoints leave the refresh token unrotated; a source whose refresh ROTATES cannot be added
+  without revisiting it.
+
 There is a second, narrower home. A DEPLOYMENT can configure credentials in its own environment
 (`DOC_SOURCE_<SOURCE>_<FIELD>`), and `DeploymentDocumentResolverService` reads them. It exists for
 one caller: a code-registered (`builtin`-tier) prompt fragment naming a LIVING standard, which
@@ -143,12 +181,15 @@ In `llm` mode the planner reuses the agents' default model
 parsed, it degrades to the deterministic heading parser, so import/plan/spawn
 always work.
 
-Credentials are stored encrypted at rest in D1: the per-source JSON bag is
-sealed with AES-256-GCM (the same `WebCryptoSecretCipher` envelope the
-environments integration uses, under a documents-scoped HKDF `info`) before it
-is written, and decrypted only on the import path. They are never returned on the
-wire. Rows written before encryption was introduced are read back as legacy
-plaintext and re-encrypted on the next write.
+Credentials are stored encrypted at rest: the per-source JSON bag is sealed with AES-256-GCM (the
+same `WebCryptoSecretCipher` envelope the environments integration uses, under a documents-scoped
+HKDF `info`). The SEAL is the row's own value: the repository stores and returns the envelope, and
+the one place it is opened is `createDocumentConnectionStore`, which every service in the module
+holds instead of the repository. That is what lets a deployment holding no key for these rows (a
+mothership-mode node) still resolve them: it names the row over `/internal/secrets/unseal` and the
+mothership opens it. Credentials are never returned on the wire, and a bag that cannot be opened
+raises rather than resolving to an empty one, so "connected with nothing in it" and "this row is
+unreadable" stay different answers.
 
 - **Confluence**: each workspace owner connects their own site with an Atlassian
   **API token** (`id.atlassian.com → Security → API tokens`); the backend
@@ -183,31 +224,33 @@ plaintext and re-encrypted on the next write.
 All endpoints are workspace-scoped under `/workspaces/:workspaceId` and return
 `503` when the integration is unconfigured. `:source` is `confluence` | `notion`.
 
-| Method & path                                 | Purpose                                                    |
-| --------------------------------------------- | ---------------------------------------------------------- |
-| `GET /document-sources`                       | Configured sources + their connect/import descriptors      |
-| `GET /document-sources/connections`           | The workspace's live connections (no credentials)          |
-| `POST /document-sources/:source/connect`      | Connect: `{ credentials: { … } }`                          |
-| `DELETE /document-sources/:source/connection` | Disconnect a source                                        |
-| `GET /documents`                              | List imported documents (all sources)                      |
-| `POST /document-sources/:source/resolve-ref`  | Canonicalise `{ ref }`: id, canonical URL, dropped scope   |
-| `POST /document-sources/:source/import`       | Fetch + persist a page: `{ ref }` (id or URL)              |
-| `POST /document-sources/:source/plan`         | Preview the board plan for `{ externalId }` (no writes)    |
-| `POST /document-sources/:source/spawn`        | Apply structure: `{ externalId, frameId? }`                |
-| `POST /documents/link`                        | Attach a doc to a block: `{ source, externalId, blockId }` |
-| `POST /documents/refresh`                     | Re-confirm one doc now: `{ source, externalId }`           |
+| Method & path                                     | Purpose                                                                         |
+| ------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `GET /document-sources`                           | Configured sources, their descriptors, and which ones this deployment can OAuth |
+| `GET /document-sources/connections`               | The workspace's live connections (no credentials)                               |
+| `POST /document-sources/:source/connect`          | Connect: `{ credentials: { … } }`                                               |
+| `GET /document-sources/:source/oauth/install-url` | Begin an OAuth connect: the vendor authorization URL                            |
+| `DELETE /document-sources/:source/connection`     | Disconnect a source                                                             |
+| `GET /documents`                                  | List imported documents (all sources)                                           |
+| `POST /document-sources/:source/resolve-ref`      | Canonicalise `{ ref }`: id, canonical URL, dropped scope                        |
+| `POST /document-sources/:source/import`           | Fetch + persist a page: `{ ref }` (id or URL)                                   |
+| `POST /document-sources/:source/plan`             | Preview the board plan for `{ externalId, frameId? }` (no writes)               |
+| `POST /document-sources/:source/spawn`            | Apply structure: `{ externalId, frameId? }`                                     |
+| `POST /documents/link`                            | Attach a doc to a block: `{ source, externalId, blockId }`                      |
+| `POST /documents/refresh`                         | Re-confirm one doc now: `{ source, externalId }`                                |
 
 ### Who may call what: the tier split
 
 This controller is one of the few that MIXES permission tiers, and the line is what a call
 touches rather than which controller serves it:
 
-| Routes                                                                                                   | Permission            | Why                                                                                                                                         |
-| -------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /document-sources/:source/connect`, `DELETE …/connection`                                          | `integrations.manage` | Writes and clears the per-workspace source CREDENTIAL.                                                                                      |
-| `POST /document-role-links`, `POST /document-role-links/remove`                                          | `integrations.manage` | A per-DocKind template/exemplar tag decides what EVERY doc run in the board writes from: the fragment-library blast radius, not one task's. |
-| `resolve-ref`, `import`, `search`, `plan`, `spawn`, `POST /documents/link`, `POST /documents/refresh`    | member tier           | Reaching for a page and putting it on a task is board authoring.                                                                            |
-| every `GET` (`/document-sources`, `/document-sources/connections`, `/documents`, `/document-role-links`) | `workspace.read`      | Reads pass the admin gate by design.                                                                                                        |
+| Routes                                                                                                   | Permission            | Why                                                                                                                                                                                                                                  |
+| -------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /document-sources/:source/connect`, `DELETE …/connection`                                          | `integrations.manage` | Writes and clears the per-workspace source CREDENTIAL.                                                                                                                                                                               |
+| `GET /document-sources/:source/oauth/install-url`                                                        | `integrations.manage` | The one gated READ here, and the one gated IMPERATIVELY: the mount lets GET through by design, and what this hands back is the first half of a credential write, completed through the PUBLIC callback where no tier can be checked. |
+| `POST /document-role-links`, `POST /document-role-links/remove`                                          | `integrations.manage` | A per-DocKind template/exemplar tag decides what EVERY doc run in the board writes from: the fragment-library blast radius, not one task's.                                                                                          |
+| `resolve-ref`, `import`, `search`, `plan`, `spawn`, `POST /documents/link`, `POST /documents/refresh`    | member tier           | Reaching for a page and putting it on a task is board authoring.                                                                                                                                                                     |
+| every `GET` (`/document-sources`, `/document-sources/connections`, `/documents`, `/document-role-links`) | `workspace.read`      | Reads pass the admin gate by design.                                                                                                                                                                                                 |
 
 The member tier is enforced by the auth gate's own write floor (any non-GET requires `≥ member`),
 so those routes mount no permission gate at all, exactly like `boardController`'s writes. The
@@ -359,9 +402,9 @@ states it in the reader's own language off an exhaustive `Record` keyed by its m
 `confirmed` names the revision (so "which revision did this run build against" is answerable
 afterwards), `not-applicable` renders nothing at all (an `upload` has no source to trail, so a
 warning would invent a problem), and `unconfirmed` names which of four gaps applies, because
-"reconnect the source" / "this deployment cannot read the credentials at all" (mothership mode,
-where the read fails permanently and by design) / "wait out the outage" / "this source has no
-revision" are four different fixes. Every gap also increments the `document.freshness_gap` counter,
+"reconnect the source" / "this deployment cannot read the credentials at all" (a corrupt envelope,
+a drifted key, or a mothership that could not be reached to open the row) / "wait out the outage" /
+"this source has no revision" are four different fixes. Every gap also increments the `document.freshness_gap` counter,
 dimensioned by reason and source: each repeats per dispatch while it lasts, so the log line says
 which run and only the rate says whether it is spreading.
 
@@ -457,14 +500,36 @@ Two deliberate NON-refusals:
   notices are themselves BOUNDED (the inline one names a handful and counts the rest) since
   a notice that reports a budget overrun must not be able to cause one.
 
-**The SPA never sends `frameId`.** Planning is target-blind: `plan(record)` takes
-only the document, and its prompt asks for a whole architecture (top-level frames →
-modules → tasks), so the `frameId` path can only flatten the planned frames into
-the target, discarding the frame titles, types and descriptions the preview renders.
-That makes the spawn produce something other than what the user approved, so the
-affordance is board-level only. Scoping a spawn to one service is a target-aware
-PLAN (a second prompt yielding modules and tasks for an existing service), not a
-target-aware write; until that exists, `frameId` is an API-only capability.
+**Planning is TARGET-AWARE when it is given a frame.** `plan(record, target?)` asks one of two
+questions, and they are different prompts rather than one prompt with a hint, because the answers
+have different shapes. Without a target: "what architecture does this document describe", answered
+as frames. With one: "what work does it imply inside this service that already exists", answered as
+that service's modules and tasks, with the modules it ALREADY holds named in the prompt so the plan
+adds beside them instead of proposing a second "Checkout" next to the one that is there.
+
+That is what makes the `frameId` spawn honest, and why the SPA can now send one. Flattening a
+board-wide plan into a frame discards the frame titles, types and descriptions the preview
+rendered, so the spawn produced something other than what was approved; a plan authored FOR the
+target carries exactly one frame, which IS the target, and discards nothing. The plan says which
+(`targetFrameId`), so the preview can read "modules inside Storefront" rather than announcing a
+service nothing will create, and the spawn re-plans against the same frame.
+
+Two rules keep the two shapes from bleeding into each other:
+
+- **A targeted response that proposes FRAMES is refused, not re-read.** `coerceTargetedPlan` reads
+  `{ modules, tasks }`; a model that answered with `frames` is proposing services where one already
+  exists, and quietly reading those frames as modules would launder that mistake onto the board.
+  Null sends the caller to the targeted heading parser instead.
+- **The fallback matches the SHAPE of the request.** A targeted plan that could not be produced
+  degrades to the targeted heading parser, never to a board-wide plan the caller did not ask for.
+  Under a target the outline shifts up a level: h1 is consumed by the target (which occupies the
+  level h1 would have created), h2 becomes a module, h3 a task.
+
+**A DESIGN document is planned into a service, always.** `isDesignSource` decides, and the SPA's
+spawn preview requires a target frame for one: a design describes screens, and asked for an
+architecture a model produces a service per Figma page. The design origin also folds a paragraph
+into whichever prompt runs, redirecting the decomposition to one task per screen, state or flow,
+named after the frame it comes from.
 
 The `credentials` bag a source expects is described by its descriptor
 (`GET /document-sources` → `credentialFields`), so the connect UI renders

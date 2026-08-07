@@ -58,3 +58,15 @@ coverage + the authoritative list of accepted gaps).
 
 Both providers can be configured on the same deployment at once: a workspace's repos
 just need to resolve to the right connection.
+
+Each provider's API base doubles as the source of the **web host** the SPA links repositories,
+merge/pull requests and issues to: `/api/v3` (GitHub Enterprise Server) and `/api/v4` (GitLab)
+are stripped, `api.github.com` maps to `github.com`, and a relative-URL install keeps its own
+prefix (`https://host/gitlab/api/v4` → `https://host/gitlab`). A base with none of those shapes
+names no host, and the SPA withholds those links rather than pointing at the provider's public
+instance, where the same namespace path is very likely somebody else's project.
+
+Both API bases are read on **every** deployment, independently of the opt-in beside them
+(`GITLAB_TOKEN`, a GitHub App): a deployment reaching either provider with a PAT still has
+repositories to link, and local mode is exactly that shape. The opt-in governs the single-token
+engine connection alone.

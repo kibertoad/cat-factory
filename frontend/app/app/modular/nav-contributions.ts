@@ -89,6 +89,16 @@ export interface NavGates {
   githubAvailable: boolean
   /** The prompt-fragment library integration is enabled. */
   libraryAvailable: boolean
+  /**
+   * The board has a CONNECTED design source (Figma, Zeplin).
+   *
+   * Availability, not permission, like `githubAvailable`: the start-from-design affordance and
+   * the tour that walks it both point at a frame-header button that only exists once a design
+   * source is connected, so a board without one is offered a walkthrough that hunts for a
+   * control nobody can see. Connecting is `integrations.manage`, but STARTING from a design is
+   * member-tier, so the gate is the connection rather than the permission to make one.
+   */
+  designSourceConnected: boolean
   /** An execution/test-env backend is reported (runner pool / environment / local). */
   infrastructureAvailable: boolean
   /** Accounts (auth) are enabled on the deployment. */

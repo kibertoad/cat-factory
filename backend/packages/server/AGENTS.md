@@ -73,13 +73,20 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   gated mount: it is a third-party browser navigation, so it is mounted at the app ROOT and gates
   itself on the sealed state, the user who started the flow, and a re-loaded `secrets.manage`.
   See `backend/docs/mcp-tool-servers.md`.
-- `modules/tasks/TaskWebhookController.ts` + `webhooks/`: the three PUBLIC, session-gate-bypassing
+- `modules/tasks/TaskWebhookController.ts` + `webhooks/`: the PUBLIC, session-gate-bypassing
   webhook receivers (`/github`, `/vcs/:provider`, `/webhooks/tasks/:source/:workspaceId`) and their
   shared body-limit + signature-rejection logging. Each verifies over the RAW body before parsing,
   acks fast, and hands off through a `gateways` seam. The tracker one is the odd shape: its
   workspace rides the PATH (a tracker delivery has no installation id to resolve one from) and its
   secret is per CONNECTION rather than per deployment. See
   `backend/docs/adr/0032-tracker-webhook-intake.md`.
+  These and the vendor OAuth callbacks (`/slack`, `/tasks` for Linear, `/documents` for every
+  OAuth-capable document source) are ONE list, `app.ts`'s `PROVIDER_CALLBACK_CONTROLLERS`, and
+  every mount in it MUST also appear in `authGate.ts`'s `PUBLIC_PREFIXES`. That pairing is the
+  point of the list: a receiver missing from the allowlist is not gated but UNREACHABLE, since its
+  caller has no session to present, and it fails only against the live vendor, on a redirect or a
+  delivery nobody can retry. `http/publicPrefixes.test.ts` pins the two together, deriving both
+  sides, after the omission shipped twice.
 - `agents/`: the **shared, runtime-neutral** agent-dispatch layer: `CompositeAgentExecutor`,
   `ContainerAgentExecutor`, `RunnerJobClient`, `ContainerRepoBootstrapper`, `ModelRouter`.
   Two collaborators split out of the executor to keep it inside its (ratcheting-down) size

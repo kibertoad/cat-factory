@@ -55,6 +55,9 @@ const DocumentTemplatesModal = defineAsyncComponent(
 const SpawnPreviewModal = defineAsyncComponent(
   () => import('~/components/documents/SpawnPreviewModal.vue'),
 )
+const StartFromDesignModal = defineAsyncComponent(
+  () => import('~/components/documents/StartFromDesignModal.vue'),
+)
 const BootstrapModal = defineAsyncComponent(
   () => import('~/components/bootstrap/BootstrapModal.vue'),
 )
@@ -472,6 +475,7 @@ watch(
         <DocumentImportModal v-if="ui.documentImport" />
         <DocumentTemplatesModal v-if="ui.documentTemplates" />
         <SpawnPreviewModal v-if="ui.spawnPreview" />
+        <StartFromDesignModal v-if="ui.startFromDesign" />
         <BootstrapModal v-if="ui.bootstrapOpen" />
         <AddServiceFromRepoModal v-if="ui.addServiceOpen" />
         <GitHubPanel v-if="ui.githubOpen" />

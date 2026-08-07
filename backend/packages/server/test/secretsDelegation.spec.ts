@@ -1,12 +1,19 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
-import { ORG_SECRET_SOURCES, createOrgSecretCipher } from '@cat-factory/kernel'
+import {
+  ORG_SECRET_KEY_ARITY,
+  ORG_SECRET_SOURCES,
+  createOrgSecretCipher,
+} from '@cat-factory/kernel'
 import { HmacSigner, TOKEN_AUDIENCE } from '../src/auth/signing.js'
 import { mintMachineToken } from '../src/auth/machineToken.js'
 import type { AppEnv, ServerContainer } from '../src/http/env.js'
 import { handleError } from '../src/http/errorHandler.js'
 import { secretDelegationController } from '../src/modules/persistence/SecretDelegationController.js'
-import { SEALED_SECRET_SOURCES } from '../src/secrets/sealedSecretSources.js'
+import {
+  SEALED_SECRET_SOURCES,
+  sealedSecretSourceSpec,
+} from '../src/secrets/sealedSecretSources.js'
 import {
   HttpSecretDelegate,
   MachineSecretDelegationUnavailableError,
@@ -62,6 +69,20 @@ const OBSERVABILITY: Record<string, { credentials: string }> = {
   ws_1: { credentials: `sealed[${OBS_INFO}]({"apiKey":"dd-key"})` },
 }
 
+// The two source-connection tables. Keyed by `(workspaceId, source)` — the one-key arity that
+// distinguishes them from the workspace-only observability read above.
+const DOC_INFO = SEALED_SECRET_SOURCES.document_source_connection.info
+const TASK_INFO = SEALED_SECRET_SOURCES.task_source_connection.info
+
+const DOCUMENT_CONNECTIONS: Record<string, { credentialsCipher: string }> = {
+  'ws_1:figma': { credentialsCipher: `sealed[${DOC_INFO}]({"token":"figma-pat"})` },
+  'ws_other:figma': { credentialsCipher: `sealed[${DOC_INFO}]({"token":"other-org-pat"})` },
+}
+
+const TASK_CONNECTIONS: Record<string, { credentialsCipher: string }> = {
+  'ws_1:jira': { credentialsCipher: `sealed[${TASK_INFO}]({"apiToken":"jira-token"})` },
+}
+
 interface AppOptions {
   cipher?: boolean
   repositories?: boolean
@@ -93,6 +114,14 @@ function makeApp(opts: AppOptions = {}) {
             },
             observabilityConnectionRepository: {
               get: async (workspaceId: string) => OBSERVABILITY[workspaceId] ?? null,
+            },
+            documentConnectionRepository: {
+              getByWorkspace: async (workspaceId: string, source: string) =>
+                DOCUMENT_CONNECTIONS[`${workspaceId}:${source}`] ?? null,
+            },
+            taskConnectionRepository: {
+              getByWorkspace: async (workspaceId: string, source: string) =>
+                TASK_CONNECTIONS[`${workspaceId}:${source}`] ?? null,
             },
           },
     config: { auth: { sessionSecret: SECRET } },
@@ -343,6 +372,63 @@ describe('POST /internal/secrets/seal', () => {
   })
 })
 
+describe('the document / task source connections', () => {
+  // The last integration to reach a mothership-mode node, and the reason it was last: its
+  // repositories decrypted INSIDE, so there was no sealed field for a row-addressed unseal to name.
+  // These assert the binding that closed it — the right row, under the right HKDF domain, reached
+  // by a source-keyed read whose workspace half the node does not get to choose.
+  const app = makeApp()
+
+  it('opens a document-source bag by (workspace, source)', async () => {
+    const res = await post(app, 'unseal', await machineToken(), {
+      source: 'document_source_connection',
+      workspaceId: 'ws_1',
+      key: ['figma'],
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, plaintext: '{"token":"figma-pat"}' })
+  })
+
+  it('opens a tracker bag by (workspace, source)', async () => {
+    const res = await post(app, 'unseal', await machineToken(), {
+      source: 'task_source_connection',
+      workspaceId: 'ws_1',
+      key: ['jira'],
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, plaintext: '{"apiToken":"jira-token"}' })
+  })
+
+  it('cannot reach another account`s connection through an in-scope workspace id', async () => {
+    // `workspaceId` is PREPENDED server-side, so naming `ws_other` is a scope refusal rather than
+    // a read — the row exists and stays a uniform 404.
+    const res = await post(app, 'unseal', await machineToken(), {
+      source: 'document_source_connection',
+      workspaceId: 'ws_other',
+      key: ['figma'],
+    })
+    expect(res.status).toBe(404)
+  })
+
+  it('refuses a workspace-only key: the arity is part of the row`s address', async () => {
+    // A short key would read a DIFFERENT row than the caller named, because the args are spread.
+    const res = await post(app, 'unseal', await machineToken(), {
+      source: 'task_source_connection',
+      workspaceId: 'ws_1',
+    })
+    expect(res.status).toBe(422)
+  })
+
+  it('404s a source the workspace has never connected', async () => {
+    const res = await post(app, 'unseal', await machineToken(), {
+      source: 'task_source_connection',
+      workspaceId: 'ws_1',
+      key: ['linear'],
+    })
+    expect(res.status).toBe(404)
+  })
+})
+
 describe('the source table', () => {
   it('binds EXACTLY the kernel vocabulary, with no unbound or extra member', () => {
     // Derived from the same source the code reads rather than pinned to a count: adding a source
@@ -353,7 +439,34 @@ describe('the source table', () => {
       expect(spec.method.length, source).toBeGreaterThan(0)
       expect(spec.field.length, source).toBeGreaterThan(0)
       expect(spec.info, source).toMatch(/^cat-factory:/)
-      expect(spec.keyArity, source).toBeGreaterThanOrEqual(0)
+    }
+  })
+
+  it('resolves a binding whose key arity comes from the KERNEL declaration, never a local copy', () => {
+    // Arity is the one part of a binding the CALLER also has to get right, and it cannot see this
+    // table. Restated here it was prose a call site could disagree with in silence — a store that
+    // sent no key passed every hosted test (a local cipher ignores the ref) and answered 422 on
+    // every open on the only deployment shape that delegates. One declaration, read by both halves.
+    for (const source of ORG_SECRET_SOURCES) {
+      expect(sealedSecretSourceSpec(source)?.keyArity, source).toBe(ORG_SECRET_KEY_ARITY[source])
+    }
+  })
+
+  it('refuses a key whose arity disagrees with the source, in EITHER direction', async () => {
+    const token = await machineToken()
+    // Too few: the args are spread into the declared read, so a short list would silently read a
+    // DIFFERENT row than the caller named. Too many passes an argument the port never declared.
+    for (const key of [undefined, [], ['jira', 'extra']]) {
+      const res = await makeApp().request('/internal/secrets/unseal', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          source: 'task_source_connection',
+          workspaceId: 'ws_1',
+          ...(key ? { key } : {}),
+        }),
+      })
+      expect(res.status, JSON.stringify(key)).toBe(422)
     }
   })
 })

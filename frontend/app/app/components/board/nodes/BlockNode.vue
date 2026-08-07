@@ -20,6 +20,7 @@ const board = useBoardStore()
 const execution = useExecutionStore()
 const ui = useUiStore()
 const tasks = useTasksStore()
+const documents = useDocumentsStore()
 const agentRuns = useAgentRunsStore()
 const services = useServicesStore()
 const reviews = useReviewStage()
@@ -159,6 +160,18 @@ function createTaskFromIssue() {
 
 function addRecurring() {
   ui.openAddRecurring(props.id)
+}
+
+/**
+ * Start a task from a design link, scoped to THIS service.
+ *
+ * BASIC tier, unlike the recurring/initiative buttons beside it: for a design-led team this is
+ * the everyday delivery loop rather than planning about it, which is the tier bar. It is offered
+ * only where a design source is actually connected, so a board that has none carries no control
+ * whose first click is a dead end.
+ */
+function startFromDesign() {
+  ui.openStartFromDesign(props.id)
 }
 
 // Hunt this service's tracker board for a bug worth picking up. Scoped to THIS frame, so
@@ -409,6 +422,17 @@ const ITEM_ICON: Record<string, string> = {
                   icon="i-lucide-ticket"
                   :title="t('board.frame.createTaskFromIssueTitle')"
                   @click.stop="createTaskFromIssue"
+                />
+                <UButton
+                  v-if="documents.connectedDesignSources.length > 0"
+                  class="nodrag"
+                  data-testid="frame-start-from-design"
+                  :size="isTouch ? 'sm' : 'xs'"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-frame"
+                  :title="t('board.frame.startFromDesignTitle')"
+                  @click.stop="startFromDesign"
                 />
                 <!-- Recurring pipelines + initiatives are ADVANCED-tier authoring: both plan
                      work rather than do it (a schedule that fires runs on a cadence, an

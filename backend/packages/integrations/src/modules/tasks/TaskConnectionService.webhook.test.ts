@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type {
   TaskConnectionRecord,
-  TaskConnectionRepository,
+  TaskConnectionStore,
   TaskSourceProvider,
 } from '@cat-factory/kernel'
 import { TaskConnectionService, trackerWebhookPath } from './TaskConnectionService.js'
@@ -17,19 +17,38 @@ import { MapTaskSourceRegistry } from './tasks.logic.js'
 // failure is silent (deliveries just start 503-ing), so it gets a pinned test rather than a
 // comment.
 
-function makeService(seed: TaskConnectionRecord[] = []) {
+function makeService(
+  seed: TaskConnectionRecord[] = [],
+  /** Override a store method, to stand in for a bag this deployment cannot open. */
+  storeOverrides: Partial<TaskConnectionStore> = {},
+) {
   const rows = new Map(seed.map((r) => [`${r.workspaceId}:${r.source}`, r]))
-  const taskConnectionRepository: TaskConnectionRepository = {
+  // Faked at the STORE level: these cases are about the webhook secret's read-modify-write, and
+  // the sealing itself has its own unit test (`sealedConnectionStore.test.ts`).
+  const taskConnectionStore: TaskConnectionStore = {
     getByWorkspace: async (workspaceId, source) => rows.get(`${workspaceId}:${source}`) ?? null,
-    listByWorkspace: async (workspaceId) =>
-      [...rows.values()].filter((r) => r.workspaceId === workspaceId),
+    listBySources: async (workspaceId, sources) =>
+      sources.flatMap((source) => {
+        const row = rows.get(`${workspaceId}:${source}`)
+        return row ? [{ source, status: 'opened' as const, connection: row }] : []
+      }),
+    listSummaries: async (workspaceId) =>
+      [...rows.values()]
+        .filter((r) => r.workspaceId === workspaceId)
+        .map(({ workspaceId: ws, source, label, createdAt }) => ({
+          workspaceId: ws,
+          source,
+          label,
+          createdAt,
+        })),
     upsert: async (record) => {
       rows.set(`${record.workspaceId}:${record.source}`, record)
     },
     softDelete: async () => {},
+    ...storeOverrides,
   }
   const service = new TaskConnectionService({
-    taskConnectionRepository,
+    taskConnectionStore,
     taskSourceSettingsRepository: {
       getByWorkspace: async () => [],
       get: async () => null,
@@ -65,6 +84,27 @@ describe('TaskConnectionService — inbound webhook configuration', () => {
       configured: false,
       deliveryPath: trackerWebhookPath('ws1', 'jira'),
       replyAllow: '',
+      // The bag opened, so `configured: false` is an observed fact rather than a safe default.
+      credentialsReadable: true,
+    })
+  })
+
+  it('states an unopenable bag instead of failing the panel that exists to diagnose it', async () => {
+    // A read-only settings panel is the one surface that may not 503 on this: it is where someone
+    // lands to find out what is wrong. `credentialsReadable` is what stops the reported
+    // `configured: false` reading as "no secret minted yet" and sending them to mint one OVER a
+    // bag that still holds the live secret.
+    const { service } = makeService([connected], {
+      getByWorkspace: () => Promise.reject(new Error('cannot open')),
+    })
+
+    const state = await service.getWebhookState('ws1', 'jira')
+
+    expect(state).toMatchObject({
+      supported: true,
+      configured: false,
+      credentialsReadable: false,
+      deliveryPath: trackerWebhookPath('ws1', 'jira'),
     })
   })
 
@@ -99,9 +139,12 @@ describe('TaskConnectionService — inbound webhook configuration', () => {
     // so the surface can never offer a secret for deliveries that would 404 on arrival.
     const bare = { ...new JiraProvider(), webhook: undefined } as unknown as TaskSourceProvider
     const svc = new TaskConnectionService({
-      taskConnectionRepository: {
+      taskConnectionStore: {
         getByWorkspace: async () => connected,
-        listByWorkspace: async () => [connected],
+        listBySources: async () => [
+          { source: connected.source, status: 'opened' as const, connection: connected },
+        ],
+        listSummaries: async () => [connected],
         upsert: async () => {},
         softDelete: async () => {},
       },

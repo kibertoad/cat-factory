@@ -430,7 +430,8 @@
       "accessDenied": {
         "title": "İzin reddedildi",
         "hint": "Bu hizmetin dayandığı depoya erişiminiz yok."
-      }
+      },
+      "startFromDesignTitle": "Tasarımdan başla"
     },
     "decisionBadge": {
       "decisionNeeded": "Karar gerekiyor",
@@ -460,7 +461,6 @@
       "noPipelineBody": "Önce oluşturucuda bir tane oluşturun.",
       "pr": "PR",
       "prNumber": "PR #{number}",
-      "openPrOnGithub": "{pr} öğesini GitHub'da aç",
       "readOutcome": "Sonuç",
       "readOutcomeHint": "Neyin değiştiğini, kanıtlarıyla birlikte okuyun",
       "review": "İncele",
@@ -478,7 +478,8 @@
       "startedToast": {
         "title": "Çalıştırma başladı",
         "body": "\"{name}\" çalıştırılıyor."
-      }
+      },
+      "openPrLink": "{pr} aç"
     },
     "dryRunToast": {
       "title": "Prova çalışması başladı",
@@ -502,7 +503,11 @@
     "attachIssueDisabledConnect": "Önce bir sorun izleyici bağlayın (Entegrasyonlar)",
     "attachIssueDisabledEnable": "Önce sorun izleyici entegrasyonunu etkinleştirin",
     "importsOnAdd": "eklendiğinde içe aktarılır",
-    "unreadable": "Getirilemedi: {error}"
+    "unreadable": "Getirilemedi: {error}",
+    "pastedLink": {
+      "offer": "Bu açıklama bir {source} sayfasına bağlantı veriyor. Bağlam olarak eklensin mi?",
+      "attach": "Ekle"
+    }
   },
   "errors": {
     "generic": {
@@ -524,7 +529,8 @@
     "unavailable": {
       "description": {
         "binary_generators_unreachable": "Bu dağıtımın üretken entegrasyonları şu anda okunamadı, bu yüzden çalıştırma başlatılmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin.",
-        "foundational_builtins_unreachable": "Bu dağıtımın yerleşik temel hizmetleri şu anda okunamadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin."
+        "foundational_builtins_unreachable": "Bu dağıtımın yerleşik temel hizmetleri şu anda okunamadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin.",
+        "connection_credentials_unreadable": "Bu bağlantı için saklanan kimlik bilgileri okunamadı. Bu dağıtım, anahtarını tutan hizmete ulaşabiliyorsa kaynağı yeniden bağlayarak bilgileri değiştirin; ulaşamıyorsa o bağlantı düzeldiğinde yeniden deneyin."
       }
     },
     "action": {
@@ -596,7 +602,7 @@
         "agent_backend_unconfigured": "Konteyner aracılarını çalıştıracak bir runner arka ucu yok. Kendi barındırdığın bir runner havuzu kaydet veya dağıtımında Cloudflare Containers'ı etkinleştir.",
         "run_not_retryable": "Yalnızca başarısız olan veya tamamlanan bir çalıştırma yeniden denenebilir. Bu çalıştırma hâlâ etkin ya da yeniden denemeye uygun olmayan bir durumda.",
         "no_pr_to_merge": "Bu çalıştırma henüz bir pull request açmadı, bu yüzden birleştirilecek bir şey yok.",
-        "github_not_connected": "Aracıların depoyu klonlayabilmesi, değişiklikleri gönderebilmesi ve pull request açabilmesi için bu çalışma alanını GitHub'a bağla.",
+        "github_not_connected": "Ajanların depoyu klonlayabilmesi, değişiklikleri gönderebilmesi ve pull request açabilmesi için bu çalışma alanını bir depo sağlayıcısına bağlayın.",
         "bootstrap_not_retryable": "Bu bootstrap işi mevcut durumunda yeniden denenemez (hâlâ çalışıyor veya zaten başarıyla tamamlandı).",
         "bootstrap_reference_missing": "Bu bootstrap'in uyarladığı referans deposuna artık erişilemiyor. Silinmiş veya erişimi iptal edilmiş. Başka bir referans seç ya da sıfırdan oluştur.",
         "preset_unsatisfiable": "Bir satır içi adımın modeli bu dağıtımda satır içi çalışamaz (satır içi desteği olmayan yalnızca abonelikle kullanılan bir model). Satır içi çalışmayı destekleyen bir model veya hazır ayar seç.",
@@ -2031,6 +2037,18 @@
         "keysValidation": "S3 erişim anahtarı kimliğini ve gizli anahtarı girin",
         "saved": "İçerik depolama kaydedildi",
         "saveFailed": "İçerik depolama kaydedilemedi"
+      },
+      "figma": {
+        "title": "Figma uygulaması (OAuth)",
+        "description": "\"Figma ile bağlan\" akışını etkinleştirir. Olmadan da çalışma alanları kişisel erişim belirteci yapıştırarak Figma’ya bağlanabilir.",
+        "clientId": "İstemci kimliği",
+        "clientSecret": "İstemci parolası",
+        "redirectUrl": "Yönlendirme adresi",
+        "validation": "İstemci kimliğini, parolayı ve yönlendirme adresini gir",
+        "saved": "Figma OAuth kaydedildi",
+        "saveFailed": "Figma OAuth kaydedilemedi",
+        "cleared": "Figma OAuth temizlendi",
+        "clearFailed": "Figma OAuth temizlenemedi"
       }
     },
     "accountFragments": {
@@ -4037,14 +4055,11 @@
       "loading": "Yükleniyor…",
       "tabs": {
         "repos": "Depolar",
-        "pulls": "Pull request'ler",
         "issues": "Sorunlar"
       },
       "linkedToBoard": "Bu panoya bağlı",
       "manageRepos": "Depoları yönet",
-      "manageHint": "Bu panonun izlemesi gereken depoları seçin. GitHub bağlantısı hesap genelinde paylaşılır ve her pano kendi depolarını bağlar.",
       "loadingRepos": "Depolar yükleniyor…",
-      "noAvailableRepos": "Yükleme henüz herhangi bir depoya erişemiyor.",
       "private": "özel",
       "saveSelection": "Seçimi kaydet",
       "noLinkedRepos": "Henüz bağlı depo yok. Bu panonun hangi depoları takip ettiğini seçmek için Depoları yönet seçeneğini kullanın.",
@@ -4054,15 +4069,11 @@
       "fromSha": "SHA'dan",
       "commitShaPlaceholder": "commit sha",
       "createBranch": "Dal oluştur",
-      "openPr": "PR aç",
       "repository": "Depo",
       "chooseRepository": "Bir depo seçin",
       "prTitle": "Başlık",
       "headBranch": "Head dalı",
       "baseBranch": "Base dalı",
-      "openPullRequest": "Pull request aç",
-      "noPulls": "Senkronize edilmiş pull request yok.",
-      "mergePr": "Pull request'i birleştir",
       "noIssues": "Senkronize edilmiş sorun yok.",
       "prState": {
         "open": "açık",
@@ -4076,9 +4087,7 @@
       "toast": {
         "resync": "{status} yeniden senkronize et",
         "reposUpdated": "Bağlı depolar güncellendi",
-        "branchCreated": "{name} dalı oluşturuldu",
-        "prOpened": "Pull request açıldı",
-        "prMerged": "PR #{number} birleştirildi"
+        "branchCreated": "{name} dalı oluşturuldu"
       },
       "errors": {
         "disconnect": "Bağlantı kesilemedi",
@@ -4087,7 +4096,6 @@
         "updateRepos": "Depolar güncellenemedi",
         "loadBranches": "Dallar yüklenemedi",
         "createBranch": "Dal oluşturulamadı",
-        "openPr": "Pull request açılamadı",
         "merge": "Birleştirilemedi"
       }
     },
@@ -4306,13 +4314,19 @@
     "connect": {
       "title": "Kaynak bağla",
       "sourceFallback": "Kaynak",
-      "intro": "Gereksinimleri, RFC'leri ve PRD'leri içe aktarmak için {source} bağla, ardından pano yapısı oluştur veya bunları agent bağlamı olarak görevlere ekle.",
+      "intro": "{source} bağlantısını kur ve sayfalarını, tasarımlarını bu panoya getir: içe aktar, pano yapısına dönüştür veya bir göreve ajan bağlamı olarak ekle.",
       "disconnect": "Bağlantıyı kes",
       "connect": "Bağla",
       "update": "Bağlantıyı güncelle",
       "connected": "{source} bağlandı",
       "disconnected": "{source} bağlantısı kesildi",
-      "connectFailed": "Bağlanamadı"
+      "connectFailed": "Bağlanamadı",
+      "oauth": {
+        "action": "{source} ile bağlan",
+        "scopes": "Şu izinler istenecek: {scopes}",
+        "fallback": "Belirteç mi tercih edersin? Aşağıdaki alanları kullan.",
+        "failed": "{source} oturumu başlatılamadı"
+      }
     },
     "spawn": {
       "title": "Yapıyı önizle",
@@ -4327,7 +4341,15 @@
       "summary": "{frames} · {modules} · {tasks}",
       "frameCount": "{count} çerçeve | {count} çerçeve",
       "moduleCount": "{count} modül | {count} modül",
-      "taskCount": "{count} görev | {count} görev"
+      "taskCount": "{count} görev | {count} görev",
+      "reusedCount": "{count} modül yeniden kullanıldı | {count} modül yeniden kullanıldı",
+      "intoService": "seçilen servisin içinde",
+      "target": {
+        "label": "Servise ekle",
+        "help": "Bir tasarım mimariyi değil ekranları anlatır; bu yüzden plan, hâlihazırda var olan bir servisin içindeki işi önerir.",
+        "placeholder": "Bir servis seç",
+        "required": "Bu tasarımın ait olduğu servisi seç."
+      }
     },
     "taskDocs": {
       "heading": "Bağlam belgeleri",
@@ -4360,6 +4382,20 @@
       "remove": "Kaldır",
       "linkFailed": "Belge bağlantısı güncellenemedi",
       "loadFailed": "Belge şablonları yüklenemedi"
+    },
+    "startFromDesign": {
+      "title": "Tasarımdan başla",
+      "intro": "Bir çerçevenin ya da dosyanın bağlantısını yapıştır. Yeni göreve eklenir ve ajan düzenini, metinlerini, bileşenlerini ve token’larını okur.",
+      "noSource": "Henüz bağlı bir tasarım kaynağı yok. Bir yönetici Entegrasyonlar’dan Figma veya Zeplin bağlayabilir.",
+      "linkLabel": "Tasarım bağlantısı",
+      "linkPlaceholder": "https://www.figma.com/design/…?node-id=1-2",
+      "checking": "Bağlantı denetleniyor…",
+      "trimmed": "Bu bağlantının desteklenen biçimine kısaltıldı.",
+      "widened": "{scope} çerçevesi okunamadı, bu yüzden dosyanın tamamı eklendi.",
+      "unchecked": "Bağlantı şu anda denetlenemedi. Görev oluşturulurken indirilecek.",
+      "uncheckedAmbiguous": "Bağlantı denetlenemedi ve birden fazla tasarım kaynağı bağlı; hangisine ait olduğu bilinmiyor. Yeniden dene.",
+      "rejected": "Bağlı hiçbir tasarım kaynağı bu bağlantıyı tanımıyor.",
+      "continue": "Devam"
     }
   },
   "tasks": {
@@ -4832,7 +4868,7 @@
       "suffixFixing": "· düzeltici yorumları ele alıyor…",
       "suffixFailing": "· ele alınacak inceleme yorumları",
       "suffixAwaiting": "· inceleme bekleniyor",
-      "reviewPr": "Çekme isteğini GitHub'da incele",
+      "reviewPr": "Pull request’i incele",
       "requestFixHeading": "Bir düzeltme iste",
       "requestFixDescription": "Düzelticinin PR dalında şimdi yapması için bir değişiklik tanımlayın (otomatik olarak ele aldığı inceleme yorumlarına ek olarak).",
       "requestFixPlaceholder": "örn. yardımcıyı yeniden adlandır ve boş girdi durumu için bir birim testi ekle",
@@ -4846,12 +4882,12 @@
     },
     "conflicts": {
       "mergeability": "Birleştirilebilirlik",
-      "viewPr": "Çekme isteğini GitHub'da görüntüle"
+      "viewPr": "Pull request’i görüntüle"
     },
     "docQuality": {
       "findings": "Belge sorunları",
       "findingsFallback": "Belge yapısal denetimleri geçti.",
-      "viewPr": "Çekme isteğini GitHub'da görüntüle"
+      "viewPr": "Pull request’i görüntüle"
     },
     "attemptsHeading": "{helper} denemeleri",
     "attempt": "Deneme {number}",
@@ -6861,7 +6897,33 @@
       },
       "toast": {
         "disconnected": "{provider} bağlantısı kesildi"
-      }
+      },
+      "pulls": {
+        "github": {
+          "tab": "Pull request’ler",
+          "open": "PR aç",
+          "openSubmit": "Pull request aç",
+          "merge": "Bu pull request’i birleştir",
+          "none": "Eşitlenmiş pull request yok.",
+          "opened": "Pull request açıldı",
+          "mergedToast": "PR #{number} birleştirildi",
+          "openFailed": "Pull request açılamadı"
+        },
+        "gitlab": {
+          "tab": "Merge request’ler",
+          "open": "MR aç",
+          "openSubmit": "Merge request aç",
+          "merge": "Bu merge request’i birleştir",
+          "none": "Eşitlenmiş merge request yok.",
+          "opened": "Merge request açıldı",
+          "mergedToast": "MR !{number} birleştirildi",
+          "openFailed": "Merge request açılamadı"
+        }
+      },
+      "manageHintApp": "Bu panonun izleyeceği depoları seçin. App kurulumu hesap genelinde paylaşılır ve her pano kendi depolarını bağlar.",
+      "manageHintToken": "Bu panonun izleyeceği depoları seçin. Liste, bağlı belirtecin erişebildiklerini gösterir ve her pano kendi depolarını bağlar.",
+      "noAvailableReposApp": "App kurulumu henüz hiçbir depoya erişemiyor.",
+      "noAvailableReposToken": "Bağlı belirteç henüz hiçbir depoya ulaşamıyor. Kapsamını ve bunlara erişiminizi kontrol edin."
     },
     "connect": {
       "or": "veya",
@@ -6969,7 +7031,8 @@
       "library": "Bu kurulumda etkinleştirilmiş bağlam parçaları kütüphanesi",
       "failedRun": "Başarısız olmuş bir çalıştırma",
       "infrastructure": "Bu çalışma alanına bağlı bir yürütme arka ucu",
-      "advancedTier": "Gelişmiş arayüz modu"
+      "advancedTier": "Gelişmiş arayüz modu",
+      "designSource": "Bağlı bir tasarım kaynağı"
     },
     "overlay": {
       "next": "İleri",
@@ -7347,6 +7410,36 @@
           "finish": {
             "title": "Tasarım adımları bunu okur",
             "body": "Bunlardan hangilerini kullandığını bildiren bir tasarım, sonraki adımda onların tam sözleşmelerini alır. Hiçbir şey bildirmeyen hiçbir şey almaz: bunu güncel tutmak, işin işlemesinin koşuludur."
+          }
+        }
+      },
+      "startFromDesign": {
+        "title": "Tasarımdan başla",
+        "description": "Bir tasarım çerçevesini ajanın yapabileceği bir göreve dönüştür.",
+        "steps": {
+          "intro": {
+            "title": "Tasarımdan çalışmak",
+            "body": "İş bir tasarım aracında başlıyorsa brief çerçevenin kendisidir. Bu tur, bir çerçeveyi yeni bir göreve ekler."
+          },
+          "open": {
+            "title": "Tasarımdan başla",
+            "body": "Bir tasarım kaynağı bağlandığı anda her servis çerçevesinde bu düğme belirir."
+          },
+          "paste": {
+            "title": "Bağlantıyı yapıştır",
+            "body": "Tasarım aracında bir çerçevenin veya dosyanın bağlantısını kopyala ve buraya yapıştır."
+          },
+          "resolved": {
+            "title": "Neyin eklendiğini denetle",
+            "body": "Bağlantı desteklenen biçimine kısaltılır. Çerçevenin kendisi okunamadıysa dosyanın tamamı eklenir ve burada bu yazar."
+          },
+          "continue": {
+            "title": "Göreve geç",
+            "body": "Tasarım yeni görevde hazır. İstediğin sonucu anlat ve görevi oluştur."
+          },
+          "finish": {
+            "title": "Çalıştırmaya hazır",
+            "body": "Ajan tasarımın düzenini, metinlerini, bileşenlerini ve token’larını okur; her çalıştırma bunu kaynağa karşı yeniden denetler."
           }
         }
       }

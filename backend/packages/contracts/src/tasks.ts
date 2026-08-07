@@ -95,6 +95,18 @@ export const taskSourceWebhookSchema = v.object({
    * and the wrong one for a public repo.
    */
   replyAllow: v.string(),
+  /**
+   * Whether the connection's sealed credential bag could be OPENED to answer this.
+   *
+   * `false` ⇒ `configured` and `replyAllow` are UNKNOWN rather than empty, and are reported at
+   * their safe defaults. The distinction has to be on the wire because the two states demand
+   * opposite actions from an operator: an unconfigured connection wants a secret minted, while an
+   * unreadable one wants the deployment's reach to its key service fixed (or the source
+   * re-connected) — and minting against the second silently discards whatever the bag still holds.
+   * A read-only panel is also the wrong place to fail: this endpoint is where someone lands to
+   * find out what is wrong, so it states the gap instead of 503ing about it.
+   */
+  credentialsReadable: v.boolean(),
 })
 export type TaskSourceWebhook = v.InferOutput<typeof taskSourceWebhookSchema>
 

@@ -20,7 +20,8 @@ surfaces and the RBAC gates, plus the committed slices that close the gaps.
 
 ### 1. The designer persona cannot use the feature at all
 
-**The authorization half is closed** (Track A slice 1); the discoverability half below is not.
+**Closed by Track A.** The survey finding is kept below because the entry points and the copy are
+only legible against the four-surface detour they replaced.
 
 Every document-source route rode one admin gate: `documentSourceController` mounted
 `requireWorkspacePermission('integrations.manage')` on `*`, and `integrations.manage` is held by
@@ -105,11 +106,11 @@ high-confidence; zero frontend unit or e2e coverage of any document surface.
 
 ## Tracks and checklists
 
-Tracks A, B and C are independent and each is worth landing alone. D's later slices build on its
-first; E consumes D's artifact bridge. F is optional scope, committed only through its first
-(registration) slice. Ordering inside a track is the intended slice order.
+Tracks A, B and C are DONE. D's later slices build on its first; E consumes D's artifact bridge. F
+is optional scope, committed only through its first (registration) slice. Ordering inside a track
+is the intended slice order.
 
-### Track A: designer access and the start-from-design flow
+### Track A: designer access and the start-from-design flow (DONE)
 
 The RBAC split follows the existing controller convention (ADR 0025), and the first slice settled
 which shape it takes: the admin permission is mounted on the controller's own PATH PATTERNS and the
@@ -127,25 +128,53 @@ not integration management, so it sits at the `member` tier; managing credential
       template tag decides what every doc run in the board writes from, which is the
       fragment-library blast radius that keeps such config admin-tier, and no designer flow needs
       it. `defineWorkspaceRbacSuite` asserts both halves plus the viewer floor.
-- [ ] **Figma OAuth connect.** Add `authorization_code` connect for the Figma document source
-      beside the PAT field (the descriptor grows an optional OAuth half; PAT remains for
-      deployments that prefer it). This is what makes "connect Figma" a designer-doable step.
-      Model: the MCP OAuth grant flow that landed in mcp-maturation slice 7.
-- [ ] **Start-from-design entry on the board.** A frame-header affordance (basic tier) that takes
-      a pasted Figma/design URL and does import + link + open-task in one step, and an Add-task
-      description paste that offers the same when a connected provider claims the URL with a
-      host-PINNED `parseRef` (Figma, Zeplin; never the host-blind prose parsers). The existing
-      info-log drop stays for unclaimed or unconnected URLs.
-- [ ] **Design-aware, target-aware plan.** A second plan prompt for design-origin documents:
-      given an existing frontend service frame, propose tasks (one per frame/flow) rather than a
-      whole architecture, unblocking the documented `frameId` spawn limitation for the design
-      case (`document-sources.md`, "The SPA never sends frameId"). The SPA spawn preview gains
-      the target-frame variant for design documents only.
-- [ ] **Designer-framed surface copy + tour.** Connect/import/picker copy that names design
-      sources and the designer's job to be done (today everything says requirements/RFC/PRD), a
-      `start-from-design` tutorial tour, and locale parity for every new key.
+- [x] **Figma OAuth connect.** `authorization_code` connect beside the PAT field, offered when the
+      SOURCE declares an `oauth` half AND the deployment has registered an app (`figmaOAuth`, beside
+      the Slack and Linear clients). Four things this had to get right. The provider DECLARES four
+      constants and nothing else, so the second OAuth-capable source adds a declaration rather than
+      a second copy of the flow; the credential bag is PLATFORM-owned, so a provider's whole share
+      of the lifecycle is noticing a token in the bag it was handed (and preferring it over a PAT an
+      earlier connect left behind, which would otherwise outlive the rotation it was replaced by).
+      Declaring is not offering, so the source listing answers "what this SOURCE supports" and "what
+      this DEPLOYMENT can run" as two fields: folded together, a board with no registered app renders
+      a button that can only 503. And ONE public callback serves every source, because a deployment
+      registers one redirect URL per vendor app, so the source rides the signed `state` and a state
+      minted by any other flow under the same secret (which mints no `source`) is REFUSED there.
+      Renewal sits on the one seam every read resolves a credential through
+      (`resolveConnection`/`resolveConnections`) and answers null rather than throwing, so a grant
+      that cannot be renewed costs the reader a source call it reports as an outage, never the read;
+      it is unguarded against a lost race, which is only safe while the supported endpoints leave the
+      refresh token unrotated.
+- [x] **Start-from-design entry on the board.** A frame-header affordance (basic tier, shown once a
+      design source is connected) that resolves a pasted design URL and hands it to the add-task
+      form as staged context, plus an Add-task description paste that offers the same. Both ask only
+      HOST-PINNED sources: a host-blind prose parser claims a SHAPE, so asking Notion about a Figma
+      link whose file key carries a UUID-shaped run gets a confident yes and stages the design into
+      Notion's key space. The paste is resolved BEFORE anything is created and a WIDENED reference
+      is stated separately from a trimmed one, because for a designer the widening from one frame to
+      the whole file IS the defect. Nothing is imported here: the form's own pre-create resolve does
+      the fetch, so an unreachable page stays a correction the author can still make. An UNCHECKED
+      paste (the pre-flight itself failed) stays stageable only where ONE design source is connected,
+      which is the only case with nothing to guess. The existing info-log drop stays for unclaimed or
+      unconnected URLs.
+- [x] **Design-aware, target-aware plan.** `plan(record, target?)` asks two different questions with
+      two different ANSWER SHAPES, rather than one prompt with a hint. A targeted response proposing
+      `frames` is REFUSED rather than re-read as modules: a model proposing services where one
+      already exists has made a mistake, and re-reading it would launder that onto the board. The
+      fallback matches the shape of the request (a targeted plan degrades to the targeted heading
+      parser, never to a board-wide plan nobody asked for), and under a target the outline shifts up
+      a level, h1 being consumed by the frame it names. The plan carries `targetFrameId`, which is
+      what makes the preview honest and the `frameId` spawn safe to send: flattening a board-wide
+      plan into a frame discarded the titles and types the preview rendered, while a plan authored
+      FOR the target has nothing to discard. Design documents REQUIRE a target in the SPA, because a
+      design describes screens and the architecture question produces a service per Figma page.
+- [x] **Designer-framed surface copy + tour.** Connect copy that names designs rather than only
+      requirements/RFCs/PRDs, the `start-from-design` tour (in the LAUNCH arc rather than the
+      catalogue-only half, gated on a design source being CONNECTED rather than on permission to
+      connect one, which is the admin's job and not the designer's), and locale parity across all
+      ten catalogs.
 
-### Track B: context fidelity
+### Track B: context fidelity (DONE)
 
 All rendering changes land in the source-neutral `DesignContext` model (new optional block
 sections and token fields), never as Figma-only renderer branches; Zeplin maps what it has,
@@ -204,7 +233,7 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
       corpus never resolves at all, since that rejection is already the wave's own failure and
       answering it twice would surface a run refusal as a fragment error naming the wrong thing.
 
-### Track C: freshness
+### Track C: freshness (DONE)
 
 - [x] **Dispatch-time refresh.** ([#1754](https://github.com/kibertoad/cat-factory/pull/1754))
       `LinkedDocumentRefreshService` behind the kernel `LinkedDocumentRefresher` port, on the
@@ -389,10 +418,10 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
       form still open rather than a toast over a task that already exists without its context.
       Model: [`document-sources.md`](../../backend/docs/document-sources.md).
 - [ ] **Coverage for the designer path.** An e2e spec for attach-document-to-task and one for the
-      start-from-design flow once Track A lands (live-push assertions per the e2e rules). The
-      `stores/documents.ts` half started with Track C slice 2, which added the store's first
-      specs (the refresh reconcile, the verdict map, the in-flight flag); the connect / import /
-      link actions are still unspecced.
+      start-from-design flow (live-push assertions per the e2e rules). The `stores/documents.ts`
+      half started with Track C slice 2, which added the store's first specs (the refresh
+      reconcile, the verdict map, the in-flight flag); Track A added the OAuth-availability and
+      design-source projections. The connect / import / link actions are still unspecced.
 
 ## Gotchas the survey surfaced (read before building)
 

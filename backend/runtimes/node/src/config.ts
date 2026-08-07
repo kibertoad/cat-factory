@@ -86,16 +86,19 @@ function loadPrivilegedApp(env: NodeJS.ProcessEnv): PrivilegedAppConfig | undefi
 }
 
 /**
- * Opt-in GitLab VCS provider config (single-token model, mirroring local-mode's PAT).
- * Enabled as soon as a `GITLAB_TOKEN` is present; the token is read from env at wiring time,
- * so this carries only the non-secret address + the webhook secret. Mirrors the Worker's
- * `loadGitLabConfig` (per "keep the runtimes symmetric").
+ * GitLab VCS provider config (single-token model, mirroring local-mode's PAT). Mirrors the
+ * Worker's `loadGitLabConfig` (per "keep the runtimes symmetric").
+ *
+ * Always returns a config, because `apiBase` is the address of the instance this deployment
+ * talks to and that is true of a deployment reaching GitLab any other way: the local facade
+ * builds on this loader and connects with a `GITLAB_PAT`, never a `GITLAB_TOKEN`. `enabled`
+ * carries the opt-in for the single-token engine connection alone; the token itself is read
+ * from env at wiring time, so this holds only the non-secret address + the webhook secret.
  */
-function loadGitLabConfig(env: NodeJS.ProcessEnv): GitLabConfig | undefined {
+function loadGitLabConfig(env: NodeJS.ProcessEnv): GitLabConfig {
   const token = env.GITLAB_TOKEN?.trim()
-  if (!token) return undefined
   return {
-    enabled: true,
+    enabled: !!token,
     apiBase: env.GITLAB_API_BASE?.trim() || GITLAB_PUBLIC_API_BASE,
     connectionId: env.GITLAB_CONNECTION_ID?.trim() || 'gitlab',
     webhookSecret: env.GITLAB_WEBHOOK_SECRET ?? '',

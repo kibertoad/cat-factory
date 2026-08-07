@@ -80,6 +80,9 @@ function makeService(
     identityResolver: resolver,
     cipher,
     clock,
+    // The deployment's resolved host for this provider; the connection carries it so the SPA
+    // links a project to the instance the token actually authenticates against.
+    webUrls: { github: 'https://github.com', gitlab: 'https://gitlab.acme.dev' },
   })
   return { service, installations }
 }
@@ -98,6 +101,9 @@ describe('VcsPatConnectionService', () => {
     expect(connection.method).toBe('pat')
     expect(connection.accountLogin).toBe('octocat')
     expect(connection.connectedAt).toBe(1000)
+    // The instance the workspace is bound to, not the provider's public one: a self-managed
+    // GitLab's projects do not live at gitlab.com/<namespace>, they live here.
+    expect(connection.webUrl).toBe('https://gitlab.acme.dev')
 
     const row = installations.rows.get(expectedId)!
     expect(row.provider).toBe('gitlab')

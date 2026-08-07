@@ -320,6 +320,26 @@ export const credentialFieldSchema = v.object({
 export type CredentialField = v.InferOutput<typeof credentialFieldSchema>
 
 /**
+ * A source's OAuth (`authorization_code`) connect half, when it declares one.
+ *
+ * Presence here says the SOURCE can be connected this way, never that this DEPLOYMENT can run the
+ * flow: that needs a registered OAuth client, which is deployment configuration and is reported
+ * separately (`oauthSources` on the source listing). The two are deliberately different facts,
+ * because they need different fixes: a source with no OAuth half will never gain a button, while
+ * one whose deployment has registered no client gains it the moment an admin does.
+ */
+export const documentSourceOAuthDescriptorSchema = v.object({
+  /**
+   * What the vendor's consent screen will ask for, so the operator reads it BEFORE being sent
+   * there rather than on a page they cannot come back from without deciding.
+   */
+  scopes: v.array(v.string()),
+})
+export type DocumentSourceOAuthDescriptor = v.InferOutput<
+  typeof documentSourceOAuthDescriptorSchema
+>
+
+/**
  * Everything the frontend needs to render a source's connect form and import
  * box without hard-coding any provider specifics.
  */
@@ -341,6 +361,12 @@ export const documentSourceDescriptorSchema = v.object({
    * backward-compatibility; absent is treated as `false`.
    */
   searchable: v.optional(v.boolean()),
+  /**
+   * The source's OAuth connect half, when it has one. Absent means the credential fields above
+   * are the ONLY way in; present means a deployment MAY additionally offer "Connect with <source>"
+   * (see {@link documentSourceOAuthDescriptorSchema} for why presence is not availability).
+   */
+  oauth: v.optional(documentSourceOAuthDescriptorSchema),
 })
 export type DocumentSourceDescriptor = v.InferOutput<typeof documentSourceDescriptorSchema>
 
@@ -440,6 +466,21 @@ export const documentBoardPlanSchema = v.object({
   source: documentOriginSchema,
   externalId: v.string(),
   planner: v.picklist(['llm', 'headings']),
+  /**
+   * The existing service frame this plan was authored FOR, or null when it proposes a whole
+   * architecture at the board root.
+   *
+   * The preview reads completely differently under the two: a board-scoped plan's `frames` are
+   * services about to be created, while a targeted plan carries exactly ONE frame standing for the
+   * target, whose modules and tasks are what will be added inside it. Without this the SPA would
+   * announce three new services over a spawn that creates three modules in one.
+   *
+   * It is also what makes the `frameId` spawn honest. Flattening a board-scoped plan into a frame
+   * discards the frame titles, types and descriptions the preview rendered, which is why the SPA
+   * never sent one; a plan authored for the target discards nothing, because the single frame IS
+   * the target.
+   */
+  targetFrameId: v.nullable(v.string()),
   frames: v.array(planFrameSchema),
 })
 export type DocumentBoardPlan = v.InferOutput<typeof documentBoardPlanSchema>
@@ -563,9 +604,16 @@ export const searchDocumentsSchema = v.object({
 })
 export type SearchDocumentsInput = v.InferOutput<typeof searchDocumentsSchema>
 
-/** Preview the board structure a page would expand into (no writes). */
+/**
+ * Preview the board structure a page would expand into (no writes).
+ *
+ * `frameId` makes the plan TARGET-AWARE: the planner is told which service it is proposing work
+ * inside, and answers with that frame's modules and tasks rather than an architecture. It is the
+ * same frame the following spawn is given, so the preview and the write agree about the target.
+ */
 export const planDocumentSchema = v.object({
   externalId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  frameId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
 })
 export type PlanDocumentInput = v.InferOutput<typeof planDocumentSchema>
 

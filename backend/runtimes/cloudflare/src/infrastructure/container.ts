@@ -221,7 +221,7 @@ function selectEngineVcsClient(
       apiBase: config.github.apiBase,
     })
   }
-  if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
+  if (config.gitlab.enabled && env.GITLAB_TOKEN) {
     return buildGitLabEngineClient({
       token: env.GITLAB_TOKEN,
       apiBase: config.gitlab.apiBase,
@@ -853,7 +853,7 @@ export function buildWorkerVcsIdentityRegistry(config: AppConfig): VcsIdentityRe
   const registry: VcsIdentityRegistry = {
     github: { resolver: new GitHubIdentityResolver({ apiBase: config.github.apiBase, logger }) },
   }
-  if (config.gitlab?.enabled) {
+  if (config.gitlab.enabled) {
     registry.gitlab = {
       resolver: new GitLabIdentityResolver({ apiBase: config.gitlab.apiBase, logger }),
     }
@@ -957,7 +957,7 @@ export function buildContainer(
   // the app-owned `vcsRegistry` above so the neutral webhook route + any VcsConnectionRef holder
   // resolves it. A no-op unless GITLAB_TOKEN is set; symmetric with the Node facade (local
   // inherits it) per "keep the runtimes symmetric".
-  if (config.gitlab?.enabled && env.GITLAB_TOKEN) {
+  if (config.gitlab.enabled && env.GITLAB_TOKEN) {
     registerGitLab(vcsRegistry, {
       tokenSource: new StaticGitLabTokenSource(env.GITLAB_TOKEN, config.gitlab.apiBase),
       clock,

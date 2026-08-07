@@ -461,6 +461,9 @@ export {
   githubConnectionRef,
   githubInstallationId,
 } from './domain/vcs-types.js'
+// The browser-facing host each provider's API base addresses, so the SPA can render a repo /
+// pull request / issue as a link instead of hand-building `github.com` URLs.
+export { type VcsWebUrls, vcsWebBaseUrl } from './domain/vcs-web-urls.js'
 export {
   type VcsProviderBundle,
   VcsProviderRegistry,

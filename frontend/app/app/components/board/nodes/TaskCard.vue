@@ -459,7 +459,7 @@ function selectTask() {
           variant="soft"
           size="xs"
           icon="i-lucide-git-pull-request"
-          :title="t('board.task.openPrOnGithub', { pr: prLabel })"
+          :title="t('board.task.openPrLink', { pr: prLabel })"
           @click.stop
         >
           {{ prLabel }}

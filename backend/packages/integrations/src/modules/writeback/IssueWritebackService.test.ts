@@ -7,8 +7,11 @@ import type {
   ReviewQuestionPostKey,
   ReviewQuestionPostRecord,
   ReviewQuestionPostRepository,
-  TaskConnectionRepository,
+  TaskConnectionStore,
+  SealedConnectionOpenResult,
+  TaskConnectionRecord,
   TaskRecord,
+  TaskSourceKind,
   TrackerSettings,
   TrackerSettingsRepository,
   TaskRepository,
@@ -62,16 +65,40 @@ function fakeTasks(issues: TaskRecord[]): TaskRepository {
  * the question comment may tell a reporter to type one.
  */
 function fakeConnections(
-  options: { webhookSecret?: string; throws?: boolean } = {},
-): TaskConnectionRepository {
+  options: {
+    webhookSecret?: string
+    /** The stored-row READ itself fails, before any source is opened. */
+    throws?: boolean
+    /** Sources whose sealed bag will not open, the rest of the batch answering normally. */
+    unreadable?: readonly TaskSourceKind[]
+  } = {},
+): TaskConnectionStore {
+  const unreadable = new Set(options.unreadable ?? [])
   return {
-    getByWorkspace: async () => {
+    getByWorkspace: async () => null,
+    listBySources: async (_ws, sources) => {
       if (options.throws) throw new Error('cipher unavailable')
-      return {
-        credentials: options.webhookSecret ? { webhookSecret: options.webhookSecret } : {},
-      } as never
+      return sources.map(
+        (source): SealedConnectionOpenResult<TaskSourceKind, TaskConnectionRecord> =>
+          unreadable.has(source)
+            ? { source, status: 'unreadable' as const, cause: new Error('corrupt envelope') }
+            : {
+                source,
+                status: 'opened' as const,
+                connection: {
+                  workspaceId: 'ws',
+                  source,
+                  credentials: options.webhookSecret
+                    ? { webhookSecret: options.webhookSecret }
+                    : {},
+                  label: source,
+                  createdAt: 0,
+                  deletedAt: null,
+                },
+              },
+      )
     },
-    listByWorkspace: async () => [],
+    listSummaries: async () => [],
     upsert: async () => {},
     softDelete: async () => {},
   }
@@ -611,7 +638,7 @@ describe('IssueWritebackService.postReviewQuestions', () => {
       trackerSettingsRepository: fakeTrackerSettings(settings()),
       taskRepository: fakeTasks([githubIssue('acme/web#3')]),
       reviewQuestionPostRepository: fakeMarkers(),
-      taskConnectionRepository: fakeConnections({ webhookSecret: 'whsec' }),
+      taskConnectionStore: fakeConnections({ webhookSecret: 'whsec' }),
       commentOnGitHubIssue: async (_ws, _id, body) => void comments.push(body),
     })
     const outcome = await svc.postReviewQuestions(
@@ -822,7 +849,7 @@ describe('IssueWritebackService.postReviewQuestions', () => {
 describe('IssueWritebackService.postReviewQuestions — answer channels', () => {
   /** Post one question comment and hand back what landed on the issue. */
   async function postWith(
-    connections: TaskConnectionRepository | undefined,
+    connections: TaskConnectionStore | undefined,
     issues = [githubIssue('acme/web#3')],
   ): Promise<string> {
     const comments: string[] = []
@@ -830,7 +857,7 @@ describe('IssueWritebackService.postReviewQuestions — answer channels', () => 
       trackerSettingsRepository: fakeTrackerSettings(settings({ writebackQuestionsOnPark: true })),
       taskRepository: fakeTasks(issues),
       reviewQuestionPostRepository: fakeMarkers(),
-      ...(connections ? { taskConnectionRepository: connections } : {}),
+      ...(connections ? { taskConnectionStore: connections } : {}),
       commentOnGitHubIssue: async (_ws, _id, body) => void comments.push(body),
     })
     expect(await svc.postReviewQuestions('ws', block(), questionPost())).toEqual({
@@ -867,15 +894,36 @@ describe('IssueWritebackService.postReviewQuestions — answer channels', () => 
     expect(await postWith(fakeConnections({ throws: true }))).not.toContain('@cat-factory')
   })
 
-  it('reads the connection ONCE per distinct source, not once per linked issue', async () => {
+  it('keeps a HEALTHY source wired when a different one is unreadable', async () => {
+    // The other half of the rule above, and the one a batch-wide catch got wrong: unreadable is a
+    // fact about the source that was unreadable. A corrupt Linear envelope is no evidence about
+    // the workspace's GitHub connection, so folding them together silently took a working reply
+    // channel away from a healthy ticket.
+    const body = await postWith(fakeConnections({ webhookSecret: 'whsec', unreadable: ['linear'] }))
+    expect(body).toContain('@cat-factory answer <id>')
+  })
+
+  it('reads the connections ONCE for the whole block, not once per linked issue', async () => {
     // A block can carry several issues on one tracker; the reply channel is a property of the
-    // `(workspace, source)` connection, and each read decrypts a credential bag.
+    // `(workspace, source)` connection, and each read opens a credential bag — which on a
+    // mothership-mode node is a round trip.
     let reads = 0
-    const counting: TaskConnectionRepository = {
+    const counting: TaskConnectionStore = {
       ...fakeConnections({ webhookSecret: 'whsec' }),
-      getByWorkspace: async () => {
+      listBySources: async (_ws, sources) => {
         reads += 1
-        return { credentials: { webhookSecret: 'whsec' } } as never
+        return sources.map((source) => ({
+          source,
+          status: 'opened' as const,
+          connection: {
+            workspaceId: 'ws',
+            source,
+            credentials: { webhookSecret: 'whsec' },
+            label: source,
+            createdAt: 0,
+            deletedAt: null,
+          },
+        }))
       },
     }
     const comments: string[] = []
@@ -887,7 +935,7 @@ describe('IssueWritebackService.postReviewQuestions — answer channels', () => 
         githubIssue('acme/web#5'),
       ]),
       reviewQuestionPostRepository: fakeMarkers(),
-      taskConnectionRepository: counting,
+      taskConnectionStore: counting,
       commentOnGitHubIssue: async (_ws, _id, body) => void comments.push(body),
     })
     expect(await svc.postReviewQuestions('ws', block(), questionPost())).toEqual({
