@@ -41,6 +41,44 @@ export interface DocumentContent {
 }
 
 /**
+ * One rendered image of a design block (a Figma frame, a Zeplin screen), downloaded server-side.
+ *
+ * The BYTES rather than the URL, deliberately. A design source hands out a short-lived signed URL
+ * that nothing downstream can use: a headless container cannot fetch it, the visual-confirmation
+ * gate compares stored artifacts, and the link is expired by the time anyone opens the document a
+ * second time. Retaining the bytes is what turns "the design has a picture somewhere" into an
+ * artifact the platform owns.
+ */
+export interface DesignRender {
+  /**
+   * The block's own name (a frame/screen title), which is also the pairing key a captured
+   * screenshot is matched to. Never an id: a `view` is what a human and a UI tester both call the
+   * screen, and an id pairs with nothing.
+   */
+  view: string
+  /** MIME type of {@link bytes}, e.g. `image/png`. */
+  contentType: string
+  bytes: Uint8Array
+}
+
+/**
+ * What one attempt to render a document's blocks produced.
+ *
+ * Retrieved and NOT-retrieved are counted separately rather than reduced to a list plus a boolean,
+ * because "this design has no images" and "six of its eight frames would not render" are different
+ * facts that a bare list renders identically. `causes` carries the distinct reasons (an HTTP
+ * status, a blocked host) so a caller can state the one that asks for a fix.
+ */
+export interface DocumentRenderResult {
+  /** The images retrieved, in the order the source presents its blocks. Possibly empty. */
+  readonly renders: readonly DesignRender[]
+  /** How many the source named but could not be retrieved. */
+  readonly failed: number
+  /** Distinct short causes for the failures above (empty when `failed` is 0). */
+  readonly causes: readonly string[]
+}
+
+/**
  * The keys an OAuth-granted document-source credential bag carries.
  *
  * PLATFORM-owned, not provider-owned, and that is what keeps the flow source-agnostic: one
@@ -193,6 +231,27 @@ export interface DocumentSourceProvider {
     externalId: string,
     workspaceId: string | null,
   ): Promise<DocumentContent>
+  /**
+   * Download rendered images of the document's blocks, bounded by the provider's own caps.
+   *
+   * OPTIONAL, and its absence is a real answer: a prose source has nothing to render, so the caller
+   * records "not applicable" rather than "none were retained". Kept OFF {@link fetchDocument} on
+   * purpose. The two are wanted at different moments and cost different things: the text is
+   * re-fetched on every dispatch whose freshness probe finds a moved version (a design file's
+   * version moves on any edit anywhere in it), while the images are only worth re-downloading when
+   * the body a reader sees has actually changed. Folded into one call, every unrelated edit in the
+   * file would pull megabytes of PNGs onto the critical path of a step dispatch.
+   *
+   * BEST-EFFORT by contract: a provider reports what it could not retrieve through
+   * {@link DocumentRenderResult.failed} instead of throwing, because an image is an enrichment and
+   * an import must never fail for the lack of one. Scoped to `workspaceId` for the same
+   * tenant-isolation reason as {@link fetchDocument}, `null` included.
+   */
+  fetchRenders?(
+    credentials: DocumentCredentials,
+    externalId: string,
+    workspaceId: string | null,
+  ): Promise<DocumentRenderResult>
   /**
    * Cheaply read the page's current version token — the {@link DocumentContent.version}
    * value {@link fetchDocument} would return, fetched with metadata only (no body

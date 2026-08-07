@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { renderDesignContext } from './design.logic.js'
 import {
   MAX_FILE_FRAMES,
+  MAX_RENDERS,
   assertSafeFigmaUrl,
   buildFigmaDesignContext,
   figmaBlocks,
@@ -12,6 +13,7 @@ import {
   figmaStylingFacts,
   figmaTokenOrigin,
   figmaTokens,
+  figmaRenderTargets,
   figmaTopLevelFrames,
   figmaUrlFor,
   normalizeFigmaNodeId,
@@ -452,6 +454,28 @@ describe('figmaTopLevelFrames', () => {
   it('returns nothing for an empty document', () => {
     expect(figmaTopLevelFrames(undefined)).toEqual([])
     expect(figmaTopLevelFrames({ name: 'Document' })).toEqual([])
+  })
+})
+
+describe('figmaRenderTargets', () => {
+  it('caps at MAX_RENDERS in document order and skips a frame with no id', () => {
+    const targets = figmaRenderTargets([
+      ...Array.from({ length: MAX_RENDERS + 3 }, (_, i) => ({ id: `1:${i}`, name: `Frame ${i}` })),
+      { name: 'no id' },
+    ])
+    expect(targets).toHaveLength(MAX_RENDERS)
+    expect(targets[0]).toEqual({ id: '1:0', name: 'Frame 0' })
+    // Rasterising is bounded well below the frames the TEXT import covers, because the two spend
+    // different budgets: a frame's prose costs the context corpus a few KB, its PNG costs the
+    // account's blob storage a megabyte.
+    expect(MAX_RENDERS).toBeLessThan(MAX_FILE_FRAMES)
+  })
+
+  it('falls back to the id for an unnamed frame rather than collapsing them onto one view', () => {
+    // `view` is the pairing key a captured screenshot is matched against, so two unnamed frames
+    // sharing a placeholder would read as two captures of one screen.
+    const targets = figmaRenderTargets([{ id: '1:1', name: '   ' }, { id: '1:2' }])
+    expect(targets.map((t) => t.name)).toEqual(['1:1', '1:2'])
   })
 })
 

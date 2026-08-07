@@ -149,6 +149,61 @@ export function defineBinaryArtifactsSuite(
       expect(byBlock.map((r) => r.id)).toEqual([rec.id])
     })
 
+    it('keys a render to its DOCUMENT and reclaims the whole set on re-import', async () => {
+      // The design-render path: an import retains a source's frames keyed to the document itself
+      // (no run, no block — neither exists yet), and the next import that changes the body replaces
+      // them wholesale. Both halves have to agree across runtimes or a local import silently keeps
+      // last month's frames beside this month's.
+      const store = makeStore()
+      const { ws, blk } = ids()
+      const design = { source: 'figma' as const, externalId: 'file1:1-2' }
+      const other = { source: 'figma' as const, externalId: 'file1:9-9' }
+      const mk = (document: typeof design | null, view: string, n: number) =>
+        store.store({
+          meta: {
+            workspaceId: ws,
+            executionId: null,
+            blockId: null,
+            kind: 'reference',
+            view,
+            contentType: 'image/png',
+            ...(document ? { document } : {}),
+          },
+          blob: png(n),
+        })
+      const first = await mk(design, 'Checkout', 1)
+      const second = await mk(design, 'Confirm', 2)
+      const sibling = await mk(other, 'Settings', 3)
+      // A hand-uploaded reference against a block: same `kind`, no document, so the reclaim below
+      // must leave it alone.
+      const uploaded = await store.store({
+        meta: {
+          workspaceId: ws,
+          executionId: null,
+          blockId: blk,
+          kind: 'reference',
+          view: 'Checkout',
+          contentType: 'image/png',
+        },
+        blob: png(4),
+      })
+
+      expect((await store.listByDocument(ws, design)).map((r) => r.id)).toEqual([
+        first.id,
+        second.id,
+      ])
+      expect((await store.getMetadata(ws, first.id))?.document).toEqual(design)
+      expect((await store.getMetadata(ws, uploaded.id))?.document).toBeNull()
+
+      expect(await store.pruneByDocument(ws, design)).toBe(2)
+      expect(await store.listByDocument(ws, design)).toEqual([])
+      // Bytes go with the rows — a reclaim that left the blobs would leak them permanently.
+      expect(await store.getBlob(ws, first.id)).toBeNull()
+      // The other document's renders and the hand-uploaded reference are untouched.
+      expect((await store.listByDocument(ws, other)).map((r) => r.id)).toEqual([sibling.id])
+      expect(await store.getMetadata(ws, uploaded.id)).not.toBeNull()
+    })
+
     it('deletes a stored artifact (metadata + bytes)', async () => {
       const store = makeStore()
       const { ws, e1, blk } = ids()

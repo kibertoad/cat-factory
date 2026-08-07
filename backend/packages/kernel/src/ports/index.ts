@@ -290,6 +290,7 @@ export type {
   BinaryArtifactStore,
   BinaryArtifactMetadataStore,
   BinaryBlobBackend,
+  DocumentArtifactRef,
   ResolveBinaryArtifactStore,
   StoreBinaryArtifactInput,
 } from './binary-artifacts.js'
@@ -321,9 +322,11 @@ export type {
 } from './github-repositories.js'
 export type { WebhookVerifier } from './webhook-verifier.js'
 export type {
+  DesignRender,
   DocumentCredentials,
   DocumentContent,
   DocumentOAuthTokens,
+  DocumentRenderResult,
   DocumentSourceOAuthSpec,
   NormalizedConnection,
   DocumentSourceProvider,

@@ -1,9 +1,25 @@
-import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type { Clock, IdGenerator, Logger } from '@cat-factory/kernel'
 import type { DocumentSourceProvider, DocumentSourceRegistry } from '@cat-factory/kernel'
 import type { DocumentRecord, DocumentRepository } from '@cat-factory/kernel'
 import type { GroupCacheHandle, LinkedDocumentRefreshOutcome } from '@cat-factory/kernel'
-import type { SourceDocument, DocumentSearchResult, DocumentSourceKind } from '@cat-factory/kernel'
-import { contentHash, redactSecrets, ValidationError } from '@cat-factory/kernel'
+import type {
+  BinaryArtifactStore,
+  DocumentArtifactRef,
+  ResolveBinaryArtifactStore,
+} from '@cat-factory/kernel'
+import type {
+  SourceDocument,
+  DocumentRenderStatus,
+  DocumentSearchResult,
+  DocumentSourceKind,
+} from '@cat-factory/kernel'
+import {
+  contentHash,
+  describeError,
+  noopLogger,
+  redactSecrets,
+  ValidationError,
+} from '@cat-factory/kernel'
 import {
   orderSourcesByClaimConfidence,
   type DocumentRefReason,
@@ -36,6 +52,17 @@ export interface DocumentImportServiceDependencies {
    * is the fresh one and an invalidation would race the store it precedes.
    */
   versionCache?: GroupCacheHandle<LinkedDocumentRefreshOutcome>
+  /**
+   * Where a design source's rendered frames are retained, resolved per workspace because the blob
+   * backend is an ACCOUNT choice rather than a boot-time one.
+   *
+   * Optional, and its absence is a first-class answer rather than a missing wire: a deployment that
+   * has configured no image storage imports the design textually and the row says
+   * `storage_unavailable`, which is a different fact from a source that offered no image.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /** Where the best-effort render pass reports what it could not retain. */
+  logger?: Logger
 }
 
 /** A document body supplied directly by a caller rather than fetched from a connected source. */
@@ -82,11 +109,16 @@ export function toSourceDocument(record: DocumentRecord): SourceDocument {
     role: record.role,
     docKind: record.docKind,
     syncedAt: record.syncedAt,
+    renderStatus: record.renderStatus,
   }
 }
 
 export class DocumentImportService {
-  constructor(private readonly deps: DocumentImportServiceDependencies) {}
+  private readonly log: Logger
+
+  constructor(private readonly deps: DocumentImportServiceDependencies) {
+    this.log = deps.logger ?? noopLogger
+  }
 
   private requireProvider(source: DocumentSourceKind) {
     const provider = this.deps.registry.get(source)
@@ -231,6 +263,13 @@ export class DocumentImportService {
       existing.deletedAt === null &&
       sameAgentVisibleProjection(existing, { ...content, contentHash: hash })
     if (existing && unchangedForReaders && existing.sourceVersion === version) return existing
+    // Renders belong to the BODY, so they are refreshed on exactly the writes that change one. A
+    // token-only write (below) carries the previous status forward untouched: a design file's
+    // version moves on any edit anywhere in it, and re-rasterising six frames because someone
+    // renamed a layer on another page is the cost this branch exists to avoid.
+    const renderStatus = unchangedForReaders
+      ? (existing?.renderStatus ?? null)
+      : await this.refreshRenders(workspaceId, provider, source, content.externalId)
     // The write that remains, when `unchangedForReaders` still holds, exists ONLY to record the
     // moved token: a page whose version bumped without changing a byte (a Figma file version moves
     // on any edit in the file, including frames this document does not cover) would otherwise keep
@@ -253,6 +292,7 @@ export class DocumentImportService {
       // any existing tag across a re-import (the repo's upsert also leaves these columns alone).
       role: existing?.role ?? null,
       docKind: existing?.docKind ?? null,
+      renderStatus,
       // `syncedAt` is "when the body was last written", which is what every reader renders it as,
       // so a token-only write must NOT move it. Moving it would put a fresh timestamp on bytes
       // nobody changed, and the person reading it would conclude their edit had landed.
@@ -261,6 +301,114 @@ export class DocumentImportService {
     }
     await this.deps.documentRepository.upsert(record)
     return record
+  }
+
+  /**
+   * Re-retain the document's rendered images, returning what became of them.
+   *
+   * The order is prune-then-store, deliberately: a document's pictures are never a mix of two
+   * revisions, and the cost is a window where a failed download leaves it with none, which the
+   * returned status states. Everything here is BEST-EFFORT — an image is an enrichment, and an
+   * import that already holds the body must not fail because a CDN did.
+   *
+   * The status is derived from what was RETAINED rather than from what was downloaded, so a store
+   * that rejects half the bytes reads as `partial` exactly like a source that rendered half the
+   * frames. What a caller does about either is the same, and claiming `stored` over an artifact
+   * that never landed is the one answer that would send them looking in the wrong place.
+   */
+  private async refreshRenders(
+    workspaceId: string,
+    provider: DocumentSourceProvider,
+    source: DocumentSourceKind,
+    externalId: string,
+  ): Promise<DocumentRenderStatus | null> {
+    // A source with nothing to rasterise: not a failure and not an empty set, but a question that
+    // does not apply. NULL is the only value that says so.
+    if (!provider.fetchRenders) return null
+    const store = await this.resolveArtifactStore(workspaceId)
+    // Asked BEFORE the download, so an unconfigured deployment spends no bandwidth on bytes it
+    // could not keep.
+    if (!store) return 'storage_unavailable'
+
+    const document: DocumentArtifactRef = { source, externalId }
+    try {
+      const connection = await this.deps.connectionService.requireConnection(workspaceId, source)
+      const result = await provider.fetchRenders(connection.credentials, externalId, workspaceId)
+      await store.pruneByDocument(workspaceId, document)
+      let stored = 0
+      let dropped = result.failed
+      for (const render of result.renders) {
+        try {
+          await store.store({
+            meta: {
+              workspaceId,
+              // No run and no block: an import happens before either exists, and the document's
+              // own identity is what a later reader joins on.
+              executionId: null,
+              blockId: null,
+              kind: 'reference',
+              view: render.view,
+              contentType: render.contentType,
+              document,
+            },
+            blob: render.bytes,
+          })
+          stored += 1
+        } catch (error) {
+          // A bespoke catch rather than `runBestEffort`: the failure is a VALUE here (it decides
+          // between `stored` and `partial`), and the loop must go on to the next frame.
+          dropped += 1
+          this.log.warn('document render could not be retained', {
+            workspaceId,
+            source,
+            externalId,
+            view: render.view,
+            ...describeError(error),
+          })
+        }
+      }
+      if (result.causes.length) {
+        this.log.warn('document renders were not fully retrieved', {
+          workspaceId,
+          source,
+          externalId,
+          retrieved: result.renders.length,
+          failed: result.failed,
+          causes: result.causes.join(', '),
+        })
+      }
+      if (stored > 0) return dropped > 0 ? 'partial' : 'stored'
+      return dropped > 0 ? 'failed' : 'none'
+    } catch (error) {
+      this.log.warn('document render pass failed', {
+        workspaceId,
+        source,
+        externalId,
+        ...describeError(error),
+      })
+      return 'failed'
+    }
+  }
+
+  /**
+   * The workspace's artifact store, or null when the account retains no images.
+   *
+   * A resolver that THROWS is answered as "no storage" rather than propagated: the caller is a
+   * best-effort enrichment on a path that already holds the document body, and an account-settings
+   * read that fails is indistinguishable, to everyone downstream, from one that says `off`.
+   */
+  private async resolveArtifactStore(workspaceId: string): Promise<BinaryArtifactStore | null> {
+    const resolve = this.deps.resolveBinaryArtifactStore
+    if (!resolve) return null
+    try {
+      return await resolve(workspaceId)
+    } catch (error) {
+      this.log.warn('could not resolve artifact storage for document renders', {
+        workspaceId,
+        ...describeError(error),
+      })
+      return null
+    }
   }
 
   /**
@@ -302,6 +450,9 @@ export class DocumentImportService {
       linkedBlockId: null,
       role: null,
       docKind: null,
+      // Markdown handed to the platform directly: there is no source to rasterise, which is the
+      // same "does not apply" the null states one field over.
+      renderStatus: null,
       syncedAt: this.deps.clock.now(),
       deletedAt: null,
     }

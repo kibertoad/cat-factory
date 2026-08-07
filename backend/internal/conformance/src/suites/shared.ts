@@ -18,6 +18,8 @@ const EMPTY_BINARY_ARTIFACT_STORE: BinaryArtifactStore = {
   listByExecution: () => Promise.resolve([]),
   countByExecution: () => Promise.resolve(0),
   listByBlock: () => Promise.resolve([]),
+  listByDocument: () => Promise.resolve([]),
+  pruneByDocument: () => Promise.resolve(0),
   delete: () => Promise.resolve(),
   pruneOlderThan: () => Promise.resolve(0),
   deleteByWorkspace: () => Promise.resolve(0),
@@ -74,6 +76,18 @@ export function memoryBinaryArtifactStore(): BinaryArtifactStore & {
           .filter((r) => r.record.workspaceId === workspaceId && r.record.blockId === blockId)
           .map((r) => r.record),
       ),
+    listByDocument: (workspaceId, document) =>
+      Promise.resolve(
+        [...rows.values()]
+          .filter(
+            (r) =>
+              r.record.workspaceId === workspaceId &&
+              r.record.document?.source === document.source &&
+              r.record.document.externalId === document.externalId,
+          )
+          .map((r) => r.record),
+      ),
+    pruneByDocument: () => Promise.resolve(0),
     delete: (workspaceId, id) => {
       if (owned(workspaceId, id)) rows.delete(id)
       return Promise.resolve()

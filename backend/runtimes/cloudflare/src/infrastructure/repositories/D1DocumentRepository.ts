@@ -4,6 +4,7 @@ import type {
   DocumentOrigin,
   DocumentRecord,
   DocumentRef,
+  DocumentRenderStatus,
   DocumentRepository,
 } from '@cat-factory/kernel'
 import { urlMatchCandidates } from '@cat-factory/kernel'
@@ -20,6 +21,7 @@ interface DocumentRow {
   body: string
   content_hash: string | null
   source_version: string | null
+  render_status: string | null
   linked_block_id: string | null
   role: string | null
   doc_kind: string | null
@@ -53,6 +55,7 @@ function rowToRecord(row: DocumentRow): DocumentRecord {
     body: row.body,
     contentHash: row.content_hash ?? '',
     sourceVersion: row.source_version,
+    renderStatus: (row.render_status as DocumentRenderStatus | null) ?? null,
     linkedBlockId: row.linked_block_id,
     role: (row.role as DocumentLinkRole | null) ?? null,
     docKind: (row.doc_kind as DocKind | null) ?? null,
@@ -74,8 +77,8 @@ export class D1DocumentRepository implements DocumentRepository {
       .prepare(
         `INSERT INTO documents
           (workspace_id, source, external_id, title, url, excerpt, body,
-           content_hash, source_version, linked_block_id, synced_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+           content_hash, source_version, render_status, linked_block_id, synced_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
          ON CONFLICT (workspace_id, source, external_id) DO UPDATE SET
            title = excluded.title,
            url = excluded.url,
@@ -83,6 +86,7 @@ export class D1DocumentRepository implements DocumentRepository {
            body = excluded.body,
            content_hash = excluded.content_hash,
            source_version = excluded.source_version,
+           render_status = excluded.render_status,
            linked_block_id = excluded.linked_block_id,
            synced_at = excluded.synced_at,
            deleted_at = NULL`,
@@ -97,6 +101,7 @@ export class D1DocumentRepository implements DocumentRepository {
         record.body,
         record.contentHash,
         record.sourceVersion,
+        record.renderStatus,
         record.linkedBlockId,
         record.syncedAt,
       )

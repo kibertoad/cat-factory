@@ -24,6 +24,7 @@ function doc(over: Partial<SourceDocument> = {}): SourceDocument {
     role: null,
     docKind: null,
     syncedAt: 1_000,
+    renderStatus: null,
     ...over,
   }
 }

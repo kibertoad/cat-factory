@@ -144,6 +144,34 @@ export function deploymentScopedSources(): DocumentSourceKind[] {
 }
 
 /**
+ * What became of the RENDERED IMAGES of a design document at its last import.
+ *
+ * A design source describes screens twice over: as the structure/styling text an agent reads, and
+ * as the pixels a person recognises. The second half is retained as `reference` binary artifacts
+ * keyed to the document, and this is the one field that says whether that happened, because every
+ * failure mode of it renders as the same absence of images and each asks for a different fix:
+ * configure image storage, retry a rate-limited source, or nothing at all.
+ *
+ * NULL is a fourth state and the commonest one: this document has no renders to speak of, either
+ * because its source is prose or because it was imported before renders existed. That is
+ * "not applicable", never "none were retained" — the distinction the vocabulary below exists to
+ * keep.
+ */
+export const documentRenderStatusSchema = v.picklist([
+  /** Every image the source offered was retrieved and retained. */
+  'stored',
+  /** Some were retained and some could not be; the document is partly illustrated. */
+  'partial',
+  /** The source offered no image for this reference (an empty file, a frame that renders to nothing). */
+  'none',
+  /** The source's render read failed outright. A retry or a look at the source is the fix. */
+  'failed',
+  /** This deployment/account retains no image storage, so nothing was even downloaded. */
+  'storage_unavailable',
+])
+export type DocumentRenderStatus = v.InferOutput<typeof documentRenderStatusSchema>
+
+/**
  * Order sources by how much a claim over a URL is WORTH: host-pinned first, registration order
  * within each pass. Every caller that asks "which source does this text belong to" reads this,
  * because the answer is only as good as the ordering (see {@link DocumentSourceTraits.hostPinned}):
@@ -408,6 +436,12 @@ export const sourceDocumentSchema = v.object({
   docKind: v.nullable(v.picklist(DOC_KINDS)),
   /** When this projection row was last refreshed (epoch ms). */
   syncedAt: v.number(),
+  /**
+   * What became of this document's rendered images at its last import, or null when the question
+   * does not apply (see {@link documentRenderStatusSchema}). Nullable rather than optional so a
+   * reader cannot mistake a source that has no renders for a field the server forgot to send.
+   */
+  renderStatus: v.nullable(documentRenderStatusSchema),
 })
 export type SourceDocument = v.InferOutput<typeof sourceDocumentSchema>
 

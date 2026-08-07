@@ -2,6 +2,7 @@ import type {
   DocKind,
   DocumentLinkRole,
   DocumentOrigin,
+  DocumentRenderStatus,
   DocumentSourceKind,
 } from '../domain/types.js'
 import type { DocumentCredentials } from './document-source.js'
@@ -156,6 +157,19 @@ export interface DocumentRecord {
   role: DocumentLinkRole | null
   /** The document kind a `role`-tagged link is scoped to (null when the document carries no role). */
   docKind: DocKind | null
+  /**
+   * What became of the document's RENDERED IMAGES at the import that wrote this body (a design
+   * source's frames, retained as `reference` binary artifacts keyed to this document).
+   *
+   * NULL means the question does not apply: a prose source, an `upload`, or a row written before
+   * renders existed. It is deliberately not the value for "nothing was retained", which is
+   * `none`/`failed`/`storage_unavailable` depending on WHY — see {@link DocumentRenderStatus}.
+   *
+   * Written only by the import that writes the body, and carried across a TOKEN-ONLY re-import
+   * unchanged: the images belong to the body, so a version bump that moved no bytes must not
+   * re-state (or re-download) them.
+   */
+  renderStatus: DocumentRenderStatus | null
   syncedAt: number
   deletedAt: number | null
 }

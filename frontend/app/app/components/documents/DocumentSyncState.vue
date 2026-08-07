@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { isConnectableSource } from '@cat-factory/contracts'
 import type { SourceDocument } from '~/types/domain'
-import { CHANGE_KEYS, GAP_KEYS } from '~/components/documents/DocumentSyncState.logic'
+import {
+  CHANGE_KEYS,
+  GAP_KEYS,
+  RENDER_STATUS_KEYS,
+} from '~/components/documents/DocumentSyncState.logic'
 
 // When a stored document was last written, and a way to ask its source whether that is still the
 // current revision.
@@ -129,6 +133,20 @@ const detail = computed(() =>
     .join(' · '),
 )
 
+/**
+ * What became of the design's rendered images, when that is something a person can act on.
+ *
+ * A THIRD fact beside the two above, and separate for the same reason they are separate from each
+ * other: it is about the pictures rather than the text, it is written by the import rather than by
+ * a click, and folding it into either would make an absent image read as a stale body. It renders
+ * only for the statuses that name a fix, so the common case adds nothing to the line.
+ */
+const renders = computed(() => {
+  const status = props.doc.renderStatus
+  const key = status ? RENDER_STATUS_KEYS[status] : null
+  return key ? t(key) : ''
+})
+
 const TONE_CLASS: Record<Stated['tone'], string> = {
   ok: 'text-emerald-400',
   warn: 'text-amber-400',
@@ -164,6 +182,10 @@ async function refresh() {
     >
       <UIcon :name="stated.icon" class="h-3 w-3 shrink-0" />
       <span class="truncate">{{ stated.text }}</span>
+    </span>
+    <span v-if="renders" class="flex min-w-0 items-center gap-1 text-slate-500" :title="renders">
+      <UIcon name="i-lucide-image-off" class="h-3 w-3 shrink-0" />
+      <span class="truncate">{{ renders }}</span>
     </span>
     <UButton
       v-if="askable"

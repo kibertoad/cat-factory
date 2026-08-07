@@ -4,6 +4,7 @@ import type {
   BinaryArtifactMetadataStore,
   BinaryArtifactRecord,
   BinaryBlobBackend,
+  DocumentArtifactRef,
 } from './binary-artifacts.js'
 import { createBinaryArtifactStore } from './binary-artifacts.js'
 
@@ -32,6 +33,24 @@ class FakeMetadataStore implements BinaryArtifactMetadataStore {
   }
   listByBlock(): Promise<BinaryArtifactRecord[]> {
     return Promise.resolve([])
+  }
+  listByDocument(
+    workspaceId: string,
+    document: DocumentArtifactRef,
+  ): Promise<BinaryArtifactRecord[]> {
+    return Promise.resolve(
+      [...this.rows.values()].filter(
+        (r) =>
+          r.workspaceId === workspaceId &&
+          r.document?.source === document.source &&
+          r.document.externalId === document.externalId,
+      ),
+    )
+  }
+  async deleteByDocument(workspaceId: string, document: DocumentArtifactRef): Promise<number> {
+    const doomed = await this.listByDocument(workspaceId, document)
+    for (const r of doomed) this.rows.delete(r.id)
+    return doomed.length
   }
   delete(_workspaceId: string, id: string): Promise<void> {
     this.rows.delete(id)

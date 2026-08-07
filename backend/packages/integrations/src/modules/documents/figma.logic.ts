@@ -21,6 +21,23 @@ import { assertHostPinned } from './http.js'
 export const FIGMA_API_HOST = 'api.figma.com'
 
 /**
+ * The hosts Figma serves a RENDERED image from, as short-lived signed URLs the `/v1/images`
+ * endpoint hands back. Two of them because the vendor has moved between these buckets and both
+ * are still returned in the wild.
+ *
+ * Pinned to this fixed set for the same reason the API host is pinned: the URL comes back inside a
+ * response body, so following it unchecked would let a compromised or spoofed API response point
+ * the downloader at an internal address. Fail-CLOSED is the right trade here — a Figma that starts
+ * serving from a third bucket costs the deployment its renders, which the import states, where the
+ * alternative costs it an SSRF. The download itself carries NO credential (the URL is already
+ * signed), so a host outside the set leaks nothing even before the guard refuses it.
+ */
+export const FIGMA_RENDER_HOSTS = [
+  's3-alpha-sig.figma.com',
+  'figma-alpha-api.s3.us-west-2.amazonaws.com',
+] as const
+
+/**
  * The scopes the OAuth consent screen asks for, and the reason each is on the list.
  *
  * `file_content:read` is what every import needs (the node tree, the published styles, the
@@ -279,6 +296,16 @@ const MAX_FRAME_TEXT = 200
 const MAX_IMPORT_TEXT = 600
 /** Top-level frames a whole-file import fetches as subtrees. */
 export const MAX_FILE_FRAMES = 12
+/**
+ * Top-level frames a whole-file import RASTERISES, well below {@link MAX_FILE_FRAMES}.
+ *
+ * The two caps count the same frames and are deliberately different numbers, because they bound
+ * different budgets: a frame's text costs the ~256 KB context corpus a few KB, while its PNG costs
+ * the account's blob storage a megabyte or two and buys a reader nothing the next frame's picture
+ * does not. Six covers the screens a design-led task is actually about; the text still covers
+ * twelve, and the import says which frames it rendered.
+ */
+export const MAX_RENDERS = 6
 /** Distinct variants listed on one component's note before the rest are summarised away. */
 const MAX_VARIANTS_PER_COMPONENT = 6
 /** Components listed, ranked by how often the design instantiates them. */
@@ -622,6 +649,30 @@ export function figmaTopLevelFrames(document: FigmaNode | undefined): FigmaNode[
     }
   }
   return frames
+}
+
+/** One frame a render pass will ask Figma to rasterise: the id to request, and what to call it. */
+export interface FigmaRenderTarget {
+  id: string
+  /** The frame's own name, which becomes the artifact's `view` (its pairing key). */
+  name: string
+}
+
+/**
+ * The frames a render pass covers, capped at {@link MAX_RENDERS} in document order.
+ *
+ * A frame with no name still renders: its picture is worth having, and the id is the only honest
+ * label left. Naming it `(unnamed)` instead would collide every unnamed frame onto one `view`,
+ * which is the pairing key, so two different screens would look like two captures of one.
+ */
+export function figmaRenderTargets(frames: readonly FigmaNode[]): FigmaRenderTarget[] {
+  const out: FigmaRenderTarget[] = []
+  for (const frame of frames) {
+    if (!frame.id) continue
+    out.push({ id: frame.id, name: frame.name?.trim() || frame.id })
+    if (out.length >= MAX_RENDERS) break
+  }
+  return out
 }
 
 /**

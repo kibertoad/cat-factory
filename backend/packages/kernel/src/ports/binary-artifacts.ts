@@ -1,3 +1,4 @@
+import type { DocumentOrigin } from '../domain/types.js'
 import type { Clock, IdGenerator } from './runtime.js'
 import type { Logger } from './logging.js'
 
@@ -28,6 +29,20 @@ export type BinaryArtifactStorageKind = 'db' | 'r2' | 's3' | 'fs' | 'memory'
 /** What an artifact is — drives actual-vs-reference pairing in the gate UI. */
 export type BinaryArtifactKind = 'screenshot' | 'reference'
 
+/**
+ * The document an artifact was rendered FROM, when it came from one.
+ *
+ * A reference image has two possible provenances that must not be confused: a person uploaded it
+ * against a task, or an import downloaded it from a design source. Only the second can be
+ * REPLACED wholesale on a re-import, so it carries the document's own SOURCE identity — never the
+ * linked block (a document is imported before it is attached to anything, and one document can be
+ * attached to a different block later) and never anything it displays.
+ */
+export interface DocumentArtifactRef {
+  source: DocumentOrigin
+  externalId: string
+}
+
 /** Metadata describing one stored blob (the bytes live in a {@link BinaryBlobBackend}). */
 export interface BinaryArtifactRecord {
   id: string
@@ -48,6 +63,11 @@ export interface BinaryArtifactRecord {
   storage: BinaryArtifactStorageKind
   /** Backend-specific locator for the bytes (e.g. the R2/S3 object key). */
   storageKey: string
+  /**
+   * The imported document this artifact was rendered from, or null for one a person uploaded.
+   * See {@link DocumentArtifactRef}.
+   */
+  document: DocumentArtifactRef | null
   createdAt: number
 }
 
@@ -56,7 +76,8 @@ export interface StoreBinaryArtifactInput {
   meta: Pick<
     BinaryArtifactRecord,
     'workspaceId' | 'executionId' | 'blockId' | 'kind' | 'view' | 'contentType'
-  >
+  > &
+    Partial<Pick<BinaryArtifactRecord, 'document'>>
   blob: Uint8Array
 }
 
@@ -88,7 +109,26 @@ export interface BinaryArtifactStore {
    * are attached to the block before any run (so they carry no executionId).
    */
   listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]>
+  /**
+   * Artifacts rendered from one imported document — the design renders an import retained, read
+   * back by the surfaces that pair them with a task's screenshots.
+   */
+  listByDocument(
+    workspaceId: string,
+    document: DocumentArtifactRef,
+  ): Promise<BinaryArtifactRecord[]>
   delete(workspaceId: string, id: string): Promise<void>
+  /**
+   * Re-import reclaim: delete every artifact rendered from one document — BOTH the metadata rows
+   * AND their bytes — and return how many were removed.
+   *
+   * Called BEFORE an import stores the new renders, not after, so the document's images are never
+   * a mix of two revisions. The cost of that ordering is a window in which a design carries no
+   * images at all, which is the honest failure: an import that then cannot download will record
+   * `failed` beside an empty set, where the reverse ordering would leave last month's frames
+   * looking like this month's. Same fail-safe blobs-first reclaim as {@link pruneOlderThan}.
+   */
+  pruneByDocument(workspaceId: string, document: DocumentArtifactRef): Promise<number>
   /**
    * Retention sweep: delete every artifact in the workspace created before `olderThan`
    * (epoch ms) — BOTH the metadata row AND its bytes — and return how many were removed.
@@ -120,6 +160,13 @@ export interface BinaryArtifactMetadataStore {
   /** Count a run's artifacts without materialising rows (the per-run upload cap precheck). */
   countByExecution(workspaceId: string, executionId: string): Promise<number>
   listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]>
+  /** Records rendered from one imported document (the design renders an import retained). */
+  listByDocument(
+    workspaceId: string,
+    document: DocumentArtifactRef,
+  ): Promise<BinaryArtifactRecord[]>
+  /** Delete every metadata row rendered from one document; returns the count. */
+  deleteByDocument(workspaceId: string, document: DocumentArtifactRef): Promise<number>
   delete(workspaceId: string, id: string): Promise<void>
   /** Records in the workspace created before `olderThan` (epoch ms) — for the retention sweep. */
   listOlderThan(workspaceId: string, olderThan: number): Promise<BinaryArtifactRecord[]>
@@ -272,6 +319,9 @@ export function createBinaryArtifactStore(deps: {
         hash,
         storage: blob.kind,
         storageKey,
+        // Defaulted here rather than required of every caller: an artifact a person uploaded has
+        // no document behind it, and that is the majority case.
+        document: input.meta.document ?? null,
         createdAt: clock.now(),
       }
       await metadata.insert(record)
@@ -298,6 +348,13 @@ export function createBinaryArtifactStore(deps: {
     },
     listByBlock(workspaceId, blockId) {
       return metadata.listByBlock(workspaceId, blockId)
+    },
+    listByDocument(workspaceId, document) {
+      return metadata.listByDocument(workspaceId, document)
+    },
+    async pruneByDocument(workspaceId, document) {
+      const previous = await metadata.listByDocument(workspaceId, document)
+      return reclaim(previous, () => metadata.deleteByDocument(workspaceId, document))
     },
     async delete(workspaceId, id) {
       const record = await metadata.get(workspaceId, id)

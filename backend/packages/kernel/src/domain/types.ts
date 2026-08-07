@@ -145,6 +145,7 @@ export type {
   DocumentSourceKind,
   DocumentOrigin,
   DocumentLinkRole,
+  DocumentRenderStatus,
   DocumentSourceDescriptor,
   CredentialField,
   DocumentConnection,

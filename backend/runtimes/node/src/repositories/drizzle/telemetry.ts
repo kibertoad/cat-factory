@@ -21,6 +21,8 @@ import type {
   AgentToolCallTrajectoryQuery,
   BinaryArtifactMetadataStore,
   BinaryArtifactRecord,
+  DocumentArtifactRef,
+  DocumentOrigin,
   LlmCallBodyWindow,
   LlmCallMetric,
   LlmCallMetricPage,
@@ -1103,6 +1105,12 @@ function rowToBinaryArtifact(row: typeof binaryArtifacts.$inferSelect): BinaryAr
     hash: row.hash,
     storage: row.storage as BinaryArtifactRecord['storage'],
     storageKey: row.storage_key,
+    // Both halves or neither: a row with only one is not a document reference, and treating it as
+    // one would key a reclaim on a half-identity that matches the wrong artifacts.
+    document:
+      row.document_source && row.document_external_id
+        ? { source: row.document_source as DocumentOrigin, externalId: row.document_external_id }
+        : null,
     createdAt: row.created_at,
   }
 }
@@ -1125,6 +1133,8 @@ export class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadat
       hash: record.hash,
       storage: record.storage,
       storage_key: record.storageKey,
+      document_source: record.document?.source ?? null,
+      document_external_id: record.document?.externalId ?? null,
       created_at: record.createdAt,
     })
   }
@@ -1174,6 +1184,34 @@ export class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadat
       )
       .orderBy(asc(binaryArtifacts.created_at), asc(binaryArtifacts.id))
     return rows.map(rowToBinaryArtifact)
+  }
+
+  async listByDocument(
+    workspaceId: string,
+    document: DocumentArtifactRef,
+  ): Promise<BinaryArtifactRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(binaryArtifacts)
+      .where(this.documentScope(workspaceId, document))
+      .orderBy(asc(binaryArtifacts.created_at), asc(binaryArtifacts.id))
+    return rows.map(rowToBinaryArtifact)
+  }
+
+  async deleteByDocument(workspaceId: string, document: DocumentArtifactRef): Promise<number> {
+    const deleted = await this.db
+      .delete(binaryArtifacts)
+      .where(this.documentScope(workspaceId, document))
+      .returning({ id: binaryArtifacts.id })
+    return deleted.length
+  }
+
+  private documentScope(workspaceId: string, document: DocumentArtifactRef) {
+    return and(
+      eq(binaryArtifacts.workspace_id, workspaceId),
+      eq(binaryArtifacts.document_source, document.source),
+      eq(binaryArtifacts.document_external_id, document.externalId),
+    )
   }
 
   async delete(workspaceId: string, id: string): Promise<void> {

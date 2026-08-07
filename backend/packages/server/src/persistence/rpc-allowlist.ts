@@ -1097,6 +1097,13 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByExecution: { scope: { kind: 'workspace', arg: 0 } },
     countByExecution: { scope: { kind: 'workspace', arg: 0 } },
     listByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    // The document-keyed pair: an import running on a node retains a design source's rendered
+    // frames and replaces the previous revision's, so both halves of that reclaim have to reach
+    // the mothership's store or a local import would silently retain nothing. Same `workspace`
+    // rule as the reads above — the document ref is a non-authoritative filter within the
+    // (authenticated) workspace, exactly like `executionId`/`blockId`.
+    listByDocument: { scope: { kind: 'workspace', arg: 0 } },
+    deleteByDocument: { scope: { kind: 'workspace', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },
   // --- Prompt-fragment library management surface ---------------------------------
