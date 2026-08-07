@@ -251,7 +251,7 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
       REQUIREMENTS REVIEW, the first step of the default pipelines and the one a human signs off on,
       which resolves its attachments through the same refresher for the same reason the initiative
       interviewer does.
-- [x] **Staleness on the surface.** ([#1777](https://github.com/kibertoad/cat-factory/pull/1777))
+- [x] **Staleness on the surface.** ([#1782](https://github.com/kibertoad/cat-factory/pull/1782))
       The imported-documents list and the task context panel show `syncedAt` beside a
       member-tier refresh action (`POST /documents/refresh` →
       `LinkedDocumentRefreshService.refreshNow`, the same ladder a dispatch runs). The
