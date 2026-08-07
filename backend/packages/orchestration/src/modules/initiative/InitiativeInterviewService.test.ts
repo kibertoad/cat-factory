@@ -285,6 +285,7 @@ describe('InitiativeInterviewService — preset interviewer steering (T5)', () =
 // ---------------------------------------------------------------------------
 
 const PRD = {
+  externalId: 'prd_1',
   title: 'Auth migration PRD',
   url: 'https://example.test/prd',
   origin: 'confluence' as const,

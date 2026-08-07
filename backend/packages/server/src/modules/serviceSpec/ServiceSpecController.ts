@@ -1,4 +1,8 @@
-import { EMPTY_SERVICE_SPEC_VIEW, getServiceSpecContract } from '@cat-factory/contracts'
+import {
+  EMPTY_SERVICE_SPEC_VIEW,
+  getRunSpecContract,
+  getServiceSpecContract,
+} from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
@@ -15,9 +19,14 @@ const EMPTY = EMPTY_SERVICE_SPEC_VIEW
  *
  * It resolves the block's repo through the same `resolveRunRepoContext` seam the engine uses
  * to bind a run's pre/post-ops (installation + repo + default branch), so it is
- * runtime-symmetric — both facades wire the resolver. When GitHub isn't connected (no
+ * runtime-symmetric: both facades wire the resolver. When GitHub isn't connected (no
  * resolver, no linked repo) or no spec exists yet, it returns `{ present: false }` so the
  * window shows an empty state instead of erroring. Mounted under `/workspaces/:workspaceId`.
+ *
+ * It also serves the RUN-scoped read beside it. Both are spec reads and the pair belongs
+ * together precisely so nobody reaches for the wrong one: this default-branch read answers
+ * "what does this service require", and `/executions/:executionId/spec` answers "what did this
+ * run rule on", which is a different tree for as long as the run's pull request is open.
  */
 export function serviceSpecController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -42,6 +51,21 @@ export function serviceSpecController(): Hono<AppEnv> {
     } catch {
       return c.json(EMPTY, 200)
     }
+  })
+
+  // The spec ONE RUN was judged against, for the outcome card's requirement join. Delegated
+  // whole to the engine's evidence loader rather than resolved here: the branch rule, the
+  // tester gate and the per-run memo are the same three the verification report and
+  // `GET /api/v1/runs/:runId/outcome` read through, and a second reader with its own copy of
+  // any of them is how the card and the endpoint came to describe one run differently.
+  buildHonoRoute(app, getRunSpecContract, async (c) => {
+    const view = await c
+      .get('container')
+      .executionService.readRunSpec(param(c, 'workspaceId'), c.req.valid('param').executionId)
+    // A run this workspace does not have is the same answer as a run whose spec cannot be read:
+    // there is no tree to join against, and the card states that as `spec: 'not_read'`. It is
+    // NOT a 404, because the card asks this question about a run it is already rendering.
+    return c.json(view ?? EMPTY, 200)
   })
 
   return app

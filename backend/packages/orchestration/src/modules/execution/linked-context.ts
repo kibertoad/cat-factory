@@ -118,9 +118,23 @@ export function linkedContextSourcesFrom(deps: {
   }
 }
 
-/** The resolved context, in the exact shape `AgentRunContext.block` carries it. */
+/**
+ * One resolved document: the shape `AgentRunContext.block.contextDocs` carries, plus the source
+ * identity that shape has no reason to hold.
+ *
+ * The agent reads a page, not an id, so `externalId` is stripped before the context crosses to
+ * the container. It is carried this far because the caller that RECORDS what a dispatch read
+ * needs a stable key, and the two visible fields cannot be one: an `upload` has no URL, so a key
+ * falling back to the title merges two same-titled uploads. It is the same `(origin, externalId)`
+ * pair this resolver already dedupes its own corpus by.
+ */
+export type LinkedContextDoc = NonNullable<AgentRunContext['block']['contextDocs']>[number] & {
+  externalId: string
+}
+
+/** The resolved context, in the shape `AgentRunContext.block` carries it (see the doc type). */
 export interface LinkedContext {
-  docs: NonNullable<AgentRunContext['block']['contextDocs']>
+  docs: LinkedContextDoc[]
   tasks: NonNullable<AgentRunContext['block']['contextTasks']>
 }
 
@@ -314,11 +328,9 @@ function reportUnmatchedUrls(
 }
 
 /** Map a document record to the agent-context doc shape (summary index + materialisable body). */
-export function toContextDoc(
-  d: DocumentRecord,
-  freshness?: DocumentFreshness,
-): NonNullable<AgentRunContext['block']['contextDocs']>[number] {
+export function toContextDoc(d: DocumentRecord, freshness?: DocumentFreshness): LinkedContextDoc {
   return {
+    externalId: d.externalId,
     title: d.title,
     url: d.url,
     origin: d.source,

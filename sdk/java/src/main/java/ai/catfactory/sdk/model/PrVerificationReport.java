@@ -31,7 +31,7 @@ import org.jspecify.annotations.Nullable;
 public record PrVerificationReport(
     @JsonProperty("ci") PrReportCi ci,
 
-    @JsonProperty("context") PrVerificationReportContext context,
+    @JsonProperty("context") PrReportContext context,
 
     @JsonProperty("environments") PrReportEnvironments environments,
 
@@ -74,7 +74,7 @@ public record PrVerificationReport(
      */
     public static final class Builder {
         private @Nullable PrReportCi ci;
-        private @Nullable PrVerificationReportContext context;
+        private @Nullable PrReportContext context;
         private @Nullable PrReportEnvironments environments;
         private @Nullable Double generatedAt;
         private @Nullable PrReportJudges judges;
@@ -96,7 +96,7 @@ public record PrVerificationReport(
         }
 
         /** Set {@code context}. */
-        public Builder context(@Nullable PrVerificationReportContext context) {
+        public Builder context(@Nullable PrReportContext context) {
             this.context = context;
             return this;
         }

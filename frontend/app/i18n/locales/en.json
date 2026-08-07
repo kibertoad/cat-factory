@@ -5840,7 +5840,7 @@
       "noSource": "No source page to compare against.",
       "moved": "This page changed while the run was in flight, so earlier steps read an older revision.",
       "gap": {
-        "none_linked": "This task linked no page, so its description was the whole brief the agents worked from."
+        "none_linked": "No page reached this run's agents, so they worked from the task description alone."
       }
     },
     "gap": {
@@ -5853,11 +5853,8 @@
       "notCovered": "Not checked: {count}",
       "regressions": "Regressions: {count}",
       "regressionTag": "Regression",
-      "idOnly": "id only",
-      "idOnlyHint": "This id is not in the service specification, so there is no title to show for it.",
       "spec": {
-        "not_read": "The service specification was not read, so these are the requirement ids the tester reported, without their titles.",
-        "unmatched": "None of these requirement ids appear in the service specification that was read, so only the ids the tester reported are shown."
+        "not_read": "The service specification was not read, so these counts cover only what the tester ruled on, by id."
       },
       "verdict": {
         "met": "Verified",
@@ -5867,8 +5864,10 @@
       "gap": {
         "no_tester_step": "This pipeline has no tester step, so no requirement was checked.",
         "tester_not_reported": "The tester has not reported yet, so no requirement has been ruled on.",
-        "no_verdicts": "The tester reported without ruling on any requirement of the service specification."
-      }
+        "no_verdicts": "The tester reported without ruling on any requirement of the service specification.",
+        "no_requirements": "The service specification records no requirements, so there was nothing for the tester to rule on."
+      },
+      "unmatchedVerdicts": "The tester also ruled on {count} id(s) this service's specification does not carry, so its own tally is higher than the counts above."
     },
     "tests": {
       "title": "How it was tested",
@@ -7246,7 +7245,7 @@
           },
           "commandBar": {
             "title": "The command palette",
-            "body": "The fastest way to reach any action: open it and start typing. You can restart this tutorial from there at any time."
+            "body": "The fastest way to reach any action: open it and start typing. To restart this tutorial at any time, pick \"@:{'nav.tutorials'}\" there."
           },
           "toolbar": {
             "title": "Board controls",

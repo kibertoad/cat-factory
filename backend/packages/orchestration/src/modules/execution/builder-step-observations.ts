@@ -39,6 +39,8 @@ export interface StepObservations {
 
 /** The shape {@link StepObservations.contextDocuments} reads off a resolved context doc. */
 interface ContextDocument {
+  /** The source's own id, which is what keys a document across the dispatches that read it. */
+  externalId: string
   title: string
   url: string
   origin: StepContextDocument['origin']
@@ -79,6 +81,7 @@ export function stepObservations(
         return
       }
       step.contextDocuments = docs.map((doc) => ({
+        externalId: doc.externalId,
         title: doc.title,
         url: doc.url,
         origin: doc.origin,

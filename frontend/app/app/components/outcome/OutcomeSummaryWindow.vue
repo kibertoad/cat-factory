@@ -12,8 +12,8 @@
 // It composes NOTHING itself: `composeRunOutcome` (`~/utils/runOutcome`) is the pure reduction,
 // so the rules that matter (a regression is an `established` requirement observed to fail; an
 // absent producer never renders as a clean result) are unit-tested without mounting this. What
-// lives here is presentation only, plus the ONE fetch the card owns: the enclosing service's
-// spec, which turns the tester's requirement IDS into the requirement TITLES a reader came for.
+// lives here is presentation only, plus the ONE fetch the card owns: the spec THIS RUN was
+// judged against, which turns the tester's requirement IDS into the TITLES a reader came for.
 import { computed, onUnmounted, ref, watch } from 'vue'
 import type {
   OutcomeCheckKind,
@@ -52,32 +52,43 @@ const { t } = useI18n()
 const blobs = useArtifactBlobs()
 onUnmounted(() => blobs.revokeAll())
 
-// The shared seam contract. The `onOpen` loader fetches the ENCLOSING SERVICE's spec: the
-// requirement verdicts are keyed by the spec's own ids, and without it the coverage section can
-// only show ids (which it then says, rather than letting an id read as a title).
-const { open, blockId, instanceId, close } = useResultView('outcome', {
-  onOpen: (view) => {
-    const block = board.getBlock(view.blockId)
-    const service = block ? board.serviceOf(block) : undefined
-    if (service) void serviceSpec.load(service.id)
-  },
-})
+// The shared seam contract.
+const { open, blockId, instanceId, close } = useResultView('outcome')
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
-const service = computed(() => (block.value ? board.serviceOf(block.value) : undefined))
-const instance = computed(() => {
+const runId = computed(() => {
   // The run carried by the opener, else the block's own live run: a card opened from a
   // notification names the run, one opened from the board does not.
-  const id = instanceId.value ?? block.value?.executionId ?? null
-  return id ? (execution.getInstance(id) ?? null) : null
+  return instanceId.value ?? block.value?.executionId ?? null
 })
+const instance = computed(() => (runId.value ? (execution.getInstance(runId.value) ?? null) : null))
+
+// The ONE fetch this card owns: the spec THIS RUN was judged against. Requirement verdicts are
+// keyed by the spec's own ids, and without the spec the coverage section can only show ids
+// (which it then says, rather than letting an id read as a title).
+//
+// Keyed by the RUN, not by the enclosing service, and that is a correctness matter rather than a
+// cache detail: the service read comes from the repo's default branch, so for as long as the
+// run's pull request is open it is missing exactly the requirements the run added and the tester
+// just ruled on. Every one of those verdicts joined against nothing and rendered as "not
+// checked", and the card's counts contradicted `GET /api/v1/runs/:runId/outcome` for one run.
+//
+// A watch rather than the `onOpen` hook, because the run id can arrive after the block does (a
+// card open on a task that starts a run) and the join must follow it.
+watch(
+  runId,
+  (id) => {
+    if (id) void serviceSpec.loadForRun(id)
+  },
+  { immediate: true },
+)
 
 const outcome = computed(() =>
   block.value
     ? composeRunOutcome({
         block: block.value,
         instance: instance.value,
-        spec: service.value ? serviceSpec.viewFor(service.value.id) : null,
+        spec: runId.value ? serviceSpec.viewForRun(runId.value) : null,
       })
     : null,
 )
@@ -115,6 +126,7 @@ const REQUIREMENTS_GAP_KEYS: Record<RequirementsGap, string> = {
   no_tester_step: 'outcome.requirements.gap.no_tester_step',
   tester_not_reported: 'outcome.requirements.gap.tester_not_reported',
   no_verdicts: 'outcome.requirements.gap.no_verdicts',
+  no_requirements: 'outcome.requirements.gap.no_requirements',
 }
 const TESTS_GAP_KEYS: Record<TestsGap, string> = {
   run_unavailable: RUN_UNAVAILABLE_KEY,
@@ -137,7 +149,6 @@ const VISUALS_GAP_KEYS: Record<VisualsGap, string> = {
  */
 const SPEC_JOIN_KEYS: Record<Exclude<OutcomeSpecJoin, 'joined'>, string> = {
   not_read: 'outcome.requirements.spec.not_read',
-  unmatched: 'outcome.requirements.spec.unmatched',
 }
 
 const VERDICT_META: Record<RequirementVerdictStatus, { color: string; key: string }> = {
@@ -195,9 +206,11 @@ const headerTitle = computed(() => outcome.value?.title ?? t('outcome.title'))
 const disposition = computed(() => outcome.value?.disposition ?? 'not_run')
 
 /**
- * The note under the requirement counts when the rows carry no spec titles, null when they do.
- * Resolved here so the `joined` exclusion is checked by the compiler once, rather than by a
- * template condition that would silently render nothing if the union grew.
+ * The note under the requirement counts when the section was NOT counted against the service's
+ * `spec/`, null when it was. It is a statement about the DENOMINATOR, not about missing titles:
+ * an unjoined section counts only what the tester chose to rule on and says nothing about what it
+ * skipped. Resolved here so the `joined` exclusion is checked by the compiler once, rather than by
+ * a template condition that would silently render nothing if the union grew.
  */
 const specNote = computed(() => {
   const requirements = outcome.value?.requirements
@@ -207,19 +220,22 @@ const specNote = computed(() => {
   return t(SPEC_JOIN_KEYS[requirements.spec])
 })
 
-/**
- * The requirement rows, each carrying whether its id is standing in for a title it has no way
- * to show. Marked per row ONLY where the section as a whole joined: an id sitting unmarked
- * between two named requirements reads as a requirement someone named after a slug, while a
- * marker on every row of a section the note above already explains is just noise.
- */
+/** The requirement rows, in the composer's severity-first order. */
 const requirementRows = computed(() => {
   const requirements = outcome.value?.requirements
-  if (!requirements || requirements.status !== 'reported') return []
-  return requirements.entries.map((entry) => ({
-    ...entry,
-    idOnly: requirements.spec === 'joined' && entry.title === null,
-  }))
+  return requirements?.status === 'reported' ? requirements.entries : []
+})
+
+/**
+ * How many verdicts the tester returned against ids this service's `spec/` does not carry, or 0.
+ *
+ * Surfaced because the counts above are the SPEC's and this number is the difference between them
+ * and the tester's own tally. Unstated, a reader comparing the two reads the gap as one of the two
+ * being wrong, when it is really a spec that moved on under the tester.
+ */
+const unmatchedVerdicts = computed(() => {
+  const requirements = outcome.value?.requirements
+  return requirements?.status === 'reported' ? requirements.unmatchedVerdicts : 0
 })
 
 /** The captured views, resolved to blobs as they arrive (the card shows them inline). */
@@ -466,14 +482,24 @@ function openTestReport() {
               }}
             </UBadge>
           </div>
-          <!-- The ids are all there is: say WHICH reason, rather than letting a slug read as
-               the name of a requirement (never read, versus read and naming none of these). -->
+          <!-- The coverage was not counted against the spec, so say what the numbers above do
+               and do not cover rather than letting them read as the whole picture. -->
           <p
             v-if="specNote"
             class="mb-2 text-[11px] leading-relaxed text-amber-300/90"
             data-testid="outcome-spec-note"
           >
             {{ specNote }}
+          </p>
+          <!-- The tester ruled on ids the spec does not carry, so its own tally and the counts
+               above legitimately differ. Said out loud, because the alternative is a reader
+               deciding which of the two numbers to distrust. -->
+          <p
+            v-if="unmatchedVerdicts > 0"
+            class="mb-2 text-[11px] leading-relaxed text-amber-300/90"
+            data-testid="outcome-unmatched-verdicts"
+          >
+            {{ t('outcome.requirements.unmatchedVerdicts', { count: unmatchedVerdicts }) }}
           </p>
           <ul class="space-y-1.5">
             <li
@@ -489,18 +515,6 @@ function openTestReport() {
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-1.5">
                   <span class="text-[13px] text-slate-200">{{ req.title ?? req.id }}</span>
-                  <!-- This row's id is standing in for a title the spec does not have for it,
-                       beside rows that DO carry one. -->
-                  <UBadge
-                    v-if="req.idOnly"
-                    color="neutral"
-                    variant="subtle"
-                    size="sm"
-                    :title="t('outcome.requirements.idOnlyHint')"
-                    data-testid="outcome-requirement-id-only"
-                  >
-                    {{ t('outcome.requirements.idOnly') }}
-                  </UBadge>
                   <UBadge
                     v-if="req.regression"
                     color="error"

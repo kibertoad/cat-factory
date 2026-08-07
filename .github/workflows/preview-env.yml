@@ -54,7 +54,8 @@ on:
     paths:
       - '.github/workflows/preview-env.yml'
       - 'deploy/preview/**'
-      # The template mirrors production's binding shape and READS the executor image out of it.
+      # The preview template mirrors this file's binding shape, and the render step reads
+      # the supported executor image TAG out of its pin.
       - 'deploy/backend/wrangler.toml'
       # The image the compose stack's `backend` service is built from.
       - 'deploy/node/Dockerfile'
@@ -313,8 +314,8 @@ jobs:
             echo "audit=${audit}"
           } >> "$GITHUB_OUTPUT"
 
-      # Rendered BESIDE the production wrangler.toml so `main` and every `migrations_dir`
-      # resolve exactly as production's do.
+      # Rendered BESIDE the deploy/backend template so `main` and every `migrations_dir`
+      # resolve exactly as they do for a deployment copying that template.
       - name: Render the preview wrangler config
         if: steps.gate.outputs.build == 'true'
         env:
@@ -325,15 +326,25 @@ jobs:
           D1_AUDIT_ID: ${{ steps.d1.outputs.audit }}
           WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
           GITHUB_APP_ID: ${{ vars.PREVIEW_GITHUB_APP_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          # The executor image is READ OUT of the production config rather than pinned in the
-          # template, so a preview can never drift onto a stale harness image.
-          EXECUTOR_IMAGE="$(grep -oE 'registry\.cloudflare\.com/[^"]*cat-factory-executor:[^"]*' deploy/backend/wrangler.toml | head -n1 || true)"
-          if [ -z "${EXECUTOR_IMAGE}" ]; then
-            echo "::error::could not read the executor image out of deploy/backend/wrangler.toml"
+          # deploy/backend/wrangler.toml is a placeholder TEMPLATE: its executor pin DECLARES
+          # the supported tag (check-runner-image-tag.mjs keeps it in lockstep with the
+          # harness version) and its account segment is nobody's. Read only the TAG out of
+          # the pin, so a preview can never drift onto a stale harness image, and compose
+          # the pull path against the preview account's own managed registry, which
+          # docker-publish.yml's mirror job keeps stocked with each newly pinned tag.
+          if [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "::error::secrets.CLOUDFLARE_ACCOUNT_ID is not set (see deploy/preview/README.md)"
             exit 1
           fi
+          EXECUTOR_TAG="$(grep -vE '^\s*#' deploy/backend/wrangler.toml | grep -oE 'cat-factory-executor:[^"]+' | head -n1 | cut -d: -f2 || true)"
+          if [ -z "${EXECUTOR_TAG}" ]; then
+            echo "::error::could not read the executor image tag out of deploy/backend/wrangler.toml"
+            exit 1
+          fi
+          EXECUTOR_IMAGE="registry.cloudflare.com/${CLOUDFLARE_ACCOUNT_ID}/cat-factory-executor:${EXECUTOR_TAG}"
           export EXECUTOR_IMAGE
           # The placeholder list is envsubst's own argument syntax — LITERAL text, not something
           # the shell should expand.
@@ -343,12 +354,13 @@ jobs:
             < deploy/preview/cloudflare/wrangler.preview.template.toml \
             > deploy/backend/wrangler.pr.toml
           # A leftover placeholder would deploy a Worker bound to a database that does not
-          # exist; fail here instead of finding out at runtime. Both patterns are literal.
+          # exist, and a REPLACE_WITH_ value is the deploy templates' own "unfilled" marker
+          # leaking through; fail here instead of finding out at runtime. Patterns are literal.
           # shellcheck disable=SC2016
-          if grep -q '\${' deploy/backend/wrangler.pr.toml; then
-            echo "::error::unsubstituted placeholders remain in the rendered config"
+          if grep -qE '\$\{|REPLACE_WITH_' deploy/backend/wrangler.pr.toml; then
+            echo "::error::unsubstituted or placeholder values remain in the rendered config"
             # shellcheck disable=SC2016
-            grep -n '\${' deploy/backend/wrangler.pr.toml
+            grep -nE '\$\{|REPLACE_WITH_' deploy/backend/wrangler.pr.toml
             exit 1
           fi
 

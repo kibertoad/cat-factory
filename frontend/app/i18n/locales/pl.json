@@ -5571,7 +5571,7 @@
       "noSource": "Brak strony źródłowej do porównania.",
       "moved": "Ta strona zmieniła się w trakcie uruchomienia, więc wcześniejsze kroki czytały starszą wersję.",
       "gap": {
-        "none_linked": "To zadanie nie ma powiązanej strony, więc jego opis był całym briefem, na którym pracowały agenty."
+        "none_linked": "Do agentów tego przebiegu nie trafiła żadna strona, więc pracowali wyłącznie na opisie zadania."
       }
     },
     "gap": {
@@ -5584,11 +5584,8 @@
       "notCovered": "Niesprawdzone: {count}",
       "regressions": "Regresje: {count}",
       "regressionTag": "Regresja",
-      "idOnly": "sam identyfikator",
-      "idOnlyHint": "Tego identyfikatora nie ma w specyfikacji usługi, więc nie ma nazwy do pokazania.",
       "spec": {
-        "not_read": "Specyfikacja usługi nie została odczytana, więc widoczne są identyfikatory wymagań zgłoszone przez testera, bez ich nazw.",
-        "unmatched": "Żaden z tych identyfikatorów wymagań nie występuje w odczytanej specyfikacji usługi, więc pokazane są tylko identyfikatory zgłoszone przez testera."
+        "not_read": "Specyfikacja usługi nie została odczytana, więc te liczby obejmują tylko to, co tester rozstrzygnął, według identyfikatora."
       },
       "verdict": {
         "met": "Potwierdzone",
@@ -5598,8 +5595,10 @@
       "gap": {
         "no_tester_step": "Ten potok nie ma kroku testowego, więc nie sprawdzono żadnego wymagania.",
         "tester_not_reported": "Tester jeszcze nie zgłosił raportu, więc żadne wymaganie nie zostało rozstrzygnięte.",
-        "no_verdicts": "Tester zgłosił raport, nie rozstrzygając żadnego wymagania ze specyfikacji."
-      }
+        "no_verdicts": "Tester zgłosił raport, nie rozstrzygając żadnego wymagania ze specyfikacji.",
+        "no_requirements": "Specyfikacja usługi nie zawiera żadnych wymagań, więc tester nie miał czego rozstrzygać."
+      },
+      "unmatchedVerdicts": "Tester rozstrzygnął dodatkowo {count} identyfikator(ów), których nie ma w tej specyfikacji, więc jego własne zliczenie jest wyższe niż powyższe."
     },
     "tests": {
       "title": "Jak to przetestowano",
@@ -6994,7 +6993,7 @@
           },
           "commandBar": {
             "title": "Paleta poleceń",
-            "body": "Najszybsza droga do każdej akcji: otwórz i zacznij pisać. Możesz stamtąd w każdej chwili ponownie uruchomić ten samouczek."
+            "body": "Najszybsza droga do każdej akcji: otwórz i zacznij pisać. Aby w każdej chwili ponownie uruchomić ten samouczek, wybierz tam „@:{'nav.tutorials'}”."
           },
           "toolbar": {
             "title": "Sterowanie tablicą",

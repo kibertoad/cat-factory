@@ -2,6 +2,9 @@
 '@cat-factory/contracts': minor
 '@cat-factory/kernel': minor
 '@cat-factory/orchestration': minor
+'@cat-factory/server': minor
+'@cat-factory/sdk': minor
+'@cat-factory/mcp-server': minor
 '@cat-factory/app': minor
 ---
 
@@ -33,5 +36,8 @@ step that finished before the edit landed. So both readers compute `movedDuringR
 distinct revisions the run's own steps recorded and state it beside the revision rather than folded
 into it.
 
-Additive on the public surface: report `version` steps to 8 and the API to 1.22.0, every existing
-section unchanged.
+Additive on the public surface: `PR_VERIFICATION_REPORT_VERSION` steps to 9, `RUN_OUTCOME_VERSION`
+to 2, and the API to 1.24.0. `GET /api/v1/runs/:runId/outcome` grows a `sources` section beside the
+existing ones and `GET /api/v1/runs/:runId/report` a `context` one; every section a consumer
+already reads is byte-for-byte unchanged, and the four SDKs plus the MCP facade are regenerated
+from the spec.

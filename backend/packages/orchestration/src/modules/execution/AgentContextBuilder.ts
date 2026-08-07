@@ -707,7 +707,13 @@ export class AgentContextBuilder {
       // Peer PRs from a multi-repo run (own-service PR stays on `pullRequest`) — the merger
       // reads these to clone each peer's PR branch and score the combined cross-repo diff.
       ...(block.peerPullRequests?.length ? { peerPullRequests: block.peerPullRequests } : {}),
-      ...(contextDocs.length ? { contextDocs } : {}),
+      // The source id each resolved doc carries is dropped here: it exists so the DISPATCH RECORD
+      // can key a document across the steps that read it, and an agent reads a page rather than
+      // an id. Projected explicitly rather than spread, so a field added to the resolver has to
+      // be decided into or out of the container payload.
+      ...(contextDocs.length
+        ? { contextDocs: contextDocs.map(({ externalId: _externalId, ...doc }) => doc) }
+        : {}),
       ...(contextTasks.length ? { contextTasks } : {}),
       // The task-estimator's triage, when produced earlier in this run — the
       // consensus executor's gating input.

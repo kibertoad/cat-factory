@@ -27,9 +27,16 @@ import { absentNote } from './prReport.steps.js'
 // derived) is a cohesive concern with its own tests, and the spine is at its size budget.
 // ---------------------------------------------------------------------------
 
-/** The identity two dispatches' records of one document agree on. */
+/**
+ * The identity two dispatches' records of one document agree on.
+ *
+ * The SOURCE identity, not anything the row displays: an `upload` carries no URL, so a key
+ * falling back to the title would fold two same-titled uploads into one row and read their
+ * differing revisions as a single page that moved mid-run. Same pair the document repository and
+ * the linked-context resolver key by, so a row here is the same document those do.
+ */
 function documentKey(doc: StepContextDocument): string {
-  return `${doc.origin}:${doc.url || doc.title}`
+  return `${doc.origin}:${doc.externalId}`
 }
 
 /** The revision a verdict names, or null when it names none (every non-`confirmed` verdict). */
@@ -77,10 +84,14 @@ function reduceDocuments(instance: ExecutionInstance): PrReportContextDocument[]
 /**
  * Compose the section from the run's own recorded state.
  *
- * `absent` covers one fact stated three ways: no linked document reached this run. A task with
- * no attachment and no document link in its description is the ordinary case; a run whose steps
- * all resolved their context outside the dispatch builder, and a run that predates the record,
- * land in the same place, and none of the three is a document the report is failing to show.
+ * `absent` states exactly one fact, and the note may not state a stronger one: no dispatch on
+ * this run PUT a linked document in front of its agent. Reading that back as "the task linked
+ * nothing" is wrong for the case this feature is aimed at. A run whose requirements were
+ * incorporated resolves its attachments once, into the reworked brief, and every dispatch after
+ * that carries only what the brief NAMES, so a task with an attached design lands here. So does a
+ * run whose steps assembled their context outside the dispatch builder (the inline requirements
+ * review), and one that predates the record. None of the four is a document the report is failing
+ * to show, and only one of them is the task having linked nothing.
  */
 export function composeContext(
   instance: ExecutionInstance,
@@ -91,8 +102,10 @@ export function composeContext(
     return {
       status: 'absent',
       note:
-        'No linked document reached this run: the task carried no attached page and named no ' +
-        'document URL, so its own description was the whole brief.',
+        'No dispatch on this run put a linked document in front of its agent. Usually that is a ' +
+        'task with no attached page and no document URL in its description, so the description ' +
+        'was the whole brief; a run whose requirements were incorporated first carries the ' +
+        'attachments folded into that brief instead, and records nothing here either.',
       documents: [],
     }
   }
@@ -112,7 +125,7 @@ function renderRevision(freshness: DocumentFreshness | undefined): string {
   if (!freshness) return 'not checked'
   switch (freshness.status) {
     case 'confirmed':
-      return `\`${hostMarkdown.cell(freshness.version)}\``
+      return hostMarkdown.codeCell(freshness.version)
     case 'not-applicable':
       return 'no source to compare against'
     case 'unconfirmed':
@@ -142,7 +155,7 @@ export function renderContext(context: PrVerificationReport['context']): string[
   if (moved.length) {
     out.push(
       `**🔄 ${moved.length} document${moved.length === 1 ? '' : 's'} changed while this run was ` +
-        `in flight** — earlier steps built against a revision the later ones did not read. ` +
+        `in flight**: earlier steps built against a revision the later ones did not read. ` +
         `Check the work against the revision below rather than against what the source shows now.`,
       '',
     )

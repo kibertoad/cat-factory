@@ -26,6 +26,7 @@ function instance(steps: PipelineStep[]): ExecutionInstance {
 
 function figma(version: string): StepContextDocument {
   return {
+    externalId: 'abc',
     title: 'Checkout flow',
     url: 'https://figma.com/file/abc',
     origin: 'figma',
@@ -34,11 +35,16 @@ function figma(version: string): StepContextDocument {
 }
 
 describe('composeContext', () => {
-  it('reports absent when no step recorded a document, saying the description was the brief', () => {
+  it('reports absent as a fact about the DISPATCHES, never about what the task linked', () => {
+    // A run whose requirements were incorporated resolves its attachments once, into the reworked
+    // brief, so every dispatch after that records nothing here even though the task DID link a
+    // page. A note claiming the task attached nothing would be false on exactly the runs this
+    // section exists for.
     const section = composeContext(instance([step(), step()]), NO_CAP)
     expect(section.status).toBe('absent')
     expect(section.documents).toEqual([])
-    expect(section.note).toContain('No linked document')
+    expect(section.note).toContain('No dispatch on this run')
+    expect(section.note).not.toMatch(/task carried no|task linked no/i)
   })
 
   it('reduces one document read by several dispatches to one row', () => {
@@ -80,6 +86,7 @@ describe('composeContext', () => {
 
   it('keeps a document with NO verdict apart from one that was checked and could not be confirmed', () => {
     const unchecked: StepContextDocument = {
+      externalId: 'prd',
       title: 'PRD',
       url: 'https://notion.so/prd',
       origin: 'notion',
@@ -89,6 +96,25 @@ describe('composeContext', () => {
     // could not tell. Only the second is a warning about the copy the agent read.
     expect(section.documents[0]?.freshness).toBeUndefined()
     expect(section.documents[1]?.freshness).toMatchObject({ status: 'confirmed' })
+  })
+
+  it('keeps two same-titled uploads apart instead of reading them as one page that moved', () => {
+    // An upload carries no URL, so the title is the only thing the ROW shows that could key it.
+    // Keying on it would fold these into one row whose two revisions render as the mid-run design
+    // change this section's loudest call-out is about.
+    const upload = (externalId: string, version: string): StepContextDocument => ({
+      externalId,
+      title: 'Wireframes.pdf',
+      url: '',
+      origin: 'upload',
+      freshness: { status: 'confirmed', version, change: 'unchanged' },
+    })
+    const section = composeContext(
+      instance([step([upload('doc_a', 'v1'), upload('doc_b', 'v2')])]),
+      NO_CAP,
+    )
+    expect(section.documents).toHaveLength(2)
+    expect(section.documents.some((doc) => doc.movedDuringRun)).toBe(false)
   })
 
   it('separates two documents that differ only by source, since the ids live in different key spaces', () => {
@@ -104,7 +130,7 @@ describe('renderContext', () => {
   it('renders an absent section as a note rather than omitting it', () => {
     const rendered = renderContext(composeContext(instance([step()]), NO_CAP)).join('\n')
     expect(rendered).toContain('### Context sources')
-    expect(rendered).toContain('No linked document')
+    expect(rendered).toContain('No dispatch on this run')
   })
 
   it('names the revision each document was read at', () => {
@@ -113,6 +139,19 @@ describe('renderContext', () => {
     )
     expect(rendered).toContain('`v7`')
     expect(rendered).toContain('[Checkout flow](https://figma.com/file/abc)')
+  })
+
+  it('fences a revision token that carries a backtick instead of letting it close the span', () => {
+    // A version token is whatever the SOURCE calls a revision, so it is untrusted text on a
+    // host-parsed surface: a hand-built one-tick span would close early and spill the rest of the
+    // row, and everything after it, into the body as live markdown.
+    const rendered = renderContext(composeContext(instance([step([figma('v`7')])]), NO_CAP)).join(
+      '\n',
+    )
+    const row = rendered.split('\n').find((line) => line.includes('Checkout flow'))!
+    expect(row).toContain('``v`7``')
+    // One row, still three cells: nothing escaped into the line as prose.
+    expect(row.split('|')).toHaveLength(5)
   })
 
   it('leads with a call-out when a document moved mid-run', () => {
@@ -128,13 +167,15 @@ describe('renderContext', () => {
         instance([
           step([
             {
+              externalId: 'up_1',
               title: 'Uploaded brief',
               url: '',
               origin: 'upload',
               freshness: { status: 'not-applicable' },
             },
-            { title: 'Never asked', url: 'https://notion.so/x', origin: 'notion' },
+            { externalId: 'x', title: 'Never asked', url: 'https://notion.so/x', origin: 'notion' },
             {
+              externalId: 'z',
               title: 'Refused',
               url: 'https://figma.com/file/z',
               origin: 'figma',

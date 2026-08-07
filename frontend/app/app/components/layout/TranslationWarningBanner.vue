@@ -5,8 +5,10 @@ import { computed } from 'vue'
 // Shown whenever the active locale is NOT English: the non-English catalogs are
 // community/AI-provided and may be inaccurate, so warn the user and point them at the
 // repository to report mistakes or open a fix PR. Rendered as a slim full-width strip at
-// the very top (distinct from the centered config-warning cards below it, so they don't
-// overlap). Dismissal is persisted per-locale in localStorage: once dismissed for a locale
+// the very top of the shell, IN NORMAL FLOW rather than fixed over the page: a strip that
+// takes its own height cannot cover anything, where the fixed one sat over the board's top
+// controls for the whole of every non-English session. Dismissal is persisted per-locale in
+// localStorage: once dismissed for a locale
 // it stays hidden across reloads, but switching to a different (separately-translated)
 // locale shows it again, since that catalog is a fresh, independently-translated context.
 const REPO_URL = 'https://github.com/kibertoad/cat-factory'
@@ -29,7 +31,7 @@ function dismiss() {
       v-if="show"
       data-testid="translation-warning"
       role="alert"
-      class="fixed inset-x-0 top-0 z-50 flex items-center gap-3 border-b border-amber-500/40 bg-amber-950/95 px-4 py-2 text-[13px] text-amber-100 shadow-lg backdrop-blur"
+      class="flex shrink-0 items-center gap-3 border-b border-amber-500/40 bg-amber-950/95 px-4 py-2 text-[13px] text-amber-100 shadow-lg backdrop-blur"
     >
       <UIcon name="i-lucide-languages" class="h-4 w-4 shrink-0 text-amber-400" />
       <p class="min-w-0 flex-1">

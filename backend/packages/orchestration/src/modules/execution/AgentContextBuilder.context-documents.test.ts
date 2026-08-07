@@ -101,6 +101,7 @@ describe('AgentContextBuilder: the documents a dispatch read', () => {
 
     expect(s.contextDocuments).toEqual([
       {
+        externalId: 'file1:1-2',
         title: 'Checkout flow',
         url: 'https://figma.com/design/file1',
         origin: 'figma',
@@ -117,6 +118,7 @@ describe('AgentContextBuilder: the documents a dispatch read', () => {
     await makeBuilder([document()]).buildContext('ws1', instance([s]), s, true, TASK)
     expect(s.contextDocuments).toEqual([
       {
+        externalId: 'file1:1-2',
         title: 'Checkout flow',
         url: 'https://figma.com/design/file1',
         origin: 'figma',

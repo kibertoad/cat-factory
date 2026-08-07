@@ -81,7 +81,11 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   built FROM: it reduces the per-dispatch `step.contextDocuments` records into one row per linked
   page, keeping the LAST verdict (the state the run ended on) and deriving `movedDuringRun` from
   the distinct revisions the run's own steps saw, since a final revision alone reads as though
-  every step had it.
+  every step had it. Its sibling is the outcome summary's `sources` (in `composeRunOutcome`, see
+  below): two renderings of one reduction, and both key a row by the document's source identity
+  rather than by anything the row DISPLAYS, because an `upload` carries no URL and a title-keyed
+  fallback folds two same-titled uploads into one row that then reads as a page which moved
+  mid-run.
   `prReport.commands.ts` holds the two CAPTURED-OUTPUT sections (the platform's own pre-PR
   validation run off `step.validation`, and the bugfix reproduction proof off `step.reproduction`),
   which are the report's only sections carrying raw command logs rather than a verdict somebody
@@ -91,7 +95,23 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   spill the rest of the report — including the machine-readable JSON block — into the body as prose.
   Its teardown leg is closed out of band by `ExecutionService.refreshVerificationReport`, wired
   to the teardown service's teardown-recorded hook (which fires on a failed attempt too), since
-  the TTL sweep reclaims an environment long after the run's last step settled. The step-selection
+  the TTL sweep reclaims an environment long after the run's last step settled. The controller also
+  answers the run OUTCOME summary (`composeOutcomeForRun`, behind
+  `GET /api/v1/runs/:runId/outcome`), which is the SAME evidence reduced for a reader who will not
+  open a diff: the reduction is `composeRunOutcome` in `@cat-factory/contracts` (shared with the SPA
+  card, which composes it live off its own store) and the rules the two documents both state live in
+  that package's `run-evidence.ts`. Both read one run's block and `spec/` through the shared
+  `RunEvidenceLoader`, because sharing composition rules while reading the evidence twice would move
+  the drift one layer down rather than removing it; `runOutcome.parity.test.ts` pins that the two
+  count one run identically. The loader reads the RUN's branch (`runSpecBranch`), and serves that
+  same read to the SPA card over `GET /workspaces/:ws/executions/:executionId/spec`: the card
+  composes locally so it can react to pushed updates, and fetching the SERVICE's default-branch spec
+  instead showed every requirement the run itself added as "not checked". On its way out over
+  `/api/v1` the summary goes through `runOutcome.boundary.ts`, which scrubs and bounds it (the
+  report has always done the same for the same text on its way onto a pull request) and names every
+  drop in `truncations`; the counts are computed before any cap. `RunEvidenceReads` owns the three
+  read paths resolved by run id, so nothing forms a second opinion about what "this run" is. The
+  step-selection
   rule both halves share lives under both in `prReport.steps.ts`, beside `absentNote`, the ONE
   renderer for an absent section's note (through `hostMarkdown`, since a note now names a pull
   request and `owner/repo#12` is a reference the host resolves). Every untrusted value it

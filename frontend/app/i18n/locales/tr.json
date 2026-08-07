@@ -5571,7 +5571,7 @@
       "noSource": "Karşılaştırılacak bir kaynak sayfa yok.",
       "moved": "Bu sayfa çalışma sürerken değişti, bu yüzden önceki adımlar daha eski bir sürümü okudu.",
       "gap": {
-        "none_linked": "Bu görev hiçbir sayfaya bağlı değil, dolayısıyla açıklaması ajanların çalıştığı brifingin tamamıydı."
+        "none_linked": "Bu çalıştırmanın ajanlarına hiçbir sayfa ulaşmadı, bu yüzden yalnızca görev açıklamasıyla çalıştılar."
       }
     },
     "gap": {
@@ -5584,11 +5584,8 @@
       "notCovered": "Denetlenmeyen: {count}",
       "regressions": "Gerilemeler: {count}",
       "regressionTag": "Gerileme",
-      "idOnly": "yalnızca kimlik",
-      "idOnlyHint": "Bu kimlik servis şartnamesinde yer almadığı için gösterilecek bir başlık yok.",
       "spec": {
-        "not_read": "Servis şartnamesi okunmadı; bu nedenle burada test edicinin bildirdiği gereksinim kimlikleri, başlıkları olmadan yer alıyor.",
-        "unmatched": "Okunan servis şartnamesinde bu gereksinim kimliklerinin hiçbiri yok; bu nedenle yalnızca test edicinin bildirdiği kimlikler gösteriliyor."
+        "not_read": "Servis şartnamesi okunamadı; bu sayılar yalnızca testçinin karara bağladıklarını, kimlik bazında kapsıyor."
       },
       "verdict": {
         "met": "Doğrulandı",
@@ -5598,8 +5595,10 @@
       "gap": {
         "no_tester_step": "Bu hatta test adımı yok, bu yüzden hiçbir gereksinim denetlenmedi.",
         "tester_not_reported": "Testçi henüz rapor vermedi, bu yüzden hiçbir gereksinim karara bağlanmadı.",
-        "no_verdicts": "Testçi rapor verdi ancak belirtimdeki hiçbir gereksinim hakkında karar vermedi."
-      }
+        "no_verdicts": "Testçi rapor verdi ancak belirtimdeki hiçbir gereksinim hakkında karar vermedi.",
+        "no_requirements": "Servis şartnamesinde hiçbir gereksinim kayıtlı değil, dolayısıyla testçinin karara bağlayacağı bir şey yoktu."
+      },
+      "unmatchedVerdicts": "Testçi ayrıca bu şartnamede bulunmayan {count} kimlik hakkında karar verdi; bu yüzden kendi sayımı yukarıdakilerden yüksek."
     },
     "tests": {
       "title": "Nasıl test edildi",
@@ -6994,7 +6993,7 @@
           },
           "commandBar": {
             "title": "Komut paleti",
-            "body": "Herhangi bir eyleme ulaşmanın en hızlı yolu: açın ve yazmaya başlayın. Bu eğitimi oradan istediğiniz zaman yeniden başlatabilirsiniz."
+            "body": "Herhangi bir eyleme ulaşmanın en hızlı yolu: açın ve yazmaya başlayın. Bu eğitimi istediğiniz zaman yeniden başlatmak için oradan \"@:{'nav.tutorials'}\" seçeneğini seçin."
           },
           "toolbar": {
             "title": "Pano denetimleri",
