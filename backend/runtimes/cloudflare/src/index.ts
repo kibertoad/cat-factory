@@ -33,6 +33,7 @@ import { D1PasswordResetTokenRepository } from './infrastructure/repositories/D1
 import { D1GateOutcomeRepository } from './infrastructure/repositories/D1GateOutcomeRepository'
 import { D1NotificationRepository } from './infrastructure/repositories/D1NotificationRepository'
 import { D1PlatformMetricsRepository } from './infrastructure/repositories/D1PlatformMetricsRepository'
+import { D1SpendRollupRepository } from './infrastructure/repositories/D1SpendRollupRepository'
 import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
 import {
   GITHUB_RECONCILE_STALE_MS,
@@ -370,6 +371,9 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
       // (they are account-scoped through the same `workspaces` sub-select).
       gateOutcomeRepository: new D1GateOutcomeRepository({ db: env.DB }),
       platformMetricsRepository: new D1PlatformMetricsRepository({ db: env.DB }),
+      // The durable cost-attribution rollup: this sweep is its only writer, and prunes it
+      // nowhere (see `RetentionDeps`).
+      spendRollupRepository: new D1SpendRollupRepository({ db: env.DB }),
       // Prune the separate provisioning-log database when its binding is present.
       ...(env.PROVISIONING_DB
         ? {

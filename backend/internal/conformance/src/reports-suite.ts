@@ -75,7 +75,7 @@ export interface ReportsSeedTicket {
 }
 
 /** The unique ids one fixture instance is built from (see `defineReportsSuite`). */
-interface FixtureIds {
+export interface FixtureIds {
   account: string
   ws: string
   tag: string
@@ -86,7 +86,11 @@ interface FixtureIds {
  * kinds, and the unattributed bucket, plus a second workspace on the SAME account and a
  * third on ANOTHER account, so scoping is exercised by every assertion below.
  */
-async function seedReportsFixture(seed: ReportsSeed, ids: () => FixtureIds, range: ReportRange) {
+export async function seedReportsFixture(
+  seed: ReportsSeed,
+  ids: () => FixtureIds,
+  range: ReportRange,
+) {
   const { account, ws, tag } = ids()
   const wsB = `${ws}-b`
   const other = ids()
@@ -277,7 +281,7 @@ async function seedReportsFixture(seed: ReportsSeed, ids: () => FixtureIds, rang
     billing: 'metered',
     createdAt: range.since - 1,
   })
-  return { account, ws, wsB, svcOne, svcTwo, repoId, other }
+  return { account, ws, wsB, svcOne, svcTwo, repoId, tag, other }
 }
 
 export function defineReportsSuite(
@@ -364,6 +368,23 @@ export function defineReportsSuite(
       expect(rows.get('jira:AAA-1')?.label).toBeNull()
       // Calls on runs with no linked ticket, and the run-less call: unattributed.
       expect(rows.get('')).toMatchObject({ calls: 2, meteredCost: 0.75 })
+    })
+
+    it('groups spend by RUN, labelled by the block the run targets', async () => {
+      // The finest TCO axis. The key comes off the ledger row itself, so it needs no join to
+      // be right; the join is the LABEL's, and a run with no block (a bootstrap) keeps its
+      // money and loses its name rather than dropping out.
+      const repo = makeRepo()
+      const { account, tag } = await seedFixture()
+      const rows = byKey(await repo.spendByDimension(scopeOf(account), 'run', range))
+      expect(rows.get(`run-a1-${tag}`)).toMatchObject({
+        calls: 2,
+        meteredCost: 3,
+        label: 'Add coupon',
+      })
+      expect(rows.get(`run-a2-${tag}`)).toMatchObject({ calls: 1, subscriptionCost: 99 })
+      // The call whose run cannot be resolved is a real slice, not a dropped row.
+      expect(rows.get('')).toMatchObject({ calls: 1, meteredCost: 0.25, label: null })
     })
 
     it('groups spend by agent kind', async () => {

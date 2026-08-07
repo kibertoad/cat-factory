@@ -3640,6 +3640,11 @@
     "retry": "Erneut versuchen",
     "error": "Berichte konnten nicht geladen werden.",
     "period": "{from} bis {to}",
+    "rollup": {
+      "none": "Die dauerhafte Kostenaggregation hat noch nichts erzeugt. Dieses Zeitfenster ist also mangels Daten leer, nicht mangels Kosten.",
+      "stale": "Die dauerhafte Kostenaggregation reicht nur bis {date}. Alles danach sind fehlende Daten, keine günstige Woche.",
+      "current": "Aus der dauerhaften Kostenaggregation, vollständig bis {date}. Die Zuordnung zu Repository, Ticket und Lauf ist hier die, die beim Entstehen der Kosten erfasst wurde."
+    },
     "unattributed": "Nicht zugeordnet",
     "window": {
       "oneDay": "Letzte 24 Stunden",
@@ -3682,6 +3687,7 @@
       "byAgentKind": "Kosten nach Agententyp",
       "byRepo": "Kosten nach Repository",
       "byTicket": "Kosten nach Ticket",
+      "byRun": "Kosten nach Lauf",
       "heading": "Kosten",
       "empty": "In diesem Zeitraum wurde keine Nutzung erfasst.",
       "calls": "{count} Aufruf | {count} Aufrufe",
