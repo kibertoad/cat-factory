@@ -523,9 +523,9 @@ export type PublicHumanTestDecision = v.InferOutput<typeof publicHumanTestDecisi
 export const publicVisualConfirmPairSchema = v.object({
   /** The logical view this pairing is for. */
   view: v.string(),
-  /** Artifact id of the captured screenshot, or null. App-resolvable only; see below. */
+  /** Artifact id of the captured screenshot, or null. Fetchable; see below. */
   actualArtifactId: v.nullable(v.string()),
-  /** Artifact id of the uploaded reference design, or null. App-resolvable only; see below. */
+  /** Artifact id of the uploaded reference design, or null. Fetchable; see below. */
   referenceArtifactId: v.nullable(v.string()),
 })
 export type PublicVisualConfirmPair = v.InferOutput<typeof publicVisualConfirmPairSchema>
@@ -534,17 +534,22 @@ export type PublicVisualConfirmPair = v.InferOutput<typeof publicVisualConfirmPa
  * A run parked on the VISUAL-CONFIRMATION gate: the UI tester's screenshots are waiting to be
  * compared against the uploaded reference designs.
  *
- * Same caveat as {@link publicHumanTestDecisionSchema}, and one more: the images themselves are
- * NOT readable over `/api/v1`. `pairs` carries the artifact ids so a caller can see how many views
- * were captured and which ones have a reference at all, but resolving an id to an image needs the
- * app. That is stated rather than hidden: a caller approving on the strength of this projection
- * alone is approving screenshots it has not seen.
+ * Same caveat as {@link publicHumanTestDecisionSchema}: the verbs are mechanical, but the
+ * judgement this park records is one an integration has to supply from somewhere real.
+ *
+ * The images themselves ARE readable: every id here resolves through
+ * `GET /api/v1/artifacts/:artifactId/blob`, which is keyed on the artifact alone and so serves the
+ * uploaded reference design exactly as it serves the captured screenshot. A caller can therefore
+ * fetch both halves of a pairing and compare them for itself, which is what this projection is
+ * for. (An earlier revision of this surface said the opposite, and kept saying it for a release
+ * after the blob endpoint shipped: a caveat that outlives its cause is worse than none, because it
+ * tells a caller not to attempt something that works.)
  */
 export const publicVisualConfirmDecisionSchema = v.object({
   kind: v.literal('visual-confirmation'),
   /** Only `awaiting_human` accepts an answer. */
   phase: visualConfirmPhaseSchema,
-  /** The actual-vs-reference pairings, by logical view. Artifact ids are app-resolvable only. */
+  /** The actual-vs-reference pairings, by logical view. Every id resolves through the blob read. */
   pairs: v.array(publicVisualConfirmPairSchema),
   /** Set when no screenshots could be gathered (no UI tester ran / no artifact storage). */
   degradedReason: v.nullable(v.string()),
@@ -846,6 +851,12 @@ export type PublicResolveJudgeInput = v.InferOutput<typeof publicResolveJudgeSch
  * is nothing to narrow: `recheck` re-evaluates the task as it now stands (which is what actually
  * clears the park, so an integration fixes the task over `PATCH /api/v1/tasks/:taskId` first),
  * and `proceed` waives the findings and records who did it.
+ *
+ * "Fixes the task first" covers every finding the gate can raise, which it did not always: three
+ * codes name the description (`title`/`description` on that patch), and the other four name a
+ * per-type field, which reached the patch only when it gained `fields`. Until then this comment
+ * named a remedy for four of its own codes that the surface did not offer, and `proceed` — waiving
+ * a finding rather than fixing it — was the only headless way past them.
  */
 export const publicResolveInputGateSchema = resolveInputGateSchema
 export type PublicResolveInputGateInput = v.InferOutput<typeof publicResolveInputGateSchema>

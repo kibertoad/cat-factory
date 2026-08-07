@@ -311,7 +311,7 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
       nothing. What absent must not be confused with is a document read with NO verdict, and that
       one is a present entry with no `freshness`: nobody asked, versus asked and could not tell.
       The report shape steps to `PR_VERIFICATION_REPORT_VERSION` 9, the outcome to
-      `RUN_OUTCOME_VERSION` 2, and the API to 1.24.0, all additive.
+      `RUN_OUTCOME_VERSION` 2, and the API to 1.25.0, all additive.
       A row is keyed by the document's SOURCE identity, never by anything it displays: an `upload`
       carries no URL, so a key falling back to the title would fold two same-titled uploads into
       one row and read their differing revisions as a page that moved mid-run.

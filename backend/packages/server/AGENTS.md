@@ -46,7 +46,11 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   read as such inlined between route registrations: `ticketLinkage.ts` (file a task FROM a tracker
   ticket: resolve and refuse before the block exists, claim after) and `documentAttachment.ts`
   (attach the requirements documents a task is built against, imported from a connected source or
-  uploaded whole, with the task rolled back if an attachment does not land). See
+  uploaded whole, with the task rolled back if an attachment does not land). `taskTypeFields.ts`
+  serves the task-type CATALOG and maps a caller's `fields` bag onto the internal shape at both
+  doors; the PATCH half MERGES over what the task already carries where creation takes the bag
+  whole, because the surface never serves that bag back, so a replacing patch would ask a caller
+  to restate values it cannot read. See
   `docs/initiatives/headless-clarification-loop.md`,
   `backend/docs/adr/0030-public-api-surface.md` and
   `backend/docs/adr/0043-public-decision-surface.md`.

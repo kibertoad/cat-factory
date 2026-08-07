@@ -50,8 +50,8 @@ saturate every core.
 
 | Package               | Mutated                          | Mutants | Score (total / covered) | Floor |
 | --------------------- | -------------------------------- | ------- | ----------------------- | ----- |
-| `@cat-factory/kernel` | `src/domain/**`, `src/shared/**` | 6,115   | 78.79% / 83.43%         | 76%   |
-| `@cat-factory/gates`  | all of `src/`                    | 651     | 85.25% / 89.37%         | 83%   |
+| `@cat-factory/kernel` | `src/domain/**`, `src/shared/**` | 6,152   | 81.78% / 84.51%         | 79%   |
+| `@cat-factory/gates`  | all of `src/`                    | 651     | 88.17% / 91.99%         | 86%   |
 | `@cat-factory/spend`  | all of `src/`                    | 396     | 95.71% / 95.71%         | 93%   |
 
 These three are pure logic with fast, database-free unit suites, which is the only shape mutation
@@ -73,6 +73,12 @@ both sides agree about, e.g. `binaryFormatCoverage`), `@cat-factory/workspaces`,
 LAST: it is the only one with no `NoCoverage` left, so there is nothing in its scope a new file
 would be joining.
 
+Inside the packages already in scope, kernel's remaining `NoCoverage` is now concentrated in
+`domain/catalog.ts`'s and `domain/seed.ts`'s data (the disposition for which is nothing) and in
+`gates.ts`'s notification-card copy. The app-owned registry seams a deployment extends the platform
+through are done: every one of them scores 100% except `pipeline-registry`, whose survivors are the
+`findIndex` bounds inside its merge helpers.
+
 ## Reading the numbers
 
 Two scores, both in the summary table and in Stryker's own output:
@@ -85,13 +91,20 @@ the two is untested code inside the scope, not weak assertions: kernel's `domain
 modules with no tests at all beside modules tested thoroughly. The covered-code score is the fair
 read on the tests that exist; the total is the honest read on the scope.
 
-Closing that gap is therefore mostly a question of which module gets its FIRST test, and the two
-biggest moves so far were both exactly that: `ip-host.logic` / `llm-output` / `subtasks.logic` /
-`errors`, then `models` / `validation-detectors` plus the multi-repo half of `gate-logic`. The
-second round took kernel from 66.29% to 78.79% by moving 566 mutants out of `NoCoverage`, which is
-also the clearest illustration of why the two columns move differently: the total gained 12.5
-points while the covered score gained 5.5, because a first test enlarges the covered denominator
-at the same time as it kills.
+Closing that gap is therefore mostly a question of which module gets its FIRST test, and the three
+biggest moves so far were all exactly that: `ip-host.logic` / `llm-output` / `subtasks.logic` /
+`errors`, then `models` / `validation-detectors` plus the multi-repo half of `gate-logic`, then the
+app-owned registry seams (pipeline / provider / VCS / judge / step-resolver / task-type /
+prompt-fragment) with the pure resolution helpers around them. The second round took kernel from
+66.29% to 78.79% by moving 566 mutants out of `NoCoverage`, which is also the clearest illustration
+of why the two columns move differently: the total gained 12.5 points while the covered score
+gained 5.5, because a first test enlarges the covered denominator at the same time as it kills.
+
+The third round shows the same asymmetry at a smaller scale, measured on ONE scope with the new
+test files moved aside and back (78.95% / 83.63% → 81.78% / 84.51%): 145 mutants left `NoCoverage`
+and 174 more were killed, so the total gained 2.8 points while the covered score gained 0.9. The
+extra 29 kills are the part worth noticing: they landed in modules that ALREADY had tests, because
+exercising a seam end to end reaches code its own file's suite drives past.
 
 **Read the report's PER-FILE undetected counts, not the headline score, when deciding what to
 work on.** They rank the work differently, and they also say which disposition applies: a file
@@ -122,11 +135,15 @@ the total by roughly `its mutants / total`, about 1.6 points for a 150-mutant on
 therefore about one ordinary module's worth of room: enough that unrelated growth cannot turn the
 nightly red, small enough that a real regression still does.
 
-This is not a hypothetical. Kernel went 5,805 → 5,956 → 6,034 → 6,084 → 6,115 mutants across the
-baselines behind this table, purely from ordinary main-branch work, and one of those steps landed
-WHILE the floor was being set: `prompt-fragment-registry.ts` arrived with no test file, adding 20
-`NoCoverage` mutants and moving the total 66.36 → 66.29 on its own. One module, no test regression
-anywhere, and a floor pinned to the measured value would already have been that much closer to red.
+This is not a hypothetical. Kernel went 5,805 → 5,956 → 6,034 → 6,084 → 6,115 → 6,152 mutants
+across the baselines behind this table, purely from ordinary main-branch work, and one of those
+steps landed WHILE the floor was being set: `prompt-fragment-registry.ts` arrived with no test file,
+adding 20 `NoCoverage` mutants and moving the total 66.36 → 66.29 on its own. One module, no test
+regression anywhere, and a floor pinned to the measured value would already have been that much
+closer to red. (The last step is the same story with the sign flipped: the 37 mutants between 6,115
+and 6,152 arrived on main while this table's third round was being measured, which is why the
+before-and-after above is a pair of runs on ONE scope rather than a comparison against the row the
+previous round left behind.)
 
 The scope can also SHRINK, and for a good reason: deleting a branch nothing could distinguish (one
 of the three dispositions below) removes its mutants from the denominator. Spend went 400 → 396
@@ -201,13 +218,22 @@ one presents as a crash that names something else.
   `There were failed tests in the initial test run` rather than a test-shaped error. The Turbo
   `^build` edge on `test:mutation` is what prevents it.
 
-Two more Stryker behaviours worth knowing before reading a report:
+Three more Stryker behaviours worth knowing before reading a report:
 
 - **Static mutants are ignored.** A mutant in code that only runs while the module loads (a
   top-level constant, the ~50-entry default price table) cannot be attributed to a test under
   per-test coverage, so Stryker would re-run the whole suite for each one. `ignoreStatic: true`
   leaves them out of the score instead of counting them as survived: "not measured" is honest,
   where a survived verdict would blame tests that structurally cannot kill it.
+- **A value computed in a `describe` BODY is read from unmutated source.** A mutant is switched on
+  per test at RUN time, and a describe body runs at COLLECTION time, before any switch is set. So a
+  snapshot taken there is built from the original code and every assertion below reads the same
+  frozen copy however the source is rewritten, reported as `Survived` rather than `NoCoverage` because
+  the tests did run and did pass. It hides exactly the guard most worth having: the derive-from-the-
+  source drift check the testing conventions ask for, whose whole design is to walk a registry once
+  and assert a relation over it. `gates`' human-wait parity guard was one, and the entire
+  `pollExhaustion: 'rearm'` declaration it exists to protect could be emptied with all four of its
+  cases green. Build the snapshot in a helper the tests CALL, not in a `const` beside them.
 - **Vitest coverage is off during mutation runs.** Stryker's vitest runner overrides
   `coverage.enabled`, so kernel's coverage-threshold ratchet does not fire inside a mutation run.
   The two ratchets answer different questions and do not interfere: coverage asks whether the code

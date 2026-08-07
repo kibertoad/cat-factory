@@ -406,7 +406,7 @@ mapping, so it always agrees with the field it filters on.
 | `POST /api/v1/services/:serviceId/tasks` | `write`  | Create a task. Body `{ title (1–200), description? (≤2000), taskType?, fields?, ticket?, documents? }` (`taskType` defaults to `feature`; `recurring` is not creatable here). See [Filling a task type's form](#filling-a-task-types-form), [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket) and [Attaching requirements documents](#attaching-requirements-documents). |
 | `GET /api/v1/services/:serviceId/tasks`  | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                                                                                                                                                                                  |
 | `GET /api/v1/tasks/:taskId`              | `read`   | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                                                                                                                                                                                                                                                                          |
-| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                                                                                                                                                                                                                                                                           |
+| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit the task's authored input: `{ title?, description?, fields? }` (an empty patch is a no-op). `fields` is MERGED over what the task already carries, so a caller sends only what it decides; see [Repairing a refused input](#repairing-a-refused-input).                                                                                                                                       |
 | `POST /api/v1/tasks/:taskId/start`       | `write`¹ | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                                                                                                                                                                                   |
 | `POST /api/v1/tasks/:taskId/stop`        | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                                                                                                                                                                                      |
 | `POST /api/v1/tasks/:taskId/retry`       | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                                                                                                                                                                                   |
@@ -543,6 +543,69 @@ what the catalog shows is exactly what creation accepts):
 `GET /api/v1/task-types` lists the built-in kinds plus the operations this deployment registered,
 minus any a workspace admin has hidden on this board: it answers "what may I create **here**", so a
 type it omits is one creation would refuse.
+
+#### Repairing a refused input
+
+The pre-dispatch input gate parks a run for free when the task states nothing an agent could act on,
+and it names exactly which input is missing. Four of its seven codes name a field of the bag above:
+`reproduction_missing`, `review_target_missing`, `success_criteria_missing` and
+`required_field_missing` (whose `field.key` says which). For a release those four named a remedy
+this surface did not offer: `fields` was accepted at CREATE and nowhere else, so the platform could
+accept a task, refuse to run it, say precisely what to go and fix, and leave you with `proceed`
+(waiving the finding) or deleting the task. Deleting is not a workaround: it loses the task id every
+stored reference points at, its ticket claim (which then refuses every future filing of that ticket)
+and its attached documents.
+
+`PATCH /api/v1/tasks/:taskId` now takes `fields`, checked against the same descriptors and refused
+the same way (`422`, `task_type_fields_invalid`, every `problem` at once):
+
+```http
+PATCH /api/v1/tasks/tsk_9
+{ "fields": { "stepsToReproduce": "1. open Reports  2. export an account with 12k rows  3. 500" } }
+```
+
+```http
+POST /api/v1/runs/run_4/decisions/input-gate/resolve
+{ "choice": "recheck" }
+```
+
+The recheck re-evaluates the task as it now stands, so it comes back `passed` only if the gap is
+genuinely closed; a still-blocked recheck is an ordinary `200` with refreshed findings.
+
+Five rules differ from the create call, each for a stated reason:
+
+- **`fields` is MERGED, not substituted.** A key you send is written; a key you omit keeps its
+  stored value. This API does not serve the bag back (a deployment's own type may declare a
+  `password` field, and a read surface cannot tell those from the rest), so a replacing patch would
+  ask you to restate values you have no way to read.
+- **An empty value means "not supplied"**, exactly as at creation, so it leaves the stored value
+  alone. There is no way to CLEAR a field here; nothing has needed one, and adding it later is
+  additive where guessing at it now would not be.
+- **Only the keys you SEND are checked against the descriptors.** A stored value was admitted by
+  another authority: the descriptors for a built-in type restate the platform's internal schema more
+  narrowly (`stepsToReproduce` is 2000 here against the schema's 4000), and a deployment can
+  re-register a custom type's form under tighter bounds than a stored task was filled in under.
+  Judging those on every patch would refuse your write for something it did not do, and refuse each
+  later one identically, leaving the task permanently un-repairable over the surface that exists to
+  repair it. Completeness is still judged on the RESULT, so a `required` field answered by neither
+  the stored bag nor your patch is named.
+- **Two spellings of one value supersede each other rather than merging.** A `review` task's target
+  is `prNumber` or `prUrl`, and the number wins when a single request carries both. Send `prUrl`
+  alone and the stored `prNumber` is dropped rather than merged back in beside it, which would
+  otherwise outrank your URL and silently revert the task to the pull request you were replacing.
+- **The best-practice fragments a task carries are frozen at creation** and are not re-derived from
+  a later edit, matching what an edit through the app does.
+
+A `review` task's target is the one value with resolution behind it, and the patch repeats that
+resolution rather than skipping it: the pull request is verified against the service's linked
+repository (a provider's own "no such PR" is a `422`; an outage is not) and the confirmed reference
+is folded into the description, exactly as at creation. Sending `description` in the same request is
+safe for a read-modify-write client: `GET /api/v1/tasks/:taskId` serves the description with that
+fold already in it, and sending it back replaces the fold rather than stating it a second time.
+Where a STORED description has since been rewritten by hand the platform can no longer tell which
+part of it was that fold, so **changing the target is refused** (with the reason in `problems`)
+rather than leaving a description naming a pull request the run does not review. Send the
+description you want alongside the new target, or edit it on its own first.
 
 #### Filing a task from a tracker ticket
 
@@ -832,7 +895,9 @@ Thirteen decision kinds appear in `decisions[]`, discriminated by `kind`:
   (`description_missing`, `description_placeholder`, `reproduction_missing`,
   `review_target_missing`, and the advisory `description_thin` / `success_criteria_missing`), so map
   them to your own copy rather than parsing prose. To clear it, **fix the task first**
-  (`PATCH /api/v1/tasks/:taskId`) and then `recheck`: the fix is verified, never taken on trust, and
+  (`PATCH /api/v1/tasks/:taskId` — `title`/`description` for the three description codes, `fields`
+  for the four that name a per-type field: see [Repairing a refused input](#repairing-a-refused-input))
+  and then `recheck`: the fix is verified, never taken on trust, and
   a still-blocked recheck comes back as an ordinary `200` with refreshed findings because nothing
   went wrong. `proceed` waives the findings, which stay on the run under an `overridden` verdict.
   This is the one park that depends on the **task** rather than the pipeline, which is why a
@@ -855,9 +920,12 @@ Thirteen decision kinds appear in `decisions[]`, discriminated by `kind`:
   exercise it. `degradedReason` non-null means no environment was provisioned and the change has
   to be tested against the PR branch by hand.
 - **`visual-confirmation`**: the UI tester's screenshots are waiting to be compared against the
-  reference designs. `pairs` carries the artifact ids per view, but **the images are not readable
-  over this API** — resolving an id to an image needs the app, so approving on this projection
-  alone approves screenshots you have not seen.
+  reference designs. `pairs` carries the artifact ids per view, and both halves of a pairing are
+  readable: `GET /api/v1/artifacts/:artifactId/blob` is keyed on the artifact alone, so it serves
+  an uploaded reference design exactly as it serves a captured screenshot. Fetch both and compare
+  them rather than approving on the projection. (This section said the opposite for a release after
+  the blob endpoint shipped. A caveat that outlives its cause is worse than none, because it tells
+  a caller not to attempt something that works.)
 
 - **`follow-ups`**: while the Coder worked it streamed forward-looking `items` (loose ends it
   noticed and deliberately did not act on, and questions it would otherwise have guessed at), and
@@ -980,7 +1048,7 @@ runs no freshness check at all, which is not the same fact as a check that ran a
 conclude. `movedDuringRun` is computed from the run's own records: the source moved WHILE the run
 was in flight, so its earlier steps built against something its later ones did not read. Nothing
 here is re-probed at read time, by design: the source has moved on since, so a fresh probe would
-answer about a revision no agent on this run ever saw. Added in 1.24.0 (report `version` 9), so a
+answer about a revision no agent on this run ever saw. Added in 1.25.0 (report `version` 9), so a
 consumer written earlier simply does not see the key.
 
 `observability` carries the links back: `runUrl` (the app's panel, for a person), `trajectoryUrl`
@@ -1013,7 +1081,7 @@ recorded about it (that is the state the run ended on) plus `movedDuringRun`, wh
 changed while the run was in flight and is therefore the one thing that last verdict cannot say.
 `url` is null for an `upload`, which has no source page to open, and a null `freshness` means the
 deployment runs no freshness check at all rather than a check that ran and could not conclude. Its
-`gap` when absent is `none_linked` or `run_unavailable`. Added in 1.24.0 (outcome `version` 2).
+`gap` when absent is `none_linked` or `run_unavailable`. Added in 1.25.0 (outcome `version` 2).
 
 Both are composed by the same code over one read of the run's evidence, so the coverage counts
 (`met` / `notMet` / `notCovered` / `regressions` / `total`) and the regression rule are the same

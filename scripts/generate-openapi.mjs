@@ -120,18 +120,24 @@ const API_PREFIX = '/api/v1'
 // `extras` bag, which keeps serving them until the window in `public-api.md` closes, so no
 // consumer has to move on this version. 1.20.0 is main's published number as of this branch's last
 // merge; re-read this line after any merge rather than trusting that the VERSION auto-merged clean.
-// 1.24.0: the verification report gains a `context` section and the run outcome summary a
+// 1.24.0: `PATCH /api/v1/tasks/:taskId` accepts `fields`, the task's per-type bag, merged over
+// what the task already carries. Additive (a new optional request field; a caller that never sends
+// one is unaffected), and it is what makes the pre-dispatch input gate's findings FIXABLE
+// headlessly: four of its seven codes name a field of that bag, and until now the surface named a
+// remedy it did not offer.
+//
+// 1.25.0: the verification report gains a `context` section and the run outcome summary a
 // `sources` one, both saying which linked pages a run's agents read and at which revision.
 // Additive on both surfaces (a new section object beside the existing ones, on two endpoints and
 // inside the PR body's fenced block), and inert for a consumer that ignores it: every section it
 // already reads is byte-for-byte unchanged. `PR_VERIFICATION_REPORT_VERSION` steps to 9 and
 // `RUN_OUTCOME_VERSION` to 2 with it.
 //
-// 1.23.0 is main's published number as of this branch's last merge, and it is NOT this change:
-// it belongs to the per-operation `x-min-scope` extension. Two diffs claiming one number is a lie
-// a consumer pinning the version would act on, so re-read this line after any merge rather than
-// trusting that the VERSION auto-merged clean.
-const API_VERSION = '1.24.0'
+// This branch has now claimed 1.22.0, 1.23.0 and 1.24.0 in turn, each published by main while it
+// was in flight. The collision surfaces as a conflict on THIS comment block, because each version
+// step writes its own paragraph, and never on the VERSION line, which auto-merges clean to a
+// number main has already used. So re-read this line after every merge rather than trusting it.
+const API_VERSION = '1.25.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -324,9 +330,9 @@ const OPERATION_DOCS = {
   },
   updatePublicTask: {
     tag: 'Tasks',
-    summary: "Edit a task's title/description",
+    summary: "Edit a task's inputs",
     description:
-      'Edit a task’s human-authored fields (title/description) before it runs. Both fields are optional.',
+      'Edit a task’s human-authored inputs before it runs: its title, its description, and `fields`, the per-case values for its own task type (checked against the descriptors `GET /api/v1/task-types` serves). All are optional. `fields` is MERGED over what the task already carries — a key you send is written, a key you omit keeps its stored value — because this API does not serve the bag back. This is what makes an input the pre-dispatch gate refused repairable: supply the value it named, then recheck the parked run.',
   },
   stopPublicTask: {
     tag: 'Tasks',

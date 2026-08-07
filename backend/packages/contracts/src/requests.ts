@@ -18,6 +18,7 @@ import { serviceConnectionsSchema } from './service-connections.js'
 import {
   agentKindSchema,
   blockTypeSchema,
+  builtinTaskTypeFieldsSchema,
   createTaskTypeSchema,
   frameRepoTypeSchema,
   positionSchema,
@@ -185,12 +186,22 @@ export const updateBlockSchema = v.partial(
     // door the create form goes through, so a type's declaration is enforced identically
     // whichever one wrote the values.
     //
-    // Deliberately NARROWER than the whole `taskTypeFields`: the BUILT-IN per-type fields are
-    // resolved at creation with side effects the patch path does not repeat (a `review` task's
-    // PR reference is verified against the provider and folded into the description), so
-    // offering them here would quietly skip that. The custom bag has no such resolution: it is
-    // exactly the deployment-declared answers, which is why it is the half that can be patched.
+    // The BUILT-IN half rides `builtinTaskTypeFields` below rather than this key: the two are
+    // validated by different authorities (see `builtinTaskTypeFieldsSchema`), so splitting them
+    // at the request boundary is what lets each be parsed by its own.
     customTaskTypeFields: descriptorFieldValuesSchema,
+    // Task-level: the BUILT-IN per-type create-form fields (a bug's repro, a spike's success
+    // criteria, a review's target PR); REPLACES the built-in half of the bag and leaves `custom`
+    // alone. Schema-typed here, so a value this key accepts is one creation would also have.
+    //
+    // These were long unpatchable, and the reason was real rather than an oversight: a `review`
+    // task's PR reference is verified against the provider at creation and FOLDED into the
+    // description, so a patch that wrote the field alone would skip both. `BoardService` now
+    // repeats that resolution instead of declining to (see `taskTypeFieldsPatch.ts`), which is
+    // what makes the pre-dispatch input gate's `reproduction_missing` / `review_target_missing` /
+    // `success_criteria_missing` findings fixable at all: each names a field, and until this key
+    // existed the only way to supply one was to delete the task and file it again.
+    builtinTaskTypeFields: builtinTaskTypeFieldsSchema,
     // Service-level (frame): the service-owned provisioning config — the provision type it
     // produces + in-repo specifics (the "what + where"). See
     // docs/initiatives/per-service-provision-types.md.

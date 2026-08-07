@@ -193,7 +193,7 @@ export const startPublicTaskContract = withMinScope(
   }),
 )
 
-/** Edit a task's title/description (pre-start edits). */
+/** Edit a task's authored inputs: title, description and its per-type `fields` bag (pre-start edits). */
 export const updatePublicTaskContract = withMinScope(
   'write',
   defineApiContract({
