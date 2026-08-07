@@ -347,6 +347,8 @@
       "intakeNoSources": "Primero conecta una fuente de tareas para extraer incidencias de ella.",
       "intakeNoIntakeSources": "Hay una fuente de tareas conectada, pero ninguna de las fuentes conectadas puede ejecutar todavía una búsqueda programada de incidencias.",
       "intakeGithubRepo": "Repositorio",
+      "intakeGitlabProject": "Proyecto",
+      "intakeGitlabProjectHelp": "La ruta completa del proyecto de GitLab, incluidos los subgrupos, p. ej. grupo/subgrupo/proyecto.",
       "intakeBoardId": "ID del tablero",
       "intakeBoardIdHelp": "El tablero, proyecto o cola al que este rastreador limita la admisión. El formato lo define el rastreador.",
       "trackerTrigger": "Iniciar ejecuciones desde webhooks del rastreador",

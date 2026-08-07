@@ -347,6 +347,8 @@
       "intakeNoSources": "חבר תחילה מקור משימות כדי למשוך ממנו תקלות.",
       "intakeNoIntakeSources": "מקור משימות מחובר, אך אף אחד מהמקורות המחוברים אינו יכול עדיין להריץ חיפוש תקלות מתוזמן.",
       "intakeGithubRepo": "מאגר",
+      "intakeGitlabProject": "פרויקט",
+      "intakeGitlabProjectHelp": "הנתיב המלא של פרויקט ה-GitLab, כולל תת-קבוצות, לדוגמה group/sub/project.",
       "intakeBoardId": "מזהה לוח",
       "intakeBoardIdHelp": "הלוח, הפרויקט או התור שאליהם מערכת המעקב מגבילה את הקליטה. התבנית נקבעת על ידי מערכת המעקב.",
       "trackerTrigger": "להתחיל הרצות מ-webhooks של מערכת המעקב",

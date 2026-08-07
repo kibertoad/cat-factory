@@ -2920,6 +2920,8 @@
       "intakeNoSources": "Verbinden Sie zuerst eine Task-Quelle, um Issues daraus zu ziehen.",
       "intakeNoIntakeSources": "Eine Task-Quelle ist verbunden, aber keine der verbundenen Quellen kann bereits eine geplante Issue-Suche ausführen.",
       "intakeGithubRepo": "Repository",
+      "intakeGitlabProject": "Projekt",
+      "intakeGitlabProjectHelp": "Der vollständige Pfad des GitLab-Projekts, einschließlich aller Untergruppen, z. B. gruppe/untergruppe/projekt.",
       "intakeBoardId": "Board-ID",
       "intakeBoardIdHelp": "Das Board, Projekt oder die Warteschlange, auf die dieser Tracker die Aufnahme eingrenzt. Das Format gibt der Tracker vor.",
       "trackerTrigger": "Läufe durch Tracker-Webhooks starten",

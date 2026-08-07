@@ -1,9 +1,13 @@
 import {
   ConflictError,
+  UnavailableError,
   ValidationError,
+  type BugCandidate,
   type GitHubClient,
   type GitHubInstallation,
+  type GitHubIssueSearchHit,
   type GitHubInstallationRepository,
+  type IssueIntakeQuery,
   type NormalizedTaskConnection,
   type TaskContent,
   type TaskCredentials,
@@ -11,6 +15,7 @@ import {
   type TaskSearchResult,
   type TaskSourceDiagnostic,
   type TaskSourceProvider,
+  type TrackerBoard,
 } from '@cat-factory/kernel'
 import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import { GITLAB_ISSUES_DESCRIPTOR } from './gitlab-issues.logic.js'
@@ -56,6 +61,16 @@ export interface GitLabIssuesProviderDependencies {
    */
   webBaseUrl?: string
 }
+
+/**
+ * Bounded page walk for intake/hunt overscan, so a run of already-worked issues at the front of
+ * the oldest-first results cannot starve the pickup while eligible ones exist beyond it. Same
+ * bound as the GitHub provider's, for the same reason.
+ */
+const INTAKE_MAX_PAGES = 5
+
+/** GitLab's own ceiling on `per_page`, which is what bounds one overscan request. */
+const GITLAB_MAX_PER_PAGE = 100
 
 export class GitLabIssuesProvider implements TaskSourceProvider {
   readonly kind = 'gitlab' as const
@@ -198,6 +213,110 @@ export class GitLabIssuesProvider implements TaskSourceProvider {
       })
     }
     return out.slice(0, 20)
+  }
+
+  /**
+   * Issue-intake predicate search: the oldest open issue(s) on the schedule's configured
+   * project matching every predicate, as lean hits the intake step imports straight away.
+   */
+  async searchIssues(
+    _credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+    workspaceId: string,
+  ): Promise<TaskSearchResult[]> {
+    const hits = await this.walkIntakeHits(query, workspaceId)
+    return hits.map((hit) => ({
+      source: 'gitlab',
+      externalId: gitlabIssuesLogic.gitlabIssueExternalId(hit),
+      title: hit.title,
+      url: hit.url,
+      status: hit.state,
+      excerpt: '',
+    }))
+  }
+
+  /**
+   * List the projects the workspace's GitLab connection can reach, as hunt boards. No GitLab
+   * connection ⇒ an empty list, matching every other read on this provider (the connection
+   * authenticates out of band, so "not connected" is an absence rather than an error).
+   */
+  async listBoards(_credentials: TaskCredentials, workspaceId: string): Promise<TrackerBoard[]> {
+    const connection = await this.deps.installations.getByWorkspace(workspaceId)
+    if (!connection || connection.provider !== 'gitlab') return []
+    const page = await this.deps.gitlabClient.listInstallationRepos(connection.installationId)
+    return gitlabIssuesLogic.gitlabProjectsToBoards(page.items)
+  }
+
+  /**
+   * Bug-hunt candidate search: the SAME walk as {@link searchIssues}, projected onto the richer
+   * candidate shape the ranking model reads. GitLab's project-issues response already carries the
+   * description, labels, age and note count, so the whole scan is one request per page and never
+   * a per-candidate detail fetch.
+   */
+  async listBugCandidates(
+    _credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+    workspaceId: string,
+  ): Promise<BugCandidate[]> {
+    const hits = await this.walkIntakeHits(query, workspaceId)
+    return hits.map(gitlabIssuesLogic.gitlabHitToBugCandidate)
+  }
+
+  /**
+   * The oldest-first page walk BOTH intake reads ride, returning the eligible hits so each caller
+   * supplies only its own projection. Shared rather than copied for the reason the GitHub twin
+   * states: every rule in here is one the recurring intake and the hunt must agree on.
+   *
+   * The exclusion list is the one predicate the project-issues endpoint cannot express, and the
+   * excluded issues ARE the oldest, so they cluster at the front of the ordering: the walk
+   * overscans by the exclusion count and pages (bounded) rather than reporting an empty board
+   * because its first page was entirely already-worked.
+   *
+   * Comparison is case-SENSITIVE, unlike the GitHub twin's: both sides of it are GitLab project
+   * paths built from the same `path_with_namespace`, and folding case would let two projects
+   * GitLab serves as distinct answer for each other.
+   */
+  private async walkIntakeHits(
+    intake: IssueIntakeQuery,
+    workspaceId: string,
+  ): Promise<GitHubIssueSearchHit[]> {
+    const connection = await this.deps.installations.getByWorkspace(workspaceId)
+    if (!connection || connection.provider !== 'gitlab') return []
+    const searchProject = this.deps.gitlabClient.searchProjectIssues
+    if (!searchProject) {
+      // Never an empty result: "this deployment cannot scan a GitLab board" and "this board has
+      // no open bugs" are opposite facts, and only the first one names something to fix.
+      // No `reason`: the status class's generic copy ("this deployment has not configured the
+      // capability this action needs") is the accurate claim here, where an outage reason would
+      // send an operator looking for a fault in a deployment that simply is not wired for it.
+      throw new UnavailableError(
+        'This deployment cannot search GitLab project issues: its GitLab client does not ' +
+          'implement the project-scoped issue read.',
+      )
+    }
+    const excluded = new Set(intake.excludeExternalIds ?? [])
+    const per = Math.min(intake.limit + excluded.size, GITLAB_MAX_PER_PAGE)
+    const out: GitHubIssueSearchHit[] = []
+    for (let page = 1; page <= INTAKE_MAX_PAGES && out.length < intake.limit; page++) {
+      const search = gitlabIssuesLogic.buildGitLabIntakeSearch(intake, { limit: per, page })
+      const hits = await searchProject.call(
+        this.deps.gitlabClient,
+        connection.installationId,
+        search.ref,
+        search.query,
+      )
+      for (const hit of hits) {
+        if (excluded.has(gitlabIssuesLogic.gitlabIssueExternalId(hit))) continue
+        // Defence in depth on the unassigned predicate: `assignee_id=None` is what narrows the
+        // search, but an adapter that reports an assignee while ignoring the parameter would
+        // otherwise offer up somebody else's in-flight work as free to take.
+        if (intake.unassignedOnly && hit.assignee) continue
+        out.push(hit)
+        if (out.length >= intake.limit) break
+      }
+      if (hits.length < per) break // a short page is the last page — stop paging
+    }
+    return out
   }
 
   /**

@@ -456,6 +456,9 @@ export class FetchGitLabClient implements VcsClient {
     })
     if (query.page && query.page > 1) params.set('page', String(query.page))
     if (query.text) params.set('search', query.text)
+    // GitLab searches title AND description by default; `in=title` is how it narrows, which is
+    // what an intake title-fragment predicate asks for.
+    if (query.text && query.textIn === 'title') params.set('in', 'title')
     if (query.openOnly) params.set('state', 'opened')
     // GitLab takes the label set as one comma-joined value, matched as AND.
     if (query.labels?.length) params.set('labels', query.labels.join(','))

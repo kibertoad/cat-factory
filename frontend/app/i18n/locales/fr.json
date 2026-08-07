@@ -347,6 +347,8 @@
       "intakeNoSources": "Connectez d'abord une source de tâches pour en extraire des tickets.",
       "intakeNoIntakeSources": "Une source de tâches est connectée, mais aucune des sources connectées ne peut encore exécuter une recherche de tickets planifiée.",
       "intakeGithubRepo": "Dépôt",
+      "intakeGitlabProject": "Projet",
+      "intakeGitlabProjectHelp": "Le chemin complet du projet GitLab, sous-groupes compris, par exemple groupe/sous-groupe/projet.",
       "intakeBoardId": "ID du tableau",
       "intakeBoardIdHelp": "Le tableau, projet ou file d’attente auquel ce traqueur limite la prise en charge. Son format est défini par le traqueur.",
       "trackerTrigger": "Lancer des exécutions depuis les webhooks du traqueur",

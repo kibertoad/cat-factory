@@ -54,6 +54,12 @@ export const issueIntakeConfigSchema = v.object({
     /** GitHub repository as `owner/name`. */
     githubRepo: v.optional(intakePredicateStringSchema),
     /**
+     * GitLab project as its full path with namespace, e.g. `group/project` or
+     * `group/sub/project`. Its own leg rather than a reuse of `githubRepo`: a GitLab namespace
+     * NESTS, so the two are not the same shape, and the two providers read different fields.
+     */
+    gitlabProject: v.optional(intakePredicateStringSchema),
+    /**
      * A DEPLOYMENT-REGISTERED source's board scope, held opaquely: only that provider knows what
      * its board id means, so the platform carries the string and never interprets it.
      *

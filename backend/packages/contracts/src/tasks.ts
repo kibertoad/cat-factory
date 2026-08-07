@@ -22,6 +22,14 @@ import { vcsProviderSchema } from './routes/auth.js'
 export const BUILTIN_TASK_SOURCE_KINDS = ['jira', 'github', 'linear', 'gitlab'] as const
 
 /**
+ * One of the sources this build ships, as a type. Its use is a `Record<BuiltinTaskSourceKind, …>`
+ * where a caller must state something for EVERY built-in and a deployment-registered source is
+ * handled separately: a fifth built-in then fails to compile until it has an answer, where an
+ * `if`-chain over the same ids would silently fall through to whatever the last branch returns.
+ */
+export type BuiltinTaskSourceKind = (typeof BUILTIN_TASK_SOURCE_KINDS)[number]
+
+/**
  * A BUILT-IN task source OR a CONSUMER-namespaced one ({@link namespacedIdSchema},
  * `<ns>:<name>`, e.g. `acme:servicenow`) a deployment registers in code on its app-owned
  * `TaskSourceRegistry` — the same `picklist ∪ namespaced` shape `taskTypeSchema` uses, for the

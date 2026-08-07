@@ -353,6 +353,7 @@ export type {
 } from './task-source.js'
 export type { BugHuntAssessor, BugHuntSubject } from './bug-hunt.js'
 export type {
+  BuiltinTaskSourceKind,
   TaskSourceWebhookAdapter,
   TrackerCommentAuthor,
   TrackerCommentEvent,

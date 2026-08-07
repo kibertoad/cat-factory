@@ -2920,6 +2920,8 @@
       "intakeNoSources": "Connetti prima una sorgente di attività per estrarne le issue.",
       "intakeNoIntakeSources": "Una sorgente di attività è connessa, ma nessuna delle sorgenti connesse può ancora eseguire una ricerca pianificata delle issue.",
       "intakeGithubRepo": "Repository",
+      "intakeGitlabProject": "Progetto",
+      "intakeGitlabProjectHelp": "Il percorso completo del progetto GitLab, sottogruppi inclusi, ad esempio gruppo/sottogruppo/progetto.",
       "intakeBoardId": "ID della board",
       "intakeBoardIdHelp": "La board, il progetto o la coda a cui questo tracker limita l’acquisizione. Il formato è definito dal tracker.",
       "trackerTrigger": "Avvia esecuzioni dai webhook del tracker",

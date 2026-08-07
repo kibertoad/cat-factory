@@ -30,13 +30,15 @@ comparison (not a work log), see [`vcs-providers.md`](./vcs-providers.md).
   usable `owner/repo/url` per hit. The neutral doc-search box degrades to "no results".
 - **Sub-issues** (`listSubIssues`): GitLab has no parent→child issue hierarchy, so the
   optional method is left unimplemented (the caller degrades gracefully).
-- **GitLab as a TASK SOURCE: the READ path landed, the SCHEDULED paths have not.**
+- **GitLab as a TASK SOURCE: the PULL paths landed, the PUSH and WRITEBACK paths have not.**
   `GitLabIssuesProvider` imports an issue onto a block, searches one project's issues from the
-  frame linked to it, and classifies its own setup. Still open: the recurring `bug-intake`
-  schedule and the interactive bug hunt (both need `searchIssues` / `listBugCandidates`), push
-  intake (the `X-Gitlab-Token` webhook adapter) and ticket writeback. Until then a GitLab
-  connection reports `supportsIntake: false`, so the schedule form does not offer it rather than
-  accepting a schedule that could never fire. Tracker:
+  frame linked to it, classifies its own setup, and backs both predicate scans: the recurring
+  `bug-intake` schedule (scoped by a `gitlabProject` board field) and the interactive bug hunt,
+  each reading a whole page of candidates in ONE project-scoped call. Still open: push intake
+  (the `X-Gitlab-Token` webhook adapter) and ticket writeback. One predicate does NOT bite on
+  GitLab and is documented rather than faked: `issueType` is ignored, because GitLab's own type
+  vocabulary (`issue` / `incident` / `test_case` / `task`) has no member meaning "bug" and GitLab
+  shops mark bugs with a label, so a GitLab intake narrows to bugs through `labels`. Tracker:
   [`gitlab-issues-intake.md`](../../docs/initiatives/gitlab-issues-intake.md).
 - **Per-workspace PAT connect (backend + UI landed; engine-routing pending)**: a workspace
   connects GitLab by pasting a PAT in the UI: `POST /workspaces/:ws/gitlab/connection` validates +

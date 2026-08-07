@@ -48,6 +48,10 @@ const intakeSource = ref<TaskSourceKind | null>(null)
 const intakeJiraProjectKey = ref('')
 const intakeLinearTeamId = ref('')
 const intakeGithubRepo = ref('')
+// A GitLab project is its full path with namespace, which NESTS (`group/sub/project`), so it is
+// its own field rather than a reuse of the GitHub one: the two are not the same shape and the two
+// providers read different legs of the stored board scope.
+const intakeGitlabProject = ref('')
 /**
  * The board scope for a DEPLOYMENT-REGISTERED source, held opaquely. Its own field rather than
  * reusing one of the three above, mirroring `issueIntakeConfigSchema.board.boardId`: only that
@@ -199,6 +203,7 @@ watch(open, (isOpen) => {
   intakeJiraProjectKey.value = ''
   intakeLinearTeamId.value = ''
   intakeGithubRepo.value = ''
+  intakeGitlabProject.value = ''
   intakeBoardId.value = ''
   trackerTrigger.value = false
   intakeTitleFragment.value = ''
@@ -229,6 +234,7 @@ const { requestClose } = useUnsavedGuard({
     intakeJiraProjectKey: intakeJiraProjectKey.value.trim(),
     intakeLinearTeamId: intakeLinearTeamId.value.trim(),
     intakeGithubRepo: intakeGithubRepo.value.trim(),
+    intakeGitlabProject: intakeGitlabProject.value.trim(),
     intakeBoardId: intakeBoardId.value.trim(),
     trackerTrigger: trackerTrigger.value,
     intakeTitleFragment: intakeTitleFragment.value.trim(),
@@ -253,6 +259,7 @@ const intakeReady = computed(() => {
   if (intakeSource.value === 'jira') return intakeJiraProjectKey.value.trim().length > 0
   if (intakeSource.value === 'linear') return intakeLinearTeamId.value.trim().length > 0
   if (intakeSource.value === 'github') return intakeGithubRepo.value.trim().length > 0
+  if (intakeSource.value === 'gitlab') return intakeGitlabProject.value.trim().length > 0
   // A registered source is scoped by its opaque board id. Falling through to `false` here would
   // make its schedule permanently unsaveable rather than merely unscoped.
   if (intakeSource.value) return intakeBoardId.value.trim().length > 0
@@ -276,6 +283,9 @@ function buildIssueIntake(): IssueIntakeConfig {
         : {}),
       ...(source === 'github' && intakeGithubRepo.value.trim()
         ? { githubRepo: intakeGithubRepo.value.trim() }
+        : {}),
+      ...(source === 'gitlab' && intakeGitlabProject.value.trim()
+        ? { gitlabProject: intakeGitlabProject.value.trim() }
         : {}),
       ...(!intakeSourceIsBuiltin.value && intakeBoardId.value.trim()
         ? { boardId: intakeBoardId.value.trim() }
@@ -545,6 +555,15 @@ async function add() {
           >
             <!-- A GitHub repo ref is always the literal `owner/name` path, never localized. -->
             <UInput v-model="intakeGithubRepo" placeholder="owner/name" class="w-full" />
+          </UFormField>
+          <UFormField
+            v-if="intakeSource === 'gitlab'"
+            :label="t('board.recurring.intakeGitlabProject')"
+            :help="t('board.recurring.intakeGitlabProjectHelp')"
+            required
+          >
+            <!-- A GitLab project path is literal, and NESTS: subgroups are part of it. -->
+            <UInput v-model="intakeGitlabProject" placeholder="group/project" class="w-full" />
           </UFormField>
           <UFormField
             v-if="intakeSource && !intakeSourceIsBuiltin"

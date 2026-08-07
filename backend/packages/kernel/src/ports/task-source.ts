@@ -119,6 +119,8 @@ export interface IssueIntakeQuery {
     jiraProjectKey?: string
     linearTeamId?: string
     githubRepo?: string
+    /** GitLab project as its full path with namespace, e.g. `group/sub/project`. */
+    gitlabProject?: string
     boardId?: string
   }
   /** Substring that must appear in the issue title. */

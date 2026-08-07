@@ -5,6 +5,7 @@ import type {
   GitHubInstallationRepository,
   GitHubIssueDetail,
   GitHubIssueSearchHit,
+  IssueIntakeQuery,
   ProjectIssueQuery,
   VcsProvider,
 } from '@cat-factory/kernel'
@@ -26,7 +27,10 @@ function connectionRepo(provider: VcsProvider | null): GitHubInstallationReposit
  */
 function fakeClient(opts: {
   hits?: GitHubIssueSearchHit[]
+  /** Per-page hits, for the intake walk; page 1 is `pages[0]`. Takes precedence over `hits`. */
+  pages?: GitHubIssueSearchHit[][]
   issues?: Record<string, GitHubIssueDetail>
+  projects?: { owner: string; name: string }[]
   omitProjectSearch?: boolean
   failWith?: { status?: number; message?: string }
 }) {
@@ -44,7 +48,7 @@ function fakeClient(opts: {
         throw Object.assign(new Error(opts.failWith.message ?? 'nope'), {
           status: opts.failWith.status,
         })
-      return { items: [{ owner: 'group/sub', name: 'web' }] }
+      return { items: opts.projects ?? [{ owner: 'group/sub', name: 'web' }] }
     },
     async listIssues() {
       return { items: [] }
@@ -58,6 +62,7 @@ function fakeClient(opts: {
             query: ProjectIssueQuery,
           ) {
             searchCalls.push({ ref: `${ref.owner}/${ref.repo}`, query })
+            if (opts.pages) return opts.pages[(query.page ?? 1) - 1] ?? []
             return opts.hits ?? []
           },
         }),
@@ -322,5 +327,200 @@ describe('GitLabIssuesProvider.repoScope', () => {
     expect(provider.repoScope?.matches('group/sub/web#12', { owner: 'group', repo: 'sub' })).toBe(
       false,
     )
+  })
+})
+
+/** A hit as the project-scoped read returns it, carrying the fields a hunt ranks on. */
+function hit(number: number, over: Partial<GitHubIssueSearchHit> = {}): GitHubIssueSearchHit {
+  return {
+    owner: 'group/sub',
+    repo: 'web',
+    number,
+    title: `Issue ${number}`,
+    state: 'open',
+    url: `https://git.acme.io/group/sub/web/-/issues/${number}`,
+    body: 'repro',
+    labels: ['bug'],
+    createdAt: '2026-01-02T03:04:05Z',
+    commentCount: 1,
+    ...over,
+  }
+}
+
+const intake: IssueIntakeQuery = { board: { gitlabProject: 'group/sub/web' }, limit: 1 }
+
+describe('GitLabIssuesProvider.searchIssues', () => {
+  it('scopes the schedule’s board as a project argument and returns lean import refs', async () => {
+    const { client, searchCalls } = fakeClient({ hits: [hit(5)] })
+    const provider = new GitLabIssuesProvider({
+      gitlabClient: client,
+      installations: connectionRepo('gitlab'),
+    })
+
+    const results = await provider.searchIssues({}, intake, 'ws1')
+
+    expect(searchCalls[0]!.ref).toBe('group/sub/web')
+    expect(searchCalls[0]!.query).toMatchObject({ openOnly: true, order: 'created-asc' })
+    expect(results).toEqual([
+      {
+        source: 'gitlab',
+        externalId: 'group/sub/web#5',
+        title: 'Issue 5',
+        url: 'https://git.acme.io/group/sub/web/-/issues/5',
+        status: 'open',
+        excerpt: '',
+      },
+    ])
+  })
+
+  // The already-worked exclusion list is the one predicate this endpoint cannot express, so the
+  // request overscans by its size and the excluded ids are dropped from the single response.
+  it('overscans by the exclusion count and drops the already-worked ids', async () => {
+    const { client, searchCalls } = fakeClient({ hits: [hit(1), hit(2), hit(3)] })
+    const provider = new GitLabIssuesProvider({
+      gitlabClient: client,
+      installations: connectionRepo('gitlab'),
+    })
+
+    const results = await provider.searchIssues(
+      {},
+      { ...intake, excludeExternalIds: ['group/sub/web#1', 'group/sub/web#2'] },
+      'ws1',
+    )
+
+    expect(searchCalls[0]!.query.limit).toBe(3) // limit 1 + the two excluded ids
+    expect(results.map((r) => r.externalId)).toEqual(['group/sub/web#3'])
+  })
+
+  // A full page that yields nothing eligible must not read as an exhausted board: the walk pages
+  // on until it has its pick or runs out of results.
+  it('pages past a full page that yielded nothing eligible', async () => {
+    const { client, searchCalls } = fakeClient({
+      pages: [[hit(1, { assignee: 'someone' })], [hit(2)]],
+    })
+    const provider = new GitLabIssuesProvider({
+      gitlabClient: client,
+      installations: connectionRepo('gitlab'),
+    })
+
+    const results = await provider.searchIssues({}, { ...intake, unassignedOnly: true }, 'ws1')
+
+    expect(searchCalls.map((c) => c.query.page)).toEqual([undefined, 2])
+    expect(results.map((r) => r.externalId)).toEqual(['group/sub/web#2'])
+  })
+
+  it('stops paging on a short page rather than walking the bound', async () => {
+    const { client, searchCalls } = fakeClient({ pages: [[hit(1)]] })
+    const provider = new GitLabIssuesProvider({
+      gitlabClient: client,
+      installations: connectionRepo('gitlab'),
+    })
+
+    const results = await provider.searchIssues(
+      {},
+      { ...intake, limit: 5, excludeExternalIds: ['group/sub/web#1'] },
+      'ws1',
+    )
+
+    expect(searchCalls).toHaveLength(1)
+    expect(results).toEqual([])
+  })
+
+  it('returns nothing when the workspace’s connection is a GitHub App, or absent', async () => {
+    for (const provider of ['github', null] as const) {
+      const source = new GitLabIssuesProvider({
+        gitlabClient: fakeClient({ hits: [hit(5)] }).client,
+        installations: connectionRepo(provider),
+      })
+      expect(await source.searchIssues({}, intake, 'ws1')).toEqual([])
+    }
+  })
+
+  // "This deployment cannot scan a GitLab board" and "this board has no open bugs" are opposite
+  // facts, and only the first names something to fix.
+  it('refuses when the wired client cannot read project issues, rather than reporting an empty board', async () => {
+    const provider = new GitLabIssuesProvider({
+      gitlabClient: fakeClient({ omitProjectSearch: true }).client,
+      installations: connectionRepo('gitlab'),
+    })
+    await expect(provider.searchIssues({}, intake, 'ws1')).rejects.toThrow(/cannot search GitLab/i)
+  })
+})
+
+describe('GitLabIssuesProvider.listBugCandidates', () => {
+  it('rates from the SAME response the scan already made, with no per-candidate fetch', async () => {
+    const { client, issueCalls } = fakeClient({ hits: [hit(5)] })
+    const provider = new GitLabIssuesProvider({
+      gitlabClient: client,
+      installations: connectionRepo('gitlab'),
+    })
+
+    const candidates = await provider.listBugCandidates({}, { ...intake, limit: 40 }, 'ws1')
+
+    expect(issueCalls).toEqual([])
+    expect(candidates).toEqual([
+      {
+        source: 'gitlab',
+        externalId: 'group/sub/web#5',
+        title: 'Issue 5',
+        url: 'https://git.acme.io/group/sub/web/-/issues/5',
+        status: 'open',
+        type: '',
+        priority: null,
+        labels: ['bug'],
+        description: 'repro',
+        createdAt: '2026-01-02T03:04:05Z',
+        commentCount: 1,
+      },
+    ])
+  })
+
+  // `assignee_id=None` is what narrows the request; this is the defence against an adapter that
+  // reports an assignee while ignoring the parameter, which would offer up in-flight work.
+  it('drops an assigned issue even when the vendor ignored the unassigned parameter', async () => {
+    const { client, searchCalls } = fakeClient({
+      hits: [hit(5, { assignee: 'someone' }), hit(6, { assignee: null })],
+    })
+    const provider = new GitLabIssuesProvider({
+      gitlabClient: client,
+      installations: connectionRepo('gitlab'),
+    })
+
+    const candidates = await provider.listBugCandidates(
+      {},
+      { ...intake, limit: 40, unassignedOnly: true },
+      'ws1',
+    )
+
+    expect(searchCalls[0]!.query.unassignedOnly).toBe(true)
+    expect(candidates.map((c) => c.externalId)).toEqual(['group/sub/web#6'])
+  })
+})
+
+describe('GitLabIssuesProvider.listBoards', () => {
+  it('offers each reachable project under its full path, so two same-named projects are distinct', async () => {
+    const { client } = fakeClient({
+      projects: [
+        { owner: 'group/sub', name: 'web' },
+        { owner: 'other', name: 'web' },
+      ],
+    })
+    const provider = new GitLabIssuesProvider({
+      gitlabClient: client,
+      installations: connectionRepo('gitlab'),
+    })
+
+    expect(await provider.listBoards({}, 'ws1')).toEqual([
+      { id: 'group/sub/web', name: 'web', key: 'group/sub/web' },
+      { id: 'other/web', name: 'web', key: 'other/web' },
+    ])
+  })
+
+  it('lists nothing when the workspace has no GitLab connection', async () => {
+    const provider = new GitLabIssuesProvider({
+      gitlabClient: fakeClient({}).client,
+      installations: connectionRepo('github'),
+    })
+    expect(await provider.listBoards({}, 'ws1')).toEqual([])
   })
 })

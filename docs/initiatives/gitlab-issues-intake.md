@@ -1,6 +1,7 @@
 # Initiative: GitLab Issues as a task source
 
-**Status:** in progress (the READ path landed: import, search, setup check) · **Owner:** core · **Started:** 2026-08-05
+**Status:** in progress (read path + both predicate scans landed; push and writeback are open) ·
+**Owner:** core · **Started:** 2026-08-05
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -133,8 +134,8 @@ tracker rather than a one-PR change.
 | 3   | `GitLabIssuesProvider`: `normalizeConnection` / `parseRef` / `fetchTask` / `search` / `diagnose`        | 🟩 done | this |
 | 3b  | **Registry wiring, both facades** (pulled forward out of slice 4: the read path is unreachable unwired) | 🟩 done | this |
 | 3c  | **Registry-driven scope + settings surface** (review follow-up: three `github` hard-codings)            | 🟩 done | this |
-| 4   | `searchIssues` (recurring `bug-intake`) + the `board.gitlabProject` scope field                         | ⬜ todo |      |
-| 5   | `listBoards` + `listBugCandidates` (interactive bug hunt), ONE vendor call per scan                     | ⬜ todo |      |
+| 4   | `searchIssues` (recurring `bug-intake`) + the `board.gitlabProject` scope field                         | 🟩 done | this |
+| 5   | `listBoards` + `listBugCandidates` (interactive bug hunt), ONE vendor call per scan                     | 🟩 done | this |
 | 6   | Webhook adapter: `X-Gitlab-Token` verification on the RAW body, push intake + ticket replies            | ⬜ todo |      |
 | 7   | Ticket writeback (`tracker` step + review-question posts) against a GitLab issue                        | ⬜ todo |      |
 | 8   | Conformance: the task-source suite parameterised over the new provider on both facades                  | ⬜ todo |      |
@@ -211,6 +212,55 @@ before slice 4 (recurring intake) or 5 (bug hunt): three of the decisions below 
   registered source and still names the right remedy for an unavailable one. **A slice that adds a
   capability owes the callers that gate on it, not only the provider that implements it**: slice 4
   and slice 6 each have one (`supportsIntake` and the webhook adapter's presence).
+
+## Findings (slices 4-5: the predicate scans)
+
+The recurring `bug-intake` schedule and the interactive bug hunt now both run on GitLab. Read
+this before slice 6 (webhooks) or 7 (writeback).
+
+- **The board scope had a leg missing, and the fall-through was silent.** `BugHuntService`'s
+  `boardScopeFor` was an `if`-chain ending in the opaque `boardId` leg that only a
+  DEPLOYMENT-REGISTERED source's provider reads, so the moment `gitlab` became a built-in (slice
+  1. a GitLab hunt handed its project path to a leg no built-in provider looks at. The failure
+     mode is the one that chain's own comment warns about one source over: every leg is a plain
+     string, so it surfaces as "no matching issues" rather than as mis-routing. It is now a
+     `Record<BuiltinTaskSourceKind, …>` (the type is new, exported from contracts beside the
+     vocabulary), so a fifth built-in fails to compile until it names its leg, and each source's
+     routing is pinned by a test.
+- **`titleFragment` needed a new port field, because GitLab's default reading of it is wrong for
+  intake.** GitLab's `search` parameter covers the description as well as the title, so a
+  schedule configured on a title fragment would have picked up (and started a pipeline on) an
+  issue that merely mentions it in its body. `ProjectIssueQuery.textIn: 'title'` is the
+  narrowing, and it is its own field rather than a convention on `text` because the picker's
+  free-text box legitimately wants the wider reading: the two differ in what they RETURN, not in
+  how they are spelled.
+- **`issueType` is IGNORED, and that is a stated outcome rather than a silent one.** GitLab's own
+  issue-type vocabulary is the closed set `issue` / `incident` / `test_case` / `task`, which has
+  no member meaning "bug" — and `bug` is exactly what `BugIntakeService` defaults the predicate
+  to, so sending it would be rejected by the API outright. This follows the precedent Linear
+  already set (teams label their bugs, which the `labels` predicate covers). The consequence
+  worth knowing when configuring a GitLab intake: the type predicate does not narrow anything, so
+  a schedule that must pick up only bugs says so with a LABEL.
+- **The exclusion overscan cannot page on exclusions alone, on either provider.** Both walks size
+  the request at `limit + excluded.size`, so a FULL page can hold at most `excluded.size` excluded
+  ids and therefore always yields at least `limit` eligible ones. The bounded page walk is reached
+  only when the unassigned defence-in-depth filter drops hits the vendor should have filtered, and
+  that is what the paging test exercises. Worth knowing before anyone "fixes" the walk against a
+  scenario it cannot see.
+- **A client that cannot read project issues REFUSES rather than reporting an empty board.**
+  `searchProjectIssues` is optional on the port, and both scans throw an `UnavailableError` when
+  it is absent, with no `reason`: the status class's generic copy ("this deployment has not
+  configured the capability") is the accurate claim, where an outage reason would send an operator
+  hunting for a fault in a deployment that simply is not wired for it. An empty list would have
+  read as a board with no open bugs, which is the opposite fact.
+- **The scope field the modal now renders is `gitlabProject`, not a reuse of `githubRepo`.** A
+  GitLab namespace NESTS, so the two are different shapes, and the two providers read different
+  legs. `intakeReady` gates on it, so a GitLab intake schedule cannot be saved unscoped.
+- **What slice 6 inherits:** `intakeMatch.logic.ts`'s `configuredBoard` now reads the new leg, but
+  its `sameBoard` comparison folds case, which is more forgiving than GitLab (whose project paths
+  are case-SENSITIVE, the same asymmetry `repoScope` states). It is unreachable until a GitLab
+  webhook adapter exists, and the fix belongs with it: thread the comparison off the provider's
+  own `repoScope` rules rather than guessing per leg.
 
 When the committed scope completes, convert this tracker into a numbered ADR under
 `backend/docs/adr/` and `git rm` this file, per CLAUDE.md.

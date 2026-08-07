@@ -386,6 +386,8 @@
       "intakeNoSources": "Connect a task source first to pull issues from it.",
       "intakeNoIntakeSources": "A task source is connected, but none of the connected sources can run a scheduled issue search yet.",
       "intakeGithubRepo": "Repository",
+      "intakeGitlabProject": "Project",
+      "intakeGitlabProjectHelp": "The GitLab project's full path, including any subgroups, e.g. group/sub/project.",
       "intakeBoardId": "Board id",
       "intakeBoardIdHelp": "The board, project or queue this tracker scopes intake to. Its format is defined by the tracker.",
       "trackerTrigger": "Start runs from tracker webhooks",

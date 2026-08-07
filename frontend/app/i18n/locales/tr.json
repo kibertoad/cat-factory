@@ -347,6 +347,8 @@
       "intakeNoSources": "Sorunları çekmek için önce bir görev kaynağı bağlayın.",
       "intakeNoIntakeSources": "Bir görev kaynağı bağlı, ancak bağlı kaynakların hiçbiri henüz zamanlanmış bir sorun aramasını çalıştıramıyor.",
       "intakeGithubRepo": "Depo",
+      "intakeGitlabProject": "Proje",
+      "intakeGitlabProjectHelp": "GitLab projesinin alt gruplar dahil tam yolu, örneğin grup/altgrup/proje.",
       "intakeBoardId": "Pano kimliği",
       "intakeBoardIdHelp": "Bu izleyicinin alımı kapsamlandırdığı pano, proje veya kuyruk. Biçimini izleyici belirler.",
       "trackerTrigger": "Çalıştırmaları izleyici webhookları ile başlat",

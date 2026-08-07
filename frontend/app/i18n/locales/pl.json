@@ -347,6 +347,8 @@
       "intakeNoSources": "Najpierw połącz źródło zadań, aby pobierać z niego zgłoszenia.",
       "intakeNoIntakeSources": "Źródło zadań jest połączone, ale żadne z połączonych źródeł nie może jeszcze uruchomić zaplanowanego wyszukiwania zgłoszeń.",
       "intakeGithubRepo": "Repozytorium",
+      "intakeGitlabProject": "Projekt",
+      "intakeGitlabProjectHelp": "Pełna ścieżka projektu GitLab, wraz z podgrupami, np. grupa/podgrupa/projekt.",
       "intakeBoardId": "ID tablicy",
       "intakeBoardIdHelp": "Tablica, projekt lub kolejka, do której ten tracker ogranicza pozyskiwanie. Format określa tracker.",
       "trackerTrigger": "Uruchamiaj przebiegi z webhooków trackera",

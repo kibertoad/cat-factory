@@ -347,6 +347,8 @@
       "intakeNoSources": "課題を取り込むには、まずタスクソースを接続してください。",
       "intakeNoIntakeSources": "タスクソースは接続されていますが、接続済みのソースはいずれもまだ定期的な課題検索を実行できません。",
       "intakeGithubRepo": "リポジトリ",
+      "intakeGitlabProject": "プロジェクト",
+      "intakeGitlabProjectHelp": "GitLab プロジェクトのフルパス。サブグループを含みます (例: group/sub/project)。",
       "intakeBoardId": "ボード ID",
       "intakeBoardIdHelp": "このトラッカーが取り込み対象とするボード、プロジェクト、またはキュー。形式はトラッカーが定めます。",
       "trackerTrigger": "トラッカーの Webhook から実行を開始",

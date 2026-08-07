@@ -841,6 +841,21 @@ describe('FetchGitLabClient — project-scoped issue search', () => {
     expect(calls[0]!.url).toContain('/projects/7/issues?')
   })
 
+  // GitLab's `search` covers the description as well as the title, so an intake configured on a
+  // title fragment would otherwise pick up an issue that merely mentions it in its body.
+  it('narrows the text to the title when the caller asked for that, and not otherwise', async () => {
+    const { c, calls } = client({
+      'GET /projects/7/issues?per_page=20&search=crash&in=title': { body: [] },
+      'GET /projects/7/issues?per_page=20&search=crash': { body: [] },
+    })
+
+    await c.searchProjectIssues(connection, ref, { text: 'crash', textIn: 'title', limit: 20 })
+    await c.searchProjectIssues(connection, ref, { text: 'crash', limit: 20 })
+
+    expect(calls[0]!.url).toContain('in=title')
+    expect(calls[1]!.url).not.toContain('in=title')
+  })
+
   it('projects the whole candidate shape from that ONE response', async () => {
     const { c } = client({ 'GET /projects/7/issues?per_page=20': { body: [hit] } })
 
