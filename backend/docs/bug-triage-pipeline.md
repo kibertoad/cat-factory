@@ -34,13 +34,23 @@ A new built-in seed pipeline in `seedPipelines()` (`@cat-factory/kernel`
     'repro-test',        // failing reproduction test(s), may concede           (§7)
     'coder',             // the fix                                             (§8)
     'reviewer',          // container-explore companion on the coder            (§9)
+    'deployer',          // stands the ephemeral env up; no-op when infraless   (§9)
     'tester-api',        // ephemeral-env verification + fixer loop             (§9)
     'conflicts', 'ci', 'merger',                    // standard tail            (§10)
+    'disposer',          // reclaims what this run stood up; never fails a run
   ],
 }
 ```
 
 - The `reviewer` companion sits adjacent to `coder` per `assertValidCompanionPlacement`.
+- The terminal `disposer` is why this preset differs from the build ladder, which ships
+  without one. Elsewhere an environment outliving its run is an affordance (someone opens
+  the merged task and pokes at the live URL until the TTL sweep takes it); a schedule fires
+  into an empty room, so the affordance is worth nothing and the cost repeats every fire.
+  It sits after `merger` because that is the last step in this chain that can still want the
+  environment, and it is safe there because the merger owns the block's terminal status
+  regardless of position. Reclaim semantics and the teardown proof:
+  [`environment-disposal-and-teardown-proof.md`](../../docs/initiatives/environment-disposal-and-teardown-proof.md).
 - The gates tail is hand-authored like every other seed preset (there is no runtime
   insertion of `conflicts`/`ci`/`merger`).
 - `ScheduleTemplate` (contracts `src/recurring.ts`) gains a `'bug-triage'` value so the

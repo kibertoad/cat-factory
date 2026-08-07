@@ -121,7 +121,7 @@ revocation via a per-user session-generation check.
 
   _Not telemetry_: the profile is the mirror image. Volume is admin actions, single digits per
   account per month, against telemetry's row per LLM CALL, and retention is the opposite
-  requirement (`LLM_CALL_METRICS_RETENTION_DAYS` defaults to **3**). Decisively, the `telemetry`
+  requirement (`LLM_CALL_METRICS_RETENTION_DAYS` defaults to **14**). Decisively, the `telemetry`
   mothership bucket is written AND read on the LAPTOP, which would scatter the trail across nodes
   and leave it readable and deletable by the person it audits.
 
@@ -129,7 +129,7 @@ revocation via a per-user session-generation check.
   Node), for RETENTION rather than write profile. After the run-lifecycle slice this is the only
   table in the platform that grows monotonically with run volume AND wants a multi-year window
   (`token_usage` grows with runs but prunes at ~395 days; the telemetry sinks grow far faster but
-  prune at 3), and D1's ceiling is 10 GB PER DATABASE. Measured **~500 B/row** on Postgres (~260
+  prune at 14), and D1's ceiling is 10 GB PER DATABASE. Measured **~500 B/row** on Postgres (~260
   heap + ~245 index, the index as expensive as the data because the keyset carries `id` as its
   tie-break): 1,000 runs/day ≈ 550 MB/year, 10,000 ≈ 5.5 GB/year. Full arithmetic in
   [`storage-and-retention.md`](../../backend/docs/storage-and-retention.md).

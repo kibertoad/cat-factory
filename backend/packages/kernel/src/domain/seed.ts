@@ -549,12 +549,13 @@ function buildBuildVariantPipelines(): Pipeline[] {
       name: 'Bug triage (recurring)',
       purpose: 'build',
       description:
-        'A recurring run that pulls one open issue from your tracker board, investigates and clarifies it, then fixes, tests, and ships the PR.',
+        'A recurring run that pulls one open issue from your tracker board, investigates and clarifies it, then fixes, tests, and ships the PR, reclaiming the environment it stood up.',
       availability: 'recurring',
       // A `deployer` runs before the tester (k8s/custom only; a no-op otherwise). Only
       // `clarity-review` is a human gate; version bumped for the reseed offer, then again for the
-      // pipeline-description reseed, then again for the purpose classifier reseed.
-      version: 4,
+      // pipeline-description reseed, then again for the purpose classifier reseed, then again for
+      // the terminal `disposer`.
+      version: 5,
       steps: [
         'bug-intake',
         'bug-investigator',
@@ -568,6 +569,22 @@ function buildBuildVariantPipelines(): Pipeline[] {
         'conflicts',
         'ci',
         'merger',
+        // THE ONE SHIPPED PRESET THAT CLOSES ITS OWN TEARDOWN PROOF, and this is the preset for
+        // it because nobody is watching a scheduled run. Everywhere else the environment
+        // outliving the run is an affordance: someone opens the merged task and pokes at the live
+        // URL until the TTL sweep takes it. A recurring triage fires on a cadence into an empty
+        // room, so that affordance is worth nothing and the cost compounds once per fire, held
+        // by a 2-minute sweep on `expires_at` that lands long after the run settled and after the
+        // PR has already published "still live" as its third lifecycle leg.
+        //
+        // TERMINAL, after `merger`, for the same reason the deferred plan recommended it: every
+        // earlier slot would reclaim the environment while a later step might still want it, and
+        // the merge is the last thing in this chain that can. Safe there because the merger's
+        // resolver owns the block's terminal status (`ownsTerminalStatus`) independently of its
+        // position, so a step after it neither delays nor overwrites `done`, and because the
+        // disposer NEVER fails a run: the work has shipped by the time it runs, so an
+        // unreclaimed environment is a recorded warning and the TTL sweep is still the backstop.
+        'disposer',
       ],
     }),
     // A blueprint-only pipeline, run after a bootstrap to create the initial

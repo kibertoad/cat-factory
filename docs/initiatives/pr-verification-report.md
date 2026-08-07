@@ -375,7 +375,7 @@ Three things about it are deliberate:
 - **The read endpoint behind `reportUrl` composes from the same code**
   (`PrVerificationReportController.composeForRun`), so the live JSON and the PR body cannot state
   different facts about one run. It is also why the report shape is now part of the STABLE public
-  surface: see [`public-api-additions.md`](./public-api-additions.md) (E1).
+  surface: see [ADR 0043](../../backend/docs/adr/0043-public-decision-surface.md).
 
 ### Evidence reachability (landed with slices 9 + 10)
 
