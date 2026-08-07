@@ -12,6 +12,7 @@ import {
   type LlmCallOutcome,
 } from './observability.js'
 import { provisioningLogEntrySchema } from './provisioning-logs.js'
+import { stepToolServersSchema } from './tool-servers.js'
 
 // ---------------------------------------------------------------------------
 // The REMOTE DEBUGGING surface (`/api/v1/debug/*`) — the telemetry + event-log reads an
@@ -293,6 +294,18 @@ export const debugRunStepSchema = v.object({
    * body on this surface.
    */
   firstEvictionDetail: v.nullable(debugTextSchema),
+  /**
+   * What the step's dispatch did with the tool servers (MCP) its agent kind declared: the ones it
+   * wired, and the ones it dropped with the reason. Absent on a step no container dispatch
+   * recorded one for, which is a different fact from both lists being empty (see
+   * {@link stepToolServersSchema}).
+   *
+   * On this surface rather than only on the run surface because "the agent never had the tool" and
+   * "the agent had it and did not call it" are the same symptom to a diagnosing reader, and the
+   * tool-call trajectory can only show the second. Small and closed, so it is returned whole
+   * rather than sized.
+   */
+  toolServers: v.optional(stepToolServersSchema),
 })
 export type DebugRunStep = v.InferOutput<typeof debugRunStepSchema>
 

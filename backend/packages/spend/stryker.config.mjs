@@ -10,6 +10,7 @@ import { defineMutationConfig } from '../../../scripts/stryker-base.mjs'
 // constant, so its mutants are static and left unmeasured by `ignoreStatic` (see the base config).
 export default defineMutationConfig({
   mutate: ['src/**/*.ts', '!src/**/*.test.ts', '!src/index.ts'],
-  // Measured 90.25% total / 90.70% covered over 400 mutants, less the two-point margin.
-  minimumScore: 88,
+  // Measured 95.71% total / 95.71% covered over 396 mutants, less the two-point margin. The two
+  // scores are equal because nothing in scope is untested: spend has no `NoCoverage` mutants left.
+  minimumScore: 93,
 })

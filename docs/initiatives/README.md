@@ -94,7 +94,6 @@ a tracker document](../../CLAUDE.md).
 ### Security and access control
 
 - [Account audit log and session revocation](./audit-log-and-session-revocation.md)
-- [Per-workspace capability credentials](./capability-credential-store.md)
 - [Personal-PAT repo access + fail-closed frame redaction](./personal-pat-repo-access.md)
 - [Security hardening pass](./security-hardening.md) ·
   [round 2](./security-hardening-round-2.md)

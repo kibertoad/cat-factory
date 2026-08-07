@@ -1,10 +1,14 @@
 import type {
   AgentConfigDescriptor,
+  AgentDispatchContext,
   AgentKind,
   AgentRunContext,
+  AgentRunResult,
   AgentStepSpec,
+  AgentUserPromptBuilder,
   McpServerDefinition,
   RepoOp,
+  RunnerJobResult,
 } from '@cat-factory/kernel'
 import type { AgentKindSkillRef, AgentKindToolRef, BundledSkillDefinition } from './capabilities.js'
 import { normalizeSkillRefs, normalizeToolRefs } from './capabilities.js'
@@ -29,6 +33,7 @@ import { registerSpecBlueprintAgents } from './spec-blueprints.js'
 import { registerEnvironmentAnalystAgent } from './environment-analyst.js'
 import { registerSpikeAgent } from './spike.js'
 import { registerSkillAgent } from './skill.js'
+import { registerBuiltInContainerAgents } from './built-in-container.js'
 
 // Installation-level extension point for custom agent kinds, mirroring the
 // model-provider registry seam (`registerModelRegistry` / `@cat-factory/provider-bedrock`).
@@ -46,14 +51,41 @@ export interface AgentKindDefinition {
   /**
    * The system prompt (role) for this kind. A function form receives the kind id so a
    * single definition object can serve a family of related kinds.
+   *
+   * OPTIONAL, and omitting it means one specific thing: the kind's role text already has an
+   * owner further up `baseSystemPromptFor` (a standard-phase track, the tester/fixer track, a
+   * companion, one of the bespoke `{ role, directives }` prompts). That is the case for the
+   * BUILT-IN kinds registered here purely to declare their dispatch shape: a copy on the
+   * definition would be a second source of truth for text the track already resolves, and the
+   * track wins in `baseSystemPromptFor` regardless, so the copy would be dead the day it drifted.
+   * A kind a DEPLOYMENT registers always sets it: nothing else knows its role.
    */
-  systemPrompt: string | ((kind: AgentKind) => string)
+  systemPrompt?: string | ((kind: AgentKind) => string)
   /**
-   * Optional custom user-prompt builder. When omitted the kind uses the generic user
-   * prompt (block context + prior pipeline outputs), exactly like any other
-   * non-standard-phase kind. Human revision feedback is appended automatically.
+   * Optional custom user-prompt builder, REPLACING the generic block-context prompt. When
+   * omitted the kind uses the generic user prompt (block context + prior pipeline outputs),
+   * exactly like any other non-standard-phase kind. Human revision feedback is appended
+   * automatically. See {@link userPromptSuffix} for the additive form.
    */
-  userPrompt?: (context: AgentRunContext) => string
+  userPrompt?: AgentUserPromptBuilder
+  /**
+   * Optional task instructions APPENDED to the generic block-context prompt, for a kind that
+   * needs everything the generic prompt carries (the run's evidence, the prior agents' output)
+   * plus its own closing instruction — the `on-call` agent's "you are on the base branch, here
+   * is how to find the merged commit, answer as JSON" is the shape.
+   *
+   * Deliberately a separate field rather than a `userPrompt` that calls the generic builder:
+   * the generic builder is reached THROUGH this registry, so a kind calling it would recurse,
+   * and the wrapper sections (an initiative preset's steering, a reusable operation's
+   * parameters) would be folded in twice. Ignored when {@link userPrompt} is set, which
+   * replaces the generic prompt outright.
+   *
+   * It ends the prompt UNCONDITIONALLY: `userPromptFor` appends it after the revision feedback
+   * and the injected context files, both of which append too. That ordering is the field's whole
+   * value for a reply-shape instruction ("respond with ONLY a JSON object"), which a revision
+   * re-run would otherwise bury behind the reviewer's comments.
+   */
+  userPromptSuffix?: AgentUserPromptBuilder
   /**
    * When true this kind needs a real checkout (clone/edit/commit/PR) and must run in a
    * container rather than as a one-shot inline LLM call — see the Worker's
@@ -108,9 +140,14 @@ export interface AgentKindDefinition {
    *   actually apply them never receive them. A kind choosing this MUST write the files itself
    *   (see `prReviewerStandardsPreOp`) and say where they are — the engine only stops folding.
    *
+   * - `none` — this kind receives no standards at all. Right for a kind that JUDGES rather than
+   *   produces (`merger` scores a diff's complexity/risk/impact): a house coding standard has no
+   *   bearing on that score, and folding it in charges every assessment for text the assessment
+   *   never applies.
+   *
    * Omitted ⇒ `prompt`.
    */
-  standardsDelivery?: 'prompt' | 'context-files'
+  standardsDelivery?: 'prompt' | 'context-files' | 'none'
   /**
    * Per-kind execution tuning folded into a container dispatch's job body (today the
    * progress-guard knobs). Lets a custom kind whose normal pattern differs from the
@@ -149,6 +186,22 @@ export interface AgentKindDefinition {
    * (a prose kind, or one that sets `agent.output.shapeHint` by hand).
    */
   structuredOutput?: StructuredOutput<unknown>
+  /**
+   * Map a finished container job onto the engine's {@link AgentRunResult} — the kind's own
+   * answer to "what domain channel does my structured reply belong in".
+   *
+   * A registered kind normally needs none: its parsed JSON surfaces on `result.custom` for its
+   * post-op to render from. The BUILT-IN kinds do, because the engine reads their output through
+   * a typed channel it acts on (`mergeAssessment` gates the real merge, `testReport` greenlights
+   * or loops the fixer, `spec` is sharded into the repo), and those coercions are deliberately
+   * CONSERVATIVE: a garbage merge score reads as "severe" so it routes to a human rather than
+   * auto-merging. Declaring the mapping here is what let the executor's parallel
+   * `agentKind === …` coercion chain collapse into one registry lookup.
+   *
+   * Called only when the job returned a parsed `custom` payload. Omitted ⇒ the raw JSON is
+   * surfaced on `custom`.
+   */
+  mapStructuredResult?: (result: RunnerJobResult) => AgentRunResult
   /**
    * Deterministic backend operations run BEFORE the agent step (over a checkout-free
    * {@link RepoOp} context): read a baseline artifact into the prompt, etc. Plain TS,
@@ -316,8 +369,26 @@ export class AgentKindRegistry {
   }
 
   /** A registered kind's user prompt, or undefined when the kind is not registered / has no builder. */
-  userPrompt(context: AgentRunContext): string | undefined {
-    return this.registry.get(context.agentKind)?.userPrompt?.(context)
+  userPrompt(context: AgentRunContext, dispatch?: AgentDispatchContext): string | undefined {
+    return this.registry.get(context.agentKind)?.userPrompt?.(context, dispatch)
+  }
+
+  /**
+   * A registered kind's ADDITIVE task instructions, appended to the generic block-context
+   * prompt, or undefined when the kind is not registered / declared none. See
+   * {@link AgentKindDefinition.userPromptSuffix}.
+   */
+  userPromptSuffix(context: AgentRunContext, dispatch?: AgentDispatchContext): string | undefined {
+    return this.registry.get(context.agentKind)?.userPromptSuffix?.(context, dispatch)
+  }
+
+  /**
+   * A registered kind's structured-result mapping, or undefined when it declared none (the
+   * caller then surfaces the raw JSON on `custom`). See
+   * {@link AgentKindDefinition.mapStructuredResult}.
+   */
+  mapStructuredResult(kind: AgentKind): AgentKindDefinition['mapStructuredResult'] {
+    return this.registry.get(kind)?.mapStructuredResult
   }
 
   /** A registered kind's web-research hint, or undefined when unregistered / not supplied. */
@@ -345,7 +416,7 @@ export class AgentKindRegistry {
    * (the default) or delivered as `.cat-context/` files by its own preOp. See
    * {@link AgentKindDefinition.standardsDelivery}.
    */
-  standardsDelivery(kind: AgentKind): 'prompt' | 'context-files' {
+  standardsDelivery(kind: AgentKind): 'prompt' | 'context-files' | 'none' {
     return this.registry.get(kind)?.standardsDelivery ?? 'prompt'
   }
 
@@ -672,5 +743,9 @@ export function defaultAgentKindRegistry(): AgentKindRegistry {
   registerEnvironmentAnalystAgent(registry)
   registerSpikeAgent(registry)
   registerSkillAgent(registry)
+  // The built-in CONTAINER kinds (implementer, testers, fixers, assessors, read-only explorers).
+  // Disjoint from every id above — registration replaces by kind, so an overlap would silently
+  // drop whichever definition ran first.
+  registerBuiltInContainerAgents(registry)
   return registry
 }

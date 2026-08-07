@@ -114,7 +114,13 @@ const API_PREFIX = '/api/v1'
 // same bag as before, and one that renders a form gains the author's own grouping. 1.19.0 is main's
 // published number as of this branch's last merge; re-read this line after any merge rather than
 // trusting that the VERSION auto-merged clean.
-const API_VERSION = '1.20.0'
+// 1.21.0, not 1.20.0: each step of `GET /api/v1/debug/runs/:runId` may carry `toolServers`, what
+// the step's dispatch wired and what it dropped with the reason. Additive, and it is the
+// REPLACEMENT half of a deprecation: the same facts sat in the agent-context snapshot's untyped
+// `extras` bag, which keeps serving them until the window in `public-api.md` closes, so no
+// consumer has to move on this version. 1.20.0 is main's published number as of this branch's last
+// merge; re-read this line after any merge rather than trusting that the VERSION auto-merged clean.
+const API_VERSION = '1.21.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

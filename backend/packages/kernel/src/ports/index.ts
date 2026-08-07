@@ -292,9 +292,11 @@ export type {
 export { createBinaryArtifactStore } from './binary-artifacts.js'
 export type {
   AgentCloneSpec,
+  AgentDispatchContext,
   AgentOutputSpec,
   AgentStepSpec,
   AgentSurface,
+  AgentUserPromptBuilder,
   RepoOp,
   RepoOpContext,
   RepoOpResult,

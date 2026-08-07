@@ -3,6 +3,7 @@
   "compilerOptions": {
     "composite": true
   },
+  "exclude": ["**/*.test.ts", "**/*.spec.ts"],
   "references": [
     { "path": "../../packages/contracts/tsconfig.build.json" },
     { "path": "../../packages/kernel/tsconfig.build.json" },

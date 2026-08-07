@@ -1983,6 +1983,22 @@
         "reduced": "Was die Effektivität verringert hat",
         "obstacles": "Wichtigste Hindernisse"
       },
+      "toolServers": {
+        "heading": "Tool-Server (MCP)",
+        "dispatchedAs": "Ermittelt für den Agenten {agent}, den dieser Schritt gestartet hat.",
+        "allTools": "Alle Tools, die dieser Server bereitstellt.",
+        "narrowed": "Eingeschränkt auf: {tools}",
+        "reason": {
+          "harnessUnsupported": "war nicht verfügbar: die Agenten-CLI dieses Schritts hat keinen MCP-Client.",
+          "transportUnsupported": "war nicht verfügbar: die Agenten-CLI dieses Schritts erreicht Server dieser Art nicht.",
+          "missingSecret": "war nicht verfügbar: eine benötigte Zugangsinformation ist für dieses Board nicht hinterlegt.",
+          "reservedSecret": "war nicht verfügbar: er verlangt eine Variable, die zur Konfiguration der Plattform gehört; die Deklaration muss geändert werden.",
+          "oauthNotConnected": "war nicht verfügbar: dieses Board wurde noch nicht damit verbunden.",
+          "oauthTokenFailed": "war nicht verfügbar: die Verbindung liefert kein Zugriffstoken mehr.",
+          "overBudget": "war nicht verfügbar: dieser Agent deklariert mehr Tool-Server, als ein Lauf mitführt.",
+          "unknown": "war nicht verfügbar ({reason})."
+        }
+      },
       "adherence": {
         "heading": "Einhaltung der Best Practices",
         "headingHint": "Die Best-Practice-Standards, die in den Prompt dieses Reviewers eingefügt wurden, und wie genau die Änderung ihnen nach seinem Urteil folgt.",
