@@ -400,7 +400,10 @@ Recorded so the next iteration does not re-propose them.
   never loaded, which is a different fault with a different fix, and a build that guessed `ready`
   would dress a dead tool as a live one. `unknown` is also deliberately NOT rendered as a fault:
   it is a fact about this build, and painting it red would send an operator to debug a working
-  integration every time a CLI adds a word.
+  integration every time a CLI adds a word. It carries the CLI's own `pending` for the same
+  reason: a server still handshaking when the session was announced has no resolved state, and the
+  nearest fault member (`needs_auth`) would tell an operator to re-issue a working credential for
+  a server that came up a moment later.
 - **`toolCount: 0` is recorded and rendered as its own sentence.** A server that connected and
   exposes nothing reaches the agent exactly like one that was never wired, while every other
   signal about it says healthy (the likely causes: an `allowedTools` list matching nothing, a
@@ -410,6 +413,16 @@ Recorded so the next iteration does not re-propose them.
 
 ## Gotchas slice 5 (CLI-observed) surfaced
 
+- **The tool namespace is not parseable, only MATCHABLE.** The CLI publishes one flat tool list
+  namespaced `mcp__<id>__<tool>`, and the obvious read splits on the first separator after the
+  prefix. The id vocabulary permits `_`, so `code__search` is a legal server id: the split files
+  its tools under a server called `code` that nothing declared and leaves the real one reporting
+  `toolCount: 0`, which is precisely the value the decision above calls the most diagnostic on the
+  field. So each name is matched against the ids the SAME report declared, and where two of them
+  could both own a name (`code` and `code__search` both could own `mcp__code__search__query`),
+  neither is counted and both counts stay absent. That widened `toolCount`'s absent case from one
+  cause to two, which the field's own doc now names: absent is "this image counted nothing", never
+  "the server has no tools".
 - **The report has to ride all THREE poll dispositions, not just `running`.** The CLI announces its
   servers ONCE, near the start, so the obvious "fold it on the live poll" loses it entirely for a
   job short enough to settle between two polls — and the FAILED disposition is the one whose

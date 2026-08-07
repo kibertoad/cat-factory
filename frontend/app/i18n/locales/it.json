@@ -2014,7 +2014,7 @@
           "readyNoTools": "avviato, nessuno strumento",
           "failed": "non si è avviato",
           "needsAuth": "richiede autorizzazione",
-          "unknown": "stato non riconosciuto",
+          "unknown": "stato non determinato",
           "notLoaded": "mai caricato",
           "unattributed": "La CLI dell'agente ha segnalato un server che questo passo non ha collegato: {id}."
         }

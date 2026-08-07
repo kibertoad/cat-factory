@@ -2014,7 +2014,7 @@
           "readyNoTools": "gestartet, keine Tools",
           "failed": "Start fehlgeschlagen",
           "needsAuth": "Autorisierung erforderlich",
-          "unknown": "Zustand unbekannt",
+          "unknown": "Zustand ungeklärt",
           "notLoaded": "nie geladen",
           "unattributed": "Die Agenten-CLI meldete einen Server, den dieser Schritt nicht eingebunden hat: {id}."
         }

@@ -439,6 +439,101 @@ describe('HttpRunnerPoolProvider — dispatch templating and view mapping', () =
     })
     expect(empty.sliceReviews).toBeUndefined()
   })
+
+  it('maps the CLI-observed tool servers when the manifest points at them', async () => {
+    // The pool leg of the observation channel. Everything downstream pairs a row to the dispatch's
+    // own record by id alone, so what this coercion gets wrong is invisible until a step detail
+    // accuses a healthy server.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      toolServers: [
+        { id: 'slack', status: 'ready', toolCount: 4 },
+        // `0` is the most diagnostic count there is: connected, and exposing nothing.
+        { id: 'jira', status: 'ready', toolCount: 0 },
+        { id: 'sentry', status: 'failed' },
+      ],
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withServers: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, toolServersPath: 'toolServers' },
+    }
+    const view = await provider.poll({
+      manifest: withServers,
+      jobId: 'job-7',
+      resolveSecret: () => 't',
+    })
+
+    expect(view.toolServers).toEqual([
+      { id: 'slack', status: 'ready', toolCount: 4 },
+      { id: 'jira', status: 'ready', toolCount: 0 },
+      { id: 'sentry', status: 'failed' },
+    ])
+  })
+
+  it('trims a padded id and reads an unmappable status as unknown rather than dropping the row', async () => {
+    // The id is the ONLY key the engine pairs an observation to the dispatch's declaration by, and
+    // it pairs by exact string. A padded id that survives verbatim renders one healthy server as
+    // two faults at once: never-loaded on the wired chip, and unattributed beside it.
+    //
+    // A status this deployment cannot name stays as a row: dropping it reads as a server the CLI
+    // never loaded, which is a different fault with a different fix.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      toolServers: [
+        { id: '  slack  ', status: 'ready', toolCount: 2 },
+        { id: 'jira', status: 'reticulating' },
+        { id: '   ' },
+        { id: 42, status: 'ready' },
+        'not an object',
+        // A count that is not a usable number leaves the field absent, never 0.
+        { id: 'sentry', status: 'ready', toolCount: -1 },
+        { id: 'linear', status: 'ready', toolCount: 'many' },
+      ],
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withServers: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, toolServersPath: 'toolServers' },
+    }
+    const view = await provider.poll({
+      manifest: withServers,
+      jobId: 'job-7',
+      resolveSecret: () => 't',
+    })
+
+    expect(view.toolServers).toEqual([
+      { id: 'slack', status: 'ready', toolCount: 2 },
+      { id: 'jira', status: 'unknown' },
+      { id: 'sentry', status: 'ready' },
+      { id: 'linear', status: 'ready' },
+    ])
+  })
+
+  it('injects nothing when the manifest maps no tool-server path, or the set is empty', async () => {
+    // The absent-vs-empty rule this whole channel rests on: a pool that has not mapped the path
+    // must leave the record ABSENT, because an empty list reads as "the CLI loaded none of the
+    // servers the platform wired" on a run whose servers were fine.
+    capture('/api/jobs/job-7', 'GET', {
+      state: 'in_progress',
+      toolServers: [{ id: 'slack', status: 'ready' }],
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const unmapped = await provider.poll({ manifest, jobId: 'job-7', resolveSecret: () => 't' })
+    expect(unmapped.toolServers).toBeUndefined()
+
+    capture('/api/jobs/job-8', 'GET', { state: 'in_progress', toolServers: [] })
+    const withServers: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, toolServersPath: 'toolServers' },
+    }
+    const empty = await provider.poll({
+      manifest: withServers,
+      jobId: 'job-8',
+      resolveSecret: () => 't',
+    })
+    expect(empty.toolServers).toBeUndefined()
+  })
 })
 
 describe('HttpRunnerPoolProvider — failure, eviction and result mapping', () => {

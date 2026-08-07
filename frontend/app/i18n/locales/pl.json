@@ -1450,7 +1450,7 @@
           "readyNoTools": "uruchomiony, bez narzędzi",
           "failed": "nie wystartował",
           "needsAuth": "wymaga autoryzacji",
-          "unknown": "stan nierozpoznany",
+          "unknown": "stan nieustalony",
           "notLoaded": "nigdy nie wczytany",
           "unattributed": "CLI agenta zgłosiło serwer, którego ten krok nie podłączył: {id}."
         }

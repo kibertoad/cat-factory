@@ -1450,7 +1450,7 @@
           "readyNoTools": "起動済み、ツールなし",
           "failed": "起動に失敗",
           "needsAuth": "認可が必要",
-          "unknown": "状態を判別できません",
+          "unknown": "状態は未確定",
           "notLoaded": "読み込まれませんでした",
           "unattributed": "エージェント CLI が、このステップでは接続していないサーバーを報告しました: {id}。"
         }

@@ -79,10 +79,14 @@ export interface ObservedMcpServer {
   /**
    * How many of the CLI's exposed tools belong to this server (`mcp__<id>__…`).
    *
-   * ABSENT and `0` are different facts and both are worth having: absent means the CLI listed no
-   * tools at all, so this image observed nothing about the count, while `0` means the CLI listed
-   * its tools and this server contributed none — a server that connected and exposes nothing,
-   * which reads to the agent exactly like a server that was never wired. Never defaulted to 0.
+   * ABSENT and `0` are different facts and both are worth having: absent means this image counted
+   * nothing for the server, while `0` means it counted and the server contributed none: a server
+   * that connected and exposes nothing, which reads to the agent exactly like a server that was
+   * never wired. Never defaulted to 0.
+   *
+   * Two things leave it absent, and neither is "the server has no tools": the CLI listed no tools
+   * at all, or the tool namespace cannot say which of two declared servers a name belongs to (see
+   * {@link tallyToolsByServer}).
    */
   toolCount?: number
 }
@@ -97,6 +101,10 @@ export interface ObservedMcpServer {
  * (which reads as a server the CLI never mentioned) or a guess at `ready` (which would report a
  * dead tool as a live one, the precise failure the whole unavailability vocabulary exists to
  * prevent).
+ *
+ * `unknown` covers two causes that share one remedy, which is why they share one member: a word
+ * this image cannot map, and a word the CLI uses for a state that is not resolved YET. Neither
+ * says anything about the server, and the surface paints neither as a fault.
  */
 export type ObservedMcpStatus = 'ready' | 'failed' | 'needs_auth' | 'unknown'
 
@@ -115,8 +123,12 @@ function normalizeMcpStatus(value: unknown): ObservedMcpStatus {
   if (status === 'failed' || status === 'error') return 'failed'
   // The vendor spells the OAuth-required state with a hyphen; the underscore form costs nothing
   // to accept and is what a JSON-ish vocabulary tends to drift toward.
-  if (status === 'needs-auth' || status === 'needs_auth' || status === 'pending')
-    return 'needs_auth'
+  if (status === 'needs-auth' || status === 'needs_auth') return 'needs_auth'
+  // Everything else, INCLUDING the CLI's `pending`. A server still handshaking when the session
+  // was announced has no resolved state, which is exactly what `unknown` says, and `needs_auth` is
+  // the tempting wrong guess for it: the surface paints that one amber as "waiting for you to
+  // authorize it", sending an operator to re-issue a working credential for a server that was
+  // merely slow and came up a second later.
   return 'unknown'
 }
 
@@ -139,12 +151,8 @@ export function observeClaudeMcpInit(
   if (event.type !== 'system' || event.subtype !== 'init') return undefined
   const reported = event.mcp_servers
   if (!Array.isArray(reported) || reported.length === 0) return undefined
-  // Counted from the CLI's own tool list rather than from a per-server field, because there is no
-  // per-server field: the CLI flattens every server's tools into one array namespaced by server
-  // id. A missing/non-array list leaves every count ABSENT rather than 0 — see `toolCount`.
-  const toolCounts = countToolsByServer(event.tools)
-  const observed: ObservedMcpServer[] = []
-  const used = new Set<string>()
+  const rows: { id: string; status: ObservedMcpStatus }[] = []
+  const declared = new Set<string>()
   for (const entry of reported) {
     if (typeof entry !== 'object' || entry === null) continue
     const record = entry as Record<string, unknown>
@@ -152,36 +160,66 @@ export function observeClaudeMcpInit(
     // An id this image cannot hold is dropped rather than reported under a mangled name: the
     // whole row is only useful if it JOINS the backend's declaration, and `--strict-mcp-config`
     // means every server the CLI loaded came from the config this harness wrote.
-    if (!id || used.has(id)) continue
-    used.add(id)
-    observed.push({
-      id,
-      status: normalizeMcpStatus(record.status),
-      ...(toolCounts ? { toolCount: toolCounts.get(id) ?? 0 } : {}),
-    })
+    if (!id || declared.has(id)) continue
+    declared.add(id)
+    rows.push({ id, status: normalizeMcpStatus(record.status) })
   }
-  return observed.length ? observed : undefined
+  if (rows.length === 0) return undefined
+  // Counted from the CLI's own tool list rather than from a per-server field, because there is no
+  // per-server field: the CLI flattens every server's tools into one array namespaced by server
+  // id. A missing/non-array list leaves every count ABSENT rather than 0 (see `toolCount`).
+  const tally = tallyToolsByServer(event.tools, declared)
+  return rows.map((row) => ({
+    ...row,
+    ...(tally && !tally.ambiguous.has(row.id) ? { toolCount: tally.counts.get(row.id) ?? 0 } : {}),
+  }))
+}
+
+/** What {@link tallyToolsByServer} read out of the CLI's flat tool list. */
+interface ToolTally {
+  /** Tools attributed to each declared server. A server with none is simply absent from the map. */
+  counts: ReadonlyMap<string, number>
+  /**
+   * Servers whose count could not be established, because at least one tool name belongs to more
+   * than one of them. Their count is reported ABSENT rather than short.
+   */
+  ambiguous: ReadonlySet<string>
 }
 
 /**
- * Tally the CLI's flat tool list per server id (`mcp__<id>__<tool>`), or `undefined` when the
- * event carried no list — the distinction {@link ObservedMcpServer.toolCount} preserves.
+ * Tally the CLI's flat tool list (`mcp__<id>__<tool>`) against the servers the SAME event
+ * declared, or `undefined` when it carried no list, which is the distinction
+ * {@link ObservedMcpServer.toolCount} preserves.
+ *
+ * Matched against the declared ids rather than split on the first `__`, because the id vocabulary
+ * ({@link MCP_SERVER_ID_PATTERN}) permits an underscore: a server named `code__search` owns
+ * `mcp__code__search__query`, which a first-separator split files under a server called `code`,
+ * leaving the real one reporting `toolCount: 0`. That is the single most diagnostic value on the
+ * field, so the mis-split renders a fully healthy server as one that started and exposes nothing.
+ *
+ * The same underscore makes genuine ambiguity representable: with both `code` and `code__search`
+ * declared, `mcp__code__search__query` is a name either could own and nothing in the report says
+ * which. Neither server is counted then, and both are named `ambiguous` so their count stays
+ * absent. Guessing an owner would move a real tool onto the wrong server and take the other's
+ * count to a `0` that reads as a fault.
  */
-function countToolsByServer(tools: unknown): Map<string, number> | undefined {
+function tallyToolsByServer(tools: unknown, declared: ReadonlySet<string>): ToolTally | undefined {
   if (!Array.isArray(tools)) return undefined
   const counts = new Map<string, number>()
+  const ambiguous = new Set<string>()
   for (const tool of tools) {
     if (typeof tool !== 'string' || !tool.startsWith('mcp__')) continue
-    // `mcp__<id>__<tool>`: split on the FIRST `__` after the prefix only, since a tool name may
-    // itself contain `__` and the id may not (it is `[a-z0-9][a-z0-9_-]*`, matched below).
-    const rest = tool.slice('mcp__'.length)
-    const sep = rest.indexOf('__')
-    if (sep <= 0) continue
-    const id = rest.slice(0, sep)
-    if (!MCP_SERVER_ID_PATTERN.test(id)) continue
-    counts.set(id, (counts.get(id) ?? 0) + 1)
+    const owners: string[] = []
+    for (const id of declared) {
+      const prefix = `mcp__${id}__`
+      // The tool name after the prefix must be non-empty: `mcp__slack__` names no tool.
+      if (tool.length > prefix.length && tool.startsWith(prefix)) owners.push(id)
+    }
+    const [owner] = owners
+    if (owners.length === 1 && owner) counts.set(owner, (counts.get(owner) ?? 0) + 1)
+    else for (const id of owners) ambiguous.add(id)
   }
-  return counts
+  return { counts, ambiguous }
 }
 
 /**

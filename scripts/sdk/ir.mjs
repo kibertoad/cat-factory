@@ -80,9 +80,10 @@ const INLINE_TYPE_NAMES = {
   'agentKind,createdAt,executionId,id,provider,query,resultCount,workspaceId': 'DebugSearchQuery',
   'agentKind,evictionRecoveries,finishedAt,firstEvictionDetail,hasStructuredResult,index,lastActivityAt,model,outputChars,progress,skipped,startedAt,state,subtasks,toolServers':
     'DebugRunStep',
-  'agentKind,unavailable,wired': 'DebugStepToolServers',
+  'agentKind,observed,unavailable,wired': 'DebugStepToolServers',
   'id,label,tools,transport': 'DebugWiredToolServer',
   'id,label,reason': 'DebugUnavailableToolServer',
+  'id,status,toolCount': 'DebugObservedToolServer',
   'agentKind,code,count,message,severity,stepIndex': 'DebugRunSignal',
   'agentKind,cacheHitRate,cacheReadTokens,cacheWriteTokens,calls,completionTokens,costEstimate,errors,maxOutputTokens,outputHeadroomRatio,overheadMs,peakCompletionTokens,promptTokens,transportOverheadRatio,truncatedCalls,upstreamMs,warnings':
     'DebugLlmAgentKindRollup',

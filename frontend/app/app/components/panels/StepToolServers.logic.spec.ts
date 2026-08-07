@@ -171,9 +171,11 @@ describe('tool-server startup observations', () => {
     }
   })
 
-  it('never flags a status this build could not map', () => {
-    // `unknown` is a fact about THIS build, not about the server. Painting it as a fault would
-    // send an operator to debug a working integration every time a CLI adds a status word.
+  it('never flags a state the report did not resolve', () => {
+    // `unknown` is a fact about THIS build (a word it could not map) or about the moment the
+    // report was taken (a server still handshaking), never about the server itself. Painting it
+    // as a fault would send an operator to debug a working integration every time a CLI adds a
+    // status word or starts a server a moment slower than the session announcement.
     // Cast, because the point is a value the TYPE excludes and the DATA carries: the vocabulary
     // is persisted on a run, so a status recorded by a newer harness (or retired since) reads back
     // here as a member this build has no case for.

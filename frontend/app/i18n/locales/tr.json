@@ -1450,7 +1450,7 @@
           "readyNoTools": "başlatıldı, araç yok",
           "failed": "başlatılamadı",
           "needsAuth": "yetkilendirme gerekiyor",
-          "unknown": "durum tanınmadı",
+          "unknown": "durum belirsiz",
           "notLoaded": "hiç yüklenmedi",
           "unattributed": "Ajan CLI'si bu adımın bağlamadığı bir sunucu bildirdi: {id}."
         }

@@ -1450,7 +1450,7 @@
           "readyNoTools": "iniciado, sin herramientas",
           "failed": "no arrancó",
           "needsAuth": "requiere autorización",
-          "unknown": "estado no reconocido",
+          "unknown": "estado sin determinar",
           "notLoaded": "nunca se cargó",
           "unattributed": "La CLI del agente informó de un servidor que este paso no conectó: {id}."
         }

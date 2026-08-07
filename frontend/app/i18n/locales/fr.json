@@ -1450,7 +1450,7 @@
           "readyNoTools": "démarré, aucun outil",
           "failed": "n'a pas démarré",
           "needsAuth": "autorisation requise",
-          "unknown": "état non reconnu",
+          "unknown": "état non déterminé",
           "notLoaded": "jamais chargé",
           "unattributed": "La CLI d'agent a signalé un serveur que cette étape n'a pas branché : {id}."
         }

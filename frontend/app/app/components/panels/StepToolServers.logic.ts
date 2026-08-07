@@ -239,9 +239,11 @@ export function observationText(
  * Whether an observation should DRAW ATTENTION on the chip: the server was promised to the agent
  * and the CLI could not deliver it.
  *
- * `unknown` is deliberately NOT alarming. It says this build could not map the CLI's word, which
- * is a fact about this build rather than about the server, and painting it as a fault would send
- * an operator to debug a working integration every time a CLI adds a status.
+ * `unknown` is deliberately NOT alarming. It covers a word this build could not map (a fact about
+ * this build rather than about the server) and a server the CLI reported as still handshaking when
+ * it announced the session (a fact about the moment the report was taken). Neither says anything
+ * happened to the server, and painting either as a fault would send an operator to debug a working
+ * integration every time a CLI adds a status or starts a server a moment slower.
  */
 export function observationIsFault(observation: ToolServerObservation): boolean {
   if (observation === null) return false

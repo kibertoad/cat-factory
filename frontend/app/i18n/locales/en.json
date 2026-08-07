@@ -1541,7 +1541,7 @@
           "readyNoTools": "started, no tools",
           "failed": "failed to start",
           "needsAuth": "needs authorization",
-          "unknown": "state unrecognized",
+          "unknown": "state unresolved",
           "notLoaded": "never loaded",
           "unattributed": "The agent CLI reported a server this step did not wire: {id}."
         }

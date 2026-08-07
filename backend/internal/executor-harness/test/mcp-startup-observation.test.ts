@@ -40,7 +40,6 @@ describe('observeClaudeMcpInit', () => {
           { name: 'failed-one', status: 'failed' },
           { name: 'error-one', status: 'error' },
           { name: 'auth-one', status: 'needs-auth' },
-          { name: 'pending-one', status: 'pending' },
         ],
       }),
     )
@@ -50,7 +49,25 @@ describe('observeClaudeMcpInit', () => {
       ['failed-one', 'failed'],
       ['error-one', 'failed'],
       ['auth-one', 'needs_auth'],
-      ['pending-one', 'needs_auth'],
+    ])
+  })
+
+  it('reports a server still handshaking as unknown, never as needing authorization', () => {
+    // `pending` is the CLI saying the server had no resolved state when it announced the session,
+    // which is what `unknown` means. Reading it as `needs_auth` paints a server that came up a
+    // second later as one waiting for a credential, and sends an operator to re-issue a working
+    // token: a fault attributed to the one party who did nothing wrong.
+    const observed = observeClaudeMcpInit(
+      initEvent({
+        mcp_servers: [
+          { name: 'slow-one', status: 'pending' },
+          { name: 'handshaking-one', status: 'connecting' },
+        ],
+      }),
+    )
+    expect(observed?.map((s) => [s.id, s.status])).toEqual([
+      ['slow-one', 'unknown'],
+      ['handshaking-one', 'unknown'],
     ])
   })
 
@@ -79,17 +96,55 @@ describe('observeClaudeMcpInit', () => {
           'mcp__slack__post_message',
           'mcp__slack__list_channels',
           'mcp__jira__search',
-          // A tool name may itself contain `__`; only the FIRST separator after the prefix
-          // delimits the server id, so this still belongs to `slack`.
+          // A tool name may itself contain `__`; it still belongs to the server whose id prefixes
+          // it, which is `slack`.
           'mcp__slack__get__thread',
-          // Neither of these names a declared server; both must be ignored rather than counted.
+          // None of these names a declared server; all must be ignored rather than counted.
           'mcp__Not-An-Id__x',
           'mcp__malformed',
+          'mcp__slack__',
         ],
       }),
     )
     expect(observed).toEqual([
       { id: 'slack', status: 'ready', toolCount: 3 },
+      { id: 'jira', status: 'ready', toolCount: 1 },
+    ])
+  })
+
+  it('attributes a tool to a server whose own id contains the separator', () => {
+    // The id vocabulary permits `_`, so `code__search` is a legal server id and owns
+    // `mcp__code__search__query`. Splitting on the first separator files that tool under a server
+    // called `code` that nothing declared, and leaves the real one reporting `toolCount: 0`, the
+    // one value that reads as "it started and exposes nothing" while every other signal says
+    // healthy.
+    const observed = observeClaudeMcpInit(
+      initEvent({
+        mcp_servers: [{ name: 'code__search', status: 'connected' }],
+        tools: ['Bash', 'mcp__code__search__query', 'mcp__code__search__index'],
+      }),
+    )
+    expect(observed).toEqual([{ id: 'code__search', status: 'ready', toolCount: 2 }])
+  })
+
+  it('leaves the count absent for servers a tool name cannot be attributed between', () => {
+    // With both `code` and `code__search` declared, `mcp__code__search__query` is a name either
+    // could own and the report does not say which. Counting it for one moves a real tool onto the
+    // wrong server and takes the other's count to a 0 that reads as a fault, so both counts stay
+    // absent while the unambiguous third server keeps its own.
+    const observed = observeClaudeMcpInit(
+      initEvent({
+        mcp_servers: [
+          { name: 'code', status: 'connected' },
+          { name: 'code__search', status: 'connected' },
+          { name: 'jira', status: 'connected' },
+        ],
+        tools: ['mcp__code__search__query', 'mcp__jira__search'],
+      }),
+    )
+    expect(observed).toEqual([
+      { id: 'code', status: 'ready' },
+      { id: 'code__search', status: 'ready' },
       { id: 'jira', status: 'ready', toolCount: 1 },
     ])
   })

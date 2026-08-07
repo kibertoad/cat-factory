@@ -168,12 +168,21 @@ each of them reads as a healthy server if it collapses:
   reaches the agent exactly like one that was never wired, while every other signal about it says
   healthy — the likeliest causes being an `allowedTools` list that matches nothing and a vendor
   that authenticated and served an empty catalog. So zero is recorded and rendered as its own
-  sentence, and a CLI that listed no tools leaves the count absent instead of defaulting to it.
+  sentence, and a CLI that listed no tools leaves the count absent instead of defaulting to it. The
+  count is attributed by matching each tool name against the ids the SAME report declared, never by
+  splitting `mcp__<id>__<tool>` on its first separator: a server id may itself contain `__`, so the
+  split files `code__search`'s tools under a server called `code` and leaves the real one reporting
+  the one value that reads as a fault. Where two declared ids could both own a name (`code` and
+  `code__search` both could own `mcp__code__search__query`), nothing in the report says which, so
+  both counts stay absent rather than one being guessed.
 - **`unknown` is a fact about this BUILD, not about the server.** The CLI's status words belong to
   a third party that may add to them; an unmappable one records as `unknown` and renders neutrally
   rather than as a fault, or a CLI upgrade would send operators to debug working integrations. The
   statuses this platform maps are `ready`, `failed` (the CLI could not start it) and `needs_auth`
-  (it answered and refused the credential, which is a different fix from `failed`).
+  (it answered and refused the credential, which is a different fix from `failed`). A server the CLI
+  reported as still handshaking (`pending`) also records as `unknown`: it has no resolved state to
+  report, and calling that `needs_auth` would send an operator to re-issue a working credential for
+  a server that simply came up a moment later.
 
 Nothing in the engine branches on an observation: it is evidence for a person, never a control
 signal, and a failed server does not fail a step. It rides all three poll dispositions — a job
@@ -183,6 +192,8 @@ one whose post-mortem needs this most.
 A self-hosted runner pool that proxies the executor-harness verbatim should set
 `response.toolServersPath` to `toolServers` in its manifest. Leaving it unset costs the diagnostic
 and never manufactures a false one, which is exactly the trade the absent-vs-empty rule above buys.
+The mapping is written up for pool operators beside its sibling response paths in
+[`runner-pool-integration.md`](./runner-pool-integration.md#3-describe-your-scheduler-as-a-manifest-application-team).
 
 This is deliberately not the agent-context telemetry snapshot, which carried the same facts in its
 untyped `extras` bag. That snapshot is double-gated (`LLM_RECORD_PROMPTS` plus the per-workspace

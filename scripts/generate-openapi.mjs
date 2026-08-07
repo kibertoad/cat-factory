@@ -131,7 +131,18 @@ const API_PREFIX = '/api/v1'
 // `requirements.unmatchedVerdicts`. Two diffs claiming one number is a lie a consumer pinning
 // the version would act on, so re-read this line after any merge rather than trusting that the
 // VERSION auto-merged clean.
-const API_VERSION = '1.23.0'
+// 1.24.0, not 1.22.0: a step's `toolServers` on `GET /api/v1/debug/runs/:runId` gains an optional
+// `observed`, the agent CLI's own account of the servers it managed to load beside the `wired` /
+// `unavailable` account of what the platform decided. Additive: a consumer written against 1.21.0
+// reads both existing lists unchanged, and an ABSENT `observed` is not an empty one: it means no
+// observation was made (a harness whose CLI publishes no such report, an older runner image, an
+// unmapped runner pool), which is a distinction a consumer has to keep or it will report working
+// servers as dead. Written against 1.21.0, which is the number the `toolServers` record itself
+// took; 1.22.0 (the run outcome endpoint) and 1.23.0 (`x-min-scope`) both landed on main while
+// this branch was in flight, exactly as the note at the top of this block describes, and both were
+// found by re-reading this line after the merge rather than by trusting that the VERSION
+// auto-merged clean.
+const API_VERSION = '1.24.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

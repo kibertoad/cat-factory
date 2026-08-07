@@ -21,6 +21,7 @@ import type {
   SecretResolver,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
+import { isToolServerObservedStatus } from '@cat-factory/contracts'
 import {
   CONTAINER_EVICTION_ERROR,
   isHarnessFailureCause,
@@ -646,11 +647,15 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
  * entries, dropping anything unusable. Mirrors the executor-harness's shape.
  *
  * An entry needs a non-empty `id`: it is the only key the engine can pair an observation to the
- * dispatch's own record by, so an id-less row describes a server nobody can name. `status` is
- * narrowed to the union and anything unrecognised reads as `unknown` rather than being dropped —
- * the safe direction, because dropping reads as a server the CLI never loaded (a different fault
- * with a different fix), while `unknown` says exactly what happened: the CLI named a state this
- * deployment cannot map.
+ * dispatch's own record by, so an id-less row describes a server nobody can name. It is stored
+ * TRIMMED, because the pairing is an exact string match against the dispatch's declaration: a
+ * scheduler that pads its ids would otherwise clear this guard and then match nothing, rendering a
+ * healthy server as both never-loaded (an amber fault) and unattributed at once.
+ *
+ * `status` is narrowed through the contracts predicate that owns the vocabulary, and anything
+ * unrecognised reads as `unknown` rather than being dropped. That is the safe direction, because
+ * dropping reads as a server the CLI never loaded (a different fault with a different fix), while
+ * `unknown` says exactly what happened: the pool named a state this deployment cannot map.
  */
 function coerceObservedToolServers(raw: unknown): RunnerObservedToolServer[] {
   if (!Array.isArray(raw)) return []
@@ -658,10 +663,11 @@ function coerceObservedToolServers(raw: unknown): RunnerObservedToolServer[] {
   for (const entry of raw) {
     if (typeof entry !== 'object' || entry === null) continue
     const o = entry as Record<string, unknown>
-    if (typeof o.id !== 'string' || !o.id.trim()) continue
+    const id = typeof o.id === 'string' ? o.id.trim() : ''
+    if (!id) continue
     const server: RunnerObservedToolServer = {
-      id: o.id,
-      status: isObservedToolServerStatus(o.status) ? o.status : 'unknown',
+      id,
+      status: isToolServerObservedStatus(o.status) ? o.status : 'unknown',
     }
     // `0` is a server that connected and exposed no tools — the most diagnostic count there is,
     // and the one a truthiness guard would silently turn into "not counted".
@@ -671,17 +677,6 @@ function coerceObservedToolServers(raw: unknown): RunnerObservedToolServer[] {
     observed.push(server)
   }
   return observed
-}
-
-const OBSERVED_TOOL_SERVER_STATUSES: ReadonlySet<string> = new Set([
-  'ready',
-  'failed',
-  'needs_auth',
-  'unknown',
-])
-
-function isObservedToolServerStatus(value: unknown): value is RunnerObservedToolServer['status'] {
-  return typeof value === 'string' && OBSERVED_TOOL_SERVER_STATUSES.has(value)
 }
 
 /**

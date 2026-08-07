@@ -7,6 +7,9 @@
 '@cat-factory/server': minor
 '@cat-factory/local-server': minor
 '@cat-factory/app': minor
+'@cat-factory/sdk': minor
+'@cat-factory/mcp-server': minor
+'@cat-factory/gatekeeper-bindings': minor
 ---
 
 Record what the agent's CLI said about the tool servers it loaded, beside what the dispatch decided
@@ -47,3 +50,8 @@ post-mortem needs this most.
 Runner-pool operators who proxy the executor-harness verbatim gain
 `response.toolServersPath` on the manifest; leaving it unset costs the diagnostic and never
 produces a false one. Ships with runner image 1.95.0.
+
+On the public surface this is one additive optional field, `observed` on a step's `toolServers` in
+`GET /api/v1/debug/runs/:runId` (spec `1.24.0`), so a consumer written against the previous version
+parses everything it already knew. The one rule it has to carry across is the first distinction
+above: an absent `observed` is "no observation was made", never "the CLI loaded nothing".
