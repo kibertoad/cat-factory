@@ -337,14 +337,17 @@ tool servers on a non-container kind warn (`skills_without_container` /
 them. A dispatch that still meets an unknown id (registration raced past validation)
 DROPS it rather than failing the run.
 
-To verify what a role's dispatch actually contained, use the run's agent-context
-snapshot (the Observability panel, or
-`GET /workspaces/:ws/executions/:executionId/agent-context`: gated on
-`LLM_RECORD_PROMPTS` + the workspace's `storeAgentContext`): it captures the composed
+To verify which tool servers a dispatch actually got, read the STEP: `step.toolServers`
+holds the servers it wired and the ones it dropped with the reason, on every container
+dispatch and for as long as the run exists. The step detail renders them as chips, and
+`GET /api/v1/debug/runs/:runId` serves the same record as `steps[].toolServers`.
+
+To verify the rest of what a dispatch contained, use the run's agent-context snapshot (the
+Observability panel, or `GET /workspaces/:ws/executions/:executionId/agent-context`: gated
+on `LLM_RECORD_PROMPTS` + the workspace's `storeAgentContext`): it captures the composed
 system and user prompts (so you can see the directive/trait/standards layers around your
-text), the non-secret `toolServers` / `unavailableToolServers` projection, and the
-injected `.cat-context/*` file bodies. Credentials never appear there: a tool-server
-secret rides only the job body.
+text) and the injected `.cat-context/*` file bodies. Credentials never appear in either: a
+tool-server secret rides only the job body.
 
 ## Authoring checklist
 

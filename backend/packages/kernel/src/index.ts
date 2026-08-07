@@ -152,6 +152,7 @@ export {
   isModelUsable,
   isModelUsableInline,
   nativeVendorForRef,
+  runsOnSubscriptionHarness,
   subscriptionVendorForRef,
   subscriptionOptionFor,
   isIndividualVendor,

@@ -1,5 +1,126 @@
 # @cat-factory/kernel
 
+## 0.256.0
+
+### Minor Changes
+
+- 11a2966: Say which tool servers a step actually had, on the step
+
+  A run whose agent kind declares MCP tool servers could drop any of them for seven different
+  reasons, and until now every one of those was stated in two places nobody looks: the agent's own
+  system prompt, and one backend `warn` line. From the outside a run that quietly went without its
+  issue tracker was indistinguishable from a run whose agent simply chose not to use it, which is the
+  question an adopting deployment asks first and the platform could not answer.
+
+  **A dispatch now records what it decided on the step** (`PipelineStep.toolServers`): the servers it
+  wired (id, label, transport, and the narrowed `allowedTools` where the definition set one), the ones
+  it dropped each with its reason, and the agent kind those lists belong to. The step detail renders
+  them as chips, with translated copy per reason in every locale, and hides itself when the record
+  holds nothing (a kind that declares no tool servers, which is every step on a deployment that
+  registers none).
+
+  The kind is stamped by the engine as it folds, from the same parameter that feeds `step.dispatches`,
+  because a step's own kind is routinely not what ran: a `ci` gate escalates to `ci-fixer`, a tester
+  hands off to `fixer`, a two-phase coder dispatches twice. Each of those resolves its own
+  declarations and overwrites the record, so without the stamp the chips would credit one agent's
+  capabilities to another. The step detail names whose they are whenever the two differ.
+
+  **Recorded on the STEP rather than on the agent-context telemetry snapshot**, which is where the
+  same facts sat inside an untyped `extras` bag. The snapshot is double-gated behind
+  `LLM_RECORD_PROMPTS` and the per-workspace `storeAgentContext`, and pruned on the telemetry
+  retention window, so a surface reading it would be blank on any deployment that simply has prompt
+  recording off. "Which tools did this step have" is an ordinary question about a run, not an opt-in
+  debugging artifact. It also costs no telemetry migration: the run row already carries its steps as
+  JSON.
+
+  **Public API (additive, `info.version` 1.21.0):** each step of `GET /api/v1/debug/runs/:runId` now
+  carries the same record, so a diagnosing reader can tell "the agent never had the tool" from "the
+  agent had it and did not call it", which the tool-call trajectory alone cannot show. The snapshot's
+  `extras.toolServers` / `extras.unavailableToolServers` keep being served, deprecated, projected from
+  the step's own record so the two cannot disagree; the removal window is in `backend/docs/public-api.md`.
+
+  It is written at dispatch and never re-derived, for the same reason the model and the leased
+  subscription token are: the poll site rebuilds the job handle from the step alone, and whether a
+  server was servable depended on the resolved harness plus the facade's secret and OAuth resolvers at
+  that moment. A workspace that fills in a missing credential an hour later must not make a step that
+  ran without the tool read as one that had it. Absent and both-lists-empty stay different states:
+  absent is "no container dispatch recorded here", both-empty is "a dispatch ran and its kind declared
+  none".
+
+  **The unavailability vocabulary moved to `@cat-factory/contracts`, and kernel's
+  `UnavailableToolServer['reason']` is now typed against it.** The SPA cannot see kernel, so leaving
+  the union there would have made the run surface's copy a hand-written duplicate of a closed list,
+  and a member added on one side only renders as a blank chip. Which member a dispatch picks is still
+  decided in kernel. Internal break: the seven reason strings are unchanged, but the type now aliases
+  `ToolServerUnavailableReason`.
+
+  **Tool servers and capability credentials also gain their first cross-runtime assertions.** The
+  conformance harness could not reach either, because the suite runs a `FakeAgentExecutor` that
+  composes no job body, and the values are write-only on every wire. `ConformanceApp.toolServerDispatch()`
+  (built by `makeToolServerDispatchProbe` over each facade's OWN container) drives the same
+  `resolveToolServers` a dispatch does with the chain that facade actually composed, so a facade that
+  wired its per-workspace credential store behind the deployment environment (or not at all) now
+  fails a test instead of handing its agents an unauthenticated server. It asserts a stored credential
+  reaching the job body under its declared channel, an unstored one dropping the server as
+  `missing_secret` in the same resolution (the per-KEY composition rule), and a Pi run dropping
+  everything as `harness_unsupported`.
+
+  What this does NOT answer is a server that was wired and whose CLI failed to start it anyway: that
+  needs the agent CLI's own startup report, which is a harness change and therefore a runner-image
+  bump. It is the remaining half of the tracker's slice 5; the probe already diagnoses the same
+  condition interactively.
+
+### Patch Changes
+
+- 6076cf1: Finish the built-in-agent strangler: every container agent kind the platform ships is now an
+  ordinary `registerAgentKind` entry, and both switches that shadowed the registry are deleted.
+
+  `buildKindBody` (`@cat-factory/server`) is one path — compose the prompt, resolve the kind's
+  `AgentStepSpec` off the registry, build the generic body — where it used to carry
+  `buildMigratedBuiltInBody`'s `switch (context.agentKind)` plus a read-only-set branch, a companion
+  branch and an implementer fallback. `coerceCustomResult` (`containerAgentResult.ts`) is one
+  `registry.mapStructuredResult(kind)` lookup where it used to be an `agentKind === …` chain. The two
+  hard-coded Sets that answered questions the registry should have answered are gone with them:
+  `CONTAINER_AGENT_KINDS` (replaced by the kind's declared `container-*` surface) and
+  `MULTI_REPO_FANOUT_BUILTIN_KINDS` (replaced by `fanOutMultiRepo` on the implementer and CI-fixer
+  registrations).
+
+  **Kernel (breaking, pre-1.0).** `AgentStepSpec.infra` (declared, never read) is replaced by
+  `testInfra: boolean`; the spec gains `image`, `localWrites`, and `clone.requirePr` /
+  `clone.prFallback` / `clone.mergeBase`. New: `AgentDispatchContext` (`baseBranch` / `workBranch` /
+  `multiRepo`), passed to a kind's `userPrompt` on a container dispatch and ABSENT for an inline
+  caller — the seam whose absence is why these kinds could not be registered before, since their
+  prompts have to name a branch and `AgentRunContext` describes the work rather than the checkout.
+
+  **Agents.** `AgentKindDefinition.systemPrompt` becomes optional (a built-in's shipped TRACK owns its
+  role text; a copy on the definition would be dead the day the track's wording moved), and gains
+  `userPromptSuffix` (append to the generic block-context prompt instead of replacing it — the
+  `on-call` agent reasons over the regression evidence that prompt carries) and `mapStructuredResult`
+  (the kind's own answer to which engine channel its JSON belongs in). `standardsDelivery` gains a
+  `none` tier for a kind that judges rather than produces. A suffix is applied OUTSIDE the revision
+  and injected-context wrappers, so a reply-shape instruction still ends the prompt on a revision
+  re-run and on the inline (no-checkout) path.
+
+  **Behaviour.** Parity was gated on the executor's existing per-kind snapshot suite, which drives
+  every kind through the public `startJob` and diffs the whole body: every body is byte-identical bar
+  one deliberate change. `merger` and `on-call` were bypassing the shared prompt chain, so they now
+  receive the effort-report guidance and — the actual bug — the skill and tool-server sections, which
+  a deployment's `assignSkills('merger', …)` had always been silently dropped from. `merger` declares
+  `standardsDelivery: 'none'` so joining that chain does not newly fold the service's coding standards
+  into a scoring prompt that never applies them.
+
+  What a deployment gets: the clone/PR/infra vocabulary the built-ins use is the public one, so an
+  org's own in-place fixer, tester or assessor is a registration rather than a fork.
+
+- 2fdb08d: Simplify three predicates the nightly mutation run showed nothing could distinguish: the OpenRouter
+  slug's vendor prefix is sliced rather than split-and-guarded, the family policy's unclassified case
+  is an explicit early return, and `effectiveTierLimit` drops a branch `Math.min()` already answers.
+  Name the subscription-harness rule once as `runsOnSubscriptionHarness`, which three model decisions
+  spelled inline and two of them as its negation. Behaviour is unchanged; the rest of the change is
+  tests.
+- Updated dependencies [11a2966]
+  - @cat-factory/contracts@0.258.0
+
 ## 0.255.1
 
 ### Patch Changes

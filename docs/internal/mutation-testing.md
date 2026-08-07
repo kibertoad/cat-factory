@@ -50,9 +50,9 @@ saturate every core.
 
 | Package               | Mutated                          | Mutants | Score (total / covered) | Floor |
 | --------------------- | -------------------------------- | ------- | ----------------------- | ----- |
-| `@cat-factory/kernel` | `src/domain/**`, `src/shared/**` | 6,084   | 66.29% / 77.89%         | 64%   |
-| `@cat-factory/gates`  | all of `src/`                    | 651     | 78.03% / 85.67%         | 76%   |
-| `@cat-factory/spend`  | all of `src/`                    | 400     | 90.25% / 90.70%         | 88%   |
+| `@cat-factory/kernel` | `src/domain/**`, `src/shared/**` | 6,115   | 78.79% / 83.43%         | 76%   |
+| `@cat-factory/gates`  | all of `src/`                    | 651     | 85.25% / 89.37%         | 83%   |
+| `@cat-factory/spend`  | all of `src/`                    | 396     | 95.71% / 95.71%         | 93%   |
 
 These three are pure logic with fast, database-free unit suites, which is the only shape mutation
 testing can afford: the suite runs once per surviving mutant, so a package whose tests need
@@ -69,7 +69,9 @@ package it never ran.
 
 Candidates for the next slice, in rough order of value: `@cat-factory/contracts` (the pure rules
 both sides agree about, e.g. `binaryFormatCoverage`), `@cat-factory/workspaces`,
-`@cat-factory/consensus`, and kernel's tested `ports/**` helpers.
+`@cat-factory/consensus`, and kernel's tested `ports/**` helpers. Spend is the package to widen
+LAST: it is the only one with no `NoCoverage` left, so there is nothing in its scope a new file
+would be joining.
 
 ## Reading the numbers
 
@@ -79,13 +81,28 @@ Two scores, both in the summary table and in Stryker's own output:
 - **covered-code score** = detected / (detected + survived), over the mutants a test actually ran.
 
 where detected = `Killed` + `Timeout` and undetected = `Survived` + `NoCoverage`. The gap between
-the two is untested code inside the scope, not weak assertions: kernel sits at ~66% total against
-~78% covered because `domain/` still holds modules with no tests at all beside modules tested
-thoroughly. The covered-code score is the fair read on the tests that exist; the total is the
-honest read on the scope. Closing the gap is therefore mostly a question of which module gets its
-first test, which is why the biggest single move so far was writing one for the untested ones
-(`ip-host.logic`, `llm-output`, `subtasks.logic`, `errors`) rather than sharpening assertions in
-the tested ones.
+the two is untested code inside the scope, not weak assertions: kernel's `domain/` still holds
+modules with no tests at all beside modules tested thoroughly. The covered-code score is the fair
+read on the tests that exist; the total is the honest read on the scope.
+
+Closing that gap is therefore mostly a question of which module gets its FIRST test, and the two
+biggest moves so far were both exactly that: `ip-host.logic` / `llm-output` / `subtasks.logic` /
+`errors`, then `models` / `validation-detectors` plus the multi-repo half of `gate-logic`. The
+second round took kernel from 66.29% to 78.79% by moving 566 mutants out of `NoCoverage`, which is
+also the clearest illustration of why the two columns move differently: the total gained 12.5
+points while the covered score gained 5.5, because a first test enlarges the covered denominator
+at the same time as it kills.
+
+**Read the report's PER-FILE undetected counts, not the headline score, when deciding what to
+work on.** They rank the work differently, and they also say which disposition applies: a file
+whose count is nearly all `NoCoverage` wants a test file, while a high `Survived` count on a
+tested module wants assertions. Where the mutants sit in a data table rather than in logic, the
+answer is nothing at all. `domain/seed.ts` is the standing example of the last case: it carries one of the
+largest counts in kernel, and most of it is string literals in the demo board and the built-in
+pipeline catalog. Pinning those means asserting shipped copy line by line, which is the
+re-pinned-unread test CLAUDE.md's testing conventions warn about; the logic around the data (the
+named-step lowering, version defaulting, the seed's structural invariants) is what is worth
+holding.
 
 `Ignored`, `CompileError` and `RuntimeError` are excluded from both denominators.
 
@@ -94,8 +111,8 @@ the tested ones.
 `minimumScore` in each package's config becomes Stryker's `thresholds.break`: below it, `stryker
 run` exits non-zero and the nightly job goes red.
 
-**A floor is the measured total truncated to a whole percent, less two points** (kernel 66.29 →
-66 → 64, gates 78.03 → 78 → 76, spend 90.25 → 90 → 88). The margin is not provisional slack
+**A floor is the measured total truncated to a whole percent, less two points** (kernel 78.79 →
+78 → 76, gates 85.25 → 85 → 83, spend 95.71 → 95 → 93). The margin is not provisional slack
 waiting to be reclaimed. It is sized to the one thing that moves this number without any test
 having changed: **the denominator**.
 
@@ -105,18 +122,21 @@ the total by roughly `its mutants / total`, about 1.6 points for a 150-mutant on
 therefore about one ordinary module's worth of room: enough that unrelated growth cannot turn the
 nightly red, small enough that a real regression still does.
 
-This is not a hypothetical. Kernel went 5,805 → 5,956 → 6,034 → 6,084 mutants across the
-baselines behind this table, purely from ordinary main-branch work, and the last of those steps
-landed WHILE the floor above was being set: `prompt-fragment-registry.ts` arrived with no test
-file, adding 20 `NoCoverage` mutants and moving the total 66.36 → 66.29 on its own. One module,
-no test regression anywhere, and a floor pinned to the measured value would already have been
-that much closer to red.
+This is not a hypothetical. Kernel went 5,805 → 5,956 → 6,034 → 6,084 → 6,115 mutants across the
+baselines behind this table, purely from ordinary main-branch work, and one of those steps landed
+WHILE the floor was being set: `prompt-fragment-registry.ts` arrived with no test file, adding 20
+`NoCoverage` mutants and moving the total 66.36 → 66.29 on its own. One module, no test regression
+anywhere, and a floor pinned to the measured value would already have been that much closer to red.
+
+The scope can also SHRINK, and for a good reason: deleting a branch nothing could distinguish (one
+of the three dispositions below) removes its mutants from the denominator. Spend went 400 → 396
+that way. Neither direction is a regression, which is what the margin is there to absorb.
 
 Do not reason about that margin from runner speed. An earlier revision of this file argued the
 floors needed none, because a `Timeout` counts as DETECTED and so a slower runner "can only score
 the same or higher". Both halves fail. It is one-directional (a FASTER runner than the measuring
 machine turns timeout-kills back into survivors, which lowers the score), and the cushion it
-appeals to is mostly not there: the measurements behind the table above found **zero** timeouts in
+appeals to is mostly not there: every measurement behind the table above found **zero** timeouts in
 gates and spend, and nine in kernel, worth 0.15 points. Runner speed is the small term here;
 scope growth is the large one.
 

@@ -119,7 +119,7 @@ export function composeSystemPrompt(
 }
 
 /** How a kind's resolved best-practice standards reach the agent. See {@link composeBlockSystemPrompt}. */
-export type StandardsDelivery = 'prompt' | 'context-files'
+export type StandardsDelivery = 'prompt' | 'context-files' | 'none'
 
 /** The index file a `context-files` kind writes listing every injected standard. */
 export const STANDARDS_CONTEXT_INDEX_FILE = 'standards.md'
@@ -164,6 +164,11 @@ export function isStandardsContextFile(path: string): boolean {
  * NOT run (`standardsDelivered === false`), fall back to folding so a `code-aware` kind never ends
  * up with its resolved standards in NEITHER channel. `delivery` is required so no call site can
  * silently fold for a `context-files` kind (the missing-argument bug this guards against).
+ *
+ * `delivery: 'none'` returns the base prompt unchanged UNCONDITIONALLY: the kind receives no
+ * standards through any channel, because it applies none (a kind that scores a change rather
+ * than producing one). Unlike `context-files` there is no fallback to fold, since nothing was
+ * meant to be delivered in the first place.
  * See {@link AgentKindDefinition.standardsDelivery}.
  */
 export function composeBlockSystemPrompt(
@@ -173,6 +178,7 @@ export function composeBlockSystemPrompt(
   standardsDelivered = false,
   verbosity: StandardsVerbosity = 'full',
 ): string {
+  if (delivery === 'none') return baseSystem
   if (delivery === 'context-files' && standardsDelivered) return baseSystem
   // PRESENCE, not length. An empty `resolvedFragments` is the engine saying it resolved the
   // selection and the answer was nothing, which is a fact and not a miss: every id was

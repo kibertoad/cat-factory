@@ -20,7 +20,7 @@ Neighbouring docs, each with its own job:
 - [`custom-agent-roles.md`](./custom-agent-roles.md): the field-by-field authoring reference for
   `McpServerDefinition` and `McpSecretRef`, and how the prompt renders what you declare.
 - [ADR 0029](./adr/0029-agent-kind-capabilities.md): the design record.
-- [`capability-credential-store.md`](../../docs/initiatives/capability-credential-store.md): the
+- [ADR 0041](./adr/0041-capability-credential-store.md): the
   per-workspace sealed credential store the resolver chain reads first.
 - [`mcp-maturation.md`](../../docs/initiatives/mcp-maturation.md): the roadmap, including every
   known limit below and its disposition.
@@ -91,7 +91,7 @@ into, and boot validation warns about that combination (the same warning covers 
 ## Which runs actually get the server
 
 **A declared server that is not wired is STATED to the agent, never silently missing** (in the
-prompt's tool-server section) and recorded on the run's context snapshot. Silence would let the
+prompt's tool-server section) and recorded on the step (see below). Silence would let the
 agent plan around a tool that was never there and discover the gap mid-run. Each reason below is
 its own member of a closed vocabulary, because each needs a DIFFERENT fix, and the prompt renders
 them through an exhaustive `Record`, so adding one fails the typecheck rather than rendering blank:
@@ -105,6 +105,46 @@ them through an exhaustive `Record`, so adding one fails the typecheck rather th
 | `oauth_not_connected`   | The server authenticates with OAuth and this workspace holds no grant (or the deployment has no `ENCRYPTION_KEY` to keep one in) | Press Connect on the board, and sign in at the vendor |
 | `oauth_token_failed`    | A grant IS on file and produced no access token: revoked/expired refresh, an authorization server that refused, discovery failed | Reconnect, or wait out the vendor's outage            |
 | `over_budget`           | Nothing is wrong with the server; the kind declares more than a dispatch carries                                                 | Trim the kind's declarations                          |
+
+### What the RUN records, and where a person sees it
+
+A dispatch's decision lands on the step itself (`step.toolServers`), as two lists: the servers it
+WIRED (id, label, transport, and the narrowed `allowedTools` when the definition set one) and the
+ones it DROPPED, each with the reason from the table above. The step detail renders them as chips,
+so a run that quietly went without its issue tracker says so where a person is already looking; the
+SPA maps each reason through an exhaustive `Record` over
+`@cat-factory/contracts`'s `toolServerUnavailableReasonSchema`, and a member it does not recognise
+renders as unknown NAMING the raw code rather than disappearing.
+
+Four properties of that record are load-bearing:
+
+- **It is recorded at DISPATCH and never re-derived.** The poll site rebuilds the job handle from
+  the step alone, and whether a server was servable depended on the resolved harness plus the
+  facade's secret and OAuth resolvers AT THAT MOMENT. A workspace that fills in a missing
+  credential an hour later must not make a step that ran without the tool read as one that had it.
+- **It names the kind that was DISPATCHED**, which is routinely not the kind the step is named
+  for: a `ci` gate escalates to `ci-fixer`, a tester hands off to `fixer`, a two-phase coder
+  dispatches twice. Each of those resolves its OWN declarations and overwrites the record, so
+  `recordDispatchAttribution` stamps `agentKind` on it from the same parameter that feeds
+  `step.dispatches`. Without it the lists would be read under the step's kind and credit one
+  agent's capabilities to another. The step detail says whose they are whenever the two differ.
+- **Absent and both-empty are different states.** Absent means no container dispatch recorded here
+  (an inline step, or a run predating the field); `{ wired: [], unavailable: [] }` means a dispatch
+  ran and its kind declared no tool servers at all. The step detail hides itself on the empty
+  record, since that is every step on a deployment that registers no tool servers and it is a fact
+  about the DECLARATION rather than about the run; the distinction survives on the wire and the
+  debug API answers it.
+- **It carries no credential**, by construction rather than by field-skipping: the projection is
+  built from the prompt-facing half of the resolution and `mcpServers` (where every resolved value
+  lives) has no projection into it. The step is persisted and rendered in a browser.
+
+This is deliberately not the agent-context telemetry snapshot, which carried the same facts in its
+untyped `extras` bag. That snapshot is double-gated (`LLM_RECORD_PROMPTS` plus the per-workspace
+`storeAgentContext`) and pruned on the telemetry retention window, so a surface reading it would be
+blank on a deployment that simply has prompt recording off, while "which tools did this step have"
+is an ordinary question about a run rather than an opt-in debugging artifact. Its copy is
+DEPRECATED and still served, projected from the step's own record so the two cannot disagree; the
+removal window is in [`public-api.md`](./public-api.md).
 
 **A dispatch carries at most `TOOL_SERVER_BUDGET.maxServers` servers**, plus a total byte cap on
 the job-body field. Past either the excess is dropped under `over_budget`, and **both dimensions
@@ -245,7 +285,7 @@ ride the log line, since a metric dimension has to be bounded.
   learn what to fill in. It appears only for a caller holding `secrets.manage` and only when
   something is declared, stored or unreadable, and it saves ONE key at a time
   (`PUT /workspaces/:ws/capability-credentials/:key`) because it holds no values to re-send. See
-  [`capability-credential-store.md`](../../docs/initiatives/capability-credential-store.md).
+  [ADR 0041](./adr/0041-capability-credential-store.md).
 - **Mind what `secretKeys` can reach BEYOND that floor.** Everything outside the platform's own
   configuration is a developer's own tooling, and only the deployment knows which of it an
   integration may see. If a deployment installs agent packages it did not author, wire
@@ -504,8 +544,11 @@ this list exists so an adopting deployment learns the ceiling from the docs rath
   every workspace's runs of the kinds it is declared on; only the credential half is per-workspace
   today. Capability credentials are also SPA-only (absent from the public API) until the same
   slice.
-- **What a run actually reached is not yet recorded on a typed surface** (slice 5's remaining
-  half). Today the evidence is the prompt's tool-server section and the agent-context snapshot.
+- **What a run WIRED is recorded; what the CLI actually REACHED is not** (slice 5's remaining
+  half). `step.toolServers` states the platform's own decision, which is the answer to "why did the
+  agent not use the tool". It cannot answer "the server was wired and the CLI still failed to start
+  it": that needs the agent CLI's own startup report, which is a harness change and therefore a
+  runner-image bump. Until then a wired-but-broken server is diagnosed with the probe.
 - **Pi has no MCP client** (standing non-goal, ADR 0029). A deployment whose model provisioning
   resolves to Pi runs gets no tool servers there, stated per run as `harness_unsupported`.
 - **`http` means streamable HTTP.** The legacy HTTP+SSE transport is deliberately not a vocabulary

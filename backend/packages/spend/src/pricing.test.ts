@@ -187,6 +187,17 @@ describe('withDynamicPrices', () => {
     expect(withDynamicPrices(pricing, [])).toBe(pricing)
   })
 
+  it('keeps every base entry beside the overlay rather than replacing the table', () => {
+    // The dynamic catalog ADDS OpenRouter slugs; a curated price the deployment already had must
+    // still resolve, or every non-OpenRouter model silently falls back to the default price.
+    const overlaid = withDynamicPrices(pricing, [meta('vendor/model', 7, 21)])
+    expect(priceFor(overlaid, { provider: 'acme', model: 'big' })).toEqual(
+      pricing.prices['acme:big'],
+    )
+    expect(overlaid.currency).toBe(pricing.currency)
+    expect(overlaid.monthlyLimit).toBe(pricing.monthlyLimit)
+  })
+
   it('SKIPS a model OpenRouter reported no pricing for rather than metering it as free', () => {
     const overlaid = withDynamicPrices(pricing, [meta('vendor/unpriced', 0, 0)])
     expect(priceFor(overlaid, { provider: 'openrouter', model: 'vendor/unpriced' })).toEqual(
@@ -215,13 +226,19 @@ describe('budgetCapsOverlay', () => {
     expect(budgetCapsOverlay(undefined, 20)).toEqual({ userMonthlyLimitCap: 20 })
   })
 
+  // Each rule is asserted on BOTH sides. The two guards are separate expressions, so a test that
+  // only ever puts the bad value on one side leaves the other free to be a constant.
   it('leaves a tier uncapped for a missing or non-finite value', () => {
-    expect(budgetCapsOverlay(undefined, undefined)).toEqual({})
-    expect(budgetCapsOverlay(Number.NaN, Number.POSITIVE_INFINITY)).toEqual({})
+    // `toEqual` ignores an explicitly-undefined property, so the KEY has to be checked: an
+    // overlay carrying `{ accountMonthlyLimitCap: undefined }` overwrites a configured cap.
+    expect(Object.keys(budgetCapsOverlay(undefined, undefined))).toEqual([])
+    expect(Object.keys(budgetCapsOverlay(Number.NaN, Number.POSITIVE_INFINITY))).toEqual([])
+    expect(Object.keys(budgetCapsOverlay(Number.POSITIVE_INFINITY, Number.NaN))).toEqual([])
   })
 
-  it('treats 0 as a real ceiling and a negative value as invalid', () => {
+  it('treats 0 as a real ceiling and a negative value as invalid, on either side', () => {
     expect(budgetCapsOverlay(0, -1)).toEqual({ accountMonthlyLimitCap: 0 })
+    expect(budgetCapsOverlay(-1, 0)).toEqual({ userMonthlyLimitCap: 0 })
   })
 })
 

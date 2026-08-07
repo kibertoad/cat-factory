@@ -78,8 +78,11 @@ const INLINE_TYPE_NAMES = {
   'blockId,createdAt,detail,error,executionId,id,operation,outcome,providerId,subsystem,targetId,workspaceId':
     'DebugInfraLogEntry',
   'agentKind,createdAt,executionId,id,provider,query,resultCount,workspaceId': 'DebugSearchQuery',
-  'agentKind,evictionRecoveries,finishedAt,firstEvictionDetail,hasStructuredResult,index,lastActivityAt,model,outputChars,progress,skipped,startedAt,state,subtasks':
+  'agentKind,evictionRecoveries,finishedAt,firstEvictionDetail,hasStructuredResult,index,lastActivityAt,model,outputChars,progress,skipped,startedAt,state,subtasks,toolServers':
     'DebugRunStep',
+  'agentKind,unavailable,wired': 'DebugStepToolServers',
+  'id,label,tools,transport': 'DebugWiredToolServer',
+  'id,label,reason': 'DebugUnavailableToolServer',
   'agentKind,code,count,message,severity,stepIndex': 'DebugRunSignal',
   'agentKind,cacheHitRate,cacheReadTokens,cacheWriteTokens,calls,completionTokens,costEstimate,errors,maxOutputTokens,outputHeadroomRatio,overheadMs,peakCompletionTokens,promptTokens,transportOverheadRatio,truncatedCalls,upstreamMs,warnings':
     'DebugLlmAgentKindRollup',
