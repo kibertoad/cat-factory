@@ -44,6 +44,7 @@ jobs:
       cliSupervise: ${{ steps.filter.outputs.cliSupervise }}
       deployHarness: ${{ steps.filter.outputs.deployHarness }}
       eks: ${{ steps.filter.outputs.eks }}
+      gatekeeper: ${{ steps.filter.outputs.gatekeeper }}
       sdk: ${{ steps.filter.outputs.sdk }}
       # Coarse test-lane gating (computed in the `scope` step below):
       #   backendCode — backend source OR a root build/dependency input changed. Gates the
@@ -145,6 +146,20 @@ jobs:
               - 'backend/packages/contracts/src/primitives.ts'
               - 'backend/packages/integrations/src/modules/kubernetes/**'
               - '.github/workflows/ci.yml'
+            # The Cloudflare OS Gatekeeper reference deployment (`test-gatekeeper`) is a CONSUMER of
+            # the published surface, not part of the backend: it depends on `@cat-factory/sdk` and
+            # `@cat-factory/gatekeeper-bindings` exactly as an outside integrator would, and nothing
+            # in `backend/packages` may depend on it. Its lane is its own for the same reason it is
+            # NON-BLOCKING (not in the aggregated `Test` gate, the shape `test-eks` has): the
+            # Cloudflare OS protocol is still moving, and a partner-side breaking change must not
+            # turn this repo's CI red. It runs when the Worker itself changes, or when either half
+            # of the surface it consumes does.
+            gatekeeper:
+              - 'deploy/gatekeeper/**'
+              - 'sdk/gatekeeper/**'
+              - 'sdk/typescript/**'
+              - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             # The cross-SDK smoketest (`sdk-smoketest`) boots a real backend and drives all four
             # SDK clients plus the published MCP server against it, so it runs when EITHER side of
             # that contract moves: the
@@ -1224,11 +1239,53 @@ jobs:
         if: ${{ always() }}
         run: docker rm -f floci || true
 
+  # The Cloudflare OS Gatekeeper reference deployment, in real workerd. NON-BLOCKING (deliberately
+  # NOT in the aggregated `Test` gate's `needs`, the shape `test-eks` and `test-e2e` have): this
+  # Worker tracks a partner protocol that is still moving, and a change on that side must not red
+  # this repo's required check. It needs no database and no cluster (the cat-factory origin it
+  # talks to is a scripted worker bound as the pool's outbound service), so it is a plain install,
+  # build and run.
+  test-gatekeeper:
+    name: Test Gatekeeper (workerd)
+    needs: changes
+    if: ${{ needs.changes.outputs.gatekeeper == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The Worker imports the SDK and the bindings table through their built `dist`.
+      - name: Build the published surface it consumes
+        run: pnpm exec turbo run build --filter=@cat-factory/gatekeeper-bindings...
+
+      - name: Typecheck
+        run: pnpm exec turbo run typecheck --filter=@cat-factory/deploy-gatekeeper
+
+      - name: Gatekeeper tests
+        run: pnpm exec turbo run test:run --filter=@cat-factory/deploy-gatekeeper
+
   # Single aggregated status named "Test" so branch protection can require one
   # check regardless of the job/shard layout. Fails unless every test job passed OR was
   # legitimately skipped by the change-detection gate (no relevant changes → nothing to run).
-  # NOTE: `test-e2e` and `test-eks` are intentionally NOT in `needs` — they're non-blocking for
-  # now (see their job comments above), so their result does not gate this required status.
+  # NOTE: `test-e2e`, `test-eks` and `test-gatekeeper` are intentionally NOT in `needs`: they're
+  # non-blocking for now (see their job comments above), so their result does not gate this
+  # required status.
   test-gate:
     name: Test
     needs: [changes, test-worker, test-units, test-db, test-k8s, sdk-smoketest]

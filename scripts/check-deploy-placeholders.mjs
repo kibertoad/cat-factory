@@ -21,7 +21,11 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // The two wrangler templates the docs make the placeholder promise about. The preview
 // template is NOT listed: its `${...}` values are substituted by the preview workflow,
 // which enforces its own rendered-config check.
-const TEMPLATES = ['deploy/backend/wrangler.toml', 'deploy/frontend/wrangler.toml']
+const TEMPLATES = [
+  'deploy/backend/wrangler.toml',
+  'deploy/frontend/wrangler.toml',
+  'deploy/gatekeeper/wrangler.toml',
+]
 
 let failed = false
 for (const relPath of TEMPLATES) {

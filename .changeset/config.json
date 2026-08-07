@@ -15,6 +15,7 @@
     "@cat-factory/deploy-frontend",
     "@cat-factory/deploy-node",
     "@cat-factory/deploy-local",
+    "@cat-factory/deploy-gatekeeper",
     "@cat-factory/sdk-smoketest"
   ]
 }
