@@ -1,18 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { AgentKindRegistry } from './registry.js'
-import { PR_REVIEWER_AGENT_KINDS } from './pr-reviewer.js'
-import {
-  CONTAINER_AGENT_KINDS,
-  dispatchDeliversCheckout,
-  runsInContainer,
-} from './container-surface.js'
+import { defaultAgentKindRegistry } from './registry.js'
+import { dispatchDeliversCheckout, runsInContainer } from './container-surface.js'
 
-/** A registry carrying the built-in `pr-reviewer` definition, as every facade's does. */
-const registry = () => {
-  const reg = new AgentKindRegistry()
-  for (const definition of PR_REVIEWER_AGENT_KINDS) reg.register(definition)
-  return reg
-}
+/** The registry every facade builds: the built-in kinds pre-loaded, nothing deployment-specific. */
+const registry = () => defaultAgentKindRegistry()
 
 describe('runsInContainer', () => {
   it('covers the built-in checkout kinds', () => {
@@ -21,15 +12,14 @@ describe('runsInContainer', () => {
     }
   })
 
-  it('covers a container-backed COMPANION without a hard-coded entry', () => {
-    // `reviewer` is a `container-explore` companion, not a CONTAINER_AGENT_KINDS member — the
+  it('covers a container-backed COMPANION, which is a pairing rather than a kind', () => {
+    // `reviewer` is registered as a `container-explore` COMPANION, never as an agent kind — the
     // predicate must reach it through the companion catalog.
-    expect(CONTAINER_AGENT_KINDS.has('reviewer')).toBe(false)
+    expect(registry().get('reviewer')).toBeUndefined()
     expect(runsInContainer('reviewer', registry())).toBe(true)
   })
 
   it('covers `pr-reviewer` through its REGISTERED container surface', () => {
-    expect(CONTAINER_AGENT_KINDS.has('pr-reviewer')).toBe(false)
     expect(runsInContainer('pr-reviewer', registry())).toBe(true)
   })
 
@@ -41,6 +31,19 @@ describe('runsInContainer', () => {
       agent: { surface: 'container-explore' },
     })
     expect(runsInContainer('org-auditor', reg)).toBe(true)
+  })
+
+  it('reads every built-in container kind off its own registration, with no allow-list left', () => {
+    // The property the strangler bought: a container kind is one that DECLARED a container
+    // surface. Derived from the registry rather than re-listed, so a kind added to the catalog
+    // cannot be missed here (which is exactly what the deleted hard-coded Set made possible).
+    const declared = registry()
+      .all()
+      .filter((definition) => definition.agent?.surface?.startsWith('container-'))
+    expect(declared.length).toBeGreaterThan(0)
+    for (const definition of declared) {
+      expect(runsInContainer(definition.kind, registry())).toBe(true)
+    }
   })
 
   it('is false for a genuinely inline kind', () => {
