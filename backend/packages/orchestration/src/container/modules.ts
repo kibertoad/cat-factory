@@ -427,6 +427,7 @@ export function createTasksModule(
     })(),
   })
   return {
+    registry,
     connectionService,
     importService,
     linkService,

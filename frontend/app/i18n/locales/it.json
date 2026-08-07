@@ -377,27 +377,21 @@
         "linearTeamSearchPlaceholder": "Cerca team…"
       },
       "vendor": {
-        "github": "GitHub Issues",
-        "jira": "Jira",
-        "linear": "Linear"
+        "github": "GitHub Issues"
       },
       "linking": {
         "heading": "Collega gli issue come contesto",
         "description": "Quando una sorgente e disponibile, puoi importare i suoi issue e allegarli a un'attivita, cosicche gli agenti vedano la descrizione e i commenti dell'issue durante l'implementazione. Questo e indipendente dal tracker di registrazione qui sopra.",
-        "github": {
-          "available": "Si appoggia alla tua GitHub App installata — nessuna credenziale necessaria.",
-          "unavailable": "Installa la GitHub App (Integrazioni → GitHub) per offrire questa sorgente."
-        },
         "checkSetup": "Verifica la configurazione",
-        "install": "Installa",
         "connected": "Connesso.",
-        "jira": {
-          "connectHint": "Connettiti con un account Jira e un token API."
+        "connect": "Connetti",
+        "state": {
+          "ridesConnected": "Usa la connessione {provider} di questo workspace, quindi non richiede credenziali proprie.",
+          "ridesMissing": "Collega {provider} in Integrazioni per offrire questa sorgente.",
+          "notConnected": "Non ancora collegato."
         },
-        "linear": {
-          "connectHint": "Connettiti con una chiave API personale Linear."
-        },
-        "connect": "Connetti"
+        "connectProvider": "Collega {provider}",
+        "none": "Questo deployment non ha sorgenti di attività configurate."
       },
       "writeback": {
         "heading": "Writeback",
@@ -2924,6 +2918,7 @@
       "intake": "Acquisizione issue",
       "intakeHint": "Ogni esecuzione seleziona una issue aperta corrispondente dal tracker e la porta a termine dall'inizio alla fine.",
       "intakeNoSources": "Connetti prima una sorgente di attività per estrarne le issue.",
+      "intakeNoIntakeSources": "Una sorgente di attività è connessa, ma nessuna delle sorgenti connesse può ancora eseguire una ricerca pianificata delle issue.",
       "intakeGithubRepo": "Repository",
       "intakeBoardId": "ID della board",
       "intakeBoardIdHelp": "La board, il progetto o la coda a cui questo tracker limita l’acquisizione. Il formato è definito dal tracker.",

@@ -54,6 +54,11 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
    */
   readonly webhook = githubIssuesWebhookAdapter
   readonly descriptor = GITHUB_ISSUES_DESCRIPTOR
+  /**
+   * Repo-backed: an `owner/repo#number` id names its repository, so this source's search
+   * requires a scope and its imported rows narrow to one. See the kernel port.
+   */
+  readonly repoScope = { matches: githubIssuesLogic.githubIssueInRepoScope }
 
   constructor(private readonly deps: GitHubIssuesProviderDependencies) {}
 

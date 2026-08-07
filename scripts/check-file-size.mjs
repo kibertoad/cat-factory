@@ -151,7 +151,11 @@ const LEGACY_ALLOWANCES = new Map([
   // one is workspace-keyed, secret-free, `workspace`-scoped on the persistence allow-list, and
   // edited from a settings surface rather than written by the engine, so the next such library
   // lands there rather than among the run-path repositories.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1128],
+  // 1128 -> 1062 by extracting `tasks-deps.ts`: the task-source selector, which is the shape
+  // `github-deps.ts` already had (a per-integration selector reading `buildAppRegistry` back out
+  // of this root). It moved because a fourth built-in source pushed the file over budget, and the
+  // selector is where every future one lands too.
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1062],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)

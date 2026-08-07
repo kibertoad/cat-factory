@@ -10,7 +10,14 @@ prerequisites are configured.
 - `github/`, `documents/`, `tasks/`, `tracker/`: VCS + document/issue sources. `tasks/webhook/`
   holds the INBOUND side: the per-vendor verify+parse adapters behind
   `TaskSourceProvider.webhook`, driving `tasks/TrackerWebhookService.ts` (push intake fires a
-  matching schedule; a ticket comment answers a parked review). `tasks/` also holds the two issue
+  matching schedule; a ticket comment answers a parked review). The VCS-backed sources
+  (`GitHubIssuesProvider`, `GitLabIssuesProvider`) store no credentials: each reads through the
+  workspace's own connection row and is offered only when that row's `provider` is its own. Both
+  are also REPO-BACKED, declared by a `TaskSourceProvider.repoScope` carrying the source's own
+  id-to-repository comparison: its PRESENCE is what makes the HTTP layer resolve a repository
+  before the search and what narrows the workspace's imported rows to one, so a repo-backed source
+  added without it is a search that refuses and a list that never narrows.
+  `tasks/` also holds the two issue
   PULLS, structural twins differing only in who decides: `BugIntakeService.ts` (the recurring
   step claims the oldest match unattended) and `BugHuntService.ts` (a human picks from a rated
   board scan), both over the `listBugCandidates` / `listBoards` provider capabilities.

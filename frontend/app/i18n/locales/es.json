@@ -345,6 +345,7 @@
       "intake": "Admisión de incidencias",
       "intakeHint": "Cada ejecución toma una incidencia abierta que coincide del rastreador y la resuelve de principio a fin.",
       "intakeNoSources": "Primero conecta una fuente de tareas para extraer incidencias de ella.",
+      "intakeNoIntakeSources": "Hay una fuente de tareas conectada, pero ninguna de las fuentes conectadas puede ejecutar todavía una búsqueda programada de incidencias.",
       "intakeGithubRepo": "Repositorio",
       "intakeBoardId": "ID del tablero",
       "intakeBoardIdHelp": "El tablero, proyecto o cola al que este rastreador limita la admisión. El formato lo define el rastreador.",
@@ -2769,27 +2770,21 @@
         "linearTeamSearchPlaceholder": "Buscar equipos…"
       },
       "vendor": {
-        "github": "GitHub Issues",
-        "jira": "Jira",
-        "linear": "Linear"
+        "github": "GitHub Issues"
       },
       "linking": {
         "heading": "Vincular incidencias como contexto",
         "description": "Cuando se ofrece una fuente, puedes importar sus incidencias y adjuntarlas a una tarea, para que los agentes vean la descripción de la incidencia y los comentarios mientras implementan. Esto es independiente del gestor de registro de arriba.",
-        "github": {
-          "available": "Usa tu GitHub App instalada: no se necesitan credenciales.",
-          "unavailable": "Instala la GitHub App (Integraciones → GitHub) para ofrecer esta fuente."
-        },
         "checkSetup": "Comprobar configuración",
-        "install": "Instalar",
         "connected": "Conectado.",
-        "jira": {
-          "connectHint": "Conecta con una cuenta de Jira y un token de API."
+        "connect": "Conectar",
+        "state": {
+          "ridesConnected": "Usa la conexión de {provider} de este espacio de trabajo, así que no necesita credenciales propias.",
+          "ridesMissing": "Conecta {provider} en Integraciones para ofrecer esta fuente.",
+          "notConnected": "Aún sin conectar."
         },
-        "linear": {
-          "connectHint": "Conecta con una clave de API personal de Linear."
-        },
-        "connect": "Conectar"
+        "connectProvider": "Conectar {provider}",
+        "none": "Este despliegue no tiene fuentes de tareas configuradas."
       },
       "writeback": {
         "heading": "Escritura de vuelta",

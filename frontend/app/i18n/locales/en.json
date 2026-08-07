@@ -384,6 +384,7 @@
       "intake": "Issue intake",
       "intakeHint": "Each run picks one matching open issue from the tracker and works it end to end.",
       "intakeNoSources": "Connect a task source first to pull issues from it.",
+      "intakeNoIntakeSources": "A task source is connected, but none of the connected sources can run a scheduled issue search yet.",
       "intakeGithubRepo": "Repository",
       "intakeBoardId": "Board id",
       "intakeBoardIdHelp": "The board, project or queue this tracker scopes intake to. Its format is defined by the tracker.",
@@ -3020,27 +3021,21 @@
         "linearTeamSearchPlaceholder": "Search teams…"
       },
       "vendor": {
-        "github": "GitHub Issues",
-        "jira": "Jira",
-        "linear": "Linear"
+        "github": "GitHub Issues"
       },
       "linking": {
         "heading": "Link issues as context",
         "description": "When a source is offered you can import its issues and attach them to a task, so agents see the issue description and comments while implementing. This is independent of the filing tracker above.",
-        "github": {
-          "available": "Rides your installed GitHub App — no credentials needed.",
-          "unavailable": "Install the GitHub App (Integrations → GitHub) to offer this source."
-        },
         "checkSetup": "Check setup",
-        "install": "Install",
         "connected": "Connected.",
-        "jira": {
-          "connectHint": "Connect with a Jira account and API token."
+        "connect": "Connect",
+        "state": {
+          "ridesConnected": "Rides this workspace's {provider} connection, so it needs no credentials of its own.",
+          "ridesMissing": "Connect {provider} under Integrations to offer this source.",
+          "notConnected": "Not connected yet."
         },
-        "linear": {
-          "connectHint": "Connect with a Linear personal API key."
-        },
-        "connect": "Connect"
+        "connectProvider": "Connect {provider}",
+        "none": "This deployment has no task sources configured."
       },
       "writeback": {
         "heading": "Writeback",

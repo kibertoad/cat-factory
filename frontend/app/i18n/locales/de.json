@@ -377,27 +377,21 @@
         "linearTeamSearchPlaceholder": "Teams suchen…"
       },
       "vendor": {
-        "github": "GitHub Issues",
-        "jira": "Jira",
-        "linear": "Linear"
+        "github": "GitHub Issues"
       },
       "linking": {
         "heading": "Issues als Kontext verknüpfen",
         "description": "Wenn eine Quelle angeboten wird, kannst du ihre Issues importieren und an eine Aufgabe anhängen, sodass Agenten die Issue-Beschreibung und Kommentare während der Umsetzung sehen. Dies ist unabhängig vom Ablage-Tracker oben.",
-        "github": {
-          "available": "Nutzt deine installierte GitHub-App — keine Zugangsdaten nötig.",
-          "unavailable": "Installiere die GitHub-App (Integrationen → GitHub), um diese Quelle anzubieten."
-        },
         "checkSetup": "Einrichtung prüfen",
-        "install": "Installieren",
         "connected": "Verbunden.",
-        "jira": {
-          "connectHint": "Mit einem Jira-Konto und API-Token verbinden."
+        "connect": "Verbinden",
+        "state": {
+          "ridesConnected": "Nutzt die {provider}-Verbindung dieses Workspace und braucht daher keine eigenen Zugangsdaten.",
+          "ridesMissing": "Verbinde {provider} unter Integrationen, um diese Quelle anzubieten.",
+          "notConnected": "Noch nicht verbunden."
         },
-        "linear": {
-          "connectHint": "Mit einem persönlichen Linear-API-Schlüssel verbinden."
-        },
-        "connect": "Verbinden"
+        "connectProvider": "{provider} verbinden",
+        "none": "In diesem Deployment sind keine Aufgabenquellen konfiguriert."
       },
       "writeback": {
         "heading": "Rückschreiben",
@@ -2924,6 +2918,7 @@
       "intake": "Issue-Aufnahme",
       "intakeHint": "Jeder Lauf wählt ein passendes offenes Issue aus dem Tracker und bearbeitet es von Anfang bis Ende.",
       "intakeNoSources": "Verbinden Sie zuerst eine Task-Quelle, um Issues daraus zu ziehen.",
+      "intakeNoIntakeSources": "Eine Task-Quelle ist verbunden, aber keine der verbundenen Quellen kann bereits eine geplante Issue-Suche ausführen.",
       "intakeGithubRepo": "Repository",
       "intakeBoardId": "Board-ID",
       "intakeBoardIdHelp": "Das Board, Projekt oder die Warteschlange, auf die dieser Tracker die Aufnahme eingrenzt. Das Format gibt der Tracker vor.",

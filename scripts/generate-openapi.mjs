@@ -126,8 +126,7 @@ const API_PREFIX = '/api/v1'
 // always saw. It is the floor only: a run-starting operation can still escalate to `decide` at
 // request time when the named pipeline can park.
 //
-// 1.22.0 is main's published number as of this branch's last merge, and it is NOT this change:
-// it belongs to `GET /api/v1/runs/:runId/outcome` and the verification report's new optional
+// 1.22.0 belongs to `GET /api/v1/runs/:runId/outcome` and the verification report's new optional
 // `requirements.unmatchedVerdicts`. Two diffs claiming one number is a lie a consumer pinning
 // the version would act on, so re-read this line after any merge rather than trusting that the
 // VERSION auto-merged clean.
@@ -139,19 +138,28 @@ const API_PREFIX = '/api/v1'
 // `x-min-scope` while the branch was in flight: the collision surfaced as a conflict on this
 // comment block only because each version step writes its own paragraph here, never as one on the
 // VERSION line, which auto-merges clean to a number main has already used.
-// 1.25.0, not 1.22.0: a step's `toolServers` on `GET /api/v1/debug/runs/:runId` gains an optional
+// 1.25.0, not 1.24.0: `gitlab` joins the `TaskSourceKind` enum, GitLab Issues being a fourth
+// built-in task source. Additive on a CLOSED vocabulary, which is the shape the SDKs are built to
+// tolerate: they map an unknown enum member through rather than refusing it, so a client compiled
+// against 1.24.0 keeps parsing every response it already understood and simply never asks for the
+// new source. No existing member changes meaning and no persisted `source` value moves.
+// 1.26.0, not 1.22.0: a step's `toolServers` on `GET /api/v1/debug/runs/:runId` gains an optional
 // `observed`, the agent CLI's own account of the servers it managed to load beside the `wired` /
 // `unavailable` account of what the platform decided. Additive: a consumer written against 1.21.0
 // reads both existing lists unchanged, and an ABSENT `observed` is not an empty one: it means no
 // observation was made (a harness whose CLI publishes no such report, an older runner image, an
 // unmapped runner pool), which is a distinction a consumer has to keep or it will report working
-// servers as dead. FOURTH number this one addition has held. It was written against 1.21.0, the
-// number the `toolServers` record itself took; 1.22.0 (the run outcome endpoint) and 1.23.0
-// (`x-min-scope`) landed on main while the branch was in flight, and 1.24.0 above landed on the
-// merge that produced THIS paragraph, having auto-merged the VERSION line to the number this
-// branch had already written there. Every one of the four was found by re-reading this line after
-// a merge, which is the only thing that catches it.
-const API_VERSION = '1.25.0'
+// servers as dead.
+//
+// FIFTH number this one addition has held: written against 1.21.0 (the number the `toolServers`
+// record itself took), then displaced in turn by the run outcome endpoint, `x-min-scope`, the
+// task-`fields` patch and the GitLab source above, each published by main while this branch was in
+// flight. Not one of the five announced itself on the VERSION line, which auto-merged clean every
+// time to the number main had just used; every one surfaced as a conflict in THIS comment block,
+// only because each version step writes its own paragraph here. That is the whole reason the
+// paragraphs exist, and it is why the note at the top of the block says to re-read this line after
+// every merge rather than trust a clean one.
+const API_VERSION = '1.26.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

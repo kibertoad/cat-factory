@@ -5,6 +5,7 @@ import type {
   DeploymentDocumentResolver,
   Logger,
   OperationalMetrics,
+  TaskSourceRegistry,
 } from '@cat-factory/kernel'
 import { ModuleRegistry } from './container/module-registry.js'
 import {
@@ -173,6 +174,14 @@ export interface DocumentsModule {
 
 /** The task-source integration's services, present only when configured. */
 export interface TasksModule {
+  /**
+   * The app-owned provider registry the services resolve every source on, exposed so the HTTP
+   * layer can read a source's declared CAPABILITIES before it calls one: today whether a search
+   * has to be scoped to a repository (`provider.repoScope`), which decides what the request
+   * needs to resolve first. It stays the registration authority: a controller reads capability
+   * off it and lets the service refuse an unregistered source, rather than gating on it twice.
+   */
+  registry: TaskSourceRegistry
   connectionService: TaskConnectionService
   importService: TaskImportService
   linkService: TaskLinkService

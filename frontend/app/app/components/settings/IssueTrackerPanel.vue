@@ -15,7 +15,8 @@
 // directly; linking is the source toggle), so both are shown explicitly to undo
 // the common confusion that "I have the GitHub App, why is nothing surfaced?".
 import { computed, onMounted, ref, watch } from 'vue'
-import type { TaskSourceDiagnosticStatus, TaskSourceKind, TrackerKind } from '~/types/domain'
+import type { TaskSourceKind, TaskSourceState, TrackerKind } from '~/types/domain'
+import TaskSourceCard from '~/components/settings/TaskSourceCard.vue'
 
 const { t } = useI18n()
 const tracker = useTrackerStore()
@@ -50,15 +51,12 @@ onMounted(() => {
 // (no deep traversal) catches every change.
 watch(() => tracker.settings, hydrate)
 
-// Per-source live state (available = usable now; enabled = offered to the workspace).
-const github = computed(() => tasks.descriptorFor('github'))
-const jira = computed(() => tasks.descriptorFor('jira'))
-const linear = computed(() => tasks.descriptorFor('linear'))
-
 // A tracker can only file where it can authenticate: GitHub rides the installed
 // App, Jira/Linear need a connection. Selecting an unusable tracker is allowed (it
-// just won't file until set up), but we surface the gap inline.
-const githubAvailable = computed(() => github.value?.available ?? false)
+// just won't file until set up), but we surface the gap inline. (The FILING picker is a
+// closed list of the three trackers the `tracker` step can file into, unlike the LINKING
+// list below, which is whatever the deployment registered.)
+const githubAvailable = computed(() => tasks.descriptorFor('github')?.available ?? false)
 const jiraConnected = computed(() => tasks.isConnected('jira'))
 const linearConnected = computed(() => tasks.isConnected('linear'))
 
@@ -135,6 +133,18 @@ async function save() {
 // --- linking sources (per-source toggle, saved immediately) -------------------
 const togglingSource = ref<TaskSourceKind | null>(null)
 
+/**
+ * Open whatever a source needs before it can be offered. A VCS-backed source (GitHub Issues,
+ * GitLab Issues) is missing its workspace VCS connection, which is set up on the VCS integration
+ * surface and NOT here: that one panel serves both providers, so a GitLab deployment lands on
+ * its PAT form and a GitHub one on the App install. Everything else is missing its own
+ * credentials, which is this source's connect form.
+ */
+function openRemedy(source: TaskSourceState) {
+  if (source.ridesVcsProvider) ui.openGitHub()
+  else ui.openTaskConnect(source.source)
+}
+
 async function toggleSource(source: TaskSourceKind, enabled: boolean) {
   togglingSource.value = source
   try {
@@ -186,20 +196,6 @@ async function checkSetup(source: TaskSourceKind) {
       color: 'error',
     })
   }
-}
-
-// Status → presentation for a setup-check verdict.
-const STATUS_UI: Record<
-  TaskSourceDiagnosticStatus,
-  { color: 'success' | 'warning' | 'error' | 'neutral'; icon: string }
-> = {
-  ready: { color: 'success', icon: 'i-lucide-circle-check' },
-  not_installed: { color: 'warning', icon: 'i-lucide-download' },
-  not_connected: { color: 'warning', icon: 'i-lucide-plug' },
-  auth_failed: { color: 'error', icon: 'i-lucide-key-round' },
-  forbidden: { color: 'error', icon: 'i-lucide-shield-x' },
-  unreachable: { color: 'error', icon: 'i-lucide-wifi-off' },
-  error: { color: 'error', icon: 'i-lucide-triangle-alert' },
 }
 </script>
 
@@ -370,190 +366,21 @@ const STATUS_UI: Record<
         </p>
       </div>
 
-      <!-- GitHub Issues source -->
-      <div class="rounded-lg border border-slate-800 bg-slate-800/40 px-3 py-2.5">
-        <div class="flex items-center justify-between gap-2">
-          <div class="flex min-w-0 items-center gap-2.5">
-            <UIcon name="i-lucide-github" class="h-5 w-5 shrink-0 text-slate-300" />
-            <div class="min-w-0">
-              <div class="text-sm font-medium text-slate-200">
-                {{ t('settings.issueTracker.vendor.github') }}
-              </div>
-              <div class="text-[11px] text-slate-500">
-                {{
-                  githubAvailable
-                    ? t('settings.issueTracker.linking.github.available')
-                    : t('settings.issueTracker.linking.github.unavailable')
-                }}
-              </div>
-            </div>
-          </div>
-          <div class="flex shrink-0 items-center gap-2">
-            <UButton
-              size="xs"
-              color="neutral"
-              variant="ghost"
-              icon="i-lucide-stethoscope"
-              :loading="tasks.checking === 'github'"
-              @click="checkSetup('github')"
-            >
-              {{ t('settings.issueTracker.linking.checkSetup') }}
-            </UButton>
-            <USwitch
-              v-if="githubAvailable"
-              :model-value="github?.enabled ?? false"
-              :loading="togglingSource === 'github'"
-              @update:model-value="(v: boolean) => toggleSource('github', v)"
-            />
-            <UButton
-              v-else
-              size="xs"
-              color="neutral"
-              variant="soft"
-              icon="i-lucide-github"
-              @click="ui.openGitHub()"
-            >
-              {{ t('settings.issueTracker.linking.install') }}
-            </UButton>
-          </div>
-        </div>
-        <UAlert
-          v-if="tasks.diagnostics.github"
-          class="mt-2.5"
-          :color="STATUS_UI[tasks.diagnostics.github.status].color"
-          variant="subtle"
-          :icon="STATUS_UI[tasks.diagnostics.github.status].icon"
-          :description="
-            tasks.diagnostics.github.message +
-            (tasks.diagnostics.github.detail ? ` ${tasks.diagnostics.github.detail}` : '')
-          "
-          :ui="{ description: 'text-[11px]' }"
-        />
-      </div>
+      <TaskSourceCard
+        v-for="source in tasks.sources"
+        :key="source.source"
+        :state="source"
+        :diagnostic="tasks.diagnostics[source.source] ?? null"
+        :checking="tasks.checking === source.source"
+        :toggling="togglingSource === source.source"
+        @check="checkSetup(source.source)"
+        @toggle="(enabled: boolean) => toggleSource(source.source, enabled)"
+        @remedy="openRemedy(source)"
+      />
 
-      <!-- Jira source -->
-      <div class="rounded-lg border border-slate-800 bg-slate-800/40 px-3 py-2.5">
-        <div class="flex items-center justify-between gap-2">
-          <div class="flex min-w-0 items-center gap-2.5">
-            <UIcon name="i-lucide-trello" class="h-5 w-5 shrink-0 text-slate-300" />
-            <div class="min-w-0">
-              <div class="text-sm font-medium text-slate-200">
-                {{ t('settings.issueTracker.vendor.jira') }}
-              </div>
-              <div class="text-[11px] text-slate-500">
-                {{
-                  jiraConnected
-                    ? t('settings.issueTracker.linking.connected')
-                    : t('settings.issueTracker.linking.jira.connectHint')
-                }}
-              </div>
-            </div>
-          </div>
-          <div class="flex shrink-0 items-center gap-2">
-            <UButton
-              v-if="jiraConnected"
-              size="xs"
-              color="neutral"
-              variant="ghost"
-              icon="i-lucide-stethoscope"
-              :loading="tasks.checking === 'jira'"
-              @click="checkSetup('jira')"
-            >
-              {{ t('settings.issueTracker.linking.checkSetup') }}
-            </UButton>
-            <USwitch
-              v-if="jira?.available"
-              :model-value="jira?.enabled ?? false"
-              :loading="togglingSource === 'jira'"
-              @update:model-value="(v: boolean) => toggleSource('jira', v)"
-            />
-            <UButton
-              v-else
-              size="xs"
-              color="neutral"
-              variant="soft"
-              icon="i-lucide-plug"
-              @click="ui.openTaskConnect('jira')"
-            >
-              {{ t('settings.issueTracker.linking.connect') }}
-            </UButton>
-          </div>
-        </div>
-        <UAlert
-          v-if="tasks.diagnostics.jira"
-          class="mt-2.5"
-          :color="STATUS_UI[tasks.diagnostics.jira.status].color"
-          variant="subtle"
-          :icon="STATUS_UI[tasks.diagnostics.jira.status].icon"
-          :description="
-            tasks.diagnostics.jira.message +
-            (tasks.diagnostics.jira.detail ? ` ${tasks.diagnostics.jira.detail}` : '')
-          "
-          :ui="{ description: 'text-[11px]' }"
-        />
-      </div>
-
-      <!-- Linear source -->
-      <div class="rounded-lg border border-slate-800 bg-slate-800/40 px-3 py-2.5">
-        <div class="flex items-center justify-between gap-2">
-          <div class="flex min-w-0 items-center gap-2.5">
-            <UIcon name="i-lucide-square-kanban" class="h-5 w-5 shrink-0 text-slate-300" />
-            <div class="min-w-0">
-              <div class="text-sm font-medium text-slate-200">
-                {{ t('settings.issueTracker.vendor.linear') }}
-              </div>
-              <div class="text-[11px] text-slate-500">
-                {{
-                  linearConnected
-                    ? t('settings.issueTracker.linking.connected')
-                    : t('settings.issueTracker.linking.linear.connectHint')
-                }}
-              </div>
-            </div>
-          </div>
-          <div class="flex shrink-0 items-center gap-2">
-            <UButton
-              v-if="linearConnected"
-              size="xs"
-              color="neutral"
-              variant="ghost"
-              icon="i-lucide-stethoscope"
-              :loading="tasks.checking === 'linear'"
-              @click="checkSetup('linear')"
-            >
-              {{ t('settings.issueTracker.linking.checkSetup') }}
-            </UButton>
-            <USwitch
-              v-if="linear?.available"
-              :model-value="linear?.enabled ?? false"
-              :loading="togglingSource === 'linear'"
-              @update:model-value="(v: boolean) => toggleSource('linear', v)"
-            />
-            <UButton
-              v-else
-              size="xs"
-              color="neutral"
-              variant="soft"
-              icon="i-lucide-plug"
-              @click="ui.openTaskConnect('linear')"
-            >
-              {{ t('settings.issueTracker.linking.connect') }}
-            </UButton>
-          </div>
-        </div>
-        <UAlert
-          v-if="tasks.diagnostics.linear"
-          class="mt-2.5"
-          :color="STATUS_UI[tasks.diagnostics.linear.status].color"
-          variant="subtle"
-          :icon="STATUS_UI[tasks.diagnostics.linear.status].icon"
-          :description="
-            tasks.diagnostics.linear.message +
-            (tasks.diagnostics.linear.detail ? ` ${tasks.diagnostics.linear.detail}` : '')
-          "
-          :ui="{ description: 'text-[11px]' }"
-        />
-      </div>
+      <p v-if="tasks.sources.length === 0" class="text-[11px] text-slate-500">
+        {{ t('settings.issueTracker.linking.none') }}
+      </p>
     </section>
 
     <!-- 3. Writeback ---------------------------------------------------------->
