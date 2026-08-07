@@ -11,6 +11,7 @@ import {
 import type { CoachMarkLayout, TutorialRect, TutorialStep, TutorialTour } from '~/utils/tutorial'
 import {
   boardNodeIdFor,
+  focusLeftCard,
   isTargetClickAdvance,
   resolveSkip,
   shouldFocusCard,
@@ -318,14 +319,50 @@ watch(step, async (s) => {
 })
 
 /**
+ * Whether the card currently carries `tabindex="-1"`.
+ *
+ * The attribute is NOT standing, and that is the whole design. It is what lets `focusCard`
+ * put focus on the card, and it equally makes the card CLICK-focusable, which is the half we
+ * never want: a press on the card's text focuses it, that focus move leaves an open modal's
+ * focus trap, the trap yanks focus back, and Chromium abandons the selection the press was
+ * starting (`selectstart` never fires). The one string a user reliably tries to copy, the
+ * sample repo slug in the add-service tour, could not be selected. `preventDefault` on the
+ * press is not the alternative: cancelling pointerdown or mousedown cancels the selection
+ * itself.
+ *
+ * So the card is focusable only across the window where it actually holds focus: applied by
+ * `focusCard` just before it focuses, dropped again by `onCardFocusOut`. Outside that window
+ * a press moves focus nowhere, on every input type, with no timing window to lose. Lifting
+ * the attribute for the DURATION OF A GESTURE cannot work instead, because the gesture has no
+ * reliable end event to restore on (a touch's compatibility `mousedown` arrives at touch END,
+ * long after any tick-scoped restore) and because `focusCard`'s own `await nextTick()` is a
+ * microtask that beats a macrotask restore, leaving `.focus()` a silent no-op.
+ */
+const cardFocusable = ref(false)
+
+/**
  * Put focus on the tooltip so the tour's own controls are one Tab away. WHETHER to do that is
  * `shouldFocusCard`'s call, in the logic module, so it is pinned by a test — this function is
  * only the DOM half. `preventScroll` because the card is already placed.
  */
 async function focusCard(cause: TutorialAdvanceCause) {
   if (!shouldFocusCard(cause)) return
+  cardFocusable.value = true
+  // One tick for BOTH the step's own re-render and the attribute above: `.focus()` on a card
+  // that is not yet focusable is a silent no-op, and focus then sits whereever the press left
+  // it (`<body>`, when the pressed control was a Back button that this step unmounts).
   await nextTick()
-  cardEl.value?.focus({ preventScroll: true })
+  const el = cardEl.value
+  el?.focus({ preventScroll: true })
+  // Focus did not land: the card unmounted, or a modal's focus trap pulled it straight back.
+  // Clear the flag here rather than waiting for a `focusout` that will never fire, or the
+  // card is left click-focusable, which is exactly the state this is all avoiding.
+  if (!el || document.activeElement !== el) cardFocusable.value = false
+}
+
+/** Focus has left the card, so it stops being focusable until something focuses it again. */
+function onCardFocusOut(event: FocusEvent) {
+  if (focusLeftCard(cardEl.value, event.relatedTarget)) cardFocusable.value = false
 }
 
 /**
@@ -520,20 +557,23 @@ onUnmounted(() => {
            this card would close the user's half-filled form instead of pressing a button). -->
       <!-- `tabindex="-1"` so `focusCard()` can put focus here when the tour starts and on every
            Next/Back — without it a keyboard user has to tab the whole page to reach Next, since
-           this is teleported to the end of `body`. No `aria-modal`: a coach mark is NOT modal,
-           and half the catalog asks the user to operate the real control behind it. No
-           `aria-describedby` on the body either: the live region above already reads the body
-           as part of a complete announcement, and pointing at it here would have every focus
-           move read it a second time. -->
+           this is teleported to the end of `body`. BOUND rather than static, and absent while
+           the card does not hold focus: see `cardFocusable`, without which a press on the card's
+           text focuses it and an open modal's focus trap cancels the selection being started.
+           No `aria-modal`: a coach mark is NOT modal, and half the catalog asks the user to
+           operate the real control behind it. No `aria-describedby` on the body either: the
+           live region above already reads the body as part of a complete announcement, and
+           pointing at it here would have every focus move read it a second time. -->
       <div
         ref="cardEl"
         role="dialog"
-        tabindex="-1"
+        :tabindex="cardFocusable ? -1 : undefined"
         :aria-label="t('tutorial.overlay.ariaLabel')"
         class="pointer-events-auto fixed z-[70] w-80 max-w-[calc(100vw-16px)] rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
         :style="{ top: `${layout.top}px`, left: `${layout.left}px` }"
         data-testid="tutorial-tooltip"
         @pointerdown.stop
+        @focusout="onCardFocusOut"
       >
         <div class="mb-1 flex items-start justify-between gap-3">
           <h3 class="text-sm font-semibold text-slate-100">{{ t(step.titleKey) }}</h3>
