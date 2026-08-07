@@ -820,7 +820,7 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
   [ADR 0039](./backend/docs/adr/0039-role-scoped-submission-allowlists.md).
 - **Merge track record** persists each decision best-effort. Trap: an unreadable diff yields `unknown`,
   which never matches a rule, so a VCS outage cannot change policy.
-  [`merge-track-record.md`](./docs/initiatives/merge-track-record.md).
+  [ADR 0046](./backend/docs/adr/0046-merge-track-record.md).
 - **Notifications** (`NotificationChannel`) and run-lifecycle events (`RunLifecycleSink`) are built together
   by `buildNotificationWebhookSupport` onto ONE registered endpoint and the ONE `signedDelivery.ts`
   retry/SSRF/signature core. Traps: the started edge is exactly-once via `handOffLiveRun` (announced LAST,
@@ -925,7 +925,7 @@ recording an LLM call: [`llm-telemetry.md`](./backend/docs/llm-telemetry.md). Th
 
 The deployment-level projections (`gate_outcomes`, `platform_run_days`, plus `spend_days`, the ONE with
 no retention: a TCO table that expires is a slower ledger) live in the MAIN store; their rewrite,
-watermark and derived-id rules: [`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md)
+watermark and derived-id rules: [ADR 0048](./backend/docs/adr/0048-platform-operator-observability.md)
 and [`storage-and-retention.md`](./backend/docs/storage-and-retention.md). Remote debugging reads
 (`/api/v1/debug/*`) obey one rule: size is computable BEFORE the request: [`debug-api.md`](./backend/docs/debug-api.md).
 
@@ -1073,7 +1073,7 @@ AND that a gated controller leaves no route of its own uncovered.
   `useAppOverlays().open`). The placement rule for step-attached state (declared result view vs
   `ResultWindowShell` section, decided by the RECORD's scope) and the `useResultViewRunMeta` rule live in
   [`frontend-extension-mechanism.md`](./docs/initiatives/frontend-extension-mechanism.md); adoption:
-  [`modular-vue-adoption.md`](./docs/initiatives/modular-vue-adoption.md).
+  [ADR 0049](./backend/docs/adr/0049-modular-vue-adoption.md).
 - **Tests**: Worker integration tests use real `workerd` + real local D1; Node tests use real Postgres
   (`DATABASE_URL`); only the LLM is faked. **Running the WHOLE tree locally is BANNED: that is CI's lane.** Run
   the narrowest scope that covers the change (`pnpm test:changed`, `pnpm test:quick` for what needs neither

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Universal dedicated-result-view host (slice 2 of the modular-vue adoption —
-// docs/initiatives/modular-vue-adoption.md). An agent archetype can declare a
+// backend/docs/adr/0049-modular-vue-adoption.md). An agent archetype can declare a
 // `resultView` id (see `~/utils/catalog`); when a step of that kind is opened,
 // `ui.resultView` is set and this host mounts the matching registered window
 // instead of the generic `AgentStepDetail` prose panel.

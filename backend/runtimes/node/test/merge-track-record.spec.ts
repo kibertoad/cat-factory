@@ -4,7 +4,7 @@ import { makeConformanceApp, setupTestDb } from './harness.js'
 
 // The merge track record against the Node facade (real Postgres / Drizzle). Asserts the whole
 // chain — classify → per-class rule → merge → effort tag → per-class SQL rollup — behaves
-// identically to the Worker (D1). See docs/initiatives/merge-track-record.md.
+// identically to the Worker (D1). See backend/docs/adr/0046-merge-track-record.md.
 
 const databaseUrl = process.env.DATABASE_URL
 

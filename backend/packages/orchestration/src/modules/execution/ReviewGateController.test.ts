@@ -561,7 +561,7 @@ describe('ReviewGateController public surface', () => {
 })
 
 // ---------------------------------------------------------------------------
-// The headless question echo (slice 2a of docs/initiatives/headless-clarification-loop.md).
+// The headless question echo (slice 2a of backend/docs/adr/0047-headless-clarification-loop.md).
 //
 // The decision itself is pinned by `reviewQuestionWriteback.logic.test.ts`; what is asserted
 // here is the WIRING, which no pure test can reach: that a headless park actually reaches the

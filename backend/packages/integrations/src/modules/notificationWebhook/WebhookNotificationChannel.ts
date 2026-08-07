@@ -25,7 +25,7 @@ import { WEBHOOK_SIGNATURE_HEADERS } from './webhookSignature.js'
 // watch and no browser to hold a WebSocket open, so without a push it can only learn that its run
 // parked by polling. That matters most for the clarification loop: a parked run waits for a human
 // INDEFINITELY, so "the caller will notice eventually" is not a design (see
-// `docs/initiatives/headless-clarification-loop.md`, D3).
+// `backend/docs/adr/0047-headless-clarification-loop.md`, D3).
 //
 // The retry/SSRF/signing machinery lives in `signedDelivery.ts`, shared with the two sinks that
 // POST to the SAME registered endpoints — those are properties of the endpoint, not of the

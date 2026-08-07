@@ -2,7 +2,7 @@ import type { AgentArchetype, CustomAgentKind } from '~/types/domain'
 
 /**
  * Custom agent-kind projection (slice 2 of the modular-vue adoption —
- * docs/initiatives/modular-vue-adoption.md).
+ * backend/docs/adr/0049-modular-vue-adoption.md).
  *
  * A deployment's BACKEND-registered agent kinds arrive in the workspace snapshot as
  * `customAgentKinds` (wire data), folded into the shared per-workspace capability manifest

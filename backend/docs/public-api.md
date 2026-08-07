@@ -391,7 +391,7 @@ surface only ever sees runs it created, never the workspace's ordinary board run
 | ------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /api/v1/jobs`            | `write`¹ | Start a run. Body `{ pipelineId, input (≤50k chars), title? (≤200) }` → `202 { jobId, status, links: { self, events } }`. Capped at **5 in-flight** runs per workspace (`429 too_many_active_runs`). |
 | `GET /api/v1/jobs`             | `read`   | List this surface's jobs, newest first. `?limit=`, `?cursor=`, `?status=running\|succeeded\|failed`, `?since=<epoch-ms>`.                                                                            |
-| `GET /api/v1/jobs/:id`         | `read`   | One job: `{ jobId, status, pipelineId, createdAt, result, error }`. `result.output` is the final agent reply, `result.data` its structured output (when produced).                                   |
+| `GET /api/v1/jobs/:id`         | `read`   | One job: `{ jobId, status, pipelineId, createdAt, externalIdentity, result, error }`. `result.output` is the final agent reply, `result.data` its structured output (when produced).                 |
 | `POST /api/v1/jobs/:id/cancel` | `write`  | Cancel (idempotent; a terminal job comes back as-is). The escape hatch for a parked run.                                                                                                             |
 | `GET /api/v1/jobs/:id/events`  | `read`   | SSE stream; see [Streaming](#streaming-sse).                                                                                                                                                         |
 
@@ -747,10 +747,10 @@ knowable, so they do not gate the start; see
 
 ### Task runs & streaming
 
-| Method / path                      | Scope  | Behaviour                                                                                                                                       |
-| ---------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/tasks/:taskId/run`    | `read` | The rich run projection: `{ runId, taskId, status, createdAt, currentStep, steps[], pullRequest, error }`. `404 no_run` before the first start. |
-| `GET /api/v1/tasks/:taskId/events` | `read` | SSE stream of that projection; see [Streaming](#streaming-sse).                                                                                 |
+| Method / path                      | Scope  | Behaviour                                                                                                                                                         |
+| ---------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/tasks/:taskId/run`    | `read` | The rich run projection: `{ runId, taskId, status, createdAt, currentStep, steps[], externalIdentity, pullRequest, error }`. `404 no_run` before the first start. |
+| `GET /api/v1/tasks/:taskId/events` | `read` | SSE stream of that projection; see [Streaming](#streaming-sse).                                                                                                   |
 
 Run `status` distinguishes the states a caller reacts to: `running`, `blocked` (parked on a human;
 go read `/runs/:runId/decisions`), `paused` (spend-gated), `done`, `failed`. Each step reports
@@ -982,12 +982,15 @@ itself need a wider key.
 | `GET /api/v1/me`           | `read` | What the calling key is and what it may do.                  |
 | `GET /api/v1/openapi.json` | `read` | **This deployment's** OpenAPI 3.1 document, served verbatim. |
 
-`GET /api/v1/me` answers `{ keyId, accountId, workspaceId, scope, label, createdAt }`. Before it,
+`GET /api/v1/me` answers
+`{ keyId, accountId, workspaceId, scope, label, externalIdentity, createdAt }`. Before it,
 "can this key do X" was answerable only by attempting X and reading the `403`, which for a
 destructive operation is not a check at all. Two things to hold on to when you read `scope`: the
 ladder is **inclusive** (`read` ⊂ `write` ⊂ `decide` ⊂ `admin`), so compare against the rung an
 action needs rather than for equality; and `workspaceId` is the ONE workspace every call under this
 key acts within, which is what a multi-tenant integration should log alongside its own tenant id.
+`externalIdentity` is who whoever provisioned this key said it acts for, or `null`
+([key provisioning](#key-provisioning-apiv1keys)).
 
 `GET /api/v1/openapi.json` serves the same bytes as the committed
 [`docs/openapi.json`](../../docs/openapi.json), generated from the route contracts by
@@ -1172,6 +1175,51 @@ Create body: `{ "label": "tenant-42 reader", "scope": "read" }`; omitting `scope
 same safe middle rung the app defaults to. Everything else comes from the calling key: the mint
 lands in **its** workspace, and this surface has no vocabulary for another one.
 
+#### Mapping a run back to a person (`externalIdentity`)
+
+The create body also takes an optional `externalIdentity`: an opaque string naming who, on **your**
+side, this key acts for (an OS user id, a tenant slug, a service-account name). Up to 200
+characters, no control characters. It is stored verbatim and never parsed, resolved against a user,
+or used to decide anything: what a key may do is its `scope`, and what a run may do is the policy
+the workspace authored.
+
+It is echoed in three places, which together are the whole feature:
+
+- on the key resource (`POST`/`GET /api/v1/keys`, and the app's key list),
+- on `GET /api/v1/me`, so a subsystem handed a credential can discover which identity it holds
+  rather than being told twice,
+- on **every run that key starts**: `externalIdentity` on the run resource
+  (`GET /api/v1/tasks/:taskId/run`) and on the job resource (`GET /api/v1/jobs`,
+  `GET /api/v1/jobs/:id`, `POST /api/v1/jobs/:id/cancel`, and the two SSE run streams), `null` for
+  a run started from the app, by a schedule, or by a key with no identity. The 202 that
+  `POST /api/v1/jobs` answers with is the accepted-job envelope (`jobId`, `status`, `links`) and
+  carries no run fields at all, identity included: follow `links.self` for the resource.
+
+So an integration that mints one key per person gets real per-person attribution without keeping a
+keyId table of its own. Three properties are worth relying on:
+
+- **The run's copy is pinned when it starts, not looked up when you read it.** Revoking the key
+  (what you do when someone leaves) does not erase who a finished run was for, and reading a page
+  of runs costs no key reads.
+- **A retry keeps it.** A re-drive is the same work for the same requester, whoever pressed retry.
+- **A key that has an identity of its own only sees runs started for THAT identity.** Every run
+  projection carries `externalIdentityWithheld` beside the value, and `true` there means the run
+  does have an identity your key may not read. It is never `true` for a run that simply names
+  nobody, so the two stay distinguishable: a withheld attribution is one the platform is holding,
+  not one it never had. A key minted with no identity (your provisioning key, or one a member
+  minted in the app) reads every run's, which is the mapping this feature exists to give you, so
+  do the mapping from the provisioner rather than from the per-person keys. Your own key's
+  identity is on `GET /api/v1/me`.
+
+  The rule is what keeps one-key-per-person from handing each person the roster of everyone else:
+  the identity is often an email, and workspace reach is otherwise shared. It compares the stored
+  bytes exactly, with no case folding or trimming, because the value is opaque everywhere else
+  too.
+
+For attribution that actually _governs_ a run (role-scoped merge policy, submission allow-lists),
+mint per-user keys and keep them per-user: `externalIdentity` is provenance you supplied, not an
+authorization input the platform verified.
+
 Two bounds are what make this safe to offer, and both are enforced, not advisory:
 
 - **`admin` cannot be minted here** (`400 validation`). A key provisioned over the API can never
@@ -1182,7 +1230,9 @@ Two bounds are what make this safe to offer, and both are enforced, not advisory
   the credential they can see and the ones an attacker made keep working.
 
 A provisioned key records `createdByKeyId` (and no `createdByUserId`, since no person minted it), which
-is what the app's key list shows and what the cascade follows. Revoking the **calling** key is
+is what the app's key list shows and what the cascade follows. `externalIdentity` is never inherited
+from the provisioning key: a provisioner mints for many identities, so defaulting to its own would
+name the integration on every run it starts for anyone. Revoking the **calling** key is
 allowed: a harness handing back a scratch credential is the case it exists for.
 
 ### Run debugging (`/api/v1/debug/*`)

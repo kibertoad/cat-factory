@@ -3,7 +3,7 @@ import type { Block } from '~/types/domain'
 
 /**
  * Pure definition of the block-inspector panel group (slice 4 of the modular-vue
- * adoption — docs/initiatives/modular-vue-adoption.md).
+ * adoption — backend/docs/adr/0049-modular-vue-adoption.md).
  *
  * The inspector used to be a 631-line `v-if` fan in `InspectorPanel.vue` that
  * switched its body on the selected block's `level` (frame/module/task/epic/

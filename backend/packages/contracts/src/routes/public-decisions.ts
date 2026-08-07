@@ -35,7 +35,7 @@ import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 //
 // Reading a run's decisions needs `read`; ANSWERING one needs the `decide` rung of the scope
 // ladder — the same rung that admits a parking pipeline in the first place (see
-// `docs/initiatives/headless-clarification-loop.md`, D1).
+// `backend/docs/adr/0047-headless-clarification-loop.md`, D1).
 // ---------------------------------------------------------------------------
 
 const runIdParams = singleStringParam('runId')

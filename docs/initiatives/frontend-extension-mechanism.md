@@ -4,7 +4,7 @@
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up a
 > slice; update the checklist at the end of each PR. This initiative builds ON TOP of the
-> landed [modular-vue adoption](./modular-vue-adoption.md) (slices 0–5): that initiative
+> landed [modular-vue adoption](../../backend/docs/adr/0049-modular-vue-adoption.md) (slices 0–5): that initiative
 > put the registry/slot/journey/panel machinery in place and converted the first-party
 > features onto it; THIS one turns those seams into a complete, documented, dogfooded
 > **consumer extension surface** and adds the seams that are still missing.
@@ -288,7 +288,7 @@ store imports.
 ### 6. Consumer stream events (slice F: last, and deliberately narrow)
 
 The workspace stream's `onMessage` switch drops unknown event types silently, and the
-adoption tracker marks the event fan-out a choke point to leave alone. The narrow,
+adoption ADR marks the event fan-out a choke point to leave alone. The narrow,
 non-invasive design: the `WorkspaceEvent` union gains ONE member
 `{ type: 'custom', kind: '<ns>:<name>', workspaceId, payload }` (backend: a
 publisher-side helper to emit it), and `onMessage` gains ONE terminal branch looking up
@@ -355,7 +355,7 @@ Sequencing: A first (it exercises only landed seams and produces the guide the l
 slices extend); B and C are independent after A; D–F are independent of each other;
 G closes. Each slice follows the repo rules: e2e (`data-testid` + live-push) before
 refactor, changesets, doc sweep, and, where a slice touches modular-vue itself, the
-co-evolution loop from the [adoption tracker](./modular-vue-adoption.md) (upstream fix,
+co-evolution loop from the [ADR 0049](../../backend/docs/adr/0049-modular-vue-adoption.md) (upstream fix,
 release, re-adopt in-slice; no shims outliving a slice).
 
 ## Slice A outcomes (landed)

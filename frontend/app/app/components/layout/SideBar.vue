@@ -31,7 +31,7 @@ const providerConnections = useProviderConnectionsStore()
 const ui = useUiStore()
 
 // The nav catalog + its reactive RBAC/availability gating now lives in the shared
-// modular-vue manifest (docs/initiatives/modular-vue-adoption.md, slice 1): every
+// modular-vue manifest (backend/docs/adr/0049-modular-vue-adoption.md, slice 1): every
 // destination is declared once in `nav-contributions.ts`, gated by `navSlotFilter`
 // over a reactive `gates` service, and rendered here (and in CommandBar / BoardToolbar)
 // from `useReactiveSlots`. Sections + items appear/disappear reactively as a permission
@@ -230,7 +230,7 @@ watch(
       </button>
 
       <!-- Sections + items come from the shared nav manifest, already gated by the
-         reactive slotFilter (docs/initiatives/modular-vue-adoption.md, slice 1) — which
+         reactive slotFilter (backend/docs/adr/0049-modular-vue-adoption.md, slice 1) — which
          also drops the `advanced` items in basic interface mode. An empty section is
          dropped upstream, so there is no per-section `v-if` here.
          In the rail the section HEADERS go (they'd wrap to nothing at 3.5rem) but the

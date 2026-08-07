@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The environment setup wizard shell (shared-stacks slice 7; converted to a
 // modular-vue journey in slice 3 of the modular-vue adoption —
-// docs/initiatives/modular-vue-adoption.md).
+// backend/docs/adr/0049-modular-vue-adoption.md).
 //
 // This component is now purely the MODAL + STEPPER CHROME. The step sequence,
 // forward/back navigation, and resume are owned by the `environment-setup`

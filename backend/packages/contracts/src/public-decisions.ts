@@ -49,7 +49,7 @@ import {
 // Answering rides the SAME service methods the SPA controllers call, so the park's CAS/approval-id
 // arbitration and the task's merge-preset knobs (iteration cap, tolerated severity) apply
 // identically whichever surface answers first. See
-// `docs/initiatives/headless-clarification-loop.md` and
+// `backend/docs/adr/0047-headless-clarification-loop.md` and
 // `backend/docs/adr/0043-public-decision-surface.md`.
 //
 // WHAT MAY BE REUSED FROM AN INTERNAL SCHEMA, AND WHAT MUST BE PROJECTED.

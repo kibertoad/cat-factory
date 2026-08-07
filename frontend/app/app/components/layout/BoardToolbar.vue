@@ -5,7 +5,7 @@ import IconButton from '~/components/common/IconButton.vue'
 
 const ui = useUiStore()
 const board = useBoardStore()
-// Toolbar contributions from the shared nav manifest (docs/initiatives/modular-vue-adoption.md,
+// Toolbar contributions from the shared nav manifest (backend/docs/adr/0049-modular-vue-adoption.md,
 // slice 1). First-party contributes none — this is the reactive extension point a consumer
 // deployment uses to add a board-toolbar action via `registerAppModule`, gated + rendered like
 // the sidebar/command entries with zero edits here.

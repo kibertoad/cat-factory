@@ -33,7 +33,7 @@ import { createSaveActions } from '~/stores/environmentWizard/save'
 // compose provider keys purely on the saved recipe (the build-flag rule). Mirrors the other infra
 // stores' idiom; the flow state is a singleton so the wizard's step children share it.
 //
-// Since slice 3 of the modular-vue adoption (docs/initiatives/modular-vue-adoption.md) the wizard's
+// Since slice 3 of the modular-vue adoption (backend/docs/adr/0049-modular-vue-adoption.md) the wizard's
 // step NAVIGATION lives in a modular-vue journey (`app/modular/journeys/environmentSetup.ts`), NOT
 // here — this store no longer holds a `step` / `STEP_ORDER` / `goToStep`. It is purely the per-frame
 // data+action layer the journey's step components drive; `beginForFrame` seeds it when a step first

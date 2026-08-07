@@ -381,6 +381,22 @@ describe('buildResumedInstance', () => {
     const next = resume()
     expect(next.mode).toBeUndefined()
     expect(next.initiatedByRole).toBeUndefined()
+    expect(next.initiatedByExternalIdentity).toBeUndefined()
+  })
+
+  it('keeps naming who the run was started for, whoever drives the re-drive', () => {
+    // A retry is the same work for the same requester. Re-taking the identity from the retrying
+    // caller would attribute the run to the operator who pressed retry, or (from a sweeper, which
+    // presents no key at all) to nobody, and the integration that started it would lose the
+    // mapping precisely when the run needed looking at.
+    const next = buildResumedInstance({
+      previous: previous({ initiatedByExternalIdentity: 'os-user:ada' }),
+      id: 'exec_new',
+      plan: { steps: [step('coder', 'pending')], currentStep: 0 },
+      initiatedBy: 'usr_operator',
+      now: 10,
+    })
+    expect(next.initiatedByExternalIdentity).toBe('os-user:ada')
   })
 
   it('does not let an initiator override re-tier the run', () => {
