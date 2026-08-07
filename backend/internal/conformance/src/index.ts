@@ -9,6 +9,8 @@ export {
   type ConformanceHarness,
   type LocalModelEndpointsProbe,
   type PackageRegistriesProbe,
+  type ToolServerDispatchProbe,
+  type ToolServerDispatchResult,
   type UserSecretsProbe,
   RecordingEventPublisher,
   type TestResponse,
@@ -35,6 +37,10 @@ export {
   type OnboardingProbe,
   type OnboardingUsersProbe,
 } from './onboarding.js'
+export {
+  makeToolServerDispatchProbe,
+  type ToolServerDispatchContainer,
+} from './tool-servers-probe.js'
 export { makeIncorporatedReview, makeReadyReviewWithOpenItem } from './requirements-fixtures.js'
 export { makeIncorporatedClarityReview, makeReadyClarityReview } from './clarity-fixtures.js'
 export {
@@ -91,6 +97,7 @@ export {
   type ReportsSeedRun,
   type ReportsSeedUsage,
 } from './reports-suite.js'
+export { defineSpendRollupSuite, type SpendRollupSeed } from './spend-rollup-suite.js'
 export { defineUserRepoAccessSuite } from './user-repo-access-suite.js'
 export { defineEnvironmentHandlersSuite } from './environment-handlers-suite.js'
 export { defineEnvironmentTestSuite } from './environment-test-suite.js'

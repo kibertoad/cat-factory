@@ -1842,6 +1842,7 @@
         "within_thresholds": "Jede Bewertung liegt innerhalb der {preset}-Schwellenwerte, daher wurde der PR automatisch gemergt.",
         "exceeded_thresholds": "{axes} überschritt die {preset}-Schwellenwerte, daher wartet der PR darauf, dass ein Mensch mergt.",
         "auto_merge_disabled": "Das {preset}-Preset sendet jeden PR an einen Menschen, daher wartet dieser auf Prüfung.",
+        "no_policy_configured": "Für diesen Lauf galt keine Merge-Richtlinie, daher wird kein PR selbstständig gemergt. Diese Installation hat keine Merge-Preset-Bibliothek eingerichtet; das kann nur ein Betreiber ändern.",
         "no_rationale": "Der Merger hat den PR bewertet, aber keine Begründung gegeben, daher konnte dem Urteil zum automatischen Mergen nicht vertraut werden; der PR wartet darauf, dass ein Mensch mergt.",
         "no_assessment": "Der Merger hat keine parsbare Bewertung zurückgegeben, daher wartet der PR darauf, dass ein Mensch mergt.",
         "merge_failed": "Die Bewertungen lagen innerhalb der {preset}-Schwellenwerte, aber der automatische Merge konnte nicht abgeschlossen werden (zum Beispiel Branch-Schutz oder ein Konflikt), daher wartet der PR darauf, dass ein Mensch mergt.",
@@ -1992,6 +1993,31 @@
         "outOfTen": "{value}/10",
         "reduced": "Was die Effektivität verringert hat",
         "obstacles": "Wichtigste Hindernisse"
+      },
+      "toolServers": {
+        "heading": "Tool-Server (MCP)",
+        "dispatchedAs": "Ermittelt für den Agenten {agent}, den dieser Schritt gestartet hat.",
+        "allTools": "Alle Tools, die dieser Server bereitstellt.",
+        "narrowed": "Eingeschränkt auf: {tools}",
+        "reason": {
+          "harnessUnsupported": "war nicht verfügbar: die Agenten-CLI dieses Schritts hat keinen MCP-Client.",
+          "transportUnsupported": "war nicht verfügbar: die Agenten-CLI dieses Schritts erreicht Server dieser Art nicht.",
+          "missingSecret": "war nicht verfügbar: eine benötigte Zugangsinformation ist für dieses Board nicht hinterlegt.",
+          "reservedSecret": "war nicht verfügbar: er verlangt eine Variable, die zur Konfiguration der Plattform gehört; die Deklaration muss geändert werden.",
+          "oauthNotConnected": "war nicht verfügbar: dieses Board wurde noch nicht damit verbunden.",
+          "oauthTokenFailed": "war nicht verfügbar: die Verbindung liefert kein Zugriffstoken mehr.",
+          "overBudget": "war nicht verfügbar: dieser Agent deklariert mehr Tool-Server, als ein Lauf mitführt.",
+          "unknown": "war nicht verfügbar ({reason})."
+        },
+        "remedy": {
+          "harnessUnsupported": "Führen Sie den Schritt auf einer Agenten-CLI mit MCP aus, oder erweitern Sie die Harness-Liste des Servers.",
+          "transportUnsupported": "Deklarieren Sie dafür einen stdio-Server, oder führen Sie den Schritt auf einer Agenten-CLI aus, die HTTP-Server erreicht.",
+          "missingSecret": "Hinterlegen Sie die genannte Zugangsinformation im Infrastruktur-Fenster unter den Capability-Zugangsdaten.",
+          "reservedSecret": "Ändern Sie die Deklaration auf einen anderen Schlüssel; das Setzen dieser Variablen hilft gerade nicht.",
+          "oauthNotConnected": "Verbinden Sie dieses Board im Infrastruktur-Fenster damit.",
+          "oauthTokenFailed": "Verbinden Sie es im Infrastruktur-Fenster neu, oder warten Sie die Störung des Anbieters ab.",
+          "overBudget": "Kürzen Sie, was der Agent deklariert, damit ein Lauf alles mitführen kann."
+        }
       },
       "adherence": {
         "heading": "Einhaltung der Best Practices",
@@ -3699,6 +3725,11 @@
     "retry": "Erneut versuchen",
     "error": "Berichte konnten nicht geladen werden.",
     "period": "{from} bis {to}",
+    "rollup": {
+      "none": "Die dauerhafte Kostenaggregation hat noch nichts erzeugt. Dieses Zeitfenster ist also mangels Daten leer, nicht mangels Kosten.",
+      "stale": "Die dauerhafte Kostenaggregation reicht nur bis {date}. Alles danach sind fehlende Daten, keine günstige Woche.",
+      "current": "Aus der dauerhaften Kostenaggregation, vollständig bis {date}. Die Zuordnung zu Repository, Ticket und Lauf ist hier die, die beim Entstehen der Kosten erfasst wurde."
+    },
     "unattributed": "Nicht zugeordnet",
     "window": {
       "oneDay": "Letzte 24 Stunden",
@@ -3741,6 +3772,7 @@
       "byAgentKind": "Kosten nach Agententyp",
       "byRepo": "Kosten nach Repository",
       "byTicket": "Kosten nach Ticket",
+      "byRun": "Kosten nach Lauf",
       "heading": "Kosten",
       "empty": "In diesem Zeitraum wurde keine Nutzung erfasst.",
       "calls": "{count} Aufruf | {count} Aufrufe",
@@ -3892,6 +3924,25 @@
       "noneImported": "Noch keine Dokumente importiert.",
       "imported": "\"{title}\" importiert",
       "importFailed": "Import fehlgeschlagen"
+    },
+    "freshness": {
+      "updated": "Aktualisiert am {when}",
+      "refresh": "Auf Änderungen prüfen",
+      "change": {
+        "unchanged": "Stimmt mit der Quelle überein",
+        "reimported": "Neuere Fassung übernommen",
+        "revision_only": "Die Quelle hat sich geändert, diese Kopie jedoch nicht"
+      },
+      "checkedAt": "Geprüft am {when}",
+      "revision": "Revision {version}",
+      "notApplicable": "Diese Installation hat keinen Leser für diese Quelle, es gibt also nichts zum Abgleichen.",
+      "gap": {
+        "not_connected": "Nicht geprüft: dieser Workspace ist nicht mehr mit der Quelle verbunden.",
+        "credentials_unreadable": "Nicht geprüft: diese Installation kann die Zugangsdaten der Quelle nicht lesen.",
+        "unversioned": "Nicht geprüft: die Quelle veröffentlicht keine Revision zum Vergleich.",
+        "source_unreachable": "Nicht geprüft: die Quelle war nicht erreichbar."
+      },
+      "refreshFailed": "Prüfung auf Änderungen fehlgeschlagen"
     },
     "connect": {
       "title": "Quelle verbinden",

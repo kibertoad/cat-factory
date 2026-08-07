@@ -1,5 +1,171 @@
 # @cat-factory/local-server
 
+## 0.115.0
+
+### Minor Changes
+
+- 11dae5b: Durable cost attribution: a spend rollup with no retention behind the TCO axes
+
+  The Reports view could already slice spend by repository and by tracker ticket, but it could not
+  answer either question durably, and nothing said so. Every attribution past the workspace was
+  assembled at READ time from three mutable sources: `token_usage`, pruned at ~13 months;
+  `agent_runs`, the row a call reaches the board through, prunable too; and the LIVE
+  `services.repo_github_id` / `tasks.linked_block_id` links, which an operator re-points whenever a
+  service moves repository or an issue is re-imported. So "what did this repository cost us last
+  quarter" gave one answer this month and a different, silently smaller one next year, and the ledger's
+  own durable rollup stopped at `(billing, vendor, provider, model)` for the current billing period.
+
+  The retention sweep now materialises `spend_days`: one row per `(workspace, UTC day, run, agent kind,
+provider:model, billing, vendor)`, carrying the board shape FROZEN at rollup time: the run, its block
+  and title, its service and name, its repository id and `owner/name`, its task type, its ticket ref,
+  plus the account and board names. A read of it joins nothing, so nothing downstream can be re-pointed
+  or pruned out from under a report. `run` joins `repo` and `ticket` as a spend dimension on both
+  sources, so the finest TCO question ("what did that pipeline execution cost") is a grouped query too.
+
+  **It is never pruned, and that is the feature.** A TCO table has to outlive the ledger it was folded
+  from; one with a window is just a slower ledger. There is no `deleteOlderThan` on
+  `SpendRollupRepository` at all, so the absence is structural rather than an omission a future sweep
+  could quietly fill, and the table is excluded from the workspace-delete cascade for the reason
+  `audit_events` is: money already spent is an account-level fact that deleting a board does not undo.
+  Keeping it out of that list is only half of keeping it, though, because the sweep rewrites a trailing
+  window by deleting it and re-folding `token_usage`, which IS cascaded: for a deleted board the re-fold
+  reads nothing, so an unbounded window DELETE would have reclaimed its most recent days on the sweep's
+  own schedule with no further operator action. The rewrite is therefore scoped to workspaces that still
+  exist, which is the general rule that a rewrite may only delete what it can reproduce. What makes the
+  whole thing affordable is the grain. A run writes hundreds of ledger rows and a handful of these, so
+  the table grows with run volume, never call volume. The arithmetic is written down in
+  `backend/docs/storage-and-retention.md` §1c rather than left to be re-derived.
+
+  Reports routes by window: `24h`/`7d` still scan the ledger (millisecond-exact, and a sweep cadence
+  would show there as a missing tail), `30d`/`90d` read the rollup. Mixing sources inside one window was
+  rejected: every breakdown partitions the same rows and the totals fold from one of them, so a hybrid
+  would leave the tiles and the cards describing different data. The freshness cost is stated rather
+  than hidden: the projection carries `source` and `rolledUpThrough`, and the panel renders "no rollup
+  yet" / "the rollup is behind" / "complete through <date>", because an un-materialised rollup and an
+  account that spent nothing produce the same empty breakdown.
+
+  Worth a reviewer's attention: the fold has to REPRODUCE the ledger read's two fan-out guards (the
+  pre-aggregated service label over colliding frame block ids, and the deterministic lowest-ref pick for
+  a block linked from two tickets) rather than merely resemble them, or an account's spend would change
+  the moment a reader switched from `7d` to `30d`; the conformance suite asserts every dimension of the
+  rollup equals the ledger's answer on the same fixture, and then deletes the ledger, the runs and the
+  tickets and asserts the rollup is unchanged, and it does the same after deleting the boards themselves,
+  which is the only way to see that the account scope rides the row's own frozen `account_id` rather than
+  a `workspaces` join.
+
+  Unlike the daily run rollup, the pass resumes from its own watermark instead of a fixed lookback,
+  because a day missed here is missing from the only durable record of it. Each pass is span-capped, and
+  the first pass backfills 90 days so the longest window is not under-reported for a quarter while
+  looking complete. That backfill bound is deliberately NOT reused as the catch-up horizon: it answers
+  how much history a deployment adopts on its first pass, whereas a resumed pass has no such choice and
+  the ledger still holds every day since the watermark, so the horizon follows
+  `TOKEN_USAGE_RETENTION_DAYS` instead. Past the ledger's own retention there is nothing left to fold, and
+  the pass logs the span it gave up on, because a high-water mark structurally cannot represent a hole.
+  `rolledUpThrough` is the last COMPLETE day rather than the newest one written, since a sweep firing at
+  noon folds a day that keeps accruing after it returns; the panel measures its lag against the same day
+  boundary, so the verdict does not swing with the hour the report was opened. Ordering in the sweep is a
+  correctness property, not style: the rollup reads `token_usage`, so it runs before the prune that
+  bounds it, and it now shares that prune's window so the catch-up walk cannot step over days the next
+  statement is about to delete.
+
+### Patch Changes
+
+- Updated dependencies [11dae5b]
+  - @cat-factory/contracts@0.259.0
+  - @cat-factory/kernel@0.257.0
+  - @cat-factory/orchestration@0.226.0
+  - @cat-factory/node-server@0.184.0
+  - @cat-factory/agents@0.116.4
+  - @cat-factory/gitlab@0.16.12
+  - @cat-factory/integrations@0.138.3
+  - @cat-factory/prompt-fragments@1.0.5
+  - @cat-factory/server@0.237.1
+  - @cat-factory/executor-harness@1.94.0
+
+## 0.114.4
+
+### Patch Changes
+
+- 11a2966: Say which tool servers a step actually had, on the step
+
+  A run whose agent kind declares MCP tool servers could drop any of them for seven different
+  reasons, and until now every one of those was stated in two places nobody looks: the agent's own
+  system prompt, and one backend `warn` line. From the outside a run that quietly went without its
+  issue tracker was indistinguishable from a run whose agent simply chose not to use it, which is the
+  question an adopting deployment asks first and the platform could not answer.
+
+  **A dispatch now records what it decided on the step** (`PipelineStep.toolServers`): the servers it
+  wired (id, label, transport, and the narrowed `allowedTools` where the definition set one), the ones
+  it dropped each with its reason, and the agent kind those lists belong to. The step detail renders
+  them as chips, with translated copy per reason in every locale, and hides itself when the record
+  holds nothing (a kind that declares no tool servers, which is every step on a deployment that
+  registers none).
+
+  The kind is stamped by the engine as it folds, from the same parameter that feeds `step.dispatches`,
+  because a step's own kind is routinely not what ran: a `ci` gate escalates to `ci-fixer`, a tester
+  hands off to `fixer`, a two-phase coder dispatches twice. Each of those resolves its own
+  declarations and overwrites the record, so without the stamp the chips would credit one agent's
+  capabilities to another. The step detail names whose they are whenever the two differ.
+
+  **Recorded on the STEP rather than on the agent-context telemetry snapshot**, which is where the
+  same facts sat inside an untyped `extras` bag. The snapshot is double-gated behind
+  `LLM_RECORD_PROMPTS` and the per-workspace `storeAgentContext`, and pruned on the telemetry
+  retention window, so a surface reading it would be blank on any deployment that simply has prompt
+  recording off. "Which tools did this step have" is an ordinary question about a run, not an opt-in
+  debugging artifact. It also costs no telemetry migration: the run row already carries its steps as
+  JSON.
+
+  **Public API (additive, `info.version` 1.21.0):** each step of `GET /api/v1/debug/runs/:runId` now
+  carries the same record, so a diagnosing reader can tell "the agent never had the tool" from "the
+  agent had it and did not call it", which the tool-call trajectory alone cannot show. The snapshot's
+  `extras.toolServers` / `extras.unavailableToolServers` keep being served, deprecated, projected from
+  the step's own record so the two cannot disagree; the removal window is in `backend/docs/public-api.md`.
+
+  It is written at dispatch and never re-derived, for the same reason the model and the leased
+  subscription token are: the poll site rebuilds the job handle from the step alone, and whether a
+  server was servable depended on the resolved harness plus the facade's secret and OAuth resolvers at
+  that moment. A workspace that fills in a missing credential an hour later must not make a step that
+  ran without the tool read as one that had it. Absent and both-lists-empty stay different states:
+  absent is "no container dispatch recorded here", both-empty is "a dispatch ran and its kind declared
+  none".
+
+  **The unavailability vocabulary moved to `@cat-factory/contracts`, and kernel's
+  `UnavailableToolServer['reason']` is now typed against it.** The SPA cannot see kernel, so leaving
+  the union there would have made the run surface's copy a hand-written duplicate of a closed list,
+  and a member added on one side only renders as a blank chip. Which member a dispatch picks is still
+  decided in kernel. Internal break: the seven reason strings are unchanged, but the type now aliases
+  `ToolServerUnavailableReason`.
+
+  **Tool servers and capability credentials also gain their first cross-runtime assertions.** The
+  conformance harness could not reach either, because the suite runs a `FakeAgentExecutor` that
+  composes no job body, and the values are write-only on every wire. `ConformanceApp.toolServerDispatch()`
+  (built by `makeToolServerDispatchProbe` over each facade's OWN container) drives the same
+  `resolveToolServers` a dispatch does with the chain that facade actually composed, so a facade that
+  wired its per-workspace credential store behind the deployment environment (or not at all) now
+  fails a test instead of handing its agents an unauthenticated server. It asserts a stored credential
+  reaching the job body under its declared channel, an unstored one dropping the server as
+  `missing_secret` in the same resolution (the per-KEY composition rule), and a Pi run dropping
+  everything as `harness_unsupported`.
+
+  What this does NOT answer is a server that was wired and whose CLI failed to start it anyway: that
+  needs the agent CLI's own startup report, which is a harness change and therefore a runner-image
+  bump. It is the remaining half of the tracker's slice 5; the probe already diagnoses the same
+  condition interactively.
+
+- Updated dependencies [6076cf1]
+- Updated dependencies [2fdb08d]
+- Updated dependencies [11a2966]
+  - @cat-factory/agents@0.116.3
+  - @cat-factory/kernel@0.256.0
+  - @cat-factory/orchestration@0.225.0
+  - @cat-factory/server@0.237.0
+  - @cat-factory/contracts@0.258.0
+  - @cat-factory/node-server@0.183.3
+  - @cat-factory/executor-harness@1.94.0
+  - @cat-factory/gitlab@0.16.11
+  - @cat-factory/integrations@0.138.2
+  - @cat-factory/prompt-fragments@1.0.4
+
 ## 0.114.3
 
 ### Patch Changes

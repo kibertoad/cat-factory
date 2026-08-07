@@ -107,9 +107,12 @@ export { bugHuntScore, parseBugHuntVerdicts, rankBugCandidates } from './domain/
 export {
   BLOCK_TYPE_LABEL,
   DEFAULT_RISK_POLICY,
+  FALLBACK_RISK_POLICY,
   DEFAULT_MERGE_CLASS_RULES,
   RISK_POLICY_SEEDS,
   seedRiskPolicies,
+  riskPolicyFromSeed,
+  riskPolicySeedRows,
   type RiskPolicySeed,
   DEFAULT_CI_MAX_ATTEMPTS,
   DEFAULT_MAX_REQUIREMENT_ITERATIONS,
@@ -152,6 +155,7 @@ export {
   isModelUsable,
   isModelUsableInline,
   nativeVendorForRef,
+  runsOnSubscriptionHarness,
   subscriptionVendorForRef,
   subscriptionOptionFor,
   isIndividualVendor,
@@ -602,6 +606,7 @@ export {
 // that states it in the materialised context file. See `domain/document-freshness.ts`.
 export {
   type DocumentFreshness,
+  type DocumentFreshnessChange,
   type DocumentFreshnessGap,
   freshnessHeaderLines,
 } from './domain/document-freshness.js'

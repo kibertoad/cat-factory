@@ -9,6 +9,7 @@ import {
   listDocumentsContract,
   listDocumentSourcesContract,
   planDocumentContract,
+  refreshDocumentContract,
   resolveDocumentRefContract,
   searchDocumentsContract,
   spawnDocumentContract,
@@ -60,6 +61,14 @@ export function documentsApi({ send, ws }: ApiContext) {
 
     importDocument: (workspaceId: string, source: DocumentSourceKind, body: { ref: string }) =>
       send(importDocumentContract, { pathPrefix: ws(workspaceId), pathParams: { source }, body }),
+
+    // Re-confirm one stored document against its source now, pulling the new body if the page
+    // moved. Keyed by `(source, externalId)` in the BODY, because the target is a stored row
+    // rather than a provider surface, and an `externalId` carries slashes.
+    refreshDocument: (
+      workspaceId: string,
+      body: { source: DocumentSourceKind; externalId: string },
+    ) => send(refreshDocumentContract, { pathPrefix: ws(workspaceId), body }),
 
     searchDocumentSource: (workspaceId: string, source: DocumentSourceKind, query: string) =>
       send(searchDocumentsContract, {

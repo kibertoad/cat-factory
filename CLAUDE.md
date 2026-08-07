@@ -869,18 +869,18 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
   port; the VALUE rides the job body only. Deadliest trap: **a credential has TWO names and only one
   of them is a boundary** (the LOOKUP key may never be a variable the platform reads; `envName`
   carries only the narrower toolchain rule, because vendors' SDKs fix what they look for). Full
-  model: [`capability-credential-store.md`](./docs/initiatives/capability-credential-store.md).
+  model: [ADR 0041](./backend/docs/adr/0041-capability-credential-store.md).
 - **`allowedTools` is SCOPING, never a security boundary**, and claude-code's `--allowedTools` must
   ALWAYS carry the CLI's built-in tool names too (it is whole-session, not MCP-scoped). An `http`
   server must be `https` or loopback, refused at registration AND at the job boundary.
-- **A capability that can't be honoured is STATED to the agent, never silently dropped** (Pi has no
-  MCP client; an ambient Codex run has no per-run config home; a required secret didn't resolve).
+- **A capability that can't be honoured is STATED to the agent, never silently dropped.**
 - **The harness MATERIALISES, never decides**, into PER-JOB paths: never HOME-global, never the
   checkout. Changing what it writes means an image bump.
 - **A deployment's own TASK TYPES ride the same kind of seam**; one bundling a per-case form, its
   standing context and its own canned pipeline is a REUSABLE OPERATION: [`reusable-operations.md`](./backend/docs/reusable-operations.md).
-- **NOT yet done**: the built-in agents aren't migrated; their rendering still lives in the harness.
-  Converting them one at a time (parity-gated, image-bumped) is the remaining strangler work.
+- **The BUILT-INS ride the same seam**: every container kind is a `registerAgentKind` entry
+  declaring an `AgentStepSpec`; a hard-coded set beside the registry is the anti-pattern replaced.
+  Trap: it declares NO `systemPrompt` (the TRACK owns it) and NO `presentation` (palette duplicate).
 
 ## Per-workspace agent prompt overrides
 
@@ -923,11 +923,11 @@ recording an LLM call: [`llm-telemetry.md`](./backend/docs/llm-telemetry.md). Th
   `composeTraceSinks`, never a second recording path; a run's spans are a hierarchy built from DERIVED
   ids with extents folded from recorded stamps, and a span name is a bounded class.
 
-The deployment-level projections (`gate_outcomes`, `platform_run_days`) deliberately live in the MAIN
-store; their rewrite/watermark/derived-id rules:
-[`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md). Remote
-debugging reads (`/api/v1/debug/*`) obey one rule: a response's size is computable BEFORE the request;
-model: [`debug-api.md`](./backend/docs/debug-api.md).
+The deployment-level projections (`gate_outcomes`, `platform_run_days`, plus `spend_days`, the ONE with
+no retention: a TCO table that expires is a slower ledger) live in the MAIN store; their rewrite,
+watermark and derived-id rules: [`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md)
+and [`storage-and-retention.md`](./backend/docs/storage-and-retention.md). Remote debugging reads
+(`/api/v1/debug/*`) obey one rule: size is computable BEFORE the request: [`debug-api.md`](./backend/docs/debug-api.md).
 
 ## Board / service / repo-linkage model
 

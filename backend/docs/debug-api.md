@@ -202,6 +202,15 @@ The failure classes and where each one's evidence lives:
   never its broken one. The same aggregate supplies `sinks.toolCalls.count`, so the count and the
   breakdown cannot disagree, and a run that called no tools reports `failureRate: null` rather
   than a clean 0% (which would file "nothing happened" beside "everything worked").
+- **"the agent never used the tool it was given": read the step's `toolServers` first.** An agent
+  that was never handed a tool server and one that had it and ignored it produce the same
+  symptom, and the trajectory can only show the second. Each step of the overview carries what its
+  dispatch decided: `wired` (the servers the agent could call, with the `tools` the declaration
+  narrowed it to) and `unavailable` (the ones the kind declared and this dispatch dropped, each
+  with the reason it was dropped: a missing credential, an unconnected OAuth grant, a harness whose
+  MCP client cannot reach the transport). The field is ABSENT on a step no container dispatch
+  recorded one for, which is a different fact from both lists being empty (a dispatch under a kind
+  that declares no tool servers at all).
 - **`prompt_cache_cold` / a cost question.** The overview's `llm.totals` and `byAgentKind` carry
   the three input classes (fresh / cache read / cache write) separately: a loop that keeps
   invalidating its prefix and one riding a warm cache are indistinguishable when they are summed.

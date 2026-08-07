@@ -1151,5 +1151,53 @@ function registerDocumentFreshnessTests(harness: ConformanceHarness): void {
       const batched = await repo.listByRefs(ws, [{ source: 'figma', externalId: 'file1:1-2' }])
       expect(batched[0]?.sourceVersion).toBe('2317456')
     })
+
+    it('re-confirms one stored document on demand, and NAMES the gap when it cannot', async () => {
+      // The manual dual of the dispatch-time refresh: what a designer clicks when they want to
+      // know whether the frame an agent will read is the one they just edited. Asserted here
+      // because the route is wired per facade and a runtime that forgot it would leave the SPA's
+      // refresh action permanently broken on that deployment only.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const ws = workspace.id
+      await app.documentRepository().upsert({
+        workspaceId: ws,
+        source: 'figma',
+        externalId: 'file9:1-2',
+        title: 'Checkout flow',
+        url: 'https://figma.com/design/file9',
+        excerpt: 'Checkout',
+        body: '## Checkout',
+        contentHash: 'h',
+        sourceVersion: '17',
+        linkedBlockId: null,
+        role: null,
+        docKind: null,
+        syncedAt: 4_000,
+        deletedAt: null,
+      })
+
+      // No Figma connection in this workspace, so the answer is a VERDICT rather than an error:
+      // the stored copy is still perfectly usable and the person is told which of the four gaps
+      // applies, because reconnecting the source and waiting out an outage are different fixes.
+      const refreshed = await app.call<{
+        document: { externalId: string; title: string }
+        freshness: { status: string; reason?: string }
+      }>('POST', `/workspaces/${ws}/documents/refresh`, {
+        source: 'figma',
+        externalId: 'file9:1-2',
+      })
+      expect(refreshed.status).toBe(200)
+      expect(refreshed.body.document.title).toBe('Checkout flow')
+      expect(refreshed.body.freshness).toEqual({ status: 'unconfirmed', reason: 'not_connected' })
+
+      // A document this workspace never imported is a refusal, not a verdict: there is no stored
+      // body to report on, so answering `unconfirmed` would describe a row that does not exist.
+      const missing = await app.call('POST', `/workspaces/${ws}/documents/refresh`, {
+        source: 'figma',
+        externalId: 'never-imported',
+      })
+      expect(missing.status).toBe(422)
+    })
   })
 }

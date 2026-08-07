@@ -1,5 +1,29 @@
 # @cat-factory/spend
 
+## 0.15.23
+
+### Patch Changes
+
+- Updated dependencies [11dae5b]
+  - @cat-factory/contracts@0.259.0
+  - @cat-factory/kernel@0.257.0
+
+## 0.15.22
+
+### Patch Changes
+
+- 2fdb08d: Simplify three predicates the nightly mutation run showed nothing could distinguish: the OpenRouter
+  slug's vendor prefix is sliced rather than split-and-guarded, the family policy's unclassified case
+  is an explicit early return, and `effectiveTierLimit` drops a branch `Math.min()` already answers.
+  Name the subscription-harness rule once as `runsOnSubscriptionHarness`, which three model decisions
+  spelled inline and two of them as its negation. Behaviour is unchanged; the rest of the change is
+  tests.
+- Updated dependencies [6076cf1]
+- Updated dependencies [2fdb08d]
+- Updated dependencies [11a2966]
+  - @cat-factory/kernel@0.256.0
+  - @cat-factory/contracts@0.258.0
+
 ## 0.15.21
 
 ### Patch Changes

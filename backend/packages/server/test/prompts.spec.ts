@@ -1,84 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRunContext } from '@cat-factory/kernel'
-import type { RepoTarget } from '../src/agents/ContainerAgentExecutor.js'
-import {
-  mergerUserPrompt,
-  onCallUserPrompt,
-  prBody,
-  TEST_REPORT_SHAPE_HINT,
-  testerInfraSpec,
-  UI_TEST_REPORT_SHAPE_HINT,
-} from '../src/agents/prompts.js'
-import { defaultAgentKindRegistry } from '@cat-factory/agents'
+import { prBody, testerInfraSpec } from '../src/agents/prompts.js'
 
-const agentKindRegistry = defaultAgentKindRegistry()
-
-// Characterisation tests pinning the per-kind prompt material that was extracted verbatim
-// from ContainerAgentExecutor.ts into prompts.ts. They lock in the deterministic prompt
-// shapes + the infra-spec branches so the move is provably behaviour-preserving.
-
-const repo: RepoTarget = {
-  installationId: 1,
-  repoId: '1001',
-  owner: 'acme',
-  name: 'widgets',
-  baseBranch: 'main',
-}
+// Characterisation tests pinning what the container dispatch layer still renders itself: the
+// tester infra-spec branches and the pull-request body. The per-KIND prompts moved beside their
+// registrations in `@cat-factory/agents`, and their tests moved with them
+// (`agents/prompts/built-in-container.test.ts`).
 
 const context = (over: Record<string, unknown> = {}): AgentRunContext =>
   ({
-    agentKind: 'on-call',
+    agentKind: 'tester-api',
     pipelineName: 'Ship',
     block: { id: 'b1', title: 'Add login', type: 'task' },
     decisions: [],
     priorOutputs: [],
     ...over,
   }) as unknown as AgentRunContext
-
-describe('mergerUserPrompt', () => {
-  it('names the PR + branches so the agent diffs against the right base', () => {
-    const p = mergerUserPrompt(
-      context({
-        block: {
-          id: 'b1',
-          title: 'T',
-          type: 'task',
-          pullRequest: { number: 42, branch: 'feat/x', url: 'u' },
-        },
-      }),
-      repo,
-    )
-    expect(p).toContain('(PR #42)')
-    expect(p).toContain('`feat/x`')
-    expect(p).toContain('git diff origin/main...HEAD')
-  })
-
-  it('falls back to the base branch when there is no PR', () => {
-    const p = mergerUserPrompt(context({ block: { id: 'b1', title: 'T', type: 'task' } }), repo)
-    expect(p).toContain('`main`')
-    expect(p).not.toContain('(PR #')
-  })
-})
-
-describe('onCallUserPrompt', () => {
-  it('tells the agent how to locate the merged commit by PR number', () => {
-    const p = onCallUserPrompt(
-      context({
-        block: {
-          id: 'b1',
-          title: 'T',
-          type: 'task',
-          pullRequest: { number: 7, branch: 'feat/y', url: 'u' },
-        },
-      }),
-      repo,
-      agentKindRegistry,
-    )
-    expect(p).toContain('#7')
-    expect(p).toContain('git log --oneline -n 50')
-    expect(p).toContain('base branch `main`')
-  })
-})
 
 describe('testerInfraSpec', () => {
   it('runs ephemeral for a `docker-compose` service (Deployer-provisioned, no in-container bring-up)', () => {
@@ -371,15 +308,5 @@ describe('prBody', () => {
     expect(body).not.toMatch(/\bCloses https/)
     // Defused, not deleted — the reader still sees what was written.
     expect(body).toContain('&#64;alice')
-  })
-})
-
-describe('UI_TEST_REPORT_SHAPE_HINT', () => {
-  it('extends the base tester report with a screenshots array', () => {
-    expect(UI_TEST_REPORT_SHAPE_HINT).toContain('"screenshots"')
-    // Derived from the base hint, so it preserves its leading shape.
-    expect(UI_TEST_REPORT_SHAPE_HINT.startsWith(TEST_REPORT_SHAPE_HINT.replace(/\}\.$/, ''))).toBe(
-      true,
-    )
   })
 })

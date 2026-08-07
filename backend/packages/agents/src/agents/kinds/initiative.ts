@@ -1,9 +1,11 @@
-import type { AgentRunContext } from '@cat-factory/kernel'
+import type { AgentRunContext, RunnerJobResult } from '@cat-factory/kernel'
 import { INITIATIVE_ANALYST_AGENT_KIND, INITIATIVE_PLANNER_AGENT_KIND } from '@cat-factory/kernel'
 import type { InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 import { CODE_AWARE_TRAIT } from './traits.js'
 import { linkedContextSection } from '../prompts/standard.js'
+import { coerceInitiativePlan } from '../../repo-ops/initiative.js'
+import { summaryOr } from './built-in-results.js'
 
 // ---------------------------------------------------------------------------
 // The `initiative-breakdown` agent kind — the first agent reachable from the PUBLIC API.
@@ -68,10 +70,10 @@ function initiativeBreakdownUserPrompt(context: AgentRunContext): string {
 // The container initiative-planning kinds — `initiative-analyst` + `initiative-planner`.
 //
 // Both explore a real (read-only) checkout of the initiative's repo, so they run in a
-// container. They were the last built-in container kinds still rendered by the bespoke
-// `buildMigratedBuiltInBody` switch in `@cat-factory/server`; migrating them onto the
-// public `registerAgentKind` seam (the refactoring-candidates.md #5 strangler) is what
-// lets that switch shed its cases. Their kind ids live in `@cat-factory/kernel`, so the
+// container. They were the FIRST built-in container kinds moved off the bespoke per-kind
+// job-body switch in `@cat-factory/server` onto the public `registerAgentKind` seam (the
+// refactoring-candidates.md #5 strangler, since finished: that switch is deleted and every
+// built-in container kind is a registration). Their kind ids live in `@cat-factory/kernel`, so the
 // definitions (prompts + user-prompt builders) live here in the agents package alongside
 // every other registered kind — the generic `agentStep`-driven dispatch path in the server
 // builds their job body from the declared `agent` spec, and `systemPromptFor` supplies the
@@ -397,6 +399,16 @@ export const INITIATIVE_AGENT_KINDS: AgentKindDefinition[] = [
         shapeHint: INITIATIVE_PLAN_SHAPE_HINT,
         failOnUnusableFinal: true,
       },
+    },
+    // The plan as the engine's `initiativePlan` channel (its strict parse + ingest into the
+    // `initiatives` entity). A structureless/garbage plan coerces to null and the channel is left
+    // unset, so nothing is ingested and the step still records its prose output.
+    mapStructuredResult: (result: RunnerJobResult) => {
+      const plan = coerceInitiativePlan(result.custom)
+      return {
+        output: summaryOr(result, 'Initiative plan drafted.'),
+        ...(plan ? { initiativePlan: plan } : {}),
+      }
     },
   },
 ]

@@ -5,6 +5,7 @@ import type {
   MergeClassRules,
   ModelPreset,
   RequirementConcernLevel,
+  RiskPolicy,
   StepGating,
   SubmissionClassesByRole,
   WorkspaceRole,
@@ -111,6 +112,43 @@ export const DEFAULT_RISK_POLICY = {
   autoMergeEnabled: true,
   // Implementation-fork decision gate: disabled by default (see DEFAULT_FORK_DECISION_GATING).
   forkDecision: DEFAULT_FORK_DECISION_GATING,
+} as const
+
+/**
+ * The merge policy a run falls back to when NO preset resolves at all. Deliberately NOT
+ * {@link DEFAULT_RISK_POLICY}, which the two constants having identical fields would make it.
+ *
+ * They answer different questions. `Balanced` is a policy someone can read, edit and pin, and
+ * shipping it as the seeded default is defensible precisely because a workspace holding it has a
+ * ROW an operator could have changed. This constant governs a run when no such row exists, and
+ * "nobody has stated a merge policy" is not evidence that auto-merging is wanted: it is the
+ * absence of evidence, the same reading `resolveMergeClassRule` takes for an unreadable diff.
+ * Landing a pull request is also the one outcome nothing in the UI can take back afterwards, so
+ * the unresolved case REFUSES: every PR raises `merge_review` (`no_policy_configured`, its own
+ * reason precisely so it cannot read as a preset somebody chose) until a real preset resolves.
+ *
+ * WHEN that happens is a deployment-level fact, not a timing accident: a workspace is seeded with
+ * {@link riskPolicySeedRows} at CREATION, so the only run this constant governs is one in a
+ * deployment whose container wires no `riskPolicyRepository` at all. Seeding on a READ instead
+ * would make the answer depend on whether anybody had loaded the board first, and the public API
+ * starts runs on workspaces no browser has ever opened.
+ *
+ * The ceilings are pinned to 0 for the reason `mp_manual_review` pins them there: they are never
+ * consulted while auto-merge is off, and the decision banner renders them, so leaving `Balanced`'s
+ * ceilings on a decision no ceiling took part in would send a reader to edit a threshold that had
+ * nothing to do with it. Every OTHER knob is inherited, because the rest are BUDGETS (CI-fixer
+ * attempts, reviewer iterations, watch windows) rather than postures: an unconfigured deployment
+ * should still run its gates the usual number of times, it just may not land the result on its own.
+ */
+export const FALLBACK_RISK_POLICY = {
+  ...DEFAULT_RISK_POLICY,
+  // Named for what it IS, never borrowing `Balanced`: the name reaches the decision banner, and a
+  // run governed by no row must not report a preset the workspace could go and look at.
+  name: 'No merge policy configured',
+  maxComplexity: 0,
+  maxRisk: 0,
+  maxImpact: 0,
+  autoMergeEnabled: false,
 } as const
 
 /**
@@ -259,6 +297,52 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
 /** The built-in merge presets, fresh copies so callers can stamp ids/timestamps safely. */
 export function seedRiskPolicies(): RiskPolicySeed[] {
   return RISK_POLICY_SEEDS.map((p) => ({ ...p }))
+}
+
+/**
+ * One catalog seed as the row a workspace persists: its stable id and version, plus the
+ * `createdAt` the caller stamps. Kept here rather than in whichever service writes it, because
+ * TWO of them do and they must write the same bytes: board creation seeds the library, and
+ * `RiskPolicyService.reseed` restores a built-in to its current definition afterwards. A private
+ * copy in either one would let a reseed silently rewrite a field creation had set differently.
+ */
+export function riskPolicyFromSeed(seed: RiskPolicySeed, createdAt: number): RiskPolicy {
+  return {
+    id: seed.id,
+    name: seed.name,
+    maxComplexity: seed.maxComplexity,
+    maxRisk: seed.maxRisk,
+    maxImpact: seed.maxImpact,
+    ciMaxAttempts: seed.ciMaxAttempts,
+    maxRequirementIterations: seed.maxRequirementIterations,
+    maxRequirementConcernAllowed: seed.maxRequirementConcernAllowed,
+    maxTesterQualityIterations: seed.maxTesterQualityIterations,
+    releaseWatchWindowMinutes: seed.releaseWatchWindowMinutes,
+    releaseMaxAttempts: seed.releaseMaxAttempts,
+    humanReviewGraceMinutes: seed.humanReviewGraceMinutes,
+    judgeMinScore: seed.judgeMinScore,
+    judgeMaxBounces: seed.judgeMaxBounces,
+    autoMergeEnabled: seed.autoMergeEnabled,
+    forkDecision: seed.forkDecision,
+    classRules: seed.classRules,
+    classRulesByRole: seed.classRulesByRole,
+    dryRunRoles: seed.dryRunRoles,
+    submissionClassesByRole: seed.submissionClassesByRole,
+    isDefault: seed.isDefault,
+    version: seed.version,
+    createdAt,
+  }
+}
+
+/**
+ * The whole built-in library as persisted rows, ready to insert for a NEW workspace.
+ *
+ * `createdAt` is stamped by catalog ORDER (`now`, `now + 1`, …) because `list` orders by it, so
+ * the library reads back in the order the catalog declares rather than in whatever order the
+ * inserts happened to commit.
+ */
+export function riskPolicySeedRows(now: number): RiskPolicy[] {
+  return seedRiskPolicies().map((seed, index) => riskPolicyFromSeed(seed, now + index))
 }
 
 /** Fallback CI-fixer attempt budget when no preset resolves (defensive default). */
