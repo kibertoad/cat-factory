@@ -185,3 +185,106 @@ describe('mothership-mode prompt-fragment pool', () => {
     })
   })
 })
+
+/**
+ * The DEPLOYMENT-scoped document read a node makes for the bodies behind this pool.
+ *
+ * Its own suite because its risk is the opposite of the pool read's above. That one must never
+ * report a failure as an empty answer; this one spends the DEPLOYMENT's central credentials on a
+ * ref a caller names, and every provisioned node holds a machine token. So what it must never do is
+ * fetch something no fragment asked for.
+ */
+
+const DOC_FRAGMENT = {
+  ...FRAGMENT,
+  id: 'org.living-guidelines',
+  documentRef: { source: 'confluence' as const, externalId: 'page-42' },
+}
+
+/** The mothership again, with a resolver recording every ref it was actually asked to fetch. */
+function mothershipWithDocuments(fragments: unknown[]) {
+  const fetched: string[] = []
+  const registry = defaultPromptFragmentRegistry()
+  registry.registerAll(fragments as never)
+  const app = new Hono<AppEnv>()
+  app.use('*', async (c, next) => {
+    c.set('container', {
+      promptFragmentRegistry: registry,
+      deploymentDocumentResolver: {
+        configured: (source: string) => source === 'confluence',
+        fetch: async (source: string, externalId: string) => {
+          fetched.push(`${source}:${externalId}`)
+          return { body: `live body of ${externalId}`, version: 'v9' }
+        },
+      },
+      config: { auth: { sessionSecret: SECRET } },
+    } as unknown as AppEnv['Variables']['container'])
+    await next()
+  })
+  app.route('/', promptFragmentsInternalController())
+  return { app, fetched }
+}
+
+async function postRefs(app: Hono<AppEnv>, refs: unknown[]) {
+  const token = await machineToken()
+  const res = await app.request('/internal/prompt-fragments/document-bodies', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ refs }),
+  })
+  return { status: res.status, body: (await res.json()) as { bodies: Record<string, unknown> } }
+}
+
+describe('mothership-mode deployment document bodies', () => {
+  it('serves the body behind a ref a registered fragment declares', async () => {
+    const { app, fetched } = mothershipWithDocuments([DOC_FRAGMENT])
+    const { status, body } = await postRefs(app, [DOC_FRAGMENT.documentRef])
+    expect(status).toBe(200)
+    expect(body.bodies['confluence:page-42']).toEqual({ body: 'live body of page-42', version: 'v9' })
+    expect(fetched).toEqual(['confluence:page-42'])
+  })
+
+  it('REFUSES a ref no registered fragment declares, without reaching the vendor', async () => {
+    // The property that keeps this from being a general read proxy into the deployment's document
+    // estate. The credentials are central and every provisioned node holds a machine token, so a
+    // node naming an arbitrary page must get nothing, and must not cost a vendor call finding out.
+    const { app, fetched } = mothershipWithDocuments([DOC_FRAGMENT])
+    const { body } = await postRefs(app, [
+      { source: 'confluence', externalId: 'someone-elses-private-page' },
+    ])
+    expect(body.bodies).toEqual({})
+    expect(fetched).toEqual([])
+  })
+
+  it('BOUNDS the work by the registration, whatever the caller posts', async () => {
+    // The caller's list is caller-controlled and each entry would otherwise be a live vendor call.
+    // After the intersection the batch can be no larger than the deployment's own registrations,
+    // and a repeated ref is fetched once.
+    const { app, fetched } = mothershipWithDocuments([DOC_FRAGMENT])
+    const flood = Array.from({ length: 500 }, (_, i) => ({
+      source: 'confluence',
+      externalId: i % 2 === 0 ? 'page-42' : `page-${i}`,
+    }))
+    await postRefs(app, flood)
+    expect(fetched).toEqual(['confluence:page-42'])
+  })
+
+  it('omits a ref whose source this deployment did not configure', async () => {
+    const { app, fetched } = mothershipWithDocuments([
+      { ...DOC_FRAGMENT, id: 'org.notion', documentRef: { source: 'notion', externalId: 'n-1' } },
+    ])
+    const { body } = await postRefs(app, [{ source: 'notion', externalId: 'n-1' }])
+    expect(body.bodies).toEqual({})
+    expect(fetched).toEqual([])
+  })
+
+  it('refuses the route without a machine token', async () => {
+    const { app } = mothershipWithDocuments([DOC_FRAGMENT])
+    const res = await app.request('/internal/prompt-fragments/document-bodies', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refs: [DOC_FRAGMENT.documentRef] }),
+    })
+    expect(res.status).toBe(403)
+  })
+})

@@ -6,8 +6,10 @@ import { NotionProvider } from './NotionProvider.js'
 import { GitHubDocsProvider } from './GitHubDocsProvider.js'
 import {
   buildDeploymentDocumentResolver,
+  deploymentScopedDocumentProviders,
   envKeyFor,
   deploymentDocumentCredentialsFromEnv,
+  resolveDeploymentDocumentResolver,
 } from './DeploymentDocumentResolverService.js'
 
 // The DEPLOYMENT's credential home for document sources: `DOC_SOURCE_<SOURCE>_<FIELD>`, read
@@ -119,5 +121,42 @@ describe('the resolver itself', () => {
     await expect(resolver!.fetch('github', 'org/repo:g.md')).rejects.toThrow(
       /belongs\s+to a workspace/,
     )
+  })
+})
+
+describe('the deployment provider set', () => {
+  it('can build a provider for exactly the sources declared deployment-scopable', () => {
+    // The two facts live in two packages: contracts DECLARES which sources a deployment may own,
+    // and this module has to be able to BUILD one for each. Asserting the relation rather than a
+    // list, so a new source that is declared scopable and has no way to be constructed fails here
+    // instead of at an operator's boot.
+    const built = deploymentScopedDocumentProviders().map((provider) => provider.kind)
+    expect([...built].sort()).toEqual([...deploymentScopedSources()].sort())
+  })
+
+  it('resolves from an environment alone, with no tenant-facing configuration in the way', () => {
+    // What `DOCUMENT_SOURCES` governs is which sources a WORKSPACE may connect. Deriving this from
+    // that made a deployment which had set its own variables correctly meet a boot refusal naming
+    // variables it had already set, so the entry point takes an environment and nothing else.
+    const { resolver, configured } = resolveDeploymentDocumentResolver({
+      [envKeyFor('notion', new NotionProvider().descriptor.credentialFields[0]!.key)]: 'secret',
+    })
+    expect(configured).toEqual(['notion'])
+    expect(resolver!.configured('notion')).toBe(true)
+  })
+
+  it('derives Confluence variable names from the provider, which the docs quote verbatim', () => {
+    // `docs/environment-variables.md` and `reusable-operations.md` both spell these out, and both
+    // had `_EMAIL` where the derivation produces `_ACCOUNT_EMAIL`: following the doc produced a
+    // partial config, an unconfigured source, and a boot error naming variables already set. Pinned
+    // here rather than trusted to review, because a doc cannot fail a build.
+    const names = new ConfluenceProvider().descriptor.credentialFields.map((field) =>
+      envKeyFor('confluence', field.key),
+    )
+    expect(names).toEqual([
+      'DOC_SOURCE_CONFLUENCE_BASE_URL',
+      'DOC_SOURCE_CONFLUENCE_ACCOUNT_EMAIL',
+      'DOC_SOURCE_CONFLUENCE_API_TOKEN',
+    ])
   })
 })

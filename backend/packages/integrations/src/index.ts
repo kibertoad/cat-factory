@@ -38,8 +38,10 @@ export {
   DeploymentDocumentResolverService,
   buildDeploymentDocumentResolver,
   deploymentDocumentCredentialsFromEnv,
+  deploymentScopedDocumentProviders,
   envKeyFor,
   envPrefixFor,
+  resolveDeploymentDocumentResolver,
   type DeploymentDocumentCredentialResult,
   type DeploymentDocumentResolverServiceDependencies,
 } from './modules/documents/DeploymentDocumentResolverService.js'

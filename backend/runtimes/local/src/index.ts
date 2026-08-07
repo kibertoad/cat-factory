@@ -116,9 +116,11 @@ export {
   type StepResolverContext,
   type ResolverContext,
 } from '@cat-factory/kernel'
-// Through the Node facade rather than `@cat-factory/gates` directly: local IS the Node stack with
-// two differentiators, and it already depends on it, so a second physical path to the same builder
-// would be one more package a consumer could float out of step.
+// A BUILDER this facade only forwards comes through `@cat-factory/node-server`, never from the
+// package that defines it: local IS the Node stack with two differentiators and already depends on
+// it, so routing through it means a deployment gets the SAME function object either facade would
+// hand it, where a direct path is one more package a consumer could float out of step into a second
+// physical copy. It binds every such re-export below, not just this one.
 export { gateRegistryWithBuiltins } from '@cat-factory/node-server'
 // Installation-level extension point for JUDGES (the inline-LLM-against-a-rubric bucket of the step
 // taxonomy). Empty by default: the platform ships none.
@@ -148,10 +150,10 @@ export {
 // `defaultPromptFragmentRegistry()` is a deployment whose agents fold its own standards and none of
 // the platform's. Both are legitimate, which is why both are exported and neither is inferred.
 export { PromptFragmentRegistry, defaultPromptFragmentRegistry } from '@cat-factory/kernel'
-export { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
+export { promptFragmentRegistryWithBuiltins } from '@cat-factory/node-server'
 // The environment + runner backend registries, registered together on ONE bundle because an
 // environment backend and its runner backend are two halves of one deployment's infrastructure.
-export { createBackendRegistries, type BackendRegistries } from '@cat-factory/integrations'
+export { createBackendRegistries, type BackendRegistries } from '@cat-factory/node-server'
 // The REUSABLE-OPERATION authoring vocabulary: the shapes a deployment's registration literals ARE,
 // re-exported so an org package types them against the facade it boots through and needs no direct
 // `@cat-factory/kernel` or `@cat-factory/contracts` dependency of its own. That is not a
@@ -203,6 +205,8 @@ export {
   DOCUMENT_PIPELINE_ID,
   DOCUMENT_QUICK_PIPELINE_ID,
   REVIEW_PIPELINE_ID,
+  SPIKE_PIPELINE_ID,
+  RALPH_PIPELINE_ID,
 } from '@cat-factory/kernel'
 // The built-in model-preset ids + the catalog fallback default, re-exported so a local deploy-app
 // wrapper can name a preset when passing `startLocal({ defaultModelPresetId })` without a direct

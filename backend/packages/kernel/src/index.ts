@@ -192,6 +192,8 @@ export {
   DOCUMENT_PIPELINE_ID,
   DOCUMENT_QUICK_PIPELINE_ID,
   REVIEW_PIPELINE_ID,
+  SPIKE_PIPELINE_ID,
+  RALPH_PIPELINE_ID,
   defaultPipelineIdForTaskType,
 } from './domain/seed.js'
 

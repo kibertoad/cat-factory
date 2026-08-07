@@ -1,7 +1,6 @@
 import {
   type Clock,
   CompositeNotificationChannel,
-  type DocumentSourceProvider,
   type EmailSender,
   type ExecutionEventPublisher,
   type GitHubClient,
@@ -15,16 +14,9 @@ import {
 } from '@cat-factory/kernel'
 import { createTierInstallationResolvers } from '@cat-factory/agents'
 import {
-  ConfluenceProvider,
-  FigmaProvider,
-  ZeplinProvider,
-  GitHubDocsProvider,
   GitHubIssuesProvider,
   JiraProvider,
-  buildDeploymentDocumentResolver,
-  LinearDocumentProvider,
   LinearTaskProvider,
-  NotionProvider,
   EMAIL_CIPHER_INFO,
   ProvisioningLogRecorder,
   OBSERVABILITY_CIPHER_INFO,
@@ -110,7 +102,6 @@ import { D1PasswordResetTokenRepository } from './repositories/D1PasswordResetTo
 import { D1EmailConnectionRepository } from './repositories/D1EmailConnectionRepository'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
 import { D1RateLimitRepository } from './repositories/D1RateLimitRepository'
-import { D1DocumentConnectionRepository } from './repositories/D1DocumentConnectionRepository'
 import { D1DocumentRepository } from './repositories/D1DocumentRepository'
 import { D1EnvironmentConnectionRepository } from './repositories/D1EnvironmentConnectionRepository'
 import { D1CustomManifestTypeRepository } from './repositories/D1CustomManifestTypeRepository'

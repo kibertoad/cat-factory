@@ -7,7 +7,7 @@ import {
   LinearDocumentProvider,
   NotionProvider,
   ZeplinProvider,
-  buildDeploymentDocumentResolver,
+  resolveDeploymentDocumentResolver,
 } from '@cat-factory/integrations'
 import { FetchGitHubClient } from './github/FetchGitHubClient'
 import { WebCryptoSecretCipher } from '@cat-factory/server'
@@ -26,6 +26,41 @@ import { logger } from './observability/logger'
 // rather than an arbitrary cut: everything here answers one question, which is how this runtime
 // reaches an external document, and it is the only slice with TWO credential homes to keep
 // straight (a tenant's stored connection, and the deployment's own environment).
+
+/**
+ * The DEPLOYMENT's own document resolver for this Worker's `env`, as a `CoreDependencies` slice.
+ *
+ * Exported because the Worker has TWO callers that must agree about it and only one of them builds
+ * a container: `createWorker`'s first-request registration check reads it to decide whether a
+ * code-registered `documentRef` is servable, and passing that check anything less than what the
+ * engine will actually hold made every such fragment fail validation on a correctly configured
+ * deployment.
+ *
+ * Deriving it from `env` alone (rather than sharing an instance) is what lets the two agree: the
+ * resolver holds no mutable state, so the configuration IS the whole answer.
+ */
+export function deploymentDocumentDeps(env: Env): Partial<CoreDependencies> {
+  const { resolver } = resolveDeploymentDocumentResolver(deploymentEnvRecord(env))
+  return resolver ? { deploymentDocumentResolver: resolver } : {}
+}
+
+/**
+ * Every source whose deployment credentials are set but UNUSABLE, for the caller that reports once.
+ *
+ * Split from {@link deploymentDocumentDeps} because the two have different audiences and different
+ * cardinalities: the container build wants the resolver on every build and must stay silent, while
+ * the report is a boot-shaped event this runtime has to stage for itself.
+ */
+export function deploymentDocumentProblems(
+  env: Env,
+): { source: string; problem: string }[] {
+  return resolveDeploymentDocumentResolver(deploymentEnvRecord(env)).problems
+}
+
+/** The Worker's bindings read as a plain variable bag, which is all the resolver wants. */
+function deploymentEnvRecord(env: Env): Record<string, string | undefined> {
+  return env as unknown as Record<string, string | undefined>
+}
 
 /**
  * Build the document-source integration's concrete ports: the configured source
@@ -70,25 +105,20 @@ export function selectDocumentsDeps(
       }),
     )
   }
-  if (providers.length === 0) return {}
   // The DEPLOYMENT's own document credentials, read from the Worker's `env` bindings (never from a
   // tenant's stored connection) so a code-registered prompt fragment may name a living standard.
-  // A source whose variables are present but unusable is REPORTED and left unconfigured, which
-  // makes boot validation refuse any fragment naming it rather than let it fold a stale body.
-  const deployment = buildDeploymentDocumentResolver(
-    providers,
-    env as unknown as Record<string, string | undefined>,
-  )
-  for (const { source, problem } of deployment.problems) {
-    logger.warn(
-      'Deployment-wide document-source credentials are set but unusable, so this source cannot ' +
-        'back a code-registered prompt fragment',
-      { source, problem },
-    )
-  }
+  // Resolved BEFORE, and independently of, the `DOCUMENT_SOURCES` gate above: that governs what a
+  // TENANT may connect, and answering both questions from one switch made a deployment that had set
+  // its `DOC_SOURCE_*` variables correctly meet a refusal naming variables it had already set.
+  //
+  // SILENT here, unlike the Node facades: this runs on every container build (per request, and
+  // again for every cron tick and queue message), so an unusable-credentials warning belongs at the
+  // once-guarded first-request validation in `index.ts`, which reports it exactly once per isolate.
+  const deploymentDocuments = deploymentDocumentDeps(env)
+  if (providers.length === 0) return deploymentDocuments
   return {
+    ...deploymentDocuments,
     documentSourceProviders: providers,
-    ...(deployment.resolver ? { deploymentDocumentResolver: deployment.resolver } : {}),
     documentConnectionRepository: new D1DocumentConnectionRepository({
       db,
       // The config gate guarantees the key is present when enabled; source

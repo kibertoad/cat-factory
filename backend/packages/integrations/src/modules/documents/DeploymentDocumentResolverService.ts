@@ -9,6 +9,11 @@ import type {
 import { ValidationError } from '@cat-factory/kernel'
 import { isDeploymentScopedSource } from '@cat-factory/contracts'
 import { MapDocumentSourceRegistry } from './documents.logic.js'
+import { ConfluenceProvider } from './ConfluenceProvider.js'
+import { FigmaProvider } from './FigmaProvider.js'
+import { LinearDocumentProvider } from './LinearDocumentProvider.js'
+import { NotionProvider } from './NotionProvider.js'
+import { ZeplinProvider } from './ZeplinProvider.js'
 
 // DeploymentDocumentResolverService: the runtime read seam for a document the DEPLOYMENT owns,
 // the living standard a code-registered (`builtin`-tier) prompt fragment names.
@@ -136,6 +141,59 @@ export function buildDeploymentDocumentResolver(
     configured: [...credentials.keys()],
     problems,
   }
+}
+
+/**
+ * How to construct each document source's provider from NOTHING but this build, or `null` when it
+ * cannot be built that way.
+ *
+ * Exhaustive over the closed vocabulary, so a new source fails to compile until it answers the
+ * question. A `null` says the provider needs a per-workspace collaborator (`github` reaches a
+ * document through the WORKSPACE's App installation), which is the same fact
+ * `DOCUMENT_SOURCE_TRAITS.deploymentScoped` states from the contracts side; `deployment-scoped-providers`
+ * in the test file beside this one pins the two against each other, so they cannot drift into a
+ * source that is declared deployment-scopable and has no way to be built.
+ */
+const DEPLOYMENT_SCOPED_PROVIDER_FACTORIES: Record<
+  DocumentSourceKind,
+  (() => DocumentSourceProvider) | null
+> = {
+  confluence: () => new ConfluenceProvider(),
+  notion: () => new NotionProvider(),
+  figma: () => new FigmaProvider(),
+  zeplin: () => new ZeplinProvider(),
+  linear: () => new LinearDocumentProvider(),
+  github: null,
+}
+
+/** Every document source this BUILD can serve deployment-wide, one fresh provider each. */
+export function deploymentScopedDocumentProviders(): DocumentSourceProvider[] {
+  return Object.values(DEPLOYMENT_SCOPED_PROVIDER_FACTORIES)
+    .filter((factory) => factory !== null)
+    .map((factory) => factory())
+}
+
+/**
+ * The deployment's own document resolver, read from an environment and NOTHING else.
+ *
+ * The entry point all three facades call, and the reason it takes no config: what a TENANT may
+ * connect (`DOCUMENT_SOURCES`, the documents integration being enabled at all, the connection
+ * encryption key) and what the DEPLOYMENT configured for itself are different questions with
+ * different credential homes. Deriving the second from the first made a deployment that had set its
+ * `DOC_SOURCE_*` variables correctly get a refusal naming variables it had already set, because it
+ * had not ALSO opened that source to its tenants: an unrelated, undiscoverable prerequisite.
+ *
+ * PURE, so the boot-time registration check and the per-request container build can each call it
+ * and agree. The resolver holds no mutable state, so agreeing on the CONFIGURATION is the whole
+ * requirement; there is no instance to share. `problems` is reported by the caller that boots (see
+ * each facade), never per container build.
+ */
+export function resolveDeploymentDocumentResolver(env: Record<string, string | undefined>): {
+  resolver?: DeploymentDocumentResolverService
+  configured: DocumentSourceKind[]
+  problems: { source: DocumentSourceKind; problem: string }[]
+} {
+  return buildDeploymentDocumentResolver(deploymentScopedDocumentProviders(), env)
 }
 
 /** One source the deployment configured, or the reason it could not be read. */

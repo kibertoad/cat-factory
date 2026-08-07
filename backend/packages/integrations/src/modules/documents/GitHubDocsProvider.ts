@@ -190,19 +190,6 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
   }
 
   /**
-   * Resolve the installation whose token this workspace reads GitHub docs with, scoped to
-   * THIS workspace via `getByWorkspace` (never a deployment-wide `listActive` scan). That
-   * scoping is what enforces tenant isolation: a crafted `externalId` can only ever ride
-   * the caller's OWN installation token, which GitHub limits to what it may read — its
-   * account's granted repos plus public repos. So a foreign OR crafted `owner/repo:path`
-   * for another tenant's PRIVATE repo simply 404s at the read (classified by
-   * {@link fetchFailure}); there is no need to precheck the owner against the installation
-   * account. Dropping that precheck is deliberate — it used to reject a repo the token can
-   * genuinely reach (a PAT that spans accounts in local mode, or a PUBLIC guidelines repo
-   * owned by someone else that a hosted App can still read), which is a legitimate thing to
-   * link. Reachability is decided by the token, not by matching the owner string.
-   */
-  /**
    * Narrow a read's scope to a WORKSPACE, refusing the deployment scope (`null`).
    *
    * This is the whole reason this source's `deploymentScoped` trait is false. Its credential IS a
@@ -224,6 +211,19 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
     return workspaceId
   }
 
+  /**
+   * Resolve the installation whose token this workspace reads GitHub docs with, scoped to
+   * THIS workspace via `getByWorkspace` (never a deployment-wide `listActive` scan). That
+   * scoping is what enforces tenant isolation: a crafted `externalId` can only ever ride
+   * the caller's OWN installation token, which GitHub limits to what it may read: its
+   * account's granted repos plus public repos. So a foreign OR crafted `owner/repo:path`
+   * for another tenant's PRIVATE repo simply 404s at the read (classified by
+   * {@link fetchFailure}); there is no need to precheck the owner against the installation
+   * account. Dropping that precheck is deliberate, because it used to reject a repo the token
+   * can genuinely reach (a PAT that spans accounts in local mode, or a PUBLIC guidelines repo
+   * owned by someone else that a hosted App can still read), which is a legitimate thing to
+   * link. Reachability is decided by the token, not by matching the owner string.
+   */
   private async resolveInstallationId(workspaceId: string): Promise<number> {
     const installation = await this.deps.installations.getByWorkspace(workspaceId)
     if (!installation) {

@@ -5,7 +5,7 @@
 // adds no cost to a deployment that never uses EKS.
 import {
   ConfluenceProvider,
-  buildDeploymentDocumentResolver,
+  resolveDeploymentDocumentResolver,
   FigmaProvider,
   ZeplinProvider,
   GitHubDocsProvider,
@@ -785,6 +785,33 @@ function buildSystemEmailSender(
 }
 
 /**
+ * The DEPLOYMENT's own document credentials: the half of the document-source wiring that answers
+ * to this process's environment rather than to a tenant's stored connection.
+ *
+ * Separate from {@link selectNodeDocumentsDeps} because it is gated by nothing that one is gated
+ * by. `DOCUMENT_SOURCES` says what a workspace may connect, `DOCUMENTS_ENABLED` and the connection
+ * encryption key say whether tenant connections are stored at all, and none of the three has any
+ * bearing on whether this deployment can read a standard it configured centrally: those credentials
+ * live in plaintext environment variables and are never persisted.
+ *
+ * A source whose variables are present but unusable is WARNED and left unconfigured, which then
+ * makes boot validation refuse any code-registered fragment naming it rather than let one fold a
+ * stale body. Node boots once, so this is the once-per-process report; the Worker, which has no
+ * boot moment, reports at its first-request validation instead.
+ */
+function selectDeploymentDocumentDeps(): Partial<CoreDependencies> {
+  const deployment = resolveDeploymentDocumentResolver(process.env)
+  for (const { source, problem } of deployment.problems) {
+    logger.warn(
+      'Deployment-wide document-source credentials are set but unusable, so this source cannot ' +
+        'back a code-registered prompt fragment',
+      { source, problem },
+    )
+  }
+  return deployment.resolver ? { deploymentDocumentResolver: deployment.resolver } : {}
+}
+
+/**
  * Wire the document-source integration for the Node facade, mirroring the Worker's
  * `selectDocumentsDeps`: the shared `@cat-factory/integrations` provider shells
  * (Confluence/Notion always; GitHub-docs only when a GitHub client is available, since
@@ -799,7 +826,13 @@ function selectNodeDocumentsDeps(
   githubClient: GitHubClient | undefined,
   installations: GitHubInstallationRepository,
 ): Partial<CoreDependencies> {
-  if (!config.documents.enabled || !config.documents.encryptionKey) return {}
+  // The DEPLOYMENT's own document credentials, read from this process's environment (never from a
+  // tenant's stored connection) so a code-registered prompt fragment may name a living standard.
+  // Resolved BEFORE, and independently of, every gate below: those govern what a TENANT may
+  // connect, and answering both questions from one switch made a deployment that had set its
+  // `DOC_SOURCE_*` variables correctly meet a boot refusal naming variables it had already set.
+  const deploymentDocuments = selectDeploymentDocumentDeps()
+  if (!config.documents.enabled || !config.documents.encryptionKey) return deploymentDocuments
   const providers: DocumentSourceProvider[] = []
   if (config.documents.sources.includes('confluence')) providers.push(new ConfluenceProvider())
   if (config.documents.sources.includes('notion')) providers.push(new NotionProvider())
@@ -811,22 +844,10 @@ function selectNodeDocumentsDeps(
   if (config.documents.sources.includes('github') && githubClient) {
     providers.push(new GitHubDocsProvider({ githubClient, installations, logger }))
   }
-  if (providers.length === 0) return {}
-  // The DEPLOYMENT's own document credentials, read from this process's environment (never from a
-  // tenant's stored connection) so a code-registered prompt fragment may name a living standard.
-  // A source whose variables are present but unusable is REPORTED and left unconfigured, which
-  // makes boot validation refuse any fragment naming it rather than let it fold a stale body.
-  const deployment = buildDeploymentDocumentResolver(providers, process.env)
-  for (const { source, problem } of deployment.problems) {
-    logger.warn(
-      'Deployment-wide document-source credentials are set but unusable, so this source cannot ' +
-        'back a code-registered prompt fragment',
-      { source, problem },
-    )
-  }
+  if (providers.length === 0) return deploymentDocuments
   return {
+    ...deploymentDocuments,
     documentSourceProviders: providers,
-    ...(deployment.resolver ? { deploymentDocumentResolver: deployment.resolver } : {}),
     documentConnectionRepository: new DrizzleDocumentConnectionRepository(
       db,
       new WebCryptoSecretCipher({

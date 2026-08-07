@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import * as worker from '../src/index'
+import * as kernel from '@cat-factory/kernel'
+import type { RegistrationProblem } from '@cat-factory/orchestration'
+import type {
+  CustomTaskType,
+  DescriptorField,
+  DescriptorFieldShowWhen,
+  GateDefinition,
+  JudgeDefinition,
+  PromptFragment,
+  StepCompletionResolver,
+  TaskTypeFieldDescriptor,
+  TaskTypeFieldOption,
+  TaskTypePresentation,
+} from '../src/index'
 
 // ---------------------------------------------------------------------------
 // The Worker half of the extension-SURFACE guard (the authoritative classification of every
@@ -50,11 +64,75 @@ const REQUIRED_CONSTRUCTORS = [
   'createBackendRegistries',
 ] as const
 
+/**
+ * The rest of the runtime surface a registration literal reaches for, which the constructor list
+ * above says nothing about: the pure descriptor rules a deployment's own tests run against a form
+ * it declares.
+ *
+ * Listed rather than derived, unlike the pipeline ids below, because these are a DECISION about what
+ * the facade publishes rather than a mirror of a set kernel grows on its own.
+ */
+const REQUIRED_HELPERS = [
+  'isDescriptorFieldVisible',
+  'renderDescriptorFieldValue',
+  'sanitizeDescriptorFields',
+  'validateDescriptorFields',
+] as const
+
+/**
+ * The TYPE half, which no runtime check can see: a deployment writing a registration literal names
+ * its shape, and a type it cannot import from the facade is a direct `@cat-factory/contracts` or
+ * `@cat-factory/orchestration` dependency carrying the same duplicate-copy hazard as a missing
+ * constructor. Mirrors `runtimes/node/test/registry-seams.spec.ts`'s `_authoringVocabulary`.
+ *
+ * Enumerated because a type union is not reflectable; the compile error when one is missing is the
+ * guard, and this value exists only to make the imports load-bearing.
+ */
+const _authoringVocabulary:
+  | {
+      taskType: CustomTaskType
+      presentation: TaskTypePresentation
+      field: TaskTypeFieldDescriptor
+      option: TaskTypeFieldOption
+      descriptorField: DescriptorField
+      condition: DescriptorFieldShowWhen
+      fragment: PromptFragment
+      gate: GateDefinition
+      judge: JudgeDefinition
+      resolver: StepCompletionResolver
+      // What `escalateRegistrationWarning` is handed. A deployment writing that predicate names it,
+      // so it belongs to this surface exactly as the registration shapes above do.
+      registrationProblem: RegistrationProblem
+    }
+  | undefined = undefined
+
 describe('worker extension surface', () => {
   it('exports a way to CONSTRUCT every registry a deployment may override', () => {
     const exported = new Set(Object.keys(worker))
     // Every gap at once: these arrive in batches, and a guard that reports one per run trains the
     // reader to fix one per run.
     expect(REQUIRED_CONSTRUCTORS.filter((name) => !exported.has(name))).toEqual([])
+  })
+
+  it('exports the descriptor rules a deployment checks its own form against', () => {
+    const exported = new Set(Object.keys(worker))
+    expect(REQUIRED_HELPERS.filter((name) => !exported.has(name))).toEqual([])
+  })
+
+  it('re-exports every built-in pipeline id kernel publishes', () => {
+    // DERIVED from kernel, not listed: this set grows whenever the platform ships a pipeline, and a
+    // hand-copied list is how two of them (`pl_spike`, `pl_ralph`) came to be missing from all three
+    // facades at once, leaving a deployment pinning one to hard-code the string. Counting instead
+    // would fail on the next ordinary addition while naming nothing.
+    const published = Object.keys(kernel).filter((name) => name.endsWith('_PIPELINE_ID'))
+    expect(published.length).toBeGreaterThan(0)
+    const exported = new Set(Object.keys(worker))
+    expect(published.filter((name) => !exported.has(name))).toEqual([])
+  })
+
+  it('names the authoring vocabulary a registration literal is typed against', () => {
+    // Carried by the type annotation on `_authoringVocabulary`; the assertion exists so a missing
+    // export fails a test rather than only a typecheck job the reader has to go find.
+    expect(_authoringVocabulary).toBeUndefined()
   })
 })

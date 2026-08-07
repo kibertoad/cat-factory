@@ -252,9 +252,10 @@ fragment source).
   declares `defaultFragmentIds` on its own registration, where boot validation can see it.
 - **A code-registered fragment MAY name a living document**, resolved with credentials the
   DEPLOYMENT configured rather than any tenant's connection. Set `DOC_SOURCE_<SOURCE>_<FIELD>` for
-  the source (`DOC_SOURCE_NOTION_API_TOKEN`, `DOC_SOURCE_CONFLUENCE_BASE_URL` / `_EMAIL` /
+  the source (`DOC_SOURCE_NOTION_API_TOKEN`, `DOC_SOURCE_CONFLUENCE_BASE_URL` / `_ACCOUNT_EMAIL` /
   `_API_TOKEN`, …: the field names are each provider's own, the ones its connect form already
-  declares) and register the fragment with a `documentRef`. The body then re-resolves per run,
+  declares, in SCREAMING_SNAKE) and register the fragment with a `documentRef`. The body then
+  re-resolves per run,
   version-probed and cached like every other document-backed fragment, and degrades to the
   registered `body` with a WARNING naming the fragment when the source is unreachable.
 
@@ -412,8 +413,9 @@ operation carries code (its pipeline names its variants and kinds), so it is exa
 a custom agent kind.
 
 ```ts
-// ONE import, from the facade the deployment boots through. Same names from
-// `@cat-factory/node-server` and `@cat-factory/worker`.
+// ONE import, from the facade the deployment boots through. `@cat-factory/node-server` and
+// `@cat-factory/worker` export the same registry and type names; only the BOOT function differs
+// (`start` and `createWorker` respectively, in place of `startLocal` here).
 import {
   defaultAgentKindRegistry,
   defaultPipelineRegistry,
@@ -445,7 +447,8 @@ startLocal({
   // Optional: this deployment's operations reference only fragments it registers itself, so an
   // unresolvable id is always a typo here. See "Boot validation" above.
   escalateRegistrationWarning: (p: RegistrationProblem) =>
-    p.code === 'task_type_unknown_fragment' /* …the rest */,
+    p.code === 'task_type_unknown_fragment',
+  // …plus this deployment's ordinary boot options (port, database URL, and the rest).
 })
 ```
 

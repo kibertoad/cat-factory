@@ -79,4 +79,14 @@ describe('local boot entry point', () => {
       .filter((name) => !exported.has(name))
     expect(missing).toEqual([])
   })
+
+  it('re-exports every built-in pipeline id the Node facade does', () => {
+    // Same derived-from-the-reference rule as the constructors above, and for the same reason: a
+    // deployment pinning a shipped pipeline reads the id off the facade it already depends on, and
+    // a hand-copied list is how two of them went missing from all three facades at once.
+    const exported = new Set(Object.keys(localServer))
+    const published = Object.keys(nodeServer).filter((name) => name.endsWith('_PIPELINE_ID'))
+    expect(published.length).toBeGreaterThan(0)
+    expect(published.filter((name) => !exported.has(name))).toEqual([])
+  })
 })

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CoreDependencies } from '@cat-factory/orchestration'
+import * as kernel from '@cat-factory/kernel'
 import * as facade from '../src/index.js'
 import type {
   CustomTaskType,
@@ -306,6 +307,17 @@ describe('app-owned registry seams', () => {
     // Naming every gap at once rather than failing on the first: these arrive in batches (five did),
     // and a guard that reports one per run trains the reader to fix one per run.
     expect(missing).toEqual([])
+  })
+
+  it('re-exports every built-in pipeline id kernel publishes', () => {
+    // DERIVED from kernel, not listed: this set grows whenever the platform ships a pipeline, and a
+    // hand-copied list is how two of them (`pl_spike`, `pl_ralph`) came to be missing from all three
+    // facades at once, leaving a deployment pinning one to hard-code the string. Counting instead
+    // would fail on the next ordinary addition while naming nothing about what broke.
+    const published = Object.keys(kernel).filter((name) => name.endsWith('_PIPELINE_ID'))
+    expect(published.length).toBeGreaterThan(0)
+    const exported = new Set(Object.keys(facade))
+    expect(published.filter((name) => !exported.has(name))).toEqual([])
   })
 
   it('names the authoring vocabulary a registration literal is typed against', () => {

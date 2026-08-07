@@ -68,16 +68,39 @@ export function promptFragmentsInternalController(): Hono<AppEnv> {
   // deployment reaches locally, so the two topologies degrade identically.
   app.post('/internal/prompt-fragments/document-bodies', async (c) => {
     if (!(await requireMachine(c))) return c.json(forbidden, 403)
+    const container = c.get('container')
     const body = (await c.req.json().catch(() => null)) as { refs?: unknown } | null
-    const refs = Array.isArray(body?.refs) ? body.refs : []
-    const resolver = c.get('container').deploymentDocumentResolver
-    const bodies: Record<string, { body: string; version: string }> = {}
-    for (const raw of refs) {
+    const requested = Array.isArray(body?.refs) ? body.refs : []
+    const resolver = container.deploymentDocumentResolver
+    // What a fragment DECLARES is the whole admissible set, and intersecting against it is the
+    // difference between this route and a general read proxy into the deployment's document estate.
+    // The credentials it spends are central, and a machine token is held by every provisioned node,
+    // so without this a node could name any page in the deployment's Notion/Confluence and be
+    // served it. The node has no reason to ask for anything else either: it is reading the bodies
+    // behind THIS pool, which it just read from the sibling route.
+    //
+    // It is also what BOUNDS the work. The caller's list is caller-controlled and each miss would
+    // otherwise be a live vendor call; after the intersection the batch can be no larger than the
+    // number of distinct documents this deployment registered, whatever was posted.
+    const declared = declaredDocumentRefs(container.promptFragmentRegistry)
+    const wanted = new Map<string, { source: DocumentSourceKind; externalId: string }>()
+    for (const raw of requested) {
       const ref = raw as { source?: unknown; externalId?: unknown } | null
       if (!ref || typeof ref.source !== 'string' || typeof ref.externalId !== 'string') continue
-      if (!resolver?.configured(ref.source as DocumentSourceKind)) continue
+      const key = documentBodyRefKey(ref.source, ref.externalId)
+      const admissible = declared.get(key)
+      if (!admissible) continue
+      if (!resolver?.configured(admissible.source)) continue
+      wanted.set(key, admissible)
+    }
+    const bodies: Record<string, { body: string; version: string }> = {}
+    // SEQUENTIAL deliberately, now that the count is bounded by the deployment's own registrations
+    // rather than by the caller: these are external vendor calls against ONE central credential, and
+    // fanning a pool's worth of them out concurrently is how a deployment rate-limits itself out of
+    // every node's read at once.
+    for (const ref of wanted.values()) {
       try {
-        const content = await resolver.fetch(ref.source as DocumentSourceKind, ref.externalId)
+        const content = await resolver!.fetch(ref.source, ref.externalId)
         bodies[documentBodyRefKey(ref.source, ref.externalId)] = {
           body: content.body,
           version: content.version,
@@ -98,6 +121,26 @@ export function promptFragmentsInternalController(): Hono<AppEnv> {
   })
 
   return app
+}
+
+/**
+ * Every document ref a fragment in this process's own registry declares, keyed for lookup.
+ *
+ * Read off `promptFragmentRegistry` (the mothership's CODE registrations) rather than off any
+ * request input, which is what makes it an authority rather than an echo. Keyed by the same
+ * function the reply is keyed by, so an admissible ref and a returned body cannot disagree about
+ * what identifies a document.
+ */
+function declaredDocumentRefs(
+  registry: { all(): { documentRef?: { source: DocumentSourceKind; externalId: string } }[] } | undefined,
+): Map<string, { source: DocumentSourceKind; externalId: string }> {
+  const declared = new Map<string, { source: DocumentSourceKind; externalId: string }>()
+  for (const fragment of registry?.all() ?? []) {
+    const ref = fragment.documentRef
+    if (!ref) continue
+    declared.set(documentBodyRefKey(ref.source, ref.externalId), ref)
+  }
+  return declared
 }
 
 /**

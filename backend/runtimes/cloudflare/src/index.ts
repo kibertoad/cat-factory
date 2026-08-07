@@ -36,6 +36,12 @@ import { D1PlatformMetricsRepository } from './infrastructure/repositories/D1Pla
 import { D1AuditEventRepository } from './infrastructure/repositories/D1AuditEventRepository'
 import { D1SpendRollupRepository } from './infrastructure/repositories/D1SpendRollupRepository'
 import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
+// The deployment's OWN document credentials, read from `env`. Shared with the per-request container
+// build so the boot check and the engine agree about what this deployment can read.
+import {
+  deploymentDocumentDeps,
+  deploymentDocumentProblems,
+} from './infrastructure/container-documents-deps'
 import {
   GITHUB_RECONCILE_STALE_MS,
   escalateStaleNotifications,
@@ -293,6 +299,8 @@ export {
   DOCUMENT_PIPELINE_ID,
   DOCUMENT_QUICK_PIPELINE_ID,
   REVIEW_PIPELINE_ID,
+  SPIKE_PIPELINE_ID,
+  RALPH_PIPELINE_ID,
 } from '@cat-factory/kernel'
 // The options {@link createWorker} takes — re-exported from the root so a deployment can name the
 // type of what it passes without reaching for the `@cat-factory/worker/app` subpath.
@@ -1051,10 +1059,18 @@ export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
       // `env` binding. Cheap and idempotent, so it runs on every entry point rather than being
       // guarded — a `scheduled`/`queue` invocation can be the FIRST to run in a fresh isolate.
       applyLogSettings(env)
+      reportDeploymentDocumentProblemsOnce(env)
       validateRegistrationsOnce({
         // The resolved bundle whole, for the reason the two Node-hosted facades pass their
         // container: a hand-picked list is the one shape that can silently be short by one.
-        registries,
+        //
+        // The deployment's document resolver joins it HERE rather than at `createWorker`, because
+        // it is the one member derived from `env`, which a Worker only has once a request arrives.
+        // Omitting it read as "this deployment configured no document credentials", so every
+        // `builtin`-tier fragment naming a living document failed validation on a deployment that
+        // had configured them correctly — and since the once-guard flips only after a clean pass,
+        // it failed on every request rather than once.
+        registries: { ...registries, ...deploymentDocumentDeps(env) },
         onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
         // Deployment policy over platform judgement, the same seam the Node/local entry points
         // expose: a warning the platform must keep soft (it structurally cannot see whether an
@@ -1071,6 +1087,31 @@ export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
     },
     scheduled: handleScheduled,
     queue: handleQueue,
+  }
+}
+
+/**
+ * Report every deployment document source whose credentials are set but unusable, once per isolate.
+ *
+ * A Worker has no boot moment, so the report the two Node facades make while starting has to be
+ * staged against the first request here — the same shape, and for the same reason, as the
+ * once-guarded registration check it sits beside. Left ungated it would repeat on every request,
+ * which is how an operator learns to filter out the one line naming the variable they mistyped.
+ *
+ * Per-ISOLATE rather than per-deployment, like every other module-scope value in this file
+ * (`defaultWorker`): an isolate is the only lifetime a Worker has to hang one on, and a report
+ * repeated once per cold start is the honest cost of that.
+ */
+let deploymentDocumentProblemsReported = false
+function reportDeploymentDocumentProblemsOnce(env: Env): void {
+  if (deploymentDocumentProblemsReported) return
+  deploymentDocumentProblemsReported = true
+  for (const { source, problem } of deploymentDocumentProblems(env)) {
+    logger.warn(
+      'Deployment-wide document-source credentials are set but unusable, so this source cannot ' +
+        'back a code-registered prompt fragment',
+      { source, problem },
+    )
   }
 }
 
