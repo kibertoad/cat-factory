@@ -175,7 +175,21 @@ const API_PREFIX = '/api/v1'
 // 1.25.0, then 1.26.0, then 1.27.0, each published by main while the branch was in flight, and not
 // one of them announced itself on the VERSION line, which auto-merged clean to a number main had
 // already used every time. Re-read this line here, not there, after every merge.
-const API_VERSION = '1.28.0'
+//
+// 1.29.0, not 1.28.0: a run's `diagnostics.lastDispatch` gains a `failure` object, and is now
+// stamped for INLINE steps as well as container ones. Additive on the wire: the new object is
+// present only on a dispatch that never reached a running job, `executionBackend` gains one
+// further value (`inline`) in a field already documented as free-form, and every existing field
+// is byte-for-byte unchanged. What DOES change for a consumer is the population: a pure-inline run
+// used to answer `diagnostics: null` on the debug overview and now answers a block, so a client
+// treating "no diagnostics" as "no agent work happened" reads differently. That is the point of
+// the change, and it is stated here rather than left for a reader to discover.
+//
+// SEVENTH number for this one, displaced by the same five as the `observed` paragraph above plus
+// its own `toolServers` CLI record and the webhook collection. Two long-lived branches losing this
+// race independently is the case for reading the note at the top of the block rather than treating
+// it as history.
+const API_VERSION = '1.29.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

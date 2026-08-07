@@ -473,3 +473,90 @@ describe('stopJob on a pooled member', () => {
     expect(await transport.stopJob({ runId: 'never-dispatched', jobId: 'j' })).toBe('stopped')
   })
 })
+
+describe('post-mortem on a pooled member', () => {
+  const LOG_TAIL = 'harness: heap out of memory while running the coder step'
+
+  /**
+   * A pooling adapter whose exit state and log tail are scripted, so the two eviction branches
+   * can be told apart by whether the tail reached the run's failure detail.
+   */
+  function poolingAdapter(running: () => boolean) {
+    let n = 0
+    return {
+      id: 'docker' as const,
+      binary: 'docker',
+      hostAlias: 'host.docker.internal',
+      capabilities: { localDind: true, pooling: true },
+      publishesToLocalhost: true,
+      run: vi.fn(async () => `pool-${++n}`),
+      find: vi.fn(async () => undefined),
+      endpoint: vi.fn(async () => ({ host: '127.0.0.1', port: 51234 })),
+      isRunning: vi.fn(async () => running()),
+      exitState: vi.fn(async () => 'exit code 137, OOM-killed by the container runtime'),
+      logs: vi.fn(async () => LOG_TAIL),
+      remove: vi.fn(async () => {}),
+      removeRun: vi.fn(async () => {}),
+      reapExited: vi.fn(async () => 0),
+      listPoolMembers: vi.fn(async () => []),
+      listRunContainers: vi.fn(async () => []),
+    }
+  }
+
+  it("carries a confirmed-dead member's exit state and log tail onto the run", async () => {
+    // The member stopped answering AND the runtime confirms it is gone, so it died while leased
+    // to this run: its last output is this run's last words, and the only record of WHY.
+    let alive = true
+    const adapter = poolingAdapter(() => alive)
+    const transport = mkTransport({
+      image: 'harness:test',
+      poolSize: 1,
+      adapter,
+      exec: fakeDockerPool().exec,
+      fetchImpl: vi.fn(async (input: string | URL | Request) => {
+        const url = String(input)
+        if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+        if (url.includes('/jobs/')) throw new Error('ECONNREFUSED')
+        return jsonResponse({ state: 'running' }, 202)
+      }) as unknown as typeof fetch,
+    })
+
+    await transport.dispatch({ runId: 'r1', jobId: 'j1' }, repoSpec('o', 'r'), 'agent')
+    alive = false
+    const view = await transport.poll({ runId: 'r1', jobId: 'j1' })
+
+    expect(view.evicted).toBe('crash')
+    expect(view.detail).toContain('OOM-killed')
+    expect(view.detail).toContain(LOG_TAIL)
+  })
+
+  it("refuses to attach a LIVE member's output to this run, and says why", async () => {
+    // The member answered the poll with a 404: its harness restarted or reaped the job, so the
+    // member is alive and already serving somebody else. Its stdout is that run's, possibly from
+    // another repo, and a tail lifted off it would be indistinguishable from a genuine one on
+    // this run's failure. The per-run path cannot reach this case (one container, one run).
+    const adapter = poolingAdapter(() => true)
+    const transport = mkTransport({
+      image: 'harness:test',
+      poolSize: 1,
+      adapter,
+      exec: fakeDockerPool().exec,
+      fetchImpl: vi.fn(async (input: string | URL | Request) => {
+        const url = String(input)
+        if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+        if (url.includes('/jobs/')) return new Response('no such job', { status: 404 })
+        return jsonResponse({ state: 'running' }, 202)
+      }) as unknown as typeof fetch,
+    })
+
+    await transport.dispatch({ runId: 'r1', jobId: 'j1' }, repoSpec('o', 'r'), 'agent')
+    const view = await transport.poll({ runId: 'r1', jobId: 'j1' })
+
+    expect(view.evicted).toBe('crash')
+    // The failure states what happened instead of borrowing another run's evidence...
+    expect(view.detail).toContain('no longer knows this job')
+    expect(view.detail).not.toContain(LOG_TAIL)
+    // ...and the tail is never even read, so there is nothing to leak into it.
+    expect(adapter.logs).not.toHaveBeenCalled()
+  })
+})

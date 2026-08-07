@@ -102,11 +102,16 @@ export function isDryRun(mode: RunMode | null | undefined): boolean {
  * Per-run diagnostic context captured for AFTER-THE-FACT investigation of a run (esp. a
  * failure): the "where/what did this run actually execute on" facts that were previously
  * spread across the DB (repo↔service↔installation joins), the harness transcript (model), or
- * lost entirely (which backend a step ran on). Stamped by the engine at dispatch and refined
- * on the first poll; it reflects the MOST RECENT container-step dispatch (the step most likely
- * relevant to a failure), not a per-step history. Rides in the run's `detail` JSON (no dedicated
- * column), like `ExecutionInstance.notes`/`frontendBindings`. Absent on legacy runs and on
- * runs with no container step (pure inline/gate pipelines). NEVER carries a token or secret.
+ * lost entirely (which backend a step ran on). Stamped by the engine BEFORE the dispatch and
+ * refined by what the dispatch returned and by the first poll; it reflects the MOST RECENT
+ * dispatch (the step most likely relevant to a failure), not a per-step history. Rides in the
+ * run's `detail` JSON (no dedicated column), like `ExecutionInstance.notes`/`frontendBindings`.
+ * Absent on legacy runs. NEVER carries a token or secret.
+ *
+ * Stamped BEFORE the dispatch on purpose: it used to be written from the job handle, which
+ * only exists once the container has accepted the job, so the failures where "which model,
+ * which repo, which backend" matters most (a container that never started, a preflight
+ * rejection) were the exact ones that recorded nothing.
  */
 export const runDiagnosticsSchema = v.object({
   /** Context of the most recent container-step dispatch. */
@@ -121,10 +126,33 @@ export const runDiagnosticsSchema = v.object({
       /**
        * Which runner backend the step actually ran on, the datum that distinguishes a native
        * host-process run from a sandboxed container: `local-native` | `local-container` |
-       * `runner-pool` | `cloudflare-container`. Filled on the first poll (the transport reports
-       * it); absent until then or on an older runtime.
+       * `runner-pool` | `cloudflare-container`, plus `inline` for a step the engine answered
+       * with an LLM call of its own rather than dispatching anywhere. Filled on the first poll
+       * for a container step (the transport reports it) and at dispatch for an inline one;
+       * absent until then or on an older runtime.
        */
       executionBackend: v.optional(v.string()),
+      /**
+       * How the dispatch itself ended, when it did not reach a running job. PRESENCE is the
+       * signal (a dispatch that was accepted, or is still in flight, carries none), so there
+       * is no "succeeded" member to keep in step with anything.
+       *
+       * This is the half the block was missing: the model/repo/backend facts describe where a
+       * step ran, and a run that died before any of that says which of them never happened
+       * and why. `kind` is the engine's own dispatch failure taxonomy and `reason` the
+       * machine-readable cause when the throw carried one (a preflight `DomainError`), so an
+       * investigation reads the same vocabulary the run's failure card renders.
+       */
+      failure: v.optional(
+        v.object({
+          /** `preflight` | `evicted` | `dispatch`: the engine's dispatch failure taxonomy. */
+          kind: v.string(),
+          /** Machine-readable cause (e.g. `github_not_connected`), when the throw carried one. */
+          reason: v.optional(v.string()),
+          /** Epoch ms the dispatch failed. */
+          at: v.number(),
+        }),
+      ),
       /** The repo the step operated on. */
       repo: v.optional(
         v.object({
