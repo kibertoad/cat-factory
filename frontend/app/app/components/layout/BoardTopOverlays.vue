@@ -14,9 +14,9 @@ import DefaultTestEnvBanner from '~/components/layout/DefaultTestEnvBanner.vue'
 // The column is the point. Each of these used to anchor itself (`absolute top-0`, its own
 // z-index), which makes overlap a matter of who picked the higher number: the four advisory
 // banners already deferred to a shared column, but the toolbar, the spend/connection/PAT
-// banners and the nav trigger each positioned themselves, and a standing advisory covered the
-// zoom/fit controls outright, for everyone, and the board-basics tour then ringed a control
-// nobody could see. Stacking them in flow makes that overlap structurally impossible instead
+// banners and the nav trigger each positioned themselves. A standing advisory therefore
+// covered the zoom/fit controls outright, for everyone, and the board-basics tour rang a
+// control nobody could see. Stacking them in flow makes that overlap structurally impossible
 // of merely tuned: no offset constant to keep in step with the pill's height, and a toolbar
 // that grows (a wrapped row, a scrollbar on a narrow viewport) pushes the column down by
 // exactly what it grew.
