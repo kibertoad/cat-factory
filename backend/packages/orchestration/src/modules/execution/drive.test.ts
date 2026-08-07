@@ -182,7 +182,7 @@ describe('driveExecution failure identity', () => {
   })
 })
 
-describe('driveExecution advance ceiling', () => {
+describe('driveExecution step ceiling', () => {
   /** An `ExecutionService` whose advance never settles, the wedged HTTP call F9 is about. */
   function hangingExec(events: string[]): Exec {
     return {
@@ -217,7 +217,7 @@ describe('driveExecution advance ceiling', () => {
         log,
         // The facade's clock, stubbed to expire at once: what is under test is the driver's
         // reaction to the ceiling, not the timer that measures it.
-        withAdvanceCeiling: async () => ({ timedOut: true }),
+        withStepCeiling: async () => ({ timedOut: true }),
       },
     )
 
@@ -244,7 +244,7 @@ describe('driveExecution advance ceiling', () => {
       { ...CFG, advanceTimeoutMs: 0 },
       {
         sleep: h.sleep,
-        withAdvanceCeiling: async () => {
+        withStepCeiling: async () => {
           events.push('ceiling')
           return { timedOut: true }
         },
@@ -253,5 +253,51 @@ describe('driveExecution advance ceiling', () => {
 
     expect(events).toEqual([])
     expect(h.events).toEqual(['advance'])
+  })
+})
+
+describe('driveExecution poll ceiling', () => {
+  it('counts a status read that never answers as one unreadable poll, not a failed run', async () => {
+    // The Worker runs every poll inside a `step.do` carrying the SAME `stepConfig` as an advance,
+    // and a timed-out step throws into `pollOnce`, which tolerates a bounded run of them. Node
+    // bounded the advance and left the polls unbounded, so a hung status read wedged the run in
+    // exactly the way F9 describes: pg-boss keeps heartbeating the active job, so the stale-run
+    // sweeper still reads it `live` and skips it.
+    const events: string[] = []
+    const exec = {
+      advanceInstance: async () => {
+        events.push('advance')
+        return AWAITING_JOB
+      },
+      pollAgentJob: () => {
+        events.push('pollJob')
+        return new Promise<AdvanceResult>(() => {})
+      },
+      failRun: async (_ws: string, _id: string, message: string, kind: string) => {
+        events.push(`fail:${kind}:${message}`)
+      },
+    } as unknown as Exec
+
+    // The advance settles; every poll after it hangs. Asserting on the DRIVER's reaction, not on
+    // the timer that measures it — the facade wrapper owns the clock.
+    let calls = 0
+    await driveExecution(
+      exec,
+      'ws',
+      'ex',
+      { ...CFG, advanceTimeoutMs: 300_000, jobPollFailureTolerance: 2 },
+      {
+        sleep: async () => {},
+        withStepCeiling: async (work) =>
+          ++calls === 1 ? { timedOut: false, value: await work } : { timedOut: true },
+      },
+    )
+
+    // Tolerated, then terminal once the tolerance is spent — never on the first unanswered read.
+    expect(events.slice(0, 3)).toEqual(['advance', 'pollJob', 'pollJob'])
+    expect(events.at(-1)).toContain(
+      'fail:timeout:Implementation job status was unreadable (2 polls)',
+    )
+    expect(events.at(-1)).toContain('no answer within 5 minutes')
   })
 })

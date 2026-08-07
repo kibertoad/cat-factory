@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AdvanceResult, DriveConfig } from '@cat-factory/orchestration'
 import { driveExecution } from '../src/execution/drive.js'
 
@@ -14,6 +14,11 @@ import { driveExecution } from '../src/execution/drive.js'
 // ACTIVE job regardless of handler progress, so a hung call inside `advanceInstance` leaves the
 // run `running` with a live job and a frozen `updated_at`: the stale-run sweeper classifies it
 // `live` and skips it, and the run wedges until the queue's expire cap (up to 24h).
+//
+// FAKE timers, not a short real ceiling raced against `Date.now()`. A wall-clock assertion on a
+// shared CI runner is a coin toss the product cannot lose but the suite can, and it could only
+// ever observe that the drive returned EARLY — never the thing worth pinning, which is that the
+// wrapper drops the timer it armed. `vi.getTimerCount()` observes that directly.
 
 type Exec = Parameters<typeof driveExecution>[0]
 
@@ -23,9 +28,9 @@ const CFG: DriveConfig = {
   jobPollFailureTolerance: 1,
   ciPollIntervalMs: 1,
   ciMaxPolls: 2,
-  // A real (timer-backed) ceiling, just short enough to assert against without the test waiting
-  // out a production one. The value is what the wrapper races; the mechanism is identical.
-  advanceTimeoutMs: 25,
+  // A production-shaped ceiling: the clock is faked, so nothing waits it out, and the failure
+  // text below is the one an operator would actually read.
+  advanceTimeoutMs: 5 * 60_000,
 }
 
 /** Records the terminal failure the driver settles a run with. */
@@ -46,25 +51,35 @@ function recorder(advance: () => Promise<AdvanceResult>): Recorder {
 }
 
 describe('Node advance ceiling', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('fails a run whose advance never settles, rather than waiting on it', async () => {
     const r = recorder(() => new Promise<AdvanceResult>(() => {}))
 
-    await driveExecution(r.exec, 'ws', 'ex', CFG)
+    const drive = driveExecution(r.exec, 'ws', 'ex', CFG)
+    // Nothing has fired yet: the ceiling is a bound on the advance, not a delay before it.
+    expect(r.failures).toEqual([])
 
-    expect(r.failures).toEqual(['timeout:Step advance did not complete within 25ms'])
+    await vi.advanceTimersByTimeAsync(CFG.advanceTimeoutMs)
+    await drive
+
+    expect(r.failures).toEqual(['timeout:Step advance did not complete within 5 minutes'])
   })
 
-  it('leaves a healthy advance alone (the ceiling is a bound, not a deadline to wait out)', async () => {
-    // The control case: the same wiring, with an advance that settles. It proves the assertion
-    // above is the ceiling firing rather than the wrapper failing every run it drives, and
-    // that a settled advance clears its timer instead of holding the drive open for the rest
-    // of the window.
+  it('drops the armed timer as soon as the advance settles', async () => {
+    // The control case, and the one that would otherwise cost every healthy advance a timer held
+    // open for the rest of the window. It also proves the assertion above is the ceiling firing
+    // rather than the wrapper failing every run it drives.
     const r = recorder(async () => ({ kind: 'done' }) as AdvanceResult)
 
-    const started = Date.now()
     await driveExecution(r.exec, 'ws', 'ex', CFG)
 
     expect(r.failures).toEqual([])
-    expect(Date.now() - started).toBeLessThan(CFG.advanceTimeoutMs)
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

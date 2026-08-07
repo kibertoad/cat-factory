@@ -43,10 +43,15 @@ Cloudflare stops an instance after 10 minutes with **no inbound requests**.
 - The success path now also reclaims explicitly (Layer 2), so this idle window is
   a fallback (e.g. when no async container executor is wired), not the primary
   success-path reaper.
-- When it fires while the driver still believes the job is running (a poll gap
-  longer than the window), `onActivityExpired` records the reclaim in DO storage,
-  so the resulting 404 poll is classified as `transient` churn on the larger
-  recovery budget instead of reading as a crash. See
+- `onActivityExpired` records the reclaim in DO storage, so a 404 poll that
+  follows is classified as `transient` churn on the larger recovery budget
+  instead of reading as a crash. The hook cannot tell the case that matters (a
+  poll gap outran the window while a job was still running) from the routine one
+  (the run parked on a human decision and nothing was running), so it records
+  both; the record is dropped again the moment a new job is accepted, which is
+  what stops a routine marker excusing the next step's genuine crash. It is
+  claimed by the polling job rather than deleted on read, so a retried durable
+  poll step re-reads the same answer. See
   [`stuck-run-audit.md`](../../docs/initiatives/stuck-run-audit.md) F12.
 
 ## Layer 2: explicit reclaim (`shutdown()` RPC → SIGKILL)

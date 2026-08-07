@@ -4,6 +4,7 @@ import { CloudflareContainerTransport } from '../src/infrastructure/containers/C
 import type { ExecutionContainer } from '../src/infrastructure/containers/ExecutionContainer'
 import {
   ATTRIBUTION_WINDOW_MS,
+  clearStopCause,
   type ContainerStopCause,
   recordStopCause,
   type StopCauseStorage,
@@ -17,8 +18,13 @@ import {
 // the run) and a budget of FIVE on infrastructure churn. So a reclaim read as a crash costs a
 // healthy run its recovery: two poll-scheduling hiccups in one step, each idling the container
 // out, and the run fails `evicted` with nothing actually wrong.
+//
+// The reverse mistake is the one the rules below mostly guard: a record that outlives what it can
+// honestly explain hands the NEXT death an alibi, and the death it excuses is the OOM the small
+// budget exists to catch.
 
 const NOW = 1_700_000_000_000
+const JOB = 'job-1'
 
 /** The three storage methods the bookkeeping uses, over a plain Map. */
 function fakeStorage(): StopCauseStorage & { size: () => number } {
@@ -34,15 +40,20 @@ function fakeStorage(): StopCauseStorage & { size: () => number } {
 /** A namespace whose poll 404s, with the container answering `cause` about its own reclaim. */
 function namespace404(
   cause: ContainerStopCause | undefined,
-): DurableObjectNamespace<ExecutionContainer> {
+): DurableObjectNamespace<ExecutionContainer> & { claims: string[] } {
+  const claims: string[] = []
   const stub = {
     fetch: () => Promise.resolve(new Response('no such job', { status: 404 })),
-    recentEvictionCause: () => Promise.resolve(cause),
+    recentEvictionCause: (jobId: string) => {
+      claims.push(jobId)
+      return Promise.resolve(cause)
+    },
   }
   return {
     idFromName: (name: string) => ({ name, toString: () => name }),
     get: () => stub,
-  } as unknown as DurableObjectNamespace<ExecutionContainer>
+    claims,
+  } as unknown as DurableObjectNamespace<ExecutionContainer> & { claims: string[] }
 }
 
 describe('stop-cause bookkeeping', () => {
@@ -50,7 +61,7 @@ describe('stop-cause bookkeeping', () => {
     const storage = fakeStorage()
     await recordStopCause(storage, 'idle', NOW)
 
-    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.idle)).toBe('idle')
+    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.idle, JOB)).toBe('idle')
   })
 
   it('forgets a reclaim the poll found too late to explain', async () => {
@@ -59,7 +70,7 @@ describe('stop-cause bookkeeping', () => {
     const storage = fakeStorage()
     await recordStopCause(storage, 'idle', NOW)
 
-    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.idle + 1)).toBeUndefined()
+    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.idle + 1, JOB)).toBeUndefined()
   })
 
   it('gives an idle reclaim a wider window than a rollout, because it is found later', async () => {
@@ -71,17 +82,42 @@ describe('stop-cause bookkeeping', () => {
 
     const storage = fakeStorage()
     await recordStopCause(storage, 'rollout', NOW)
-    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.idle)).toBeUndefined()
+    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.idle, JOB)).toBeUndefined()
   })
 
-  it('consumes the record, so one reclaim explains exactly one eviction', async () => {
+  it('spends a record on one job, so one reclaim explains exactly one eviction', async () => {
     // The engine answers an eviction by re-dispatching onto a FRESH container under the same DO
-    // id. A record left behind would still be there to excuse that container's death too.
+    // id. A record left readable would still be there to excuse that container's death too.
     const storage = fakeStorage()
     await recordStopCause(storage, 'idle', NOW)
 
-    expect(await takeStopCause(storage, NOW)).toBe('idle')
-    expect(await takeStopCause(storage, NOW)).toBeUndefined()
+    expect(await takeStopCause(storage, NOW, JOB)).toBe('idle')
+    expect(await takeStopCause(storage, NOW, 'job-2')).toBeUndefined()
+  })
+
+  it('answers a REPLAYED poll for the same job identically', async () => {
+    // The read runs inside a `step.do` that retries three times. A destructive read loses the
+    // attribution when the step throws AFTER it (a contended persist, a failed emit), and the
+    // retry then reports the crash this mechanism exists to spare — so the claim is keyed by the
+    // job rather than the record being deleted.
+    const storage = fakeStorage()
+    await recordStopCause(storage, 'rollout', NOW)
+
+    expect(await takeStopCause(storage, NOW, JOB)).toBe('rollout')
+    expect(await takeStopCause(storage, NOW, JOB)).toBe('rollout')
+  })
+
+  it('drops a record when a new job is accepted, so it cannot excuse that job', async () => {
+    // The routine case: a run parks on a human decision, nothing is running, and the container
+    // idles out anyway. Left in place that marker sits inside its 30-minute window ready to
+    // excuse the NEXT step's genuine OOM as churn — weakening the crash budget on the common
+    // path rather than the rare one.
+    const storage = fakeStorage()
+    await recordStopCause(storage, 'idle', NOW)
+
+    await clearStopCause(storage)
+
+    expect(await takeStopCause(storage, NOW, 'job-after-dispatch')).toBeUndefined()
     expect(storage.size()).toBe(0)
   })
 
@@ -92,7 +128,7 @@ describe('stop-cause bookkeeping', () => {
     const storage = fakeStorage()
     await storage.put('containerStopCause', { cause: 'stargate', at: NOW } as never)
 
-    expect(await takeStopCause(storage, NOW)).toBeUndefined()
+    expect(await takeStopCause(storage, NOW, JOB)).toBeUndefined()
   })
 })
 
@@ -120,5 +156,38 @@ describe('CloudflareContainerTransport 404 classification', () => {
 
     expect(view.evicted).toBe('transient')
     expect(view.error).toContain('transient infrastructure eviction')
+  })
+
+  it('claims the record under the POLLING job, not the run', async () => {
+    // A run's container serves every step, so a record claimed by the run would be spent by the
+    // first eviction and unreadable on a replay of that same step's poll.
+    const namespace = namespace404('idle')
+    await new CloudflareContainerTransport(namespace).poll(ref)
+
+    expect(namespace.claims).toEqual([ref.jobId])
+  })
+
+  it('spends the stored record even when it knows the cause itself', async () => {
+    // A rollout in flight makes the container fetch THROW rather than 404, so this path derives
+    // its verdict from the signal. It must still spend whatever the container recorded, or one
+    // reclaim excuses this eviction and is left behind to excuse the next one too.
+    const claims: string[] = []
+    const namespace = {
+      idFromName: (name: string) => ({ name, toString: () => name }),
+      get: () => ({
+        fetch: () => Promise.reject(new Error('new version rollout')),
+        recentEvictionCause: (jobId: string) => {
+          claims.push(jobId)
+          return Promise.resolve<ContainerStopCause | undefined>('idle')
+        },
+      }),
+    } as unknown as DurableObjectNamespace<ExecutionContainer>
+
+    const view = await new CloudflareContainerTransport(namespace).poll(ref)
+
+    // The cause the transport OBSERVED wins over the stored one: the container is mid-drain, and
+    // what it recorded earlier is not what this poll just watched happen.
+    expect(view.error).toContain('transient infrastructure eviction')
+    expect(claims).toEqual([ref.jobId])
   })
 })

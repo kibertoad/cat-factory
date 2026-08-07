@@ -1,4 +1,4 @@
-import { type AppConfig, parseNumericEnv } from '@cat-factory/server'
+import { type AppConfig, parseConfigDuration, parseNumericEnv } from '@cat-factory/server'
 import type { DriveConfig } from './drive.js'
 import type { AdvanceQueueOptions, SweeperConfig } from './pgBossRunner.js'
 
@@ -7,14 +7,22 @@ import type { AdvanceQueueOptions, SweeperConfig } from './pgBossRunner.js'
 // by the container (which builds the work runner) and `start()` (which builds the worker
 // + sweeper) so the timing is derived once and stays consistent.
 
-/** Parse a Workflows-style duration ("15 seconds", "5 minutes", "24 hours", "1 day") to ms. */
-function durationMs(value: string, fallback: number): number {
-  const m = /^(\d+)\s*(second|minute|hour|day)s?$/.exec(value.trim())
-  if (!m) return fallback
-  const n = Number(m[1])
-  const scale =
-    m[2] === 'second' ? 1000 : m[2] === 'minute' ? 60_000 : m[2] === 'hour' ? 3_600_000 : 86_400_000
-  return n * scale
+/**
+ * A duration from `AppConfig.execution` in milliseconds.
+ *
+ * The SHARED parser, not a local regex: the local one this replaced knew four of the units the
+ * Worker accepts and silently substituted its own default for the rest, which is how one
+ * `ADVANCE_TIMEOUT` came to mean two different bounds. The strings it is handed here have
+ * already been resolved (and canonicalised) by the config loader through that same parser, so a
+ * fault here means the config was assembled without it. That throws rather than falling back to
+ * a number of its own: a second opinion about the same value is how the two readings drifted.
+ */
+function durationMs(value: string): number {
+  const parsed = parseConfigDuration(value)
+  if ('fault' in parsed) {
+    throw new Error(`execution config carries an unresolved duration "${value}": ${parsed.fault}`)
+  }
+  return parsed.duration.ms
 }
 
 export interface ExecutionRuntime {
@@ -48,8 +56,8 @@ export interface ExecutionRuntime {
  */
 export function executionRuntime(config: AppConfig, env: NodeJS.ProcessEnv): ExecutionRuntime {
   const exec = config.execution
-  const jobPollIntervalMs = durationMs(exec.jobPollInterval, 15_000)
-  const ciPollIntervalMs = durationMs(exec.ciPollInterval, 30_000)
+  const jobPollIntervalMs = durationMs(exec.jobPollInterval)
+  const ciPollIntervalMs = durationMs(exec.ciPollInterval)
 
   const drive: DriveConfig = {
     jobPollIntervalMs,
@@ -57,9 +65,9 @@ export function executionRuntime(config: AppConfig, env: NodeJS.ProcessEnv): Exe
     jobPollFailureTolerance: exec.jobPollFailureTolerance,
     ciPollIntervalMs,
     ciMaxPolls: exec.ciMaxPolls,
-    // The hang bound on one advance. Same config value the Worker hands to `step.do`, so a
-    // deployment that widens it widens both facades (stuck-run audit F9).
-    advanceTimeoutMs: durationMs(exec.advanceTimeout, 300_000),
+    // The hang bound on one advance and on one status read. Same config value the Worker hands
+    // to `step.do`, so a deployment that widens it widens both facades (stuck-run audit F9).
+    advanceTimeoutMs: durationMs(exec.advanceTimeout),
   }
 
   // One step's worst-case poll budget (a container-job poll loop + a CI poll loop)...

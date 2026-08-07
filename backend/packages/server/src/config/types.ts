@@ -56,12 +56,13 @@ export interface ExecutionConfig {
   /** Safety bound on the number of CI polls before the gate is given up. */
   ciMaxPolls: number
   /**
-   * Ceiling on ONE `advanceInstance` call, the engine's hang bound. Cloudflare applies it as
-   * the `step.do` timeout its durable driver already wrapped every advance in; Node races the
-   * same ceiling in `driveExecution` (pg-boss heartbeats an active job independently of handler
-   * progress, so without it a hung HTTP call inside an advance wedges the run until the queue's
-   * expire cap, up to 24h; stuck-run audit F9). ONE knob so the two facades cannot drift apart
-   * on the hang bound.
+   * Ceiling on ONE `advanceInstance` call or status read, the engine's hang bound. Cloudflare
+   * applies it as the `step.do` timeout its durable driver already wrapped both in; Node races
+   * the same ceiling in `driveExecution` (pg-boss heartbeats an active job independently of
+   * handler progress, so without it a hung HTTP call wedges the run until the queue's expire
+   * cap, up to 24h; stuck-run audit F9). ONE knob so the two facades cannot drift apart on the
+   * hang bound, which is also why the value arrives here CANONICALISED by the shared
+   * `resolveDurationEnv` rather than as whatever the operator typed.
    */
   advanceTimeout: string
   /** Age ceiling for the instance-level container reaper (epoch-ms). */

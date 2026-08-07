@@ -196,9 +196,10 @@ handler progress, so `classifyAdvanceJob` reports `live` and the sweeper skips i
 `queue.expireInSeconds` (up to 24h). CF has always bounded the same call at 5 min
 (`ExecutionWorkflow`'s `STEP_CONFIG.timeout`).
 **Fix (landed):** the ceiling became ONE shared knob (`ExecutionConfig.advanceTimeout`,
-`ADVANCE_TIMEOUT`, default `5 minutes`) that the Worker hands to `step.do` and Node races in
-`driveExecution`. See the Group D engine notes for the seam and for why the timeout does NOT
-retry in-process the way the Workflows step does.
+`ADVANCE_TIMEOUT`, default `30 minutes`) that the Worker hands to `step.do` and Node races in
+`driveExecution`, bounding the STATUS READS the same loop waits on as well as the advance. See
+the Group D engine notes for the seam, for how the default is sized, and for why the timeout
+does NOT retry in-process the way the Workflows step does.
 
 **F10: Recurring pipeline fire clobbers a human-parked (`blocked`) prior run.** ✅ FIXED (this PR)
 `RecurringPipelineService.fire`'s active-run guard (now at
@@ -544,10 +545,32 @@ covers all three. Runner image `1.97.0`.
 D's two non-harness findings, landed together as the engine slice the harness slice left behind.
 
 - **F9**: the hang bound became ONE config value, `ExecutionConfig.advanceTimeout`
-  (`ADVANCE_TIMEOUT`, default `5 minutes`), because a Node-only knob beside Cloudflare's
+  (`ADVANCE_TIMEOUT`, default `30 minutes`), because a Node-only knob beside Cloudflare's
   hard-coded `STEP_CONFIG.timeout` is the same drift the finding is about, one release later.
   The Worker builds its per-durable-step config from it; Node races it in `driveExecution`.
-  - **The clock is an injected SEAM with an inert default** (`DriveOptions.withAdvanceCeiling`),
+  - **ONE knob means one PARSER, not just one name.** The Worker hands the string to Workflows
+    and Node turns it into a `setTimeout` delay, and while those were two readings the knob had
+    two meanings: Node's regex knew four of Workflows' seven units and silently substituted its
+    own default for the rest, so `ADVANCE_TIMEOUT="1 week"` was a week on Cloudflare and five
+    minutes on Node. Every duration knob now resolves through `resolveDurationEnv`
+    (`@cat-factory/server`), which CANONICALISES what it accepts, refuses the calendar units
+    whose length the two runtimes would each have to invent, refuses anything past
+    `MAX_TIMER_DELAY_MS` (where `setTimeout` substitutes 1ms and every step expires at once),
+    and warns once before falling back to a default that is also shared.
+  - **The default is sized against the slowest LEGITIMATE advance, not the typical one.** One
+    advance can contain several sequential inline LLM calls (a requirements-review incorporation
+    cycle, a consensus debate's rounds, a judge, the estimator), which is minutes apiece against
+    a slow or locally-run model. The two mistakes are not symmetric: firing late only delays a
+    wedged run's failure and is still bounded far below the 24h expire cap the finding is about,
+    while firing early ends a healthy run terminally on Node. So the ceiling sits above the
+    slowest legitimate advance.
+  - **The ceiling bounds the POLLS too**, which the first cut left unbounded: the Worker wraps
+    `pollAgentJob`/`pollGate`/`resolveGatePollExhaustion` in the same `stepConfig`, and a hung
+    status read wedges a Node run exactly as a hung advance does (same frozen `updated_at`, same
+    `live` verdict from the sweeper). The DISPOSITION differs and matches the Worker's: a
+    timed-out `step.do` throws into `pollOnce`, which counts one unreadable poll, so a timed-out
+    poll here counts against `jobPollFailureTolerance` rather than failing the run outright.
+  - **The clock is an injected SEAM with an inert default** (`DriveOptions.withStepCeiling`),
     exactly like the existing `sleep` and for the same reason: orchestration owns no timers.
     Both Node-side callers (the pg-boss worker and the mothership in-process runner) import
     `driveExecution` from the Node `drive.ts` wrapper, so wiring it there covers both.
@@ -584,9 +607,23 @@ D's two non-harness findings, landed together as the engine slice the harness sl
     instead was rejected too: it is the same trade with no knowledge added, and it bills every
     LEAKED container (a backend that died before `release`) for the extra window, which is
     precisely the case the 10-minute reclaim is right about.
-  - **A recorded cause is CONSUMED on read.** The engine answers an eviction by re-dispatching
-    onto a fresh container under the SAME DO id, so a record left behind would still be sitting
-    there to excuse that container's death too.
+  - **A recorded cause is CLAIMED by the polling job, not deleted.** One reclaim must explain
+    exactly one eviction (the engine answers one by re-dispatching onto a fresh container under
+    the SAME DO id, so an unclaimed record would still be sitting there to excuse that
+    container's death too) — but the read runs inside a `step.do` that RETRIES, and a
+    destructive read is not replay-safe: a step that reads the record and then throws re-runs
+    with the attribution gone and reports the crash the mechanism exists to spare. Writing
+    `claimedBy: <jobId>` states the same rule in a form a retry cannot break, and both eviction
+    paths claim, including the one that derives `rollout` from the thrown signal and would
+    otherwise leave a record behind to excuse a second death.
+  - **A new job's acceptance DROPS the record.** `onActivityExpired` cannot tell a poll-gap
+    reclaim from the routine "run parked on a human decision, nothing running" one: only the
+    harness knows whether a job is live, and asking it would itself be activity. So the marker
+    is minted for both, and `RunContainer.fetch` clears it when `POST /jobs` is accepted, which
+    is the moment it stops being able to explain anything. Without that boundary the common
+    benign case poisons the rare dangerous one, excusing the NEXT step's genuine OOM as churn.
+    It has to be the acceptance and not the container STARTING, because a 404 poll boots the
+    container on its way to discovering the job is gone.
   - **The two causes get different windows and different wording**, because they are found at
     different distances from the poll. A rollout drain interrupts an in-flight poll (seconds);
     an idle reclaim is discovered only when polling resumes, however long the gap outran the

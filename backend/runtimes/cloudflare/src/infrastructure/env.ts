@@ -168,10 +168,13 @@ export interface Env {
    */
   CI_MAX_POLLS?: string
   /**
-   * Ceiling on ONE pipeline-step advance, applied as the durable driver's `step.do` timeout
-   * here and raced in `driveExecution` on Node: the engine's hang bound, kept as one knob so
-   * a wedged advance is waited out for the same length of time on both facades. A Workflows
-   * duration string ("5 minutes", the default).
+   * Ceiling on ONE pipeline-step advance or status read, applied as the durable driver's
+   * `step.do` timeout here and raced in `driveExecution` on Node: the engine's hang bound, kept
+   * as one knob so a wedged call is waited out for the same length of time on both facades.
+   *
+   * A duration string ("30 minutes", the default), written as a whole number and one of
+   * seconds/minutes/hours/days/weeks. Both facades parse it with the same parser, so a value one
+   * accepts the other honours identically; an unusable one warns and falls back on both.
    */
   ADVANCE_TIMEOUT?: string
   /**

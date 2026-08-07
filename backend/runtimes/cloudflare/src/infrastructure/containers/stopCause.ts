@@ -26,6 +26,17 @@ export interface StopCauseRecord {
   cause: ContainerStopCause
   /** Epoch ms the stop was observed. */
   at: number
+  /**
+   * The job id this record has already been spent explaining, once one has claimed it.
+   *
+   * A claim rather than a delete, because the caller runs inside a RETRYING durable step. A
+   * destructive read is not replay-safe: a `step.do` that reads the record and then throws (a
+   * contended persist, a failed emit) re-runs with the attribution already gone and reports the
+   * `crash` this whole mechanism exists to spare. Keyed by the claimant so a REPLAY of the same
+   * poll re-reads the same answer, while a different job's poll finds it spent — which is the
+   * "one reclaim explains exactly one eviction" rule, now stated in a way a retry cannot break.
+   */
+  claimedBy?: string
 }
 
 /**
@@ -37,6 +48,12 @@ export interface StopCauseRecord {
  * that discovers it arrives however long the gap outran the idle window: minutes, not seconds.
  * A window sized for the rollout case would therefore read every real idle reclaim as a crash,
  * which is the finding itself.
+ *
+ * The window is a BACKSTOP, not the primary bound on what a record may excuse. What actually
+ * scopes it is the pair of rules around it: {@link clearStopCause} drops the record the moment a
+ * new job is accepted, and {@link takeStopCause} lets exactly one job spend it. So the wide
+ * `idle` window buys the poll gap it exists for without also handing the next step's crash an
+ * alibi.
  */
 export const ATTRIBUTION_WINDOW_MS = {
   rollout: 120_000,
@@ -76,10 +93,17 @@ function isContainerStopCause(value: unknown): value is ContainerStopCause {
  * as a `crash`, which is the honest reading of "no attribution" and the conservative one:
  * it costs a run one restart of its recovery budget, never a wrongly-extended one.
  */
-export function attributeStopCause(record: unknown, now: number): ContainerStopCause | undefined {
+export function attributeStopCause(
+  record: unknown,
+  now: number,
+  claimant: string,
+): ContainerStopCause | undefined {
   if (!record || typeof record !== 'object') return undefined
-  const { cause, at } = record as Partial<StopCauseRecord>
+  const { cause, at, claimedBy } = record as Partial<StopCauseRecord>
   if (!isContainerStopCause(cause) || typeof at !== 'number') return undefined
+  // Spent on somebody else's eviction. Only the job that claimed it may read it back, which is
+  // what lets a replay be idempotent without letting one reclaim excuse two deaths.
+  if (claimedBy !== undefined && claimedBy !== claimant) return undefined
   return now - at <= ATTRIBUTION_WINDOW_MS[cause] ? cause : undefined
 }
 
@@ -104,16 +128,39 @@ export async function recordStopCause(
 }
 
 /**
- * Read the cause explaining a 404 poll and CONSUME it. One reclaim explains exactly one 404:
- * the engine responds by re-dispatching onto a fresh container addressed by the same DO id, so
- * a record left behind would still be sitting there to excuse the next death, whenever and for
- * whatever reason it came.
+ * Forget whatever this container observed before now.
+ *
+ * Called when a NEW job is accepted, which is the moment the record stops being able to explain
+ * anything: a stop cause accounts for the death of a container that was serving the jobs
+ * outstanding when it was observed, and a job dispatched afterwards is not one of them. Without
+ * this the common benign case poisons the rare dangerous one — a run parks on a human decision,
+ * its container idles out with nothing running, and the `idle` marker that leaves behind is
+ * still there half an hour later to excuse a genuine OOM in the NEXT step as transient churn.
+ */
+export async function clearStopCause(storage: StopCauseStorage): Promise<void> {
+  await storage.delete(STOP_CAUSE_KEY)
+}
+
+/**
+ * Read the cause explaining `claimant`'s 404 poll, CLAIMING it for that job.
+ *
+ * One reclaim explains exactly one job's eviction: the engine answers one by re-dispatching onto
+ * a fresh container under the same DO id, so an unclaimed record would still be sitting there to
+ * excuse the next death, whenever and for whatever reason it came. The claim is written rather
+ * than the record deleted so a REPLAYED poll for the same job reads back the same answer (see
+ * {@link StopCauseRecord.claimedBy}).
  */
 export async function takeStopCause(
   storage: StopCauseStorage,
   now: number,
+  claimant: string,
 ): Promise<ContainerStopCause | undefined> {
-  const cause = attributeStopCause(await storage.get(STOP_CAUSE_KEY), now)
-  await storage.delete(STOP_CAUSE_KEY)
+  const record = await storage.get(STOP_CAUSE_KEY)
+  const cause = attributeStopCause(record, now, claimant)
+  // Nothing to claim: either there was no record, it was spent, or it is too old to explain
+  // anything. Leaving an expired record in place costs one key until the next reclaim
+  // overwrites it, and rewriting it here would only re-date somebody else's observation.
+  if (!cause) return undefined
+  await storage.put(STOP_CAUSE_KEY, { ...(record as StopCauseRecord), claimedBy: claimant })
   return cause
 }

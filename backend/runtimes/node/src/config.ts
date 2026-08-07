@@ -16,6 +16,10 @@ import type {
   TasksConfig,
 } from '@cat-factory/server'
 import {
+  DEFAULT_ADVANCE_TIMEOUT,
+  DEFAULT_CI_POLL_INTERVAL,
+  DEFAULT_DECISION_TIMEOUT,
+  DEFAULT_JOB_POLL_INTERVAL,
   DOCS,
   ENV_HELP,
   ENV_VARS_ANCHORS,
@@ -26,6 +30,7 @@ import {
   parseNumericEnv,
   requireEncryptionKey,
   requireGitHubAppPrivateKey,
+  resolveDurationEnv,
   resolveMachineTokenTtlMs,
   resolveSsoConfig,
   resolveTrustedProxyHops,
@@ -706,13 +711,33 @@ function buildOtelConfig(env: NodeJS.ProcessEnv): AppConfig['otel'] {
  */
 function buildExecutionConfig(env: NodeJS.ProcessEnv): AppConfig['execution'] {
   return {
-    decisionTimeout: env.DECISION_TIMEOUT?.trim() || '24 hours',
-    jobPollInterval: env.JOB_POLL_INTERVAL?.trim() || '15 seconds',
+    // Every duration goes through the SHARED parser with the SHARED default, so a value this
+    // facade honours is one the Worker honours identically — the local regex that used to read
+    // these knew four of Workflows' units and silently fell back on the rest, which made
+    // `ADVANCE_TIMEOUT="1 week"` a week on Cloudflare and five minutes here.
+    decisionTimeout: resolveDurationEnv(
+      'DECISION_TIMEOUT',
+      env.DECISION_TIMEOUT,
+      DEFAULT_DECISION_TIMEOUT,
+    ).canonical,
+    jobPollInterval: resolveDurationEnv(
+      'JOB_POLL_INTERVAL',
+      env.JOB_POLL_INTERVAL,
+      DEFAULT_JOB_POLL_INTERVAL,
+    ).canonical,
     jobMaxPolls: num('JOB_MAX_POLLS', env.JOB_MAX_POLLS) ?? 280,
     jobPollFailureTolerance: num('JOB_POLL_FAILURE_TOLERANCE', env.JOB_POLL_FAILURE_TOLERANCE) ?? 6,
-    ciPollInterval: env.CI_POLL_INTERVAL?.trim() || '30 seconds',
+    ciPollInterval: resolveDurationEnv(
+      'CI_POLL_INTERVAL',
+      env.CI_POLL_INTERVAL,
+      DEFAULT_CI_POLL_INTERVAL,
+    ).canonical,
     ciMaxPolls: num('CI_MAX_POLLS', env.CI_MAX_POLLS) ?? 120,
-    advanceTimeout: env.ADVANCE_TIMEOUT?.trim() || '5 minutes',
+    advanceTimeout: resolveDurationEnv(
+      'ADVANCE_TIMEOUT',
+      env.ADVANCE_TIMEOUT,
+      DEFAULT_ADVANCE_TIMEOUT,
+    ).canonical,
     containerMaxAgeMs:
       Math.max(75, num('CONTAINER_MAX_AGE_MINUTES', env.CONTAINER_MAX_AGE_MINUTES) ?? 90) * 60_000,
   }

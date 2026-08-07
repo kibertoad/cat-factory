@@ -155,6 +155,28 @@ export class CloudflareContainerTransport implements RunnerTransport {
     return readRunnerDispatchAck(await safeJson(res))
   }
 
+  /**
+   * The failed view for a container that has gone away, spending whatever the container recorded
+   * about its own reclaim.
+   *
+   * BOTH eviction paths funnel through here, including the one that already knows the cause from
+   * the thrown rollout signal, because the claim is not only how the cause is read: it is how a
+   * record is marked spent. A path that reported an eviction without claiming would leave the
+   * record behind to excuse a second one.
+   *
+   * Claiming is best-effort. An unreachable DO answers nothing, which reads as the crash it may
+   * well have been, and a container mid-rollout drain routinely is unreachable — so the cause the
+   * transport OBSERVED itself wins over a read that could not happen.
+   */
+  private async evictionOf(
+    stub: { recentEvictionCause: (jobId: string) => Promise<ContainerStopCause | undefined> },
+    ref: RunnerJobRef,
+    observed?: ContainerStopCause,
+  ): Promise<RunnerJobView> {
+    const claimed = await stub.recentEvictionCause(ref.jobId).catch(() => undefined)
+    return evictionView(observed ?? claimed)
+  }
+
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
     // The per-run container is the Durable Object addressed by the run id; its DO id is
     // the closest thing to a stable "container id" to surface in the run's details (a
@@ -174,7 +196,7 @@ export class CloudflareContainerTransport implements RunnerTransport {
       // "new version rollout" signal (exit 143) rather than returning a 404. Report it
       // as a transient rollout eviction so the engine recovers it on the larger
       // rollout budget instead of failing the run.
-      if (isRolloutSignal(err)) return evictionView('rollout')
+      if (isRolloutSignal(err)) return this.evictionOf(stub, ref, 'rollout')
       throw err
     }
     if (res.status === 404) {
@@ -185,10 +207,8 @@ export class CloudflareContainerTransport implements RunnerTransport {
       // regex-matches it any more, see I5). Ask the DO what it observed about its own reclaim
       // (a new-version rollout, or its idle window elapsing between polls). Either is infra
       // churn the engine should ride out on the larger transient budget rather than spend the
-      // crash budget on. An unreachable DO answers nothing, which reads as the crash it may
-      // well have been.
-      const cause = await stub.recentEvictionCause().catch(() => undefined)
-      return evictionView(cause)
+      // crash budget on.
+      return this.evictionOf(stub, ref)
     }
     if (!res.ok) {
       throw new Error(`Container job poll failed (HTTP ${res.status}): ${await safeText(res)}`)
