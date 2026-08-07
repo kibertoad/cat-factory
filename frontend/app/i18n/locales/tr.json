@@ -345,6 +345,7 @@
       "intake": "Sorun alımı",
       "intakeHint": "Her çalıştırma, izleyiciden eşleşen açık bir sorunu seçer ve baştan sona işler.",
       "intakeNoSources": "Sorunları çekmek için önce bir görev kaynağı bağlayın.",
+      "intakeNoIntakeSources": "Bir görev kaynağı bağlı, ancak bağlı kaynakların hiçbiri henüz zamanlanmış bir sorun aramasını çalıştıramıyor.",
       "intakeGithubRepo": "Depo",
       "intakeBoardId": "Pano kimliği",
       "intakeBoardIdHelp": "Bu izleyicinin alımı kapsamlandırdığı pano, proje veya kuyruk. Biçimini izleyici belirler.",

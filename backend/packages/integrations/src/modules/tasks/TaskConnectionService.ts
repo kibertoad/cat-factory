@@ -1,7 +1,7 @@
 import type { Clock } from '@cat-factory/kernel'
 import type { TaskConnectionRecord, TaskConnectionRepository } from '@cat-factory/kernel'
 import type { TaskSourceSettingsRepository } from '@cat-factory/kernel'
-import type { GitHubInstallationRepository } from '@cat-factory/kernel'
+import type { GitHubInstallationRepository, VcsProvider } from '@cat-factory/kernel'
 import type { TaskCredentials, TaskSourceProvider, TaskSourceRegistry } from '@cat-factory/kernel'
 import type {
   TaskConnection,
@@ -63,13 +63,31 @@ function isCredentialless(provider: TaskSourceProvider): boolean {
 }
 
 /**
- * The credentialless source whose availability is the installed GitHub App's
- * presence. Keyed on the source kind (not just "is credentialless") so a future
- * credentialless source with a different out-of-band auth path is forced to add its
- * own availability branch rather than silently inheriting the App check.
+ * The VCS connection a credentialless source rides, or null for a source that authenticates
+ * some other way. GitHub Issues rides the workspace's installed GitHub App and GitLab Issues
+ * rides its per-workspace GitLab connection; both are rows of the same one-per-workspace
+ * connection table, told apart by the row's `provider`.
+ *
+ * Keyed on the source kind (not just "is credentialless") so a future credentialless source
+ * with a different out-of-band auth path is forced to add its own availability branch rather
+ * than silently inheriting this one. Reading the row's provider (rather than merely its
+ * existence) is what stops the two VCS sources standing in for each other: a workspace
+ * connected to GitLab would otherwise report GitHub Issues as available, and the import
+ * would then resolve an empty App projection.
  */
-function ridesGitHubApp(provider: TaskSourceProvider): boolean {
-  return provider.kind === 'github' && isCredentialless(provider)
+function ridesVcsConnection(provider: TaskSourceProvider): VcsProvider | null {
+  if (!isCredentialless(provider)) return null
+  if (provider.kind === 'github') return 'github'
+  if (provider.kind === 'gitlab') return 'gitlab'
+  return null
+}
+
+/** How a source's missing VCS connection is described to the operator, per provider. */
+const VCS_CONNECT_HINT: Record<VcsProvider, string> = {
+  github:
+    "this workspace's GitHub App, which isn't installed yet. Install it under Integrations → GitHub",
+  gitlab:
+    "this workspace's GitLab connection, which doesn't exist yet. Connect one with a personal access token under Integrations → GitLab",
 }
 
 /** A provider that can list Linear teams (only {@link LinearTaskProvider} today). */
@@ -108,22 +126,27 @@ export class TaskConnectionService {
     // Resolve availability inputs ONCE up front rather than a per-provider repository read
     // (N+1): the App presence is workspace-wide, and the credentialed connections are one
     // listByWorkspace indexed by source.
-    const hasInstallation = this.deps.installations
-      ? (await this.deps.installations.getByWorkspace(workspaceId)) !== null
-      : false
+    const vcsConnection = this.deps.installations
+      ? await this.deps.installations.getByWorkspace(workspaceId)
+      : null
     const connectedSources = new Set(
       (await this.deps.taskConnectionRepository.listByWorkspace(workspaceId)).map((c) => c.source),
     )
     const states: TaskSourceState[] = []
     for (const provider of this.deps.registry.list()) {
-      const available = ridesGitHubApp(provider)
-        ? hasInstallation
+      const ridesVcs = ridesVcsConnection(provider)
+      const available = ridesVcs
+        ? vcsConnection?.provider === ridesVcs
         : connectedSources.has(provider.kind)
       states.push({
         ...provider.descriptor,
         available,
         // No row ⇒ default enabled, so a source is offered as soon as it's available.
         enabled: enabledBySource.get(provider.kind) ?? true,
+        // Asked of the provider, not of its descriptor: a source with no predicate search cannot
+        // back a recurring intake, and offering it in the schedule form produces a schedule that
+        // saves and then never fires.
+        supportsIntake: typeof provider.searchIssues === 'function',
       })
     }
     return states
@@ -149,16 +172,17 @@ export class TaskConnectionService {
     }
     const label = provider.descriptor.label
 
-    if (ridesGitHubApp(provider)) {
-      const installed =
-        !!this.deps.installations &&
-        (await this.deps.installations.getByWorkspace(workspaceId)) !== null
-      if (!installed) {
+    const ridesVcs = ridesVcsConnection(provider)
+    if (ridesVcs) {
+      const connection = this.deps.installations
+        ? await this.deps.installations.getByWorkspace(workspaceId)
+        : null
+      if (connection?.provider !== ridesVcs) {
         return {
           source,
           ok: false,
           status: 'not_installed',
-          message: `${label} rides this workspace's GitHub App, which isn't installed yet. Install it under Integrations → GitHub, then re-check.`,
+          message: `${label} rides ${VCS_CONNECT_HINT[ridesVcs]}, then re-check.`,
         }
       }
       return this.runProviderDiagnose(provider, { workspaceId, credentials: null }, label)

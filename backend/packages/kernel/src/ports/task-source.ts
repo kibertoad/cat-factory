@@ -156,8 +156,21 @@ export interface TaskSourceProvider {
   normalizeConnection(input: TaskCredentials): NormalizedTaskConnection
   /** Resolve a stable issue key from raw user input (a bare key or an issue URL); null if unparseable. */
   parseRef(input: string): string | null
-  /** Fetch a single issue by its key using the connection credentials. */
-  fetchTask(credentials: TaskCredentials, externalId: string): Promise<TaskContent>
+  /**
+   * Fetch a single issue by its key using the connection credentials.
+   *
+   * `workspaceId` is the workspace the import runs in, and it is REQUIRED for the same reason
+   * {@link TaskSourceProvider.search}'s is: a provider that authenticates out-of-band (GitHub
+   * Issues rides the workspace's App; GitLab Issues rides its VCS connection) has no
+   * credentials in the bag to resolve, and an external id names a repository, not a tenant.
+   * Without it such a provider can only scan every connection on the deployment for one that
+   * can read the id, which reads another tenant's issue whenever the ids collide.
+   */
+  fetchTask(
+    credentials: TaskCredentials,
+    externalId: string,
+    workspaceId: string,
+  ): Promise<TaskContent>
   /**
    * Search the tracker by free text and return lean hits (no description/
    * comments). Optional: a provider that only supports paste-a-URL import omits

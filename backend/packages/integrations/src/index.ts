@@ -198,6 +198,15 @@ export {
   GitHubIssuesProvider,
   type GitHubIssuesProviderDependencies,
 } from './modules/tasks/GitHubIssuesProvider.js'
+export * as gitlabIssuesLogic from './modules/tasks/gitlab-issues.logic.js'
+export {
+  GITLAB_ISSUES_DESCRIPTOR,
+  gitlabWebBaseFromApiBase,
+} from './modules/tasks/gitlab-issues.logic.js'
+export {
+  GitLabIssuesProvider,
+  type GitLabIssuesProviderDependencies,
+} from './modules/tasks/GitLabIssuesProvider.js'
 // The Jira task-source provider (a thin `fetch` shell around the pure Jira logic):
 // runtime-neutral, so both facades compose the SAME class instead of a per-runtime copy.
 export { JiraProvider, JiraApiError } from './modules/tasks/JiraProvider.js'

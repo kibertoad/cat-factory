@@ -345,6 +345,7 @@
       "intake": "Prise en charge des tickets",
       "intakeHint": "Chaque exécution sélectionne un ticket ouvert correspondant dans le suivi et le traite de bout en bout.",
       "intakeNoSources": "Connectez d'abord une source de tâches pour en extraire des tickets.",
+      "intakeNoIntakeSources": "Une source de tâches est connectée, mais aucune des sources connectées ne peut encore exécuter une recherche de tickets planifiée.",
       "intakeGithubRepo": "Dépôt",
       "intakeBoardId": "ID du tableau",
       "intakeBoardIdHelp": "Le tableau, projet ou file d’attente auquel ce traqueur limite la prise en charge. Son format est défini par le traqueur.",

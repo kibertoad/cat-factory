@@ -32,6 +32,7 @@ const jiraDescriptor: TaskSourceState = {
   refPlaceholder: 'PROJ-123',
   available: true,
   enabled: true,
+  supportsIntake: true,
 }
 
 const jiraConnection: TaskConnection = { source: 'jira', label: 'acme', connectedAt: 0 }

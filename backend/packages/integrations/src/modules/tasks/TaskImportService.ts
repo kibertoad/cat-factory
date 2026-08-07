@@ -94,7 +94,7 @@ export class TaskImportService {
       throw new ValidationError(`Could not resolve a ${source} issue key from '${ref}'`)
     }
     const credentials = await this.resolveCredentials(workspaceId, source, provider)
-    const content = await provider.fetchTask(credentials, externalId)
+    const content = await provider.fetchTask(credentials, externalId, workspaceId)
 
     // Preserve any existing block link across a re-import.
     const existing = await this.deps.taskRepository.get(workspaceId, source, content.externalId)

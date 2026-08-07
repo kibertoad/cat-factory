@@ -120,7 +120,14 @@ const API_PREFIX = '/api/v1'
 // `extras` bag, which keeps serving them until the window in `public-api.md` closes, so no
 // consumer has to move on this version. 1.20.0 is main's published number as of this branch's last
 // merge; re-read this line after any merge rather than trusting that the VERSION auto-merged clean.
-const API_VERSION = '1.21.0'
+// 1.22.0, not 1.21.0: `gitlab` joins the `TaskSourceKind` enum, GitLab Issues being a fourth
+// built-in task source. Additive on a CLOSED vocabulary, which is the shape the SDKs are built to
+// tolerate: they map an unknown enum member through rather than refusing it, so a client compiled
+// against 1.21.0 keeps parsing every response it already understood and simply never asks for the
+// new source. No existing member changes meaning and no persisted `source` value moves. 1.21.0 is
+// main's published number as of this branch's last merge; re-read this line after any merge rather
+// than trusting that the VERSION auto-merged clean.
+const API_VERSION = '1.22.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

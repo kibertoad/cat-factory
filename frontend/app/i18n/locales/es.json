@@ -345,6 +345,7 @@
       "intake": "Admisión de incidencias",
       "intakeHint": "Cada ejecución toma una incidencia abierta que coincide del rastreador y la resuelve de principio a fin.",
       "intakeNoSources": "Primero conecta una fuente de tareas para extraer incidencias de ella.",
+      "intakeNoIntakeSources": "Hay una fuente de tareas conectada, pero ninguna de las fuentes conectadas puede ejecutar todavía una búsqueda programada de incidencias.",
       "intakeGithubRepo": "Repositorio",
       "intakeBoardId": "ID del tablero",
       "intakeBoardIdHelp": "El tablero, proyecto o cola al que este rastreador limita la admisión. El formato lo define el rastreador.",

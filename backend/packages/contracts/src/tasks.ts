@@ -18,7 +18,7 @@ import { namespacedIdSchema } from './primitives.js'
 // ---------------------------------------------------------------------------
 
 /** The task sources this build ships. A deployment registers its own beside them (see below). */
-export const BUILTIN_TASK_SOURCE_KINDS = ['jira', 'github', 'linear'] as const
+export const BUILTIN_TASK_SOURCE_KINDS = ['jira', 'github', 'linear', 'gitlab'] as const
 
 /**
  * A BUILT-IN task source OR a CONSUMER-namespaced one ({@link namespacedIdSchema},
@@ -181,6 +181,17 @@ export const taskSourceStateSchema = v.object({
   ...taskSourceDescriptorSchema.entries,
   available: v.boolean(),
   enabled: v.boolean(),
+  /**
+   * Whether this source can back a recurring `bug-intake` schedule, i.e. whether its provider
+   * implements the predicate search intake runs. DERIVED from the provider rather than declared
+   * on the descriptor beside it, because the answer is a fact about the registered
+   * implementation and a declared one drifts from it silently.
+   *
+   * It is on the STATE rather than the descriptor for the same reason `available` is: a source
+   * the schedule form offers but cannot search is not a source with a missing field, it is a
+   * schedule that can never fire, and the form has to know which before it renders a picker.
+   */
+  supportsIntake: v.boolean(),
 })
 export type TaskSourceState = v.InferOutput<typeof taskSourceStateSchema>
 

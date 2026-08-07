@@ -248,6 +248,7 @@ export type {
   InstallationSummary,
   ListOptions,
   Paged,
+  ProjectIssueQuery,
   RateLimitSnapshot,
   RepoContentEntry,
   RepoEntry,

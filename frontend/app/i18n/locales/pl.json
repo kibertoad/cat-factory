@@ -345,6 +345,7 @@
       "intake": "Pobieranie zgłoszeń",
       "intakeHint": "Każde uruchomienie wybiera jedno pasujące otwarte zgłoszenie z trackera i realizuje je od początku do końca.",
       "intakeNoSources": "Najpierw połącz źródło zadań, aby pobierać z niego zgłoszenia.",
+      "intakeNoIntakeSources": "Źródło zadań jest połączone, ale żadne z połączonych źródeł nie może jeszcze uruchomić zaplanowanego wyszukiwania zgłoszeń.",
       "intakeGithubRepo": "Repozytorium",
       "intakeBoardId": "ID tablicy",
       "intakeBoardIdHelp": "Tablica, projekt lub kolejka, do której ten tracker ogranicza pozyskiwanie. Format określa tracker.",

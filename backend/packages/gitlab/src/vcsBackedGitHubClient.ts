@@ -127,6 +127,10 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
 
   // Optional reads: expose only when the underlying provider implements them, so a
   // capability check on the GitHubClient stays honest.
+  if (vcs.searchProjectIssues) {
+    client.searchProjectIssues = (i, ref, query) =>
+      vcs.searchProjectIssues!(conn(i), toRepoRef(ref), query)
+  }
   if (vcs.listSubIssues) {
     client.listSubIssues = (i, ref, n) => vcs.listSubIssues!(conn(i), toRepoRef(ref), n)
   }

@@ -120,6 +120,18 @@ describe('asGitHubClient (VcsClient → GitHubClient)', () => {
     expect(await missing.getRepoById(123, 7)).toBeNull()
   })
 
+  // The task source reads through the adapted client, so the project-scoped issue search has
+  // to survive the bridge — an unforwarded optional would look to a capability check exactly
+  // like a provider that cannot scope a search at all.
+  it('forwards the project-scoped issue search, resolving the ref to the project path', async () => {
+    const { client, calls } = adapted({
+      [`GET /projects/${PROJECT}/issues?per_page=20&search=crash`]: { body: [] },
+    })
+    expect(client.searchProjectIssues).toBeDefined()
+    await client.searchProjectIssues!(123, ref, { limit: 20, text: 'crash' })
+    expect(calls.at(-1)?.url).toBe(`/projects/${PROJECT}/issues?per_page=20&search=crash`)
+  })
+
   it('throws for App-installation discovery (no single-token equivalent)', async () => {
     const { client } = adapted({})
     await expect(client.getInstallation(1)).rejects.toThrow(/not supported/i)
