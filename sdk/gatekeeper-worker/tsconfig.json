@@ -1,0 +1,16 @@
+{
+  "extends": "../../backend/tsconfig.base.json",
+  "compilerOptions": {
+    // A published library, resolved and emitted for Node's ESM resolver rather than for this
+    // repo's build graph, exactly as the gatekeeper bindings and the TypeScript SDK are. That is
+    // also why relative imports carry `.js`: what wrangler bundles is the emitted `dist`.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "erasableSyntaxOnly": true,
+    // Unlike its `sdk/*` siblings this package runs in ONE place, a Worker isolate, so the
+    // Cloudflare globals (`DurableObjectStub`, `ExportedHandler`, the `cloudflare:workers` module)
+    // are part of the surface it compiles against rather than an ambient extra.
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["src/**/*.ts"]
+}

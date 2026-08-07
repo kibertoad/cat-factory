@@ -2,7 +2,7 @@
   "name": "@cat-factory/deploy-gatekeeper",
   "version": "0.0.0",
   "private": true,
-  "description": "Reference Cloudflare OS Gatekeeper for cat-factory: a credential-holding Worker that exposes the /api/v1 operation table as policy-scoped Cap'n Web capabilities, mints per-OS-user API keys, and turns outbound webhook deliveries into approval cards. Copy this package, point it at your workspace and edit src/policy.config.ts.",
+  "description": "Template Cloudflare OS Gatekeeper deployment for cat-factory: the wrangler config, the policy an operator writes, and three lines of wiring over the published @cat-factory/gatekeeper-worker. Copy this package, point it at your workspace and edit src/policy.config.ts.",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
@@ -12,12 +12,9 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@cat-factory/gatekeeper-bindings": "workspace:*",
-    "@cat-factory/sdk": "workspace:*",
-    "capnweb": "^0.10.0"
+    "@cat-factory/gatekeeper-worker": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.20.1",
     "@cloudflare/workers-types": "^5.20260804.1",
     "typescript": "7.0.2",
     "vitest": "^4.1.10",

@@ -8,7 +8,7 @@
 // answered as a 503 naming the binding an operator has to set, which is the same shape the
 // platform's own unwired-capability refusals take.
 
-import type { GatekeeperState } from './state'
+import type { GatekeeperState } from './state.js'
 
 export interface GatekeeperEnv {
   /** The cat-factory deployment's origin, e.g. `https://cat-factory.example.com`. */

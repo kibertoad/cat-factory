@@ -146,17 +146,19 @@ jobs:
               - 'backend/packages/contracts/src/primitives.ts'
               - 'backend/packages/integrations/src/modules/kubernetes/**'
               - '.github/workflows/ci.yml'
-            # The Cloudflare OS Gatekeeper reference deployment (`test-gatekeeper`) is a CONSUMER of
-            # the published surface, not part of the backend: it depends on `@cat-factory/sdk` and
-            # `@cat-factory/gatekeeper-bindings` exactly as an outside integrator would, and nothing
-            # in `backend/packages` may depend on it. Its lane is its own for the same reason it is
-            # NON-BLOCKING (not in the aggregated `Test` gate, the shape `test-eks` has): the
-            # Cloudflare OS protocol is still moving, and a partner-side breaking change must not
-            # turn this repo's CI red. It runs when the Worker itself changes, or when either half
-            # of the surface it consumes does.
+            # The Cloudflare OS Gatekeeper (`test-gatekeeper`) is a CONSUMER of the published
+            # surface, not part of the backend: `@cat-factory/gatekeeper-worker` and the template
+            # that installs it depend on `@cat-factory/sdk` and `@cat-factory/gatekeeper-bindings`
+            # exactly as an outside integrator would, and nothing in `backend/packages` may depend
+            # on either. This lane is its own for the same reason it is NON-BLOCKING (not in the
+            # aggregated `Test` gate, the shape `test-eks` has): the Cloudflare OS protocol is
+            # still moving, and a partner-side breaking change must not turn this repo's CI red.
+            # What it adds is the workerd suite; the machinery package is a published library, so
+            # its build and typecheck are already gated by `Build & typecheck` like any other.
             gatekeeper:
               - 'deploy/gatekeeper/**'
               - 'sdk/gatekeeper/**'
+              - 'sdk/gatekeeper-worker/**'
               - 'sdk/typescript/**'
               - '.github/workflows/ci.yml'
               - '.github/actions/**'
@@ -1239,12 +1241,12 @@ jobs:
         if: ${{ always() }}
         run: docker rm -f floci || true
 
-  # The Cloudflare OS Gatekeeper reference deployment, in real workerd. NON-BLOCKING (deliberately
-  # NOT in the aggregated `Test` gate's `needs`, the shape `test-eks` and `test-e2e` have): this
-  # Worker tracks a partner protocol that is still moving, and a change on that side must not red
-  # this repo's required check. It needs no database and no cluster (the cat-factory origin it
-  # talks to is a scripted worker bound as the pool's outbound service), so it is a plain install,
-  # build and run.
+  # The Cloudflare OS Gatekeeper, in real workerd: the machinery package's own suite, plus the
+  # template that installs it. NON-BLOCKING (deliberately NOT in the aggregated `Test` gate's
+  # `needs`, the shape `test-eks` and `test-e2e` have): this Worker tracks a partner protocol that
+  # is still moving, and a change on that side must not red this repo's required check. It needs no
+  # database and no cluster (the cat-factory origin it talks to is a scripted worker bound as the
+  # pool's outbound service), so it is a plain install, build and run.
   test-gatekeeper:
     name: Test Gatekeeper (workerd)
     needs: changes
@@ -1270,15 +1272,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # The Worker imports the SDK and the bindings table through their built `dist`.
+      # Both packages import their dependencies through the built `dist`: the machinery imports the
+      # SDK and the bindings table, and the template imports the machinery.
       - name: Build the published surface it consumes
-        run: pnpm exec turbo run build --filter=@cat-factory/gatekeeper-bindings...
+        run: pnpm exec turbo run build --filter=@cat-factory/gatekeeper-worker...
 
       - name: Typecheck
-        run: pnpm exec turbo run typecheck --filter=@cat-factory/deploy-gatekeeper
+        run: >-
+          pnpm exec turbo run typecheck
+          --filter=@cat-factory/gatekeeper-worker --filter=@cat-factory/deploy-gatekeeper
 
       - name: Gatekeeper tests
-        run: pnpm exec turbo run test:run --filter=@cat-factory/deploy-gatekeeper
+        run: >-
+          pnpm exec turbo run test:run
+          --filter=@cat-factory/gatekeeper-worker --filter=@cat-factory/deploy-gatekeeper
 
   # Single aggregated status named "Test" so branch protection can require one
   # check regardless of the job/shard layout. Fails unless every test job passed OR was

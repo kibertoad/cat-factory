@@ -5,7 +5,7 @@ import {
   PARKED_DECISION_CARD_TYPES,
   readDelivery,
   SUBSCRIBED_CARD_TYPES,
-} from '../src/webhook/delivery'
+} from '../src/webhook/delivery.js'
 
 function notification(
   overrides: { notification?: Record<string, unknown> } & Record<string, unknown> = {},

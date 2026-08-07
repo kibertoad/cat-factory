@@ -19,9 +19,14 @@
 // granted `decisions_approve_step` cannot approve through this route either. The answer flow gets
 // no privilege of its own.
 
-import { answererFor, type AnswerFields, type DecisionVerb, type LiveDecision } from './decisions'
-import { GatekeeperError } from './errors'
-import type { ApprovalCard } from './state'
+import {
+  answererFor,
+  type AnswerFields,
+  type DecisionVerb,
+  type LiveDecision,
+} from './policy/decisions.js'
+import { GatekeeperError } from './errors.js'
+import type { ApprovalCard } from './state.js'
 
 export interface AnswerInput extends AnswerFields {
   /** The verb, as the kind's answerer names it (`approve`, `reply`, `resolve`, …). */

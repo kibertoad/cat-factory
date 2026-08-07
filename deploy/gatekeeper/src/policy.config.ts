@@ -1,10 +1,10 @@
 // THE FILE AN OPERATOR EDITS.
 //
-// Everything else in this package is machinery; this is the deployment's actual governance
-// decision, kept in source rather than in a var because it is the thing a reviewer should see in
-// a diff. Three tiers are shipped as a starting point. They are examples, not defaults you should
-// keep: the names, the grants and above all `defaultTier` describe ONE way of pairing an OS
-// workspace with a cat-factory workspace, and yours will differ.
+// The machinery lives in `@cat-factory/gatekeeper-worker`; this is the deployment's actual
+// governance decision, kept in source rather than in a var because it is the thing a reviewer
+// should see in a diff. Three tiers are shipped as a starting point. They are examples, not
+// defaults you should keep: the names, the grants and above all `defaultTier` describe ONE way of
+// pairing an OS workspace with a cat-factory workspace, and yours will differ.
 //
 // Two properties are worth preserving whatever you change:
 //
@@ -15,8 +15,9 @@
 //     ACTOR, so it is also the blast radius of that actor's credential if the OS side is
 //     compromised. `compilePolicy` refuses a grant above it rather than letting the two drift.
 
-import { DECISION_BINDINGS } from './decisions'
-import type { GatekeeperPolicy } from './policy'
+// The `/policy` entry point rather than the package root: it carries the same vocabulary without
+// pulling in the Worker runtime, so this file (and the test beside it) loads anywhere.
+import { DECISION_BINDINGS, type GatekeeperPolicy } from '@cat-factory/gatekeeper-worker/policy'
 
 /**
  * The everyday delivery loop: file work, start it, watch it, stop it.

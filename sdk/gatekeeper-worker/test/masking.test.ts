@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyMask, MASKED } from '../src/masking'
+import { applyMask, MASKED } from '../src/masking.js'
 
 describe('applyMask', () => {
   it('replaces a masked leaf rather than removing it', () => {

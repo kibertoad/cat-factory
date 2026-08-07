@@ -15,8 +15,8 @@ import {
   DECISION_BINDINGS,
   DECISION_KEY_SCOPE,
   type DecisionAnswerer,
-} from '../src/decisions'
-import { GatekeeperError } from '../src/errors'
+} from '../src/policy/decisions.js'
+import { GatekeeperError } from '../src/errors.js'
 
 function answerer(kind: string): DecisionAnswerer {
   const found = answererFor(kind)

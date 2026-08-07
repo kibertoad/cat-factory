@@ -6,9 +6,9 @@
 // hard to vary end to end (each needs its own scripted run) and trivial to vary here.
 
 import { describe, expect, it } from 'vitest'
-import { answerCard, type DecisionListShape } from '../src/approvals'
-import { GatekeeperError } from '../src/errors'
-import type { ApprovalCard } from '../src/state'
+import { answerCard, type DecisionListShape } from '../src/approvals.js'
+import { GatekeeperError } from '../src/errors.js'
+import type { ApprovalCard } from '../src/state.js'
 
 const CARD: ApprovalCard = {
   cardId: 'ntf_1',

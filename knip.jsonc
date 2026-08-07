@@ -179,11 +179,20 @@
     "deploy/backend": { "entry": ["src/**/*.ts"] },
     "deploy/node": { "entry": ["src/**/*.ts"] },
     "deploy/local": { "entry": ["src/**/*.ts"] },
-    // `src/index.ts` is the Worker entry and the specs are the second, which is also why `project`
-    // is stated: the default (`**/*`) would sweep in `vitest.config.ts` and the fake origin, and
-    // neither is source this analysis has anything to say about.
+    // The Gatekeeper template: the Worker entry, the policy it wires, and the policy's own test.
+    // `src/index.ts` is knip's own default entry and the vitest plugin finds the suite, so the
+    // only thing worth stating is that `src/**` is the project (the default would sweep in
+    // `vitest.config.ts`, which is configuration rather than source this analysis can speak to).
     "deploy/gatekeeper": {
-      "entry": ["src/index.ts", "test/**/*.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"],
+    },
+    // The Gatekeeper machinery. `src/index.ts` is the published entry and the specs are the
+    // second, which is also why `project` is stated: the default (`**/*`) would sweep in
+    // `vitest.config.ts` and the fake origin, and neither is source this analysis has anything to
+    // say about. `src/policy/index.ts` is the second published entry (`./policy`), which nothing
+    // inside the package has to import for it to be part of the surface.
+    "sdk/gatekeeper-worker": {
+      "entry": ["src/index.ts", "src/policy/index.ts", "test/**/*.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"],
       // The vitest config reads `./test/fake-cat-factory.mjs` relative to cwd, which fails when
       // knip loads it from the repo root, and its test entries are covered by the explicit

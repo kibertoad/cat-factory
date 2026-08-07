@@ -2,17 +2,26 @@
 //
 // It also holds the flows that are neither pure policy nor pure transport: enrolling this
 // Gatekeeper as an outbound webhook endpoint, taking delivery of one, and retiring an actor.
+//
+// The POLICY arrives as an argument, never as an import. This package is the base a deployment
+// installs; the policy is the one thing that deployment writes, so a `policy.config.ts` this
+// module reached for would be a file the base owns and the operator cannot replace without
+// forking it.
 
 import { CatFactoryClient } from '@cat-factory/sdk'
-import { buildCapability } from './capability'
-import { requireVar, type GatekeeperEnv } from './env'
-import { GatekeeperError } from './errors'
-import { KeyBroker, type Actor } from './keys'
-import { compilePolicy, tierForActor, type CompiledPolicy } from './policy'
-import { POLICY } from './policy.config'
-import type { GatekeeperState } from './state'
-import { cardEffectOf, readDelivery, SUBSCRIBED_CARD_TYPES } from './webhook/delivery'
-import { verifyDelivery, type VerificationResult } from './webhook/signature'
+import { buildCapability } from './capability.js'
+import { requireVar, type GatekeeperEnv } from './env.js'
+import { GatekeeperError } from './errors.js'
+import { KeyBroker, type Actor } from './keys.js'
+import {
+  compilePolicy,
+  tierForActor,
+  type CompiledPolicy,
+  type GatekeeperPolicy,
+} from './policy/compile.js'
+import type { GatekeeperState } from './state.js'
+import { cardEffectOf, readDelivery, SUBSCRIBED_CARD_TYPES } from './webhook/delivery.js'
+import { verifyDelivery, type VerificationResult } from './webhook/signature.js'
 
 /** Identifies this integration in the deployment's logs, beside the SDK's own version. */
 const USER_AGENT = 'cat-factory-gatekeeper'
@@ -56,9 +65,16 @@ export class Gatekeeper {
     })
   }
 
-  /** Assemble, compiling the policy. Throws `PolicyError` on a policy an operator has to fix. */
-  static create(env: GatekeeperEnv): Gatekeeper {
-    return new Gatekeeper(env, compilePolicy(POLICY))
+  /**
+   * Assemble against the deployment's own policy, compiling it.
+   *
+   * Throws a `PolicyError` on a policy an operator has to fix, and a `ConfigError` on a binding
+   * they have not set. Both are refusals the request path answers as a 503 naming the cause, which
+   * is why the compile happens per assembly rather than once at module load: a Worker whose policy
+   * threw while its module evaluated serves nothing at all, not even the refusal that says why.
+   */
+  static create(env: GatekeeperEnv, policy: GatekeeperPolicy): Gatekeeper {
+    return new Gatekeeper(env, compilePolicy(policy))
   }
 
   /** Whether the presented bearer token is this Gatekeeper's own. */
