@@ -19,7 +19,9 @@ A task type carrying only `presentation` is still just a work-item classificatio
 a card). The three fields above are what turn it into an operation.
 
 > The design record, including the alternatives rejected and the slices still open, is
-> [`docs/initiatives/reusable-operations.md`](../../docs/initiatives/reusable-operations.md).
+> [`docs/initiatives/reusable-operations.md`](../../docs/initiatives/reusable-operations.md), and
+> [ADR 0040](./adr/0040-deployment-extension-seam-reachability.md) records what an org build outside
+> this repo could not reach when it registered one against the published packages.
 > Related: [`custom-agents.md`](./custom-agents.md) (the extension trust model these
 > registrations share), [`initiative-presets.md`](./initiative-presets.md) (the vehicle when
 > the work must be PLANNED and decomposed), and
@@ -117,8 +119,18 @@ in the other and one validator covers both.
 
 - **Types a task type admits**: `text`, `textarea`, `number`, `select`, `checkbox`,
   `checkbox-group`, `path`. Each field may carry `help`, `placeholder`, `required`, `options`,
-  `default` / `defaultValues`, `maxLength`, `min` / `max`, and a single-condition
-  `showWhen: { key, equals? | includes? }`.
+  `default` / `defaultValues`, `maxLength`, `min` / `max`, a single-condition
+  `showWhen: { key, equals? | includes? }`, and a `section` caption.
+- **`section` groups a long form and does nothing else.** An operation that collects a dozen fields,
+  each of which changes what the agents do, reads as one undifferentiated column; a caption above a
+  run of related fields fixes that. It is PRESENTATION: validation, what is frozen, and the prompt
+  fold are all unchanged, so moving a field between sections can never change what the platform does
+  with its answer. Declare a section's fields CONSECUTIVELY (case and spacing are folded, as in the
+  picker's category rows): boot refuses a section a filled form could caption TWICE, because the
+  renderer keeps your declaration order rather than repairing it. What boot judges is REACHABILITY,
+  not the order of the declared list, so a section interleaved only with a MUTUALLY EXCLUSIVE branch
+  is fine and is the normal way to write a branching form (each branch's fields beside the picker
+  they qualify). A section whose every field is hidden by `showWhen` renders no caption at all.
 - **`password` is excluded by construction.** A collected value is folded into prompts, projected
   onto the board snapshot and captured in agent-context telemetry. A capability whose agents need
   a credential declares it BY NAME against the per-workspace capability-credential store, where
@@ -300,15 +312,16 @@ about a prospective run. A bare `pipelineRepository.get` on a run-adjacent path 
 that boot ERRORS on anything fully knowable from the registration and WARNS only where it
 structurally cannot see the answer.
 
-| Code                                | Severity | Cause                                                                              |
-| ----------------------------------- | -------- | ---------------------------------------------------------------------------------- |
-| `task_type_not_namespaced`          | error    | the id is not `<ns>:<name>`, so it collides with the built-in picklist             |
-| `task_type_form_panel_invalid`      | error    | `formPanel` is not a namespaced id                                                 |
-| `task_type_unknown_pipeline`        | error    | `defaultPipelineId` resolves to neither a built-in nor a registered pipeline       |
-| `task_type_field_duplicate`         | error    | the form declares one field `key` twice                                            |
-| `task_type_field_no_options`        | error    | a `select` / `checkbox-group` with no options, so the form renders an empty picker |
-| `task_type_field_unknown_condition` | error    | a `showWhen` gating a field on a key the form does not declare, so it never shows  |
-| `task_type_unknown_fragment`        | **warn** | a `defaultFragmentIds` id the CODE pool does not resolve                           |
+| Code                                  | Severity | Cause                                                                               |
+| ------------------------------------- | -------- | ----------------------------------------------------------------------------------- |
+| `task_type_not_namespaced`            | error    | the id is not `<ns>:<name>`, so it collides with the built-in picklist              |
+| `task_type_form_panel_invalid`        | error    | `formPanel` is not a namespaced id                                                  |
+| `task_type_unknown_pipeline`          | error    | `defaultPipelineId` resolves to neither a built-in nor a registered pipeline        |
+| `task_type_field_duplicate`           | error    | the form declares one field `key` twice                                             |
+| `task_type_field_no_options`          | error    | a `select` / `checkbox-group` with no options, so the form renders an empty picker  |
+| `task_type_field_unknown_condition`   | error    | a `showWhen` gating a field on a key the form does not declare, so it never shows   |
+| `task_type_field_section_interleaved` | error    | a `section` split by a field that can show beside both halves, so it captions twice |
+| `task_type_unknown_fragment`          | **warn** | a `defaultFragmentIds` id the CODE pool does not resolve                            |
 
 The fragment check is the one warning because both causes are live: a typo, or an
 account/workspace-tier id, which merges per workspace at run time and is invisible at boot. The

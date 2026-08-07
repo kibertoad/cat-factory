@@ -488,6 +488,7 @@ currently open and what each one is trying to change.
 - [0036: In-app tutorial tours](./backend/docs/adr/0036-in-app-tutorials.md)
 - [0037: Role-scoped merge policy and sandboxed runs](./backend/docs/adr/0037-role-scoped-merge-policy.md)
 - [0039: Role-scoped submission allowlists per change class](./backend/docs/adr/0039-role-scoped-submission-allowlists.md)
+- [0040: Deployment extension seams are reachable from the supported entry point](./backend/docs/adr/0040-deployment-extension-seam-reachability.md)
 
 ## Deployment
 

@@ -108,7 +108,13 @@ const API_PREFIX = '/api/v1'
 // two codes to branch on. The reason VOCABULARY is part of the stable surface, which is why a new
 // member is a version step at all, and why `public-api.md` names both codes rather than describing
 // the refusal only in prose. 1.18.0 is main's published number as of this branch's last merge.
-const API_VERSION = '1.19.0'
+// 1.20.0, not 1.19.0: a descriptor field on `GET /api/v1/task-types` may carry an optional `section`,
+// the grouping caption a long operation form is rendered under. Additive, and inert for a headless
+// caller: it groups nothing the create call validates, so a client that ignores it fills exactly the
+// same bag as before, and one that renders a form gains the author's own grouping. 1.19.0 is main's
+// published number as of this branch's last merge; re-read this line after any merge rather than
+// trusting that the VERSION auto-merged clean.
+const API_VERSION = '1.20.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

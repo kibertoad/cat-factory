@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import type { CustomTaskType } from '@cat-factory/kernel'
-import type { InitiativePresetDescriptor, InitiativePresetField } from '@cat-factory/contracts'
+import type {
+  DescriptorField,
+  InitiativePresetDescriptor,
+  InitiativePresetField,
+} from '@cat-factory/contracts'
 import {
   InitiativePresetRegistry,
   defaultGateRegistry,
@@ -70,15 +74,39 @@ describe('deployment-registered prompt fragments', () => {
   })
 })
 
-describe('custom task types (reusable operations)', () => {
-  const base = {
-    presentation: {
-      label: 'Introduce API',
-      icon: 'i-lucide-plug',
-      color: '#0ea5e9',
-      description: 'Expose functionality over HTTP.',
+/** The presentation half every custom-task-type case below shares, spread over its own fields. */
+const TASK_TYPE_BASE = {
+  presentation: {
+    label: 'Introduce API',
+    icon: 'i-lucide-plug',
+    color: '#0ea5e9',
+    description: 'Expose functionality over HTTP.',
+  },
+}
+
+/**
+ * Boot problems for ONE registered custom task type. Module-scope because the two describes below
+ * split its reference-resolution half from its form half and must ask the same question of the same
+ * wiring; the fragment pool is a parameter because only the first of them registers fragments.
+ */
+const taskTypeProblems = (
+  taskType: CustomTaskType,
+  promptFragmentRegistry = defaultPromptFragmentRegistry(),
+) => {
+  const taskTypeRegistry = defaultTaskTypeRegistry()
+  taskTypeRegistry.register(taskType)
+  return collectRegistrationProblems({
+    registries: {
+      agentKindRegistry: defaultAgentKindRegistry(),
+      gateRegistry: defaultGateRegistry(),
+      taskTypeRegistry,
+      promptFragmentRegistry,
     },
-  }
+  })
+}
+
+describe('custom task types (reusable operations)', () => {
+  const base = TASK_TYPE_BASE
   // A FRESH fragment registry per call, so a fragment one case registers cannot leak into another.
   // That used to need an `afterEach` clearing a module global; an injected instance simply cannot
   // outlive its test.
@@ -95,18 +123,8 @@ describe('custom task types (reusable operations)', () => {
     summary: `The ${id} standard.`,
     body: 'BODY',
   })
-  const problemsFor = (taskType: CustomTaskType) => {
-    const taskTypeRegistry = defaultTaskTypeRegistry()
-    taskTypeRegistry.register(taskType)
-    return collectRegistrationProblems({
-      registries: {
-        agentKindRegistry: defaultAgentKindRegistry(),
-        gateRegistry: defaultGateRegistry(),
-        taskTypeRegistry,
-        promptFragmentRegistry,
-      },
-    })
-  }
+  const problemsFor = (taskType: CustomTaskType) =>
+    taskTypeProblems(taskType, promptFragmentRegistry)
 
   it('resolves defaultFragmentIds against the code pool without complaint', () => {
     promptFragmentRegistry.register({
@@ -318,6 +336,28 @@ describe('custom task types (reusable operations)', () => {
     expect(warned).toContain('task_type_unknown_fragment')
   })
 
+  it('still ERRORS on a defaultPipelineId that resolves to nothing', () => {
+    // The pipeline reference is a different bar from the fragment one: an unknown id means the
+    // created task silently falls back to the workspace's positional default pipeline, and
+    // nothing at run time can tell that apart from a deliberate choice.
+    const problems = problemsFor({
+      ...base,
+      taskType: 'org:introduce-api',
+      defaultPipelineId: 'pl_nope',
+    })
+    expect(problems[0]?.severity).toBe('error')
+    expect(problems[0]?.code).toBe('task_type_unknown_pipeline')
+  })
+})
+
+// The FORM half of a custom task type's registration, split from the reference-resolution half above
+// when the two together pushed one describe past its function-length budget. A cohesive cut rather
+// than an arbitrary one: every test above asks whether the ids a registration NAMES resolve, and
+// every test here asks whether the form it DECLARES can be filled and rendered.
+describe('custom task type create forms', () => {
+  const base = TASK_TYPE_BASE
+  // No fragment pool: nothing here NAMES a fragment, so each call gets a fresh empty one.
+  const problemsFor = (taskType: CustomTaskType) => taskTypeProblems(taskType)
   it('ERRORS on a create form that structurally cannot be filled', () => {
     // The three ways the richer field vocabulary lets a descriptor break itself, each of which
     // fails silently in the form rather than anywhere a test or a user could name.
@@ -411,17 +451,84 @@ describe('custom task types (reusable operations)', () => {
     ).toEqual([])
   })
 
-  it('still ERRORS on a defaultPipelineId that resolves to nothing', () => {
-    // The pipeline reference is a different bar from the fragment one: an unknown id means the
-    // created task silently falls back to the workspace's positional default pipeline, and
-    // nothing at run time can tell that apart from a deliberate choice.
-    const problems = problemsFor({
+  it('ERRORS on a section declared in two places, and accepts a grouped form', () => {
+    // Grouping is presentation, and this is still an error, because neither rendering is honest: the
+    // renderer preserves declaration order, so the caption appears TWICE (reading as a platform
+    // fault rather than as the declaration it is), and merging the two runs would move a field away
+    // from where its author wrote it. Knowable from the registration, so boot is where it can be
+    // fixed. Folded on case and spacing, exactly as the renderer cuts the runs, so a case-variant
+    // re-declaration cannot pass as a distinct section.
+    const interleaved = problemsFor({
       ...base,
       taskType: 'org:introduce-api',
-      defaultPipelineId: 'pl_nope',
+      fields: [
+        { key: 'style', label: 'Style', type: 'text', section: 'Shape' },
+        { key: 'dir', label: 'Directory', type: 'path', section: 'Placement' },
+        { key: 'verb', label: 'Verb', type: 'text', section: 'shape' },
+      ],
     })
-    expect(problems[0]?.severity).toBe('error')
-    expect(problems[0]?.code).toBe('task_type_unknown_pipeline')
+    expect(interleaved[0]?.severity).toBe('error')
+    expect(interleaved[0]?.code).toBe('task_type_field_section_interleaved')
+    // Named by the spelling the form would render, not the one that broke it.
+    expect(interleaved[0]?.message).toContain('"Shape"')
+
+    expect(
+      problemsFor({
+        ...base,
+        taskType: 'org:introduce-api',
+        fields: [
+          { key: 'entity', label: 'Entity', type: 'text' },
+          { key: 'style', label: 'Style', type: 'text', section: 'Shape' },
+          { key: 'verb', label: 'Verb', type: 'text', section: 'Shape' },
+          { key: 'dir', label: 'Directory', type: 'path', section: 'Placement' },
+        ],
+      }),
+    ).toEqual([])
+  })
+
+  it('does NOT refuse a section interleaved only with a mutually exclusive branch', () => {
+    // The refusal is about what a form can be made to PRINT, not about the order of the declared
+    // list, because the renderer applies `showWhen` before it cuts the runs. A branching form is
+    // written exactly this way (each branch's fields beside the picker they qualify), so reading
+    // contiguity off the flat list would fail boot outright over a form no user can break.
+    expect(
+      problemsFor({
+        ...base,
+        taskType: 'org:introduce-api',
+        fields: [
+          {
+            key: 'kind',
+            label: 'Kind',
+            type: 'select',
+            options: [
+              { value: 'http', label: 'HTTP' },
+              { value: 'cli', label: 'CLI' },
+            ],
+          },
+          {
+            key: 'method',
+            label: 'Method',
+            type: 'text',
+            section: 'Endpoint',
+            showWhen: { key: 'kind', equals: 'http' },
+          },
+          {
+            key: 'argv',
+            label: 'Argv',
+            type: 'text',
+            section: 'Command',
+            showWhen: { key: 'kind', equals: 'cli' },
+          },
+          {
+            key: 'timeout',
+            label: 'Timeout',
+            type: 'number',
+            section: 'Endpoint',
+            showWhen: { key: 'kind', equals: 'http' },
+          },
+        ],
+      }),
+    ).toEqual([])
   })
 })
 
@@ -474,6 +581,16 @@ describe('initiative presets: the OTHER descriptor-driven form', () => {
         { key: 'root', label: 'Root again', type: 'text' },
       ])[0]?.code,
     ).toBe('initiative_preset_field_duplicate')
+
+    // The grouping fault reaches this surface through the same checker, so a preset cannot declare a
+    // section the create modal would caption twice.
+    expect(
+      problemsFor([
+        { key: 'scope', label: 'Scope', type: 'text', section: 'Scope' },
+        { key: 'root', label: 'Root', type: 'path' },
+        { key: 'depth', label: 'Depth', type: 'number', section: 'Scope' },
+      ])[0]?.code,
+    ).toBe('initiative_preset_field_section_interleaved')
   })
 
   it('is silent on a well-formed form, and on the built-in presets that ride along', () => {
@@ -494,5 +611,88 @@ describe('initiative presets: the OTHER descriptor-driven form', () => {
         },
       }).filter((problem) => problem.code.startsWith('initiative_preset_')),
     ).toEqual([])
+  })
+})
+
+// The THIRD surface that declares a descriptor form, and the one that reads least like one: a gate
+// declares its per-step parameters as an OPTION on `GateRegistry.register`, so nothing at the call
+// site says "descriptor form". It renders through the same `DescriptorFields` component the other two
+// do, and so it fails the same ways, which is why it is held to the same bar by the same checker
+// rather than by a copy or by nothing.
+describe('gate config forms: the third descriptor-driven form', () => {
+  const problemsFor = (configFields: DescriptorField[]) => {
+    const gateRegistry = defaultGateRegistry()
+    gateRegistry.register(
+      'license-check',
+      () => ({
+        kind: 'license-check',
+        helperKind: 'ci-fixer',
+        wired: () => true,
+        unwiredOutput: 'skipped',
+        probe: async () => ({ status: 'pass', headSha: null }),
+        onExhausted: async () => ({ error: 'spent' }),
+      }),
+      { configFields },
+    )
+    return collectRegistrationProblems({
+      registries: { agentKindRegistry: defaultAgentKindRegistry(), gateRegistry },
+    }).filter((problem) => problem.code.startsWith('gate_field_'))
+  }
+
+  it('ERRORS on each way a gate form cannot be filled, naming the gate', () => {
+    const duplicate = problemsFor([
+      { key: 'minScore', label: 'Minimum score', type: 'number' },
+      { key: 'minScore', label: 'Minimum score again', type: 'text' },
+    ])
+    expect(duplicate.map((p) => p.code)).toEqual(['gate_field_duplicate'])
+    expect(duplicate[0]?.severity).toBe('error')
+    // Named by the REGISTRATION, because that is the only place it can be fixed: the pipeline author
+    // who meets the broken form did not write it and cannot repair it.
+    expect(duplicate[0]?.message).toContain('license-check')
+
+    expect(
+      problemsFor([{ key: 'tier', label: 'Tier', type: 'select' }]).map((p) => p.code),
+    ).toEqual(['gate_field_no_options'])
+    expect(
+      problemsFor([
+        { key: 'strict', label: 'Strict', type: 'text', showWhen: { key: 'nope', equals: 'a' } },
+      ]).map((p) => p.code),
+    ).toEqual(['gate_field_unknown_condition'])
+    expect(
+      problemsFor([
+        {
+          key: 'tier',
+          label: 'Tier',
+          type: 'select',
+          default: 'gold',
+          options: [{ value: 'bronze', label: 'Bronze' }],
+        },
+      ]).map((p) => p.code),
+    ).toEqual(['gate_field_default_outside_options'])
+  })
+
+  it('ERRORS on a section its config form would caption twice', () => {
+    // The gap this suite was added for. Gate config forms gained `section` for free by riding the
+    // shared vocabulary, and rendered it through the shared component, with no check behind it: a
+    // gate could boot clean and print the exact duplicate caption the platform calls its own fault.
+    expect(
+      problemsFor([
+        { key: 'minScore', label: 'Minimum score', type: 'number', section: 'Thresholds' },
+        { key: 'notify', label: 'Notify', type: 'checkbox' },
+        { key: 'maxScore', label: 'Maximum score', type: 'number', section: 'thresholds' },
+      ]).map((p) => p.code),
+    ).toEqual(['gate_field_section_interleaved'])
+  })
+
+  it('is silent on a well-formed form, and on a gate that declares none', () => {
+    expect(
+      problemsFor([
+        { key: 'minScore', label: 'Minimum score', type: 'number', section: 'Thresholds' },
+        { key: 'maxScore', label: 'Maximum score', type: 'number', section: 'Thresholds' },
+        { key: 'notify', label: 'Notify', type: 'checkbox' },
+      ]),
+    ).toEqual([])
+    // A gate declaring no fields is not a subject here rather than a subject with an empty form.
+    expect(problemsFor([])).toEqual([])
   })
 })

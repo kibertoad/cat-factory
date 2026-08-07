@@ -1,4 +1,4 @@
-import { descriptorFieldDefaults } from '@cat-factory/contracts'
+import { descriptorFieldDefaults, descriptorFieldSections } from '@cat-factory/contracts'
 import type { DescriptorField, DescriptorFieldValue, DescriptorFieldValues } from '~/types/domain'
 
 // Form-side helpers over the shared descriptor-field vocabulary (`contracts/src/form-fields.ts`),
@@ -73,6 +73,45 @@ export function setDescriptorCheckbox(
 export function descriptorGroupValue(values: DescriptorFieldValues, key: string): string[] {
   const value = values[key]
   return Array.isArray(value) ? value : []
+}
+
+/** One row of a rendered descriptor form: a field, plus the section chrome that precedes it. */
+export interface DescriptorFormRow {
+  /** The field to render. Its `key` is the row's identity in the keyed diff. */
+  field: DescriptorField
+  /** The caption to print above this field, set only on the field that OPENS a captioned run. */
+  caption?: string
+  /** Whether this field opens a run with another run before it, i.e. needs the between-runs gap. */
+  startsGroup: boolean
+}
+
+/**
+ * A descriptor form reduced to a FLAT list of rows: the shared `descriptorFieldSections` grouping,
+ * with each run's caption carried on the field that opens it rather than on a wrapper around it.
+ *
+ * Flat is the whole point, and it is a correctness rule rather than a layout preference. Run
+ * membership is DERIVED state that changes as `showWhen` reveals and hides fields, while a field's
+ * identity does not. Rendering the runs as nested `v-for`s re-parents a field the moment a boundary
+ * moves, and Vue cannot move a node between two parents: it unmounts and remounts it. The field being
+ * remounted is typically the one being TYPED INTO, because typing into a `showWhen` trigger is what
+ * moved the boundary, so the input loses focus, caret and any in-flight IME composition mid-keystroke.
+ * Keeping every field a sibling under one parent, keyed by `field.key`, makes that a MOVE, which
+ * preserves the live input: the behaviour the flat column had before sections existed.
+ *
+ * Presentation, so it lives here rather than in contracts: what a caption spans is the shared rule,
+ * and this is only how the SPA lays that out.
+ */
+export function descriptorFormRows(
+  fields: readonly DescriptorField[],
+  values: DescriptorFieldValues,
+): DescriptorFormRow[] {
+  return descriptorFieldSections(fields, values).flatMap((group, groupIndex) =>
+    group.fields.map((field, fieldIndex) => ({
+      field,
+      ...(fieldIndex === 0 && group.section !== undefined ? { caption: group.section } : {}),
+      startsGroup: fieldIndex === 0 && groupIndex > 0,
+    })),
+  )
 }
 
 /** One option toggled on/off in a `checkbox-group` field's value (deduped, order-preserving). */
