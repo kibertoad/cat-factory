@@ -386,7 +386,7 @@ export type DebugToolCallKindInsight = v.InferOutput<typeof debugToolCallKindIns
  * Both breakdowns are folds over ONE aggregate, so they total identically to each other and to
  * `totals` by construction, and both lead with the most-failed row: a run's busiest tool is
  * almost never its broken one, and the caller reading this is looking for the broken one.
- * `GET /debug/runs/:runId/tool-calls?ok=false` is the drill-down into any row of it.
+ * `GET /debug/runs/:runId/tool-calls?outcome=error` is the drill-down into any row of it.
  */
 export const debugToolCallRollupSchema = v.object({
   totals: debugToolCallTotalsSchema,
