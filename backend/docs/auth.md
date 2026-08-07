@@ -371,9 +371,9 @@ that should reach this deployment, checked in that order:
    operator wrote, and releasing the claim is their fix.
 
 Group memberships are read on **every** sign-in, so removing someone from a group
-blocks their next login. As with every other method, a session already minted lapses
-at its own expiry rather than being revoked (see the session-revocation note above),
-which is the gap between "disabled in the IdP" and "locked out here".
+blocks their next login, and their existing sessions are ended too (see
+[Session revocation](#session-revocation) below, including why a refusal caused by a
+claim that simply never arrived is deliberately not treated as an offboarding).
 
 ### GitHub: login + org allowlists
 
@@ -419,9 +419,9 @@ the `read:org` scope, so the login flow requests `read:user read:org` whenever
 privilege). For a GitHub App, ensure the app is permitted that scope; a classic
 OAuth App needs no pre-registration of scopes.
 
-Sessions are stateless and bounded by expiry (`AUTH_SESSION_TTL_HOURS`), so
-removing a user or org from an allowlist blocks **new** logins immediately but
-does not revoke a session already minted; it lapses at its own expiry.
+Sessions are stateless and bounded by expiry (`AUTH_SESSION_TTL_HOURS`). Removing
+a user or org from an allowlist blocks **new** logins immediately; the sessions
+they already hold are ended through revocation (below), not by the allowlist edit.
 
 Example (`wrangler.toml [vars]`):
 
@@ -433,6 +433,81 @@ AUTH_ALLOWED_ORGS   = "acme-inc,acme-labs"
 # Google/password: let anyone with a company email self-signup.
 AUTH_ALLOWED_EMAIL_DOMAINS = "acme.com,acme-labs.com"
 ```
+
+### Session revocation
+
+A session token is a signed claim, not a row, so there is nothing to delete to end
+one. Each `users` row therefore carries a **session generation**: the token is
+stamped with the value current at mint time, and verification compares the claim
+against the row. Advancing the row invalidates every token minted before it —
+one write, nothing to enumerate, and no blocklist table to grow and prune.
+
+Three things advance it:
+
+- **`POST /auth/sessions/revoke-all`** — self-serve "sign out everywhere". The
+  caller's current token is invalidated along with the rest (somebody reaching for
+  this has usually lost a device and cannot say which session to keep), so the
+  response carries a replacement token minted from the new generation.
+- **`POST /accounts/:accountId/members/:userId/revoke-sessions`** — admin-forced,
+  for offboarding a member or responding to a lost laptop. It withdraws
+  authentication only: membership and roles are untouched, because the RBAC gate
+  re-reads those on the next request and a role change needs no revocation. It is
+  recorded in the account audit log as `account.member_sessions_revoked`.
+- **An SSO sign-in the directory now refuses**, and only when the directory is what
+  refused it. This is what makes the offboarding promise real: re-reading group
+  membership on sign-in only stops a NEW session, and the bearer they already hold
+  would otherwise stay valid until it expired. Best-effort and logged, never
+  allowed to turn a correct refusal into a 500 (`sessionsRevoked` on the
+  `sso.refused` line reports which of the four outcomes occurred).
+
+**A refusal only revokes when it is EVIDENCE of something.** `judgeSsoAdmission`
+returns not just which rule refused but what the refusal is evidence of
+(`SsoRefusalEvidence`), and the two are not the same question:
+
+- `directory` — a claim the IdP DID release positively excludes them: groups were
+  released and none match, or a verified email was released whose domain is not
+  allowed. That is the directory saying they no longer belong here, and it revokes.
+- `indeterminate` — the claim the rule needed never arrived. A user removed from
+  every group, a dropped `groups` scope, a renamed `groupsClaim` and a provider
+  that stopped marking `email` verified all produce exactly this, and nothing can
+  tell them apart. The login is still refused (fail closed is unchanged); the
+  revocation is withheld.
+
+The distinction is not fastidiousness: acting on the second as if it were the first
+turns a configuration regression into a deployment-wide forced sign-out. On the
+release where a scope goes missing, every returning employee is refused, and
+revoking on each of those refusals would cut every live session in the deployment,
+the admin who has to fix the configuration included.
+
+The check costs one read per authenticated request, served through the
+`userSessionGeneration` app cache: a 60-second TTL on Node/local with invalidation
+on every bump, and pass-through on the Worker, whose isolates share no
+invalidation bus (a cached entry there would go on admitting a bearer a peer
+isolate had already revoked). In mothership mode a node resolves it from the
+mothership over the persistence RPC, so revoking a user centrally also stops their
+laptop honouring the session it minted for them.
+
+**A MINT reads past that cache** (`UserService.refreshSessionGeneration`, which
+every login path reaches through `sessionGenerationFor`), and this is the one place
+the bounded stale window is not acceptable. Verification gates a single request and
+the next one re-asks; a mint stamps the value into a bearer that outlives the cache
+entry, so a generation read one bump behind on a replica that missed the
+invalidation issues a token every replica refuses for a full TTL — and the refusal
+SPREADS rather than heals, as the caches that still agreed with it expire. The
+refresh also repopulates the reading replica, so the token it just minted verifies
+there rather than being refused by its own issuer.
+
+Three refusals are deliberate, and each closes a hole the obvious implementation
+leaves open. A token carrying **no generation claim** is refused rather than
+treated as current, so sessions minted before this shipped stop working (everyone
+signs in once more) instead of leaving a permanent bypass. A generation **above**
+the stored value is refused too, not only a stale one, so a restored-from-backup
+database cannot re-admit sessions it had already revoked. And a user the store has
+**no row for** is refused, which is what ends a deleted user's unexpired bearer.
+
+Two boundaries worth knowing: a WebSocket **ticket** already minted stays valid for
+its own short TTL, and machine tokens are a separate audience revoked through their
+own roster (`POST /auth/machine-nodes/:nodeId/revoke`).
 
 ---
 

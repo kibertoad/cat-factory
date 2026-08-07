@@ -24,7 +24,7 @@ import type { Context } from 'hono'
 import { ValidationError } from '@cat-factory/kernel'
 import type { DocumentsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
-import { blockEditActor, mountWorkspacePermission } from '../../http/workspaceAccess.js'
+import { blockEditAuthority, mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -200,7 +200,12 @@ export function documentSourceController(): Hono<AppEnv> {
     const plan = await documents.plannerService.plan(record)
     // The plan comes from an imported document, but the board write is the member's: they asked
     // for the spawn on their own board, so it is judged under their tier (ADR 0037).
-    const result = await documents.linkService.spawn(workspaceId, plan, blockEditActor(c), frameId)
+    const result = await documents.linkService.spawn(
+      workspaceId,
+      plan,
+      blockEditAuthority(c),
+      frameId,
+    )
     return c.json({ plan, result }, 201)
   })
 

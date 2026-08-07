@@ -537,6 +537,9 @@ function startBackgroundSweepers(deps: {
       // Both operator-observability projections live in the main DB beside `agent_runs`.
       gateOutcomeRepository: repos.gateOutcomeRepository,
       platformMetricsRepository: repos.platformMetricsRepository,
+      // The account audit log, in its own `audit` schema: audit retention is measured in years
+      // and gets its own knob, so it can never be shortened by tuning something else.
+      auditEventRepository: repos.auditEventRepository,
       // The durable cost-attribution rollup: this sweep is its only writer, and prunes it
       // nowhere (see `RetentionRepos`).
       spendRollupRepository: repos.spendRollupRepository,

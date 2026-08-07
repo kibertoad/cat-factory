@@ -66,6 +66,7 @@ function session(overrides: Partial<SessionPayload> = {}): Promise<string> {
     name: 'The Octocat',
     avatarUrl: 'https://example.com/a.png',
     exp: Date.now() + 60_000,
+    gen: 0,
     ...overrides,
   }
   return new HmacSigner(SECRET).sign(payload)

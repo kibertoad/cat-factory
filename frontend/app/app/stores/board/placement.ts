@@ -3,6 +3,7 @@ import { moduleNameInContainer } from '@cat-factory/contracts'
 import { useServicesStore } from '~/stores/services'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { createBoardDependencies } from './dependencies'
+import { moveRefusalKey } from './moveRefusal'
 import type { BoardWriteContext } from './context'
 import { UNDO_WINDOW_MS } from './context'
 
@@ -76,9 +77,13 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
       b.parentId = prevParentId
       b.position = prevPosition
       b.moduleName = prevModuleName
+      // A cross-home drag can be refused on merge-preset grounds, which is a condition the mover
+      // can act on rather than a fault. The backend sends the machine-readable reason and no
+      // translated prose, so map it here; anything else keeps the raw message as the last resort.
+      const refusal = moveRefusalKey(e)
       toast.add({
         title: tr('board.toast.moveFailed'),
-        description: e instanceof Error ? e.message : String(e),
+        description: refusal ? tr(refusal) : e instanceof Error ? e.message : String(e),
         icon: 'i-lucide-triangle-alert',
         color: 'error',
       })

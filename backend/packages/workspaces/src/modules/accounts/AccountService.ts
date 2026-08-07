@@ -16,6 +16,7 @@ import type { AuditRecorder, Clock, IdGenerator } from '@cat-factory/kernel'
 import {
   ConflictError,
   NotFoundError,
+  UnavailableError,
   ValidationError,
   assertFound,
   noopAuditRecorder,
@@ -65,6 +66,17 @@ export interface AccountServiceDependencies {
    * REQUIRED on `CoreDependencies`, so a facade cannot silently run unaudited.
    */
   audit?: AuditRecorder
+  /**
+   * End every session a user currently holds, bound from `UserService.revokeSessions` (the
+   * generation bump plus the cache invalidation that must follow it).
+   *
+   * A bound callback rather than the service itself, so this service depends on the one
+   * CAPABILITY it needs instead of on another service's whole surface — and so the two-step
+   * ordering that makes a revocation coherent stays owned by the one place that knows about the
+   * cache. Optional for standalone unit-testability; absent ⇒ {@link revokeMemberSessions}
+   * refuses rather than reporting a revocation it did not perform.
+   */
+  revokeUserSessions?: (userId: string) => Promise<unknown>
 }
 
 /** The signed-in identity the tenancy decisions are made against. */
@@ -385,6 +397,47 @@ export class AccountService {
       details: { previousRoles: target.roles.join(', '), roles: next.join(', ') },
     })
     return toMember(membership)
+  }
+
+  /**
+   * End every session a member of this account currently holds (admin-only).
+   *
+   * The offboarding lever: it withdraws AUTHENTICATION and nothing else, leaving membership and
+   * roles exactly as they were. Deliberately not folded into a role change — the RBAC gate
+   * re-reads roles on the next request, so a downgrade needs no revocation, and coupling the two
+   * would sign a person out of every board because their role on one was adjusted.
+   *
+   * The target must be a member of THIS account: without that check an admin of any account could
+   * end the sessions of any user on the deployment by guessing an id. `requireMember` 404s
+   * otherwise, so the refusal also does not confirm that the id names anybody.
+   *
+   * Self-revocation is allowed, unlike the self-demotion guard on {@link setMemberRoles}. The two
+   * refusals protect different things: dropping your own admin can leave an account with nobody
+   * able to administer it, whereas signing yourself out is recoverable by signing back in — and
+   * an admin who has just lost a laptop is exactly who needs it.
+   */
+  async revokeMemberSessions(
+    accountId: string,
+    actingUserId: string,
+    targetUserId: string,
+  ): Promise<void> {
+    await this.requireAdmin(accountId, actingUserId)
+    await this.requireMember(accountId, targetUserId)
+    const revoke = this.deps.revokeUserSessions
+    if (!revoke) {
+      throw new UnavailableError('Session revocation is not configured on this deployment')
+    }
+    await revoke(targetUserId)
+    // AFTER the revocation commits, so the log never claims access was withdrawn that was not.
+    // `record` never throws, so a store outage costs the row and never the offboarding.
+    await this.audit.record({
+      accountId,
+      actor: { kind: 'user', userId: actingUserId },
+      action: 'account.member_sessions_revoked',
+      targetType: 'user',
+      targetId: targetUserId,
+      details: {},
+    })
   }
 
   private async ensureMembership(

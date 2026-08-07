@@ -1,3 +1,4 @@
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import type {
   BlockRepository,
   ExecutionEventPublisher,
@@ -165,10 +166,18 @@ export class PostMergeBoardController {
     }
     if (module.id !== task.parentId) {
       const n = blocks.filter((b) => b.parentId === module?.id && b.level === 'task').length
-      await this.host.board.reparent(workspaceId, taskId, {
-        parentId: module.id,
-        position: { x: 16 + (n % 2) * 190, y: 40 + Math.floor(n / 2) * 130 },
-      })
+      await this.host.board.reparent(
+        workspaceId,
+        taskId,
+        {
+          parentId: module.id,
+          position: { x: 16 + (n % 2) * 190, y: 40 + Math.floor(n / 2) * 130 },
+        },
+        // A merged run materialising the module its task named: the engine acting on what the
+        // work produced, with no request and no session behind it, so there is no tier to read.
+        // The move is within the service in any case, which re-decides no merge policy.
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+      )
     }
     // A module node appeared and/or a task changed parent: a hierarchy change spanning two
     // blocks, which no single payload can state, so this stays a coarse refresh. Name the moved

@@ -196,7 +196,7 @@ describe('judgeSsoAdmission', () => {
         identity({ groups: ['marketing'] }),
         config({ requiredGroups: ['engineering'] }),
       ),
-    ).toEqual({ allowed: false, reason: 'group_required' })
+    ).toEqual({ allowed: false, reason: 'group_required', evidence: 'directory' })
   })
 
   it('admits on ANY one of the required groups', () => {
@@ -209,6 +209,7 @@ describe('judgeSsoAdmission', () => {
     expect(judgeSsoAdmission(identity(), config({ allowedEmailDomains: ['other.com'] }))).toEqual({
       allowed: false,
       reason: 'domain_not_allowed',
+      evidence: 'directory',
     })
   })
 
@@ -226,7 +227,7 @@ describe('judgeSsoAdmission', () => {
         readSsoIdentity({ sub: 's' }, config())!,
         config({ allowedEmailDomains: ['acme.com'] }),
       ),
-    ).toEqual({ allowed: false, reason: 'email_required' })
+    ).toEqual({ allowed: false, reason: 'email_required', evidence: 'indeterminate' })
   })
 
   it('refuses an UNVERIFIED email against a domain gate', () => {
@@ -235,7 +236,7 @@ describe('judgeSsoAdmission', () => {
         identity({ email_verified: false }),
         config({ allowedEmailDomains: ['acme.com'] }),
       ),
-    ).toEqual({ allowed: false, reason: 'email_required' })
+    ).toEqual({ allowed: false, reason: 'email_required', evidence: 'indeterminate' })
   })
 
   it('reports the GROUP refusal first when both gates would refuse', () => {
@@ -245,7 +246,37 @@ describe('judgeSsoAdmission', () => {
         identity({ groups: ['marketing'] }),
         config({ requiredGroups: ['engineering'], allowedEmailDomains: ['other.com'] }),
       ),
-    ).toEqual({ allowed: false, reason: 'group_required' })
+    ).toEqual({ allowed: false, reason: 'group_required', evidence: 'directory' })
+  })
+
+  // The `evidence` half of a refusal, which is what decides whether the caller also ends the
+  // sessions the person is already holding. The reason code alone cannot answer it: BOTH cases
+  // below are `group_required`, and they mean opposite things.
+  it('calls a group refusal INDETERMINATE when no groups were released at all', () => {
+    // A user removed from every group and an IdP that stopped releasing the claim (a dropped
+    // scope, a renamed `groupsClaim`) arrive here identically. Revoking on this would turn one
+    // configuration regression into a deployment-wide forced sign-out, so the login is refused
+    // and the irreversible half withheld.
+    expect(
+      judgeSsoAdmission(identity({ groups: [] }), config({ requiredGroups: ['engineering'] })),
+    ).toEqual({ allowed: false, reason: 'group_required', evidence: 'indeterminate' })
+  })
+
+  it('calls a domain refusal DIRECTORY, and the missing-email one INDETERMINATE', () => {
+    // The same split on the other gate: a verified address that WAS released and is outside the
+    // allowlist is the directory excluding them; an address that never arrived says nothing about
+    // the person, only about what the provider is releasing.
+    expect(judgeSsoAdmission(identity(), config({ allowedEmailDomains: ['other.com'] }))).toEqual({
+      allowed: false,
+      reason: 'domain_not_allowed',
+      evidence: 'directory',
+    })
+    expect(
+      judgeSsoAdmission(
+        identity({ email_verified: false }),
+        config({ allowedEmailDomains: ['acme.com'] }),
+      ),
+    ).toEqual({ allowed: false, reason: 'email_required', evidence: 'indeterminate' })
   })
 })
 

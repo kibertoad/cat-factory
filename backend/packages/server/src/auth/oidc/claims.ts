@@ -43,8 +43,34 @@ export interface SsoIdentity {
   groups: string[]
 }
 
-/** Whether a sign-in is admitted, and if not, which rule refused it. */
-export type SsoAdmission = { allowed: true } | { allowed: false; reason: SsoErrorReason }
+/**
+ * What a refusal is EVIDENCE OF, which is a different question from which rule fired.
+ *
+ * Every admission rule here fails closed, and that part is not in dispute. But a refusal is also
+ * read as an OFFBOARDING signal — it is what ends the sessions the person is already holding —
+ * and only one of these two kinds of refusal says anything at all about the person:
+ *
+ *  - `directory` — a claim the IdP DID release positively places them outside the policy: groups
+ *    were released and none match, or a verified email was released and its domain is not
+ *    allowed. The directory has spoken, and "they no longer belong here" is what it said.
+ *  - `indeterminate` — the claim the rule needed was not released at all. This is equally
+ *    consistent with a person removed from every group, a dropped `groups` scope, a renamed
+ *    `groupsClaim`, a userinfo endpoint that stopped answering the claim, and an email the
+ *    provider stopped marking verified. Nothing here can tell those apart, and the difference
+ *    between them is the difference between one person leaving and the entire directory
+ *    integration having regressed.
+ *
+ * The distinction exists because acting on the second as if it were the first turns a login
+ * outage into a deployment-wide forced sign-out: on the release where a scope goes missing, every
+ * returning employee is refused, and every refusal would cut every one of their live sessions,
+ * including those of the admin who has to fix the configuration.
+ */
+export type SsoRefusalEvidence = 'directory' | 'indeterminate'
+
+/** Whether a sign-in is admitted, and if not, which rule refused it and on what evidence. */
+export type SsoAdmission =
+  | { allowed: true }
+  | { allowed: false; reason: SsoErrorReason; evidence: SsoRefusalEvidence }
 
 function str(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : null
@@ -170,6 +196,13 @@ function joinName(claims: Record<string, unknown>): string | null {
  *  2. `allowedEmailDomains` — their email's domain is not listed. A configured domain gate with
  *     NO email released is refused (`email_required`) rather than admitted: admitting would void
  *     a rule the operator wrote, and the fix (release the `email` claim) belongs to them.
+ *
+ * Each refusal also carries what it is EVIDENCE of ({@link SsoRefusalEvidence}), because the
+ * caller does more with a refusal than deny the login: it ends the sessions the person already
+ * holds. Deciding that here rather than at the call site is the point — the reason code alone
+ * cannot answer it (`group_required` is the directory speaking when groups WERE released and
+ * merely a missing claim when they were not), and a caller re-deriving it from the reason string
+ * would have to know which claims this function looked at.
  */
 export function judgeSsoAdmission(
   identity: SsoIdentity,
@@ -177,16 +210,25 @@ export function judgeSsoAdmission(
 ): SsoAdmission {
   if (cfg.requiredGroups.length > 0) {
     const member = identity.groups.some((group) => cfg.requiredGroups.includes(group))
-    if (!member) return { allowed: false, reason: 'group_required' }
+    if (!member) {
+      // Released-but-not-matching is the directory excluding this person. NOTHING released is a
+      // claim we did not receive, and "removed from every group" is indistinguishable from "the
+      // groups scope stopped being granted" — the shape a whole deployment regresses in at once.
+      const evidence = identity.groups.length > 0 ? 'directory' : 'indeterminate'
+      return { allowed: false, reason: 'group_required', evidence }
+    }
   }
   if (cfg.allowedEmailDomains.length > 0) {
     if (!identity.email || !identity.emailVerified) {
-      return { allowed: false, reason: 'email_required' }
+      // Always indeterminate: an absent address and one the provider stopped marking verified
+      // both say nothing about whether this person still belongs to the organisation.
+      return { allowed: false, reason: 'email_required', evidence: 'indeterminate' }
     }
     const at = identity.email.lastIndexOf('@')
     const domain = at < 0 ? '' : identity.email.slice(at + 1)
     if (!cfg.allowedEmailDomains.includes(domain)) {
-      return { allowed: false, reason: 'domain_not_allowed' }
+      // A verified address WAS released and its domain is not one the operator admits.
+      return { allowed: false, reason: 'domain_not_allowed', evidence: 'directory' }
     }
   }
   return { allowed: true }

@@ -147,7 +147,12 @@
       "archived": "הועבר לארכיון: \"{name}\"",
       "restored": "שוחזר: \"{name}\"",
       "archiveFailed": "לא ניתן להעביר את השירות לארכיון",
-      "restoreFailed": "לא ניתן לשחזר את השירות"
+      "restoreFailed": "לא ניתן לשחזר את השירות",
+      "moveRefused": {
+        "relaxes_role_sandbox": "ההרצות של משימה זו מבודדות עבור התפקיד שלך במיקומה הנוכחי, ואילו מדיניות המיזוג שתחול במיקום שאליו אתה מעביר אותה אינה כזו. בקש ממנהל סביבת העבודה להעביר אותה.",
+        "relaxes_role_submission_allowlist": "מדיניות המיזוג במיקום שאליו אתה מעביר את המשימה הייתה מאפשרת לך למזג סוגי שינויים שכאן נמנעים ממך. בקש ממנהל סביבת העבודה להעביר אותה.",
+        "relaxes_role_class_rule": "מדיניות המיזוג במיקום שאליו אתה מעביר את המשימה ממזגת אוטומטית שינויים שכאן אתה נדרש לבדוק. בקש ממנהל סביבת העבודה להעביר אותה."
+      }
     },
     "repoTypes": {
       "service": "שירות",
@@ -2096,7 +2101,9 @@
       },
       "members": {
         "title": "חברים",
-        "empty": "אין חברים עדיין."
+        "empty": "אין חברים עדיין.",
+        "revokeSessions": "ניתוק מכל המכשירים",
+        "sessionsRevoked": "נותק מכל המכשירים"
       },
       "invite": {
         "title": "הזמן חבר צוות",
@@ -2135,7 +2142,8 @@
         "sendInvite": "לא ניתן היה לשלוח הזמנה",
         "revokeInvite": "לא ניתן היה לבטל הזמנה",
         "connectEmail": "לא ניתן היה לחבר שולח אימייל",
-        "disconnectEmail": "לא ניתן היה לנתק שולח אימייל"
+        "disconnectEmail": "לא ניתן היה לנתק שולח אימייל",
+        "revokeSessions": "לא ניתן היה לנתק את החבר"
       },
       "emailNoun": "שליחת האימייל"
     },
@@ -2545,6 +2553,39 @@
     },
     "accountFoundational": {
       "intro": "היכולות המשותפות שהארגון הזה כבר מפעיל - אחסון קבצים, התראות, ביקורת - יחד עם חוזי ה-API שלהן. כל לוח יורש אותן, ולארכיטקט נאמר לצרוך אותן במקום להציע בנייה מחדש. שירותים שהפריסה רושמת בקוד עוברים בירושה גם לכאן, ואפשר לדרוס אותם לפי מזהה או להחריג אותם למטה."
+    },
+    "auditLog": {
+      "title": "יומן ביקורת",
+      "description": "מי שינה מה בחשבון הזה, ומתי. הרשומות נוספות בלבד ולא ניתן לערוך או למחוק אותן.",
+      "empty": "עדיין לא נרשם דבר עבור החשבון הזה.",
+      "loadMore": "טעינת רשומות ישנות יותר",
+      "refresh": "רענון",
+      "retiredAction": "ביצע פעולה שגרסה זו כבר אינה מזהה ({action})",
+      "actors": {
+        "system": "המערכת",
+        "apiKey": "מפתח API ‏{id}"
+      },
+      "values": {
+        "none": "ללא"
+      },
+      "actions": {
+        "accountMemberAdded": "הוסיף את {target} לחשבון בתפקיד {roles}",
+        "accountMemberRolesChanged": "שינה את התפקידים של {target} מ־{previousRoles} ל־{roles}",
+        "accountBudgetChanged": "קבע מגבלת הוצאה חודשית של {limit}",
+        "accountSettingsChanged": "קבע את ספק הענן שכברירת מחדל ל־{defaultCloudProvider}",
+        "accountInvitationCreated": "הזמין את {email} בתפקיד {roles}",
+        "accountInvitationRevoked": "ביטל את ההזמנה עבור {email}",
+        "accountInvitationAccepted": "אישר את ההזמנה עבור {email} בתפקיד {roles}",
+        "accountMemberSessionsRevoked": "ניתק את {target} מכל המכשירים",
+        "workspaceMemberAdded": "הוסיף את {target} ללוח בתפקיד {role}",
+        "workspaceMemberRoleChanged": "שינה את תפקיד הלוח של {target} מ־{previousRole} ל־{role}",
+        "workspaceMemberRemoved": "הסיר את {target} מלוח (היה {role})",
+        "workspaceAccessModeChanged": "קבע את הגישה ללוח ל־{accessMode}"
+      },
+      "errors": {
+        "load": "לא ניתן היה לטעון את יומן הביקורת.",
+        "loadMore": "לא ניתן היה לטעון רשומות ישנות יותר"
+      }
     }
   },
   "settings": {

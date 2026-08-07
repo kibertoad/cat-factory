@@ -147,7 +147,12 @@
       "archived": "\"{name}\" arşivlendi",
       "restored": "\"{name}\" geri yüklendi",
       "archiveFailed": "Hizmet arşivlenemedi",
-      "restoreFailed": "Hizmet geri yüklenemedi"
+      "restoreFailed": "Hizmet geri yüklenemedi",
+      "moveRefused": {
+        "relaxes_role_sandbox": "Bu görevin çalıştırmaları şu anki yerinde rolün için yalıtılmış, taşıdığın yerde geçerli olacak birleştirme ilkesi ise değil. Taşıması için bir çalışma alanı yöneticisine başvur.",
+        "relaxes_role_submission_allowlist": "Taşıdığın yerdeki birleştirme ilkesi, burada sana kapalı olan değişiklik türlerini birleştirmene izin verirdi. Taşıması için bir çalışma alanı yöneticisine başvur.",
+        "relaxes_role_class_rule": "Taşıdığın yerdeki birleştirme ilkesi, burada incelemekle yükümlü olduğun değişiklikleri otomatik birleştiriyor. Taşıması için bir çalışma alanı yöneticisine başvur."
+      }
     },
     "repoTypes": {
       "service": "Servis",
@@ -2096,7 +2101,9 @@
       },
       "members": {
         "title": "Üyeler",
-        "empty": "Henüz üye yok."
+        "empty": "Henüz üye yok.",
+        "revokeSessions": "Tüm cihazlardan çıkış yap",
+        "sessionsRevoked": "Tüm cihazlardan çıkış yapıldı"
       },
       "invite": {
         "title": "Bir takım arkadaşı davet et",
@@ -2135,7 +2142,8 @@
         "sendInvite": "Davet gönderilemedi",
         "revokeInvite": "Davet iptal edilemedi",
         "connectEmail": "E-posta göndericisi bağlanamadı",
-        "disconnectEmail": "E-posta göndericisinin bağlantısı kesilemedi"
+        "disconnectEmail": "E-posta göndericisinin bağlantısı kesilemedi",
+        "revokeSessions": "Üyenin oturumu kapatılamadı"
       },
       "emailNoun": "e-posta gönderimi"
     },
@@ -2545,6 +2553,39 @@
     },
     "accountFoundational": {
       "intro": "Bu kuruluşun hâlihazırda işlettiği ortak yetenekler - dosya depolama, bildirimler, denetim - ve API sözleşmeleri. Her pano bunları devralır ve bir mimara, yeniden inşa önermek yerine bunları kullanması söylenir. Bu dağıtımın kodda kaydettiği hizmetler de buraya devralınır; kimliğe göre geçersiz kılınabilir veya aşağıdan devre dışı bırakılabilir."
+    },
+    "auditLog": {
+      "title": "Denetim günlüğü",
+      "description": "Bu hesapta kimin neyi ne zaman değiştirdiği. Kayıtlar yalnızca eklenir; düzenlenemez veya silinemez.",
+      "empty": "Bu hesap için henüz hiçbir kayıt yok.",
+      "loadMore": "Daha eski kayıtları yükle",
+      "refresh": "Yenile",
+      "retiredAction": "bu sürümün artık tanımadığı bir işlem gerçekleştirdi ({action})",
+      "actors": {
+        "system": "Sistem",
+        "apiKey": "API anahtarı {id}"
+      },
+      "values": {
+        "none": "yok"
+      },
+      "actions": {
+        "accountMemberAdded": "{target} kullanıcısını hesaba {roles} olarak ekledi",
+        "accountMemberRolesChanged": "{target} kullanıcısının rollerini {previousRoles} yerine {roles} yaptı",
+        "accountBudgetChanged": "aylık harcama limitini {limit} olarak ayarladı",
+        "accountSettingsChanged": "varsayılan bulut sağlayıcısını {defaultCloudProvider} olarak ayarladı",
+        "accountInvitationCreated": "{email} adresini {roles} olarak davet etti",
+        "accountInvitationRevoked": "{email} için gönderilen daveti iptal etti",
+        "accountInvitationAccepted": "{email} için gönderilen daveti {roles} olarak kabul etti",
+        "accountMemberSessionsRevoked": "{target} kullanıcısının tüm cihazlardaki oturumlarını kapattı",
+        "workspaceMemberAdded": "{target} kullanıcısını bir panoya {role} olarak ekledi",
+        "workspaceMemberRoleChanged": "{target} kullanıcısının pano rolünü {previousRole} yerine {role} yaptı",
+        "workspaceMemberRemoved": "{target} kullanıcısını bir panodan çıkardı ({role} idi)",
+        "workspaceAccessModeChanged": "pano erişimini {accessMode} olarak ayarladı"
+      },
+      "errors": {
+        "load": "Denetim günlüğü yüklenemedi.",
+        "loadMore": "Daha eski kayıtlar yüklenemedi"
+      }
     }
   },
   "settings": {

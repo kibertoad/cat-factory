@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Block, BlockPatch } from '@cat-factory/kernel'
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
 
 /**
@@ -79,7 +80,7 @@ describe('BoardService.reparent re-stamps the declared module', () => {
     const task = block('task_1', 'task', { parentId: 'mod_sessions', moduleName: 'Sessions' })
     const { service, patches } = build(task)
 
-    await service.reparent(WS, 'task_1', { parentId: 'frame_svc', ...at })
+    await service.reparent(WS, 'task_1', { parentId: 'frame_svc', ...at }, UNATTRIBUTED_BLOCK_EDIT_AUTHORITY)
 
     expect(patches.at(-1)).toMatchObject({ parentId: 'frame_svc', moduleName: '' })
   })
@@ -91,7 +92,7 @@ describe('BoardService.reparent re-stamps the declared module', () => {
     const task = block('task_1', 'task', { parentId: 'frame_svc', moduleName: 'Not yet created' })
     const { service, patches } = build(task)
 
-    await service.reparent(WS, 'task_1', { parentId: 'mod_billing', ...at })
+    await service.reparent(WS, 'task_1', { parentId: 'mod_billing', ...at }, UNATTRIBUTED_BLOCK_EDIT_AUTHORITY)
 
     expect(patches.at(-1)).toMatchObject({ parentId: 'mod_billing', moduleName: 'Billing' })
   })
@@ -103,7 +104,7 @@ describe('BoardService.reparent re-stamps the declared module', () => {
     const task = block('task_1', 'task', { parentId: 'frame_svc' })
     const { service, patches } = build(task)
 
-    await service.reparent(WS, 'task_1', { parentId: 'frame_other', ...at })
+    await service.reparent(WS, 'task_1', { parentId: 'frame_other', ...at }, UNATTRIBUTED_BLOCK_EDIT_AUTHORITY)
 
     expect(patches.at(-1)).not.toHaveProperty('moduleName')
   })
@@ -112,8 +113,8 @@ describe('BoardService.reparent re-stamps the declared module', () => {
     const task = block('task_1', 'task', { parentId: 'frame_svc' })
     const { service, patches } = build(task)
 
-    await service.reparent(WS, 'task_1', { parentId: 'mod_sessions', ...at })
-    await service.reparent(WS, 'task_1', { parentId: 'frame_svc', ...at })
+    await service.reparent(WS, 'task_1', { parentId: 'mod_sessions', ...at }, UNATTRIBUTED_BLOCK_EDIT_AUTHORITY)
+    await service.reparent(WS, 'task_1', { parentId: 'frame_svc', ...at }, UNATTRIBUTED_BLOCK_EDIT_AUTHORITY)
 
     expect(patches[0]).toMatchObject({ moduleName: 'Sessions' })
     // Back out: the name goes with it, and lands as the empty string the store maps to NULL.

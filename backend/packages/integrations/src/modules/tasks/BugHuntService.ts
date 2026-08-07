@@ -1,4 +1,4 @@
-import type { BlockEditActor } from '@cat-factory/contracts'
+import type { BlockEditAuthority } from '@cat-factory/contracts'
 import type {
   BugCandidate,
   BugHuntAnalysisStatus,
@@ -174,7 +174,7 @@ export class BugHuntService {
     source: TaskSourceKind
     externalId: string
     containerId: string
-    editor: BlockEditActor
+    editor: BlockEditAuthority
     createdBy: string | null
     pipelineId: string
   }): Promise<TaskFromIssue> {
