@@ -1,4 +1,4 @@
-import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import type {
   BlockRepository,
   ExecutionEventPublisher,
@@ -176,7 +176,7 @@ export class PostMergeBoardController {
         // A merged run materialising the module its task named: the engine acting on what the
         // work produced, with no request and no session behind it, so there is no tier to read.
         // The move is within the service in any case, which re-decides no merge policy.
-        UNATTRIBUTED_BLOCK_EDITOR,
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       )
     }
     // A module node appeared and/or a task changed parent: a hierarchy change spanning two

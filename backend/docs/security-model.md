@@ -326,7 +326,13 @@ With that scoping, the pipeline properties are:
   resolves against the workspace that HOMES the task, so a cross-home reparent (dragging it into a
   service homed elsewhere, both mounted on the board) migrates the rows to a library where the
   source's preset is dangling and the destination's default governs instead. Same rule, with the
-  workspace varying rather than the id, applied to every task the move carries.
+  workspace varying rather than the id, applied to every RUNNABLE block the move carries
+  (`BLOCK_LEVEL_RUNS_PIPELINES`: tasks and initiatives, which start their own chains).
+  Every workspace in that decision is a HOME, never the acting board, and so is every ROLE: a
+  board mounts services homed elsewhere, the row is written at the home, and a run on it is
+  admitted through that board under the tier the editor holds there, so the editor arrives as a
+  `BlockEditAuthority` the guard asks per workspace. Judged against the acting board instead, an
+  admin of a third board skips the check on two homes where they are a plain member.
   The arms run in the engine's own precedence order, so the reason it
   gives names the restriction the run itself would have been refused on. It compares only the ROLE
   layer, so choosing between presets that treat every initiator alike stays a plain member

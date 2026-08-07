@@ -150,7 +150,7 @@ assembled engine). Grow one of these rather than `container.ts` itself.
 - `board/reparentWrite.ts`: moving a block into a new container, split from `BoardService` because
   the cross-home case is a migration rather than a layout write: it carries the subtree's rows and
   executions to the destination service's home, re-stamps the service scope key, prunes the edges
-  that then dangle, and (the reason it takes a `BlockEditActor`) refuses a move whose destination
+  that then dangle, and (the reason it takes a `BlockEditAuthority`) refuses a move whose destination
   library would drop a role-scoped merge restriction the mover is under. A `riskPolicyId` resolves
   against the workspace that HOMES the task, so a cross-home drag re-decides the policy without
   touching the field; a same-home move re-decides nothing and reads no preset. See

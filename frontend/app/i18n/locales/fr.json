@@ -147,7 +147,12 @@
       "archived": "Archivé « {name} »",
       "restored": "Restauré « {name} »",
       "archiveFailed": "Impossible d'archiver le service",
-      "restoreFailed": "Impossible de restaurer le service"
+      "restoreFailed": "Impossible de restaurer le service",
+      "moveRefused": {
+        "relaxes_role_sandbox": "Les exécutions de cette tâche sont isolées pour votre rôle là où elle se trouve, et la politique de fusion qui la régirait à destination ne l’est pas. Demandez à une administration de l’espace de travail de la déplacer.",
+        "relaxes_role_submission_allowlist": "La politique de fusion à destination vous laisserait fusionner des types de changement dont vous êtes privé ici. Demandez à une administration de l’espace de travail de la déplacer.",
+        "relaxes_role_class_rule": "La politique de fusion à destination fusionne automatiquement des changements que vous devez relire ici. Demandez à une administration de l’espace de travail de la déplacer."
+      }
     },
     "repoTypes": {
       "service": "Service",

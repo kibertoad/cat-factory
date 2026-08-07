@@ -1,4 +1,5 @@
-import type { BlockEditActor, ReparentInput } from '@cat-factory/contracts'
+import type { BlockEditAuthority, ReparentInput } from '@cat-factory/contracts'
+import { BLOCK_LEVEL_RUNS_PIPELINES } from '@cat-factory/contracts'
 import type {
   Block,
   BlockRepository,
@@ -55,14 +56,16 @@ export function createBoardReparentWrite(deps: BoardReparentDeps) {
   /**
    * Move a block into a new container at a new local position.
    *
-   * `editor` is who is moving it, for the merge-preset guard: see the cross-home branch below.
-   * Pass `UNATTRIBUTED_BLOCK_EDITOR` for a caller with no workspace tier (an engine path).
+   * `editor` is who is moving it, for the merge-preset guard: see the cross-home branch below. It
+   * is an AUTHORITY rather than a resolved actor because a cross-home move decides in two
+   * workspaces and the mover holds a role in each on their own terms. Pass
+   * `UNATTRIBUTED_BLOCK_EDIT_AUTHORITY` for a caller with no workspace tier (an engine path).
    */
   async function reparent(
     workspaceId: string,
     id: string,
     input: ReparentInput,
-    editor: BlockEditActor,
+    editor: BlockEditAuthority,
     originConnectionId?: string | null,
   ): Promise<Block> {
     await deps.requireWorkspace(workspaceId)
@@ -128,16 +131,20 @@ export function createBoardReparentWrite(deps: BoardReparentDeps) {
     const subtree = ids
       .map((bid) => srcBlocks.find((b) => b.id === bid))
       .filter((b): b is Block => b !== undefined)
-    // BEFORE any write, and the reason this write takes an editor at all. A task's merge preset
+    // BEFORE any write, and the reason this write takes an editor at all. A block's merge preset
     // resolves against the workspace that HOMES it, so carrying it to another home re-decides
     // which policy governs its runs without touching `riskPolicyId` or the preset library: the
-    // swap the picker refuses, spelled as a drag. Every task in the moved subtree is judged, not
-    // just the dragged block, because a module carries its tasks with it.
+    // swap the picker refuses, spelled as a drag. Every RUNNABLE block in the moved subtree is
+    // judged, not just the dragged one, because a module carries its contents with it. What
+    // counts as runnable is the declared `BLOCK_LEVEL_RUNS_PIPELINES`, not a `level === 'task'`
+    // test, which silently exempted the `initiative` blocks that start their own planning chains.
     await deps.riskPolicySelection.assertMayMove({
       fromWorkspaceId: blockHome,
       toWorkspaceId: parentHome,
-      actor: editor,
-      riskPolicyIds: subtree.filter((b) => b.level === 'task').map((b) => b.riskPolicyId),
+      authority: editor,
+      riskPolicyIds: subtree
+        .filter((b) => BLOCK_LEVEL_RUNS_PIPELINES[b.level])
+        .map((b) => b.riskPolicyId),
     })
 
     // Capture the SOURCE service's mounting boards BEFORE the move (afterwards the subtree no

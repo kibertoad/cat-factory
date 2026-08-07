@@ -1,8 +1,13 @@
-import type { BlockEditActor, RiskPolicySelectionRefusal } from '@cat-factory/contracts'
+import type {
+  BlockEditActor,
+  BlockEditAuthority,
+  RiskPolicySelectionRefusal,
+} from '@cat-factory/contracts'
 import { refuseRiskPolicySelection } from '@cat-factory/contracts'
-import type { RiskPolicyRepository } from '@cat-factory/kernel'
+import type { RiskPolicy, RiskPolicyRepository } from '@cat-factory/kernel'
 import { ForbiddenError } from '@cat-factory/kernel'
-import { resolveRiskPolicy } from '../merge/riskPolicyResolution.js'
+import type { ResolvedRunRiskPolicy } from '../execution/policy-types.js'
+import { preloadedRiskPolicyRead, resolveRiskPolicy } from '../merge/riskPolicyResolution.js'
 
 /**
  * Refuse a task's merge-preset SELECTION that would relax what the selector's own role is held to.
@@ -19,43 +24,58 @@ import { resolveRiskPolicy } from '../merge/riskPolicyResolution.js'
  * another home re-decides the policy while touching neither the id nor the library: the same swap,
  * spelled as a drag. {@link RiskPolicySelectionGuard.assertMayMove} is that arm.
  *
+ * **Every workspace named here is a HOME, never the acting board.** A board mounts services homed
+ * elsewhere, and a write on one lands at that home: the row is written there, its preset id
+ * resolves against THAT library, and a run on it is admitted through that board under the role the
+ * editor holds THERE (`blockRepository.get` is scoped by physical `workspace_id`, so a run cannot
+ * even resolve the block anywhere else). Which is why the editor arrives as a
+ * {@link BlockEditAuthority} rather than a pre-resolved actor: asking it per workspace is what
+ * keeps the policies and the role being compared answers to the same question.
+ *
  * Read live rather than through the `riskPolicy` cache slice: this runs on a rare board write, not
  * on the engine's per-gate path, and an authorization decision is the last place to want a
  * stale-by-a-TTL answer on a facade whose cross-isolate invalidation is a pass-through.
  */
 export interface RiskPolicySelectionGuard {
   /**
-   * Throw a {@link ForbiddenError} when `actor` may not move a task from `currentId` to `nextId`.
+   * Throw a {@link ForbiddenError} when the editor may not move a task from `currentId` to
+   * `nextId` within `homeWorkspaceId`.
+   *
+   * `homeWorkspaceId` is the workspace the row LIVES in, which for a task in a mounted foreign
+   * service is not the board the request was addressed to. Both the library the two ids resolve
+   * against and the role the editor is judged under are read there, because that is where the
+   * write lands and where a run on it would be admitted.
    *
    * Both ids are the RAW stored/patched values: absent or empty means "the workspace default",
    * which is a real selection with a real policy behind it, not the absence of one.
    */
   assertMaySelect(input: {
-    workspaceId: string
-    actor: BlockEditActor
+    homeWorkspaceId: string
+    authority: BlockEditAuthority
     currentId: string | null | undefined
     nextId: string | null | undefined
   }): Promise<void>
 
   /**
-   * Throw a {@link ForbiddenError} when `actor` may not carry tasks pinning `riskPolicyIds` out of
-   * `fromWorkspaceId` and into `toWorkspaceId`.
+   * Throw a {@link ForbiddenError} when the editor may not carry blocks pinning `riskPolicyIds`
+   * out of `fromWorkspaceId` and into `toWorkspaceId`.
    *
-   * The two workspaces are the task's HOME before and after the move (a cross-home reparent, which
-   * physically migrates the subtree's rows), never the acting board. Each pinned id is resolved on
+   * The two workspaces are the subtree's HOME before and after the move (a cross-home reparent,
+   * which physically migrates the rows), never the acting board. Each pinned id is resolved on
    * both sides, because an id is only meaningful in the library that holds it: a preset belonging
    * to the source workspace is simply dangling at the destination and falls back to ITS default,
    * exactly like a deleted one. That is what makes the move a policy decision even when the id
-   * never changes.
+   * never changes. The editor is resolved on both sides too, and for the same reason: a role is
+   * only meaningful in the workspace that granted it.
    *
-   * The ids arrive as the raw stored values of every task in the moved subtree, deduplicated here:
-   * a module of a hundred tasks sharing one preset (or pinning none, which is the default) costs
-   * one pair of resolutions, not a hundred.
+   * The ids arrive as the raw stored values of every RUNNABLE block in the moved subtree,
+   * deduplicated here: a module of a hundred tasks sharing one preset (or pinning none, which is
+   * the default) costs one pair of resolutions, not a hundred.
    */
   assertMayMove(input: {
     fromWorkspaceId: string
     toWorkspaceId: string
-    actor: BlockEditActor
+    authority: BlockEditAuthority
     riskPolicyIds: Iterable<string | null | undefined>
   }): Promise<void>
 }
@@ -78,6 +98,9 @@ const REFUSAL_MESSAGE: Record<RiskPolicySelectionRefusal, string> = {
  * copy rather than a shared string with the noun swapped, because the person who dragged a task
  * between two services picked no policy at all: told "the merge policy you picked", they would go
  * looking for a picker they never touched.
+ *
+ * Both maps are the UNTRANSLATED last resort behind `details.reason`, which is what the SPA maps
+ * to its own copy (CLAUDE.md: the backend does not localize prose).
  */
 const MOVE_REFUSAL_MESSAGE: Record<RiskPolicySelectionRefusal, string> = {
   relaxes_role_sandbox:
@@ -94,59 +117,76 @@ const MOVE_REFUSAL_MESSAGE: Record<RiskPolicySelectionRefusal, string> = {
 export function createRiskPolicySelectionGuard(deps: {
   riskPolicyRepository?: RiskPolicyRepository
 }): RiskPolicySelectionGuard {
-  const resolve = (workspaceId: string, riskPolicyId: string | null | undefined) =>
-    resolveRiskPolicy({ repository: deps.riskPolicyRepository, workspaceId, riskPolicyId })
-
-  /** Both sides of one comparison, resolved together; the refusal, or null. */
-  const judge = async (
-    actor: BlockEditActor,
-    from: { workspaceId: string; riskPolicyId: string | null | undefined },
-    to: { workspaceId: string; riskPolicyId: string | null | undefined },
-  ): Promise<RiskPolicySelectionRefusal | null> => {
-    const [resolvedFrom, resolvedTo] = await Promise.all([
-      resolve(from.workspaceId, from.riskPolicyId),
-      resolve(to.workspaceId, to.riskPolicyId),
-    ])
-    return refuseRiskPolicySelection({ from: resolvedFrom, to: resolvedTo, actor })
+  /**
+   * A resolver for every policy in force in ONE workspace, off ONE query.
+   *
+   * The library is read whole rather than per pinned id because the alternative is the N+1 this
+   * repo bans (a point read per pin, with the workspace default re-read alongside every one of
+   * them), and a preset library is a handful of hand-maintained rows either way. The resolution
+   * itself stays `resolveRiskPolicy`, the one the engine uses, so a preloaded answer and a live
+   * one cannot diverge on a dangling id or an unseeded default.
+   */
+  const openLibrary = async (workspaceId: string) => {
+    const library: readonly RiskPolicy[] =
+      (await deps.riskPolicyRepository?.list(workspaceId)) ?? []
+    const read = preloadedRiskPolicyRead(library)
+    return (riskPolicyId: string | null | undefined): Promise<ResolvedRunRiskPolicy> =>
+      resolveRiskPolicy({ repository: deps.riskPolicyRepository, workspaceId, riskPolicyId, read })
   }
+
+  /**
+   * Whether the rule can refuse anything at all for this pair of authorities, before either
+   * library is read. Not an optimisation the rule needs (`refuseRiskPolicySelection` decides the
+   * same cases), but it spares a round trip on the two readings that dominate: an editor with no
+   * tier on a side (an engine path, a headless key, dev-open) and one who owns the preset library.
+   */
+  const couldRefuse = (from: BlockEditActor, to: BlockEditActor): boolean =>
+    Boolean(from.role) && Boolean(to.role) && !from.managesPolicy && !to.managesPolicy
 
   return {
     async assertMaySelect(input) {
-      const { workspaceId, actor, currentId, nextId } = input
-      // Short-circuit before either read on the two cases that cannot refuse anything: an editor
-      // with no tier to be scoped by, and one who owns the preset library outright. Both are
-      // decided by the contracts rule as well, so this only spares them the round trip.
-      if (!actor.role || actor.managesPolicy) return
+      const { homeWorkspaceId, authority, currentId, nextId } = input
       if ((currentId ?? '') === (nextId ?? '')) return
-      const refusal = await judge(
-        actor,
-        { workspaceId, riskPolicyId: currentId },
-        { workspaceId, riskPolicyId: nextId },
-      )
+      const actor = await authority.in(homeWorkspaceId)
+      // Both sides are in force in the SAME workspace here, so one actor answers for both.
+      if (!couldRefuse(actor, actor)) return
+      const policy = await openLibrary(homeWorkspaceId)
+      const [from, to] = await Promise.all([policy(currentId), policy(nextId)])
+      const refusal = refuseRiskPolicySelection({
+        from: { policy: from, actor },
+        to: { policy: to, actor },
+      })
       if (refusal) throw new ForbiddenError(REFUSAL_MESSAGE[refusal], { reason: refusal })
     },
 
     async assertMayMove(input) {
-      const { fromWorkspaceId, toWorkspaceId, actor, riskPolicyIds } = input
-      if (!actor.role || actor.managesPolicy) return
+      const { fromWorkspaceId, toWorkspaceId, authority, riskPolicyIds } = input
       // A move that does not change the home changes no resolution: same library, same ids, same
-      // answer. Only the cross-home half of a reparent is a policy decision.
+      // answer, same role. Only the cross-home half of a reparent is a policy decision.
       if (fromWorkspaceId === toWorkspaceId) return
+      const [fromActor, toActor] = await Promise.all([
+        authority.in(fromWorkspaceId),
+        authority.in(toWorkspaceId),
+      ])
+      if (!couldRefuse(fromActor, toActor)) return
       const picks = new Set<string>()
       for (const id of riskPolicyIds) picks.add(id ?? '')
-      // Concurrent over the DEDUPLICATED picks rather than sequential over the tasks: the reads
-      // are independent, and the set is bounded by the presets the subtree names.
-      const refusals = await Promise.all(
-        [...picks].map((pick) =>
-          judge(
-            actor,
-            { workspaceId: fromWorkspaceId, riskPolicyId: pick || null },
-            { workspaceId: toWorkspaceId, riskPolicyId: pick || null },
-          ),
-        ),
-      )
-      const refusal = refusals.find((found): found is RiskPolicySelectionRefusal => found !== null)
-      if (refusal) throw new ForbiddenError(MOVE_REFUSAL_MESSAGE[refusal], { reason: refusal })
+      if (picks.size === 0) return
+      // Two reads for the whole subtree: each home's library, once. Every pick below resolves in
+      // memory off those, so the pick count costs nothing.
+      const [fromPolicy, toPolicy] = await Promise.all([
+        openLibrary(fromWorkspaceId),
+        openLibrary(toWorkspaceId),
+      ])
+      for (const pick of picks) {
+        const id = pick || null
+        const [held, next] = await Promise.all([fromPolicy(id), toPolicy(id)])
+        const refusal = refuseRiskPolicySelection({
+          from: { policy: held, actor: fromActor },
+          to: { policy: next, actor: toActor },
+        })
+        if (refusal) throw new ForbiddenError(MOVE_REFUSAL_MESSAGE[refusal], { reason: refusal })
+      }
     },
   }
 }

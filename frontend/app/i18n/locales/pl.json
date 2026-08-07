@@ -147,7 +147,12 @@
       "archived": "Zarchiwizowano „{name}”",
       "restored": "Przywrócono „{name}”",
       "archiveFailed": "Nie udało się zarchiwizować usługi",
-      "restoreFailed": "Nie udało się przywrócić usługi"
+      "restoreFailed": "Nie udało się przywrócić usługi",
+      "moveRefused": {
+        "relaxes_role_sandbox": "Uruchomienia tego zadania są w obecnym miejscu izolowane dla twojej roli, a zasada scalania obowiązująca w miejscu docelowym już nie. Poproś administrację przestrzeni roboczej o przeniesienie.",
+        "relaxes_role_submission_allowlist": "Zasada scalania w miejscu docelowym pozwoliłaby ci scalać rodzaje zmian, których tutaj nie możesz. Poproś administrację przestrzeni roboczej o przeniesienie.",
+        "relaxes_role_class_rule": "Zasada scalania w miejscu docelowym automatycznie scala zmiany, które tutaj musisz przejrzeć. Poproś administrację przestrzeni roboczej o przeniesienie."
+      }
     },
     "repoTypes": {
       "service": "Usługa",

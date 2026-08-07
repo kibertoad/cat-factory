@@ -35,7 +35,7 @@ import type { TasksModule } from '@cat-factory/orchestration'
 import { LinearOAuth } from '../../auth/LinearOAuth.js'
 import { StateSigner } from '../../github/state.js'
 import type { AppEnv } from '../../http/env.js'
-import { blockEditActor, mountWorkspacePermission } from '../../http/workspaceAccess.js'
+import { blockEditAuthority, mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -337,7 +337,7 @@ export function taskSourceController(): Hono<AppEnv> {
       externalId,
       // A person on this board is filing the issue as a task, so the write carries their tier:
       // the same authority the inspector's own create form is judged under (ADR 0037).
-      editor: blockEditActor(c),
+      editor: blockEditAuthority(c),
       createdBy: c.get('user')?.id ?? null,
     })
     return c.json(result, 201)
@@ -355,7 +355,7 @@ export function taskSourceController(): Hono<AppEnv> {
       epicRef: ref,
       containerId,
       // Same reading as the single-issue route above: a member is materialising these tasks.
-      editor: blockEditActor(c),
+      editor: blockEditAuthority(c),
       createdBy: c.get('user')?.id ?? null,
       position,
     })

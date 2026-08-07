@@ -241,10 +241,10 @@ worth having is that the guard is INERT until an operator authors a role policy,
 
 It binds at the SERVICE (`BoardService.addTask` / `updateBlock` / `reparent`), not in a controller,
 because the field is writable at every one of those doors and the escape is whichever one a caller
-reaches for. The editor travels as a REQUIRED `BlockEditActor` parameter, so a new call site cannot inherit an exemption
-from a default, and `blockEditActor.coverage.spec.ts` then classifies each route as attributed or
-deliberately unattributed with a reason: the typecheck forces a value, only the spec forces the
-RIGHT one. That pairing is copied from the run-start attribution above for the same reason: this
+reaches for. The editor travels as a REQUIRED `BlockEditAuthority` parameter, so a new call site
+cannot inherit an exemption from a default, and `blockEditAuthority.coverage.spec.ts` then
+classifies each route as attributed or deliberately unattributed with a reason: the typecheck
+forces a value, only the spec forces the RIGHT one. That pairing is copied from the run-start attribution above for the same reason: this
 feature has now shipped twice with one door enforced and another open.
 
 The spec classifies the sites that NAME an actor rather than the sites that CALL a board write,
@@ -269,14 +269,20 @@ over and start it live, having selected nothing, with the picker's refusal never
 
 `reparent` therefore takes the editor too, and its cross-home branch runs the same rule with the
 WORKSPACE varying instead of the id: the policy resolved at the source home against the one
-resolved at the destination home, for EVERY task in the moved subtree (a module carries its tasks,
-and reading only the dragged block would see a module, which pins nothing and could never refuse).
-Same-home moves read no preset at all: same library, same ids, nothing re-decided.
+resolved at the destination home, for EVERY RUNNABLE block in the moved subtree (a module carries
+its contents, and reading only the dragged block would see a module, which pins nothing and could
+never refuse). Which levels those are is the declared `BLOCK_LEVEL_RUNS_PIPELINES`, a total
+`Record<BlockLevel, boolean>` rather than a `level === 'task'` test at the reader: an `initiative`
+block starts its own planning chain and resolves a preset of its own, so a task-only filter handed
+the guard an empty list and refused nothing. A level that becomes runnable now fails the typecheck
+until it is classified. Same-home moves read no preset at all: same library, same ids, nothing
+re-decided.
 
 The copy is separate from the picker's (`MOVE_REFUSAL_MESSAGE`), because someone who dragged a task
 between two services picked no policy; told "the merge policy you picked", they would go looking for
-a control they never touched. The refusal `reason` vocabulary is unchanged, so the SPA's existing
-mapping covers both.
+a control they never touched. The refusal `reason` vocabulary is unchanged, and the SPA maps it to
+its OWN move-worded copy (`board.toast.moveRefused.*`), since the backend does not localize prose
+and the picker's strings are written for someone holding a control this person never touched.
 
 The alternative considered and rejected was refusing a role-restricted task's cross-workspace move
 outright, without resolving the destination. It is simpler and strictly more restrictive, and that
@@ -284,20 +290,37 @@ is the problem: it would refuse the move onto a destination that sandboxes the m
 which is a move that drops nothing. The narrow-only property is the whole rule, and a guard that
 refuses tightenings is not applying it.
 
-#### What the rule does NOT cover: a service mounted on two boards
+#### Every workspace in the decision is a HOME, and so is every role
 
-The guard judges a swap against the ACTING workspace's preset library, which is what the engine
-resolves too, so the two agree. A SHARED service frame mounted on a second board is where that
-agreement stops being enough: the task is one row, but `riskPolicyId` resolves against whichever
-board it is read from, and an id belonging to board A's library is simply dangling on board B (it
-falls back to B's default, exactly like a deleted preset). A member of both boards can therefore
-re-point a shared task from B, where the sandbox that governs it on A is invisible, and A then
-resolves its own default rather than the preset the task was pinned to.
+The first cut of this guard judged against the ACTING workspace on the reading that it is what the
+engine resolves too. It is not. `blockRepository.get` is scoped by physical `workspace_id`, so a
+run can only ever resolve a block under the workspace that HOMES it, and the tier it pins is the
+one the initiator holds on THAT board. A board mounting a service homed elsewhere writes every edit
+at the home as well. So the acting board answers for the decision only when it happens to be the
+home, and on a shared board it is a third party to it.
 
-Closing this means deciding that a shared task's policy resolves against its HOME workspace
-everywhere, engine included, which changes what a preset means on a mounted board rather than
-tightening a guard. It is left open deliberately and recorded here rather than in a comment,
-because the fix belongs to the shared-service model and not to this one.
+Both halves therefore resolve at the home. The LIBRARY: `addTask` judges against the workspace the
+row is about to land in and `updateBlock` against the one it lives in, or a task in a mounted
+foreign service is judged in a library it will never resolve against, where both sides of the swap
+collapse onto the acting workspace's default and the guard cannot refuse anything. The ROLE: the
+editor arrives as a `BlockEditAuthority` and the guard asks it per workspace it is deciding in, so
+each side of a comparison is read against the tier that side's workspace granted. One pre-resolved
+actor is wrong in both directions at once: an admin of the acting board skips the check on two
+homes where they are a plain member, and a member of it is refused on roles they hold nowhere the
+decision applies.
+
+Two readings fall out of that and are deliberate. A workspace the editor holds no access to
+resolves to the unattributed editor, because with no tier there they can admit no run under its
+policies, so none of its restrictions is theirs to hold or to drop; read the other way, moving a
+task into a service you are not a member of would refuse with a sandbox nobody would have escaped.
+And `managesPolicy` stands the rule down from EITHER side, since owning either library means
+authoring the outcome outright.
+
+What remains is a presentation wart rather than an escape: the picker on a mounted board offers
+the acting board's library, so a member can pick a preset that is dangling at the home and lands on
+the home's default. The guard judges the outcome the engine will actually apply, so nothing is
+relaxed by it; what is missing is the picker telling the user which library they are choosing from.
+That belongs to the shared-service model, not here.
 
 ### Why the PR still opens
 
@@ -379,9 +402,11 @@ learn is which policy the task is under and why this one is closed, not that a c
   that a run pins at admission owes the same end-to-end conformance assertion, on both runtimes.
 - The merge decision now carries the initiator's role and (when it changed the outcome) the narrowed
   rule, so a refusal can name the tier it was narrowed for instead of implying the scores did it.
-- A board write can now be refused on POLICY grounds, so `BoardService.addTask`/`updateBlock` take
-  the acting `BlockEditActor` and every caller states one. Anything else that becomes selectable
-  per task and scoped per role owes the same pair: the rule in contracts (so the picker agrees) and
-  the guard at the service (so both doors do).
+- A board write can now be refused on POLICY grounds, so `BoardService.addTask`/`updateBlock`/
+  `reparent` take a `BlockEditAuthority` and every caller states one. Anything else that becomes
+  selectable per task and scoped per role owes the same pair: the rule in contracts (so the picker
+  agrees) and the guard at the service (so every door does). It also owes an answer to WHICH
+  workspace it decides in: on a shared board the acting one is neither where the row lands nor
+  where the role that governs it was granted.
 - `resolveMergeClassRule` / `resolveRoleScopedMergeClassRule` moved from kernel to contracts, since
   the SPA now has to make the same judgement. The engine imports them from there.

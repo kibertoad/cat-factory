@@ -171,7 +171,12 @@
       "archived": "Archived \"{name}\"",
       "restored": "Restored \"{name}\"",
       "archiveFailed": "Couldn't archive the service",
-      "restoreFailed": "Couldn't restore the service"
+      "restoreFailed": "Couldn't restore the service",
+      "moveRefused": {
+        "relaxes_role_sandbox": "This task’s runs are sandboxed for your role where it is now, and the merge policy governing it where you are moving it is not. Ask a workspace admin to move it.",
+        "relaxes_role_submission_allowlist": "The merge policy where you are moving this task would let you land kinds of change it holds you back from here. Ask a workspace admin to move it.",
+        "relaxes_role_class_rule": "The merge policy where you are moving this task auto-merges changes you are held to review on it here. Ask a workspace admin to move it."
+      }
     },
     "repoTypes": {
       "service": "Service",

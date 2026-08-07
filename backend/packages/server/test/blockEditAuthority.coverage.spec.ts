@@ -17,17 +17,18 @@ import { loadCode } from './coverageScan.js'
 // task, or authoring one straight onto a permissive preset, is a policy decision. Passing the
 // editor is what gets it judged.
 //
-// The typecheck already forces every board-write entry point to be HANDED an actor
-// (`BlockEditActor` is a required parameter, deliberately). What it cannot force is the right one:
-// `UNATTRIBUTED_BLOCK_EDITOR` compiles everywhere and silently exempts the write, which is exactly
-// how the role-scoped merge policy first shipped: enforced on one controller while another
-// module's route escaped it.
+// The typecheck already forces every board-write entry point to be HANDED an authority
+// (`BlockEditAuthority` is a required parameter, deliberately). What it cannot force is the right
+// one: `UNATTRIBUTED_BLOCK_EDIT_AUTHORITY` compiles everywhere and silently exempts the write,
+// which is exactly how the role-scoped merge policy first shipped: enforced on one controller
+// while another module's route escaped it.
 //
 // So this classifies the sites that DECIDE, and only those. A module that merely declares an
 // `editor: BlockEditActor` parameter and passes it along has decided nothing and needs no entry;
 // it inherited its answer, and the typecheck already guarantees it cannot invent one. What must be
-// written down is every site that NAMES a value: `blockEditActor(c)` (the acting tier, read
-// through the one accessor) or `UNATTRIBUTED_BLOCK_EDITOR` (no tier at all, with the reason).
+// written down is every site that NAMES a value: `blockEditAuthority(c)` (the editor's authority,
+// resolvable in whichever workspace the write decides in, read through the one accessor) or
+// `UNATTRIBUTED_BLOCK_EDIT_AUTHORITY` (no tier anywhere, with the reason).
 //
 // That inversion is the point. Keying on the CALL (`boardService.addTask(` and friends) is what
 // the first cut of this spec did, and it saw neither `addServiceTask` (the public-API creation
@@ -46,13 +47,15 @@ const ROOTS: Record<string, string> = {
   integrations: packageSrc('integrations'),
 }
 
-/** Where `blockEditActor` is DEFINED, which is not a site that decides anything with it. */
+/** Where `blockEditAuthority` is DEFINED, which is not a site that decides anything with it. */
 const ACCESSOR_DEFINITION = 'server:http/workspaceAccess.ts'
 
 /**
  * Sites that write a block ON BEHALF OF A SIGNED-IN PERSON acting on their own board. Each must
- * take the tier from `blockEditActor`, never a hand-rolled read of the gate's context: one
- * authority for membership (ADR 0025), one shape to audit.
+ * take the authority from `blockEditAuthority`, never a hand-rolled read of the gate's context:
+ * one authority for membership (ADR 0025), one shape to audit. It is a RESOLVER rather than a
+ * resolved tier because a write on a mounted foreign service decides in that service's home, and
+ * the acting board's role answers for that workspace only by coincidence.
  *
  * All four are HTTP routes, and that is not a coincidence: the acting tier is a fact about the
  * REQUEST, so the only layer that can answer honestly is the one holding a request.
@@ -101,7 +104,7 @@ describe('board-write sites classify their editor', () => {
   /** Every site that NAMES an actor value, which is every site that makes the decision. */
   const deciders = [...code.entries()]
     .filter(([key]) => key !== ACCESSOR_DEFINITION)
-    .filter(([, source]) => /blockEditActor\(|UNATTRIBUTED_BLOCK_EDITOR/.test(source))
+    .filter(([, source]) => /blockEditAuthority\(|UNATTRIBUTED_BLOCK_EDIT_AUTHORITY/.test(source))
     .map(([key]) => key)
 
   it('finds the deciding sites at all (the scan itself must not silently match nothing)', () => {
@@ -131,8 +134,8 @@ describe('board-write sites classify their editor', () => {
   it('makes every attributed site read the editor through the one accessor', () => {
     for (const key of ATTRIBUTED) {
       const source = code.get(key)!
-      expect(source, `${key} must pass the editor via blockEditActor`).toContain(
-        'blockEditActor(c)',
+      expect(source, `${key} must pass the editor via blockEditAuthority`).toContain(
+        'blockEditAuthority(c)',
       )
       // A hand-rolled read is the drift this guards: it compiles, it works, and it is a second
       // place to get the dev-open absent-access fallback wrong.
@@ -141,7 +144,9 @@ describe('board-write sites classify their editor', () => {
       )
       // An attributed site that ALSO reaches for the unattributed constant would be exempting
       // one of its own writes without saying so.
-      expect(source, `${key} must not exempt a write`).not.toContain('UNATTRIBUTED_BLOCK_EDITOR')
+      expect(source, `${key} must not exempt a write`).not.toContain(
+        'UNATTRIBUTED_BLOCK_EDIT_AUTHORITY',
+      )
     }
   })
 
@@ -150,7 +155,7 @@ describe('board-write sites classify their editor', () => {
       expect(reason.length, `${key} needs a real reason, not a placeholder`).toBeGreaterThan(40)
       // The converse of the check above: a site claiming no tier must not also read one.
       expect(code.get(key), `${key} claims no tier, so it must not read one`).not.toContain(
-        'blockEditActor(c)',
+        'blockEditAuthority(c)',
       )
     }
   })

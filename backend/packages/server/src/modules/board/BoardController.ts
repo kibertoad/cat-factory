@@ -19,7 +19,7 @@ import { Hono } from 'hono'
 import { resolveViewerPat } from '../../github/viewerPat.js'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { blockEditActor } from '../../http/workspaceAccess.js'
+import { blockEditAuthority } from '../../http/workspaceAccess.js'
 
 /**
  * Board mutations. Mounted under `/workspaces/:workspaceId`, so every handler
@@ -78,7 +78,7 @@ export function boardController(): Hono<AppEnv> {
       c.req.valid('json'),
       // Creating a task straight onto a merge preset is a policy decision, judged against the
       // author's own tier (ADR 0037), read through the one accessor and never off the gate here.
-      blockEditActor(c),
+      blockEditAuthority(c),
       c.get('user')?.id ?? null,
     )
     return c.json(block, 201)
@@ -122,7 +122,7 @@ export function boardController(): Hono<AppEnv> {
       c.req.valid('json'),
       // A patch may re-point the task's merge preset, which is a policy decision judged against
       // the editor's own tier (ADR 0037), not an ordinary preference.
-      blockEditActor(c),
+      blockEditAuthority(c),
       // Skip echoing this edit back to the tab that made it — its REST response already
       // carried the authoritative block, so a self-echo would only force a redundant
       // board-wide re-hydrate (the visible "board jumps" on rapid inspector edits). Same
@@ -153,7 +153,7 @@ export function boardController(): Hono<AppEnv> {
       // Dragging a task into a service homed on another workspace re-points it at that
       // workspace's merge presets, which is the same policy decision a patch makes and is
       // judged against the mover's own tier (ADR 0037).
-      blockEditActor(c),
+      blockEditAuthority(c),
       c.req.header('x-connection-id') ?? null,
     )
     return c.json(block, 200)

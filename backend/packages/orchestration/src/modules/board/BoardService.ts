@@ -4,7 +4,7 @@ import type {
   AddModuleInput,
   AddServiceFromRepoInput,
   AddTaskInput,
-  BlockEditActor,
+  BlockEditAuthority,
   ReparentInput,
   ResizeBlockInput,
   UpdateBlockInput,
@@ -762,27 +762,29 @@ export class BoardService {
    * `editor` is who is creating it, for the merge-preset selection guard: authoring a task
    * straight onto a permissive preset moves it off the workspace default that would otherwise
    * have governed it, so creation is the same decision as a later swap and takes the same check.
-   * Pass `UNATTRIBUTED_BLOCK_EDITOR` for a caller with no workspace tier (see its doc).
+   * Pass `UNATTRIBUTED_BLOCK_EDIT_AUTHORITY` for a caller with no workspace tier (see its doc).
    */
   async addTask(
     workspaceId: string,
     containerId: string,
     input: AddTaskInput,
-    editor: BlockEditActor,
+    editor: BlockEditAuthority,
     createdBy?: string | null,
   ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
-    // Before any side effect, and against the workspace default: a task does not exist yet, so
-    // the policy this creation is moving AWAY from is the one it would have resolved unpicked.
-    await this.riskPolicySelection.assertMaySelect({
-      workspaceId,
-      actor: editor,
-      currentId: null,
-      nextId: input.riskPolicyId,
-    })
     // The container may be a frame/module of a service mounted from another workspace; create
     // the task in that service's home workspace so it joins the one shared subtree.
     const { homeWorkspaceId, block: container } = await this.resolveBlock(workspaceId, containerId)
+    // Before any side effect, and against the HOME workspace's default: a task does not exist
+    // yet, so the policy this creation is moving AWAY from is the one it would have resolved
+    // unpicked, in the library the row is about to land in, which for a mounted foreign service
+    // is not the board this request was addressed to.
+    await this.riskPolicySelection.assertMaySelect({
+      homeWorkspaceId,
+      authority: editor,
+      currentId: null,
+      nextId: input.riskPolicyId,
+    })
     if (container.level === 'task') {
       throw new ValidationError('Tasks cannot contain other tasks')
     }
@@ -953,7 +955,7 @@ export class BoardService {
     workspaceId: string,
     serviceId: string,
     input: AddTaskInput,
-    editor: BlockEditActor,
+    editor: BlockEditAuthority,
   ): Promise<Block> {
     return this.publicReads.addServiceTask(workspaceId, serviceId, input, editor)
   }
@@ -1126,13 +1128,13 @@ export class BoardService {
 
   /**
    * Apply a patch to a block. `editor` is who is applying it, for the merge-preset selection
-   * guard (see {@link addTask}); pass `UNATTRIBUTED_BLOCK_EDITOR` for a caller with no tier.
+   * guard (see {@link addTask}); pass `UNATTRIBUTED_BLOCK_EDIT_AUTHORITY` for a caller with no tier.
    */
   async updateBlock(
     workspaceId: string,
     id: string,
     patch: UpdateBlockInput,
-    editor: BlockEditActor,
+    editor: BlockEditAuthority,
     originConnectionId?: string | null,
   ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
@@ -1143,8 +1145,8 @@ export class BoardService {
     // `riskPolicyId` is not a selection.
     if (patch.riskPolicyId !== undefined) {
       await this.riskPolicySelection.assertMaySelect({
-        workspaceId,
-        actor: editor,
+        homeWorkspaceId,
+        authority: editor,
         currentId: block.riskPolicyId,
         nextId: patch.riskPolicyId,
       })
@@ -1196,13 +1198,13 @@ export class BoardService {
    * `editor` is who is moving it, for the merge-preset guard: a cross-home move carries the task
    * to a workspace whose preset library re-decides which policy governs its runs, which is the
    * same decision {@link updateBlock} judges when the id changes instead of the home. Pass
-   * `UNATTRIBUTED_BLOCK_EDITOR` for a caller with no workspace tier (see its doc).
+   * `UNATTRIBUTED_BLOCK_EDIT_AUTHORITY` for a caller with no workspace tier (see its doc).
    */
   reparent(
     workspaceId: string,
     id: string,
     input: ReparentInput,
-    editor: BlockEditActor,
+    editor: BlockEditAuthority,
     originConnectionId?: string | null,
   ): Promise<Block> {
     return this.reparentWrite.reparent(workspaceId, id, input, editor, originConnectionId)
