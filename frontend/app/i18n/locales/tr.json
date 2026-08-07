@@ -1428,6 +1428,15 @@
           "oauthTokenFailed": "kullanılamadı: bağlantı artık erişim jetonu üretmiyor.",
           "overBudget": "kullanılamadı: bu ajan tek bir çalıştırmanın taşıdığından fazla araç sunucusu bildiriyor.",
           "unknown": "kullanılamadı ({reason})."
+        },
+        "remedy": {
+          "harnessUnsupported": "Adımı MCP konuşan bir ajan CLI'sinde çalıştırın ya da sunucunun harness listesini genişletin.",
+          "transportUnsupported": "Onun için bir stdio sunucusu bildirin ya da adımı HTTP sunucularına erişen bir ajan CLI'sinde çalıştırın.",
+          "missingSecret": "Adı geçen kimlik bilgisini Altyapı penceresindeki yetenek kimlik bilgilerinde ayarlayın.",
+          "reservedSecret": "Bildirimi başka bir anahtar isteyecek şekilde değiştirin; o değişkeni ayarlamak tam da yardımcı olmayacak şeydir.",
+          "oauthNotConnected": "Bu panoyu Altyapı penceresinden ona bağlayın.",
+          "oauthTokenFailed": "Altyapı penceresinden yeniden bağlayın ya da sağlayıcının kesintisinin geçmesini bekleyin.",
+          "overBudget": "Tek bir çalıştırma hepsini taşıyabilsin diye ajanın bildirdiklerini kısaltın."
         }
       },
       "adherence": {
