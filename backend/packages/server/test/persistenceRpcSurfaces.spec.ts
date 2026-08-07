@@ -671,9 +671,13 @@ describe('environment-connection management surface (workspace-scoped)', () => {
     },
     { repo: 'customManifestTypeRepository', method: 'listByWorkspace', args: [], echoes: true },
     { repo: 'customManifestTypeRepository', method: 'remove', args: ['helm-app'] },
-    // The read BOTH delivery paths make — and the one the run-lifecycle sink makes on a run's
-    // terminal emit, where an un-routed method would surface only as a webhook that never fires.
+    // The reads every delivery path makes on a run's TERMINAL emit, where an un-routed method
+    // surfaces only as a webhook that silently never fires (delivery is best-effort, so the
+    // refusal is swallowed by design). `list` is the hot one now that a workspace can register
+    // several endpoints: all three sinks call it per delivery, so it carries the same round-trip
+    // and cross-account-refusal cover as the `get` it replaced on those paths.
     { repo: 'notificationWebhookRepository', method: 'get', args: [], echoes: true },
+    { repo: 'notificationWebhookRepository', method: 'list', args: [], echoes: true },
     { repo: 'notificationWebhookRepository', method: 'delete', args: [] },
   ]
 

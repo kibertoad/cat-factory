@@ -520,18 +520,21 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
     remove: { scope: { kind: 'workspace', arg: 0 } },
   },
-  // The workspace's ONE outbound webhook endpoint: the management surface (get/put/delete behind
-  // `integrations.manage`) and the two delivery paths that read it — the notification channel and
-  // the run-lifecycle sink. The sink is why this is no longer optional: it reads on the run's
-  // TERMINAL emit, and an un-routed method there fails on a laptop as a webhook that silently
-  // never fires (both delivery paths are best-effort, so the refusal is swallowed by design).
-  // `get`/`delete` take the workspaceId as arg0; the record-based `put(record)` binds on the
-  // record's `workspaceId` FIELD, so a row can only ever land in the caller's own in-scope
-  // workspace. Safe to expose: the repo returns the signing secret SEALED and never decrypts it
-  // (sealing/decryption live in the service and the delivery paths under the LOCAL key), so no
-  // plaintext credential crosses the machine API.
+  // The workspace's outbound webhook endpoints: the management surface (get/list/put/delete behind
+  // `integrations.manage`) and the three delivery paths that read them — the notification channel,
+  // the run-lifecycle sink and the platform-alert sink. The sinks are why this is not optional:
+  // they read on the run's TERMINAL emit, and an un-routed method there fails on a laptop as a
+  // webhook that silently never fires (every delivery path is best-effort, so the refusal is
+  // swallowed by design). `list`/`get`/`delete` take the workspaceId as arg0; the record-based
+  // `put(record)` binds on the record's `workspaceId` FIELD, so a row can only ever land in the
+  // caller's own in-scope workspace. `list` is what the three delivery paths call now that a
+  // workspace can register several endpoints, so it is the hot one: leaving it un-routed is the
+  // same silent failure `get` was allow-listed to prevent. Safe to expose: the repo returns the
+  // signing secret SEALED and never decrypts it (sealing/decryption live in the service and the
+  // delivery paths under the LOCAL key), so no plaintext credential crosses the machine API.
   notificationWebhookRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
+    list: { scope: { kind: 'workspace', arg: 0 } },
     put: { scope: { kind: 'workspaceField', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },

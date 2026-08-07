@@ -56,6 +56,7 @@ from .models import (
     PublicJobStatus,
     PublicNotificationList,
     PublicNotificationWebhook,
+    PublicNotificationWebhookList,
     PublicPipelineList,
     PublicRejectStep,
     PublicReplyFinding,
@@ -488,8 +489,10 @@ class NotificationsResource:
 
 
 class WebhookResource:
-    """The workspace's one outbound endpoint: register, inspect or remove the receiver that
-    notifications, run-lifecycle events and health alerts are pushed to.
+    """The workspace's outbound endpoints: register, inspect or remove the receivers that
+    notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls
+    address the `default` endpoint; the named ones let an integration enroll its own
+    receiver, with its own signing secret and filters, beside whatever else is registered.
     """
 
     def __init__(self, transport: Transport) -> None:
@@ -503,6 +506,20 @@ class WebhookResource:
         self._transport.request_no_content(
             "DELETE",
             f"/api/v1/notification-webhook",
+            query=None,
+            timeout=timeout,
+        )
+
+    def delete_named(self, webhook_id: str, timeout: float | None = None) -> None:
+        """Remove one named outbound webhook
+        Deregister this endpoint; its deliveries stop and the workspace's other endpoints
+        are untouched. Idempotent.
+        `DELETE /api/v1/notification-webhooks/{webhookId}` (operation
+        `deletePublicNamedNotificationWebhook`).
+        """
+        self._transport.request_no_content(
+            "DELETE",
+            f"/api/v1/notification-webhooks/{_quote(webhook_id)}",
             query=None,
             timeout=timeout,
         )
@@ -522,6 +539,38 @@ class WebhookResource:
         )
         return PublicNotificationWebhook.from_dict(raw)
 
+    def get_named(self, webhook_id: str, timeout: float | None = None) -> PublicNotificationWebhook:
+        """Read one named outbound webhook
+        The endpoint registered under this id, or `{ "webhook": null }` when there is none —
+        the same shape the unnamed read answers, so an integration's startup self-check does
+        not branch on a status code. The signing secret is never returned.
+        `GET /api/v1/notification-webhooks/{webhookId}` (operation
+        `getPublicNamedNotificationWebhook`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/notification-webhooks/{_quote(webhook_id)}",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicNotificationWebhook.from_dict(raw)
+
+    def list(self, timeout: float | None = None) -> PublicNotificationWebhookList:
+        """List the workspace's outbound webhooks
+        Every endpoint this workspace delivers to, ordered by id. The endpoint the unnamed
+        routes address appears here under the id `default`. Not paginated: the number of
+        endpoints a workspace may register is capped, so the whole set fits in one response.
+        No signing secret is returned for any of them.
+        `GET /api/v1/notification-webhooks` (operation `listPublicNotificationWebhooks`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/notification-webhooks",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicNotificationWebhookList.from_dict(raw)
+
     def set(self, body: PutNotificationWebhook, timeout: float | None = None) -> NotificationWebhook:
         """Register or update the outbound webhook
         Register the HTTPS endpoint deliveries are POSTed to, or update the one already
@@ -536,6 +585,30 @@ class WebhookResource:
         raw = self._transport.request(
             "PUT",
             f"/api/v1/notification-webhook",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return NotificationWebhook.from_dict(raw)
+
+    def set_named(self, webhook_id: str, body: PutNotificationWebhook, timeout: float | None = None) -> NotificationWebhook:
+        """Register or update one named outbound webhook
+        Register an endpoint under an id YOU choose (1-63 characters of lowercase letters,
+        digits, `-` or `_`), or update the one already there. Idempotent by id, so an
+        integration can enroll its own receiver on every cold start without tracking whether
+        it has enrolled before, and without displacing anything else the workspace
+        registered. Every field follows the same keep-on-omit rule as the unnamed route,
+        `url` being required only when there is nothing under this id to keep, and a
+        supplied `secret` rotating this endpoint's own signing secret. Refused with `reason:
+        "invalid_webhook_id"` for an id that is not a slug, and `reason:
+        "webhook_limit_reached"` (409) when registering a NEW id would exceed the
+        per-workspace cap; editing an existing one is admitted either way.
+        `PUT /api/v1/notification-webhooks/{webhookId}` (operation
+        `putPublicNamedNotificationWebhook`).
+        """
+        raw = self._transport.request(
+            "PUT",
+            f"/api/v1/notification-webhooks/{_quote(webhook_id)}",
             body=_encode(body),
             query=None,
             timeout=timeout,

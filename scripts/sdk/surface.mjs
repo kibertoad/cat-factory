@@ -48,10 +48,16 @@ const SURFACE = {
   actPublicNotification: { group: 'notifications', method: 'act' },
   dismissPublicNotification: { group: 'notifications', method: 'dismiss' },
 
-  // ---- The outbound webhook (push enrolment) ---------------------------------------------
+  // ---- The outbound webhooks (push enrolment) --------------------------------------------
+  // The unsuffixed trio addresses the `default` endpoint; the `*Named` ones take an id, so a
+  // caller enrolling its OWN receiver never has to know what else the workspace registered.
   getPublicNotificationWebhook: { group: 'webhook', method: 'get' },
   putPublicNotificationWebhook: { group: 'webhook', method: 'set' },
   deletePublicNotificationWebhook: { group: 'webhook', method: 'delete' },
+  listPublicNotificationWebhooks: { group: 'webhook', method: 'list' },
+  getPublicNamedNotificationWebhook: { group: 'webhook', method: 'getNamed' },
+  putPublicNamedNotificationWebhook: { group: 'webhook', method: 'setNamed' },
+  deletePublicNamedNotificationWebhook: { group: 'webhook', method: 'deleteNamed' },
 
   // ---- Usage ----------------------------------------------------------------------------
   getPublicUsage: { group: 'usage', method: 'get' },
@@ -188,6 +194,12 @@ export const MCP_TOOL_HINTS = {
   // is somewhere else entirely.
   putPublicNotificationWebhook: { destructive: true, idempotent: true },
   deletePublicNotificationWebhook: { destructive: true, idempotent: true },
+  // The named pair carries the same annotation for the same reason. It is NOT softened by the
+  // fact that each addresses one endpoint: what a caller overwrites is still a URL and a signing
+  // secret it cannot read back, and whoever is holding the id it chose to write to may not be
+  // whoever registered that endpoint.
+  putPublicNamedNotificationWebhook: { destructive: true, idempotent: true },
+  deletePublicNamedNotificationWebhook: { destructive: true, idempotent: true },
 }
 
 /** One-line descriptions of each resource client, rendered into every SDK's docs. */
@@ -200,7 +212,7 @@ export const GROUP_DOCS = {
     'What a task can be created AS in this workspace (the built-in kinds plus the operations the deployment registered), and the fields each one accepts.',
   notifications: "The workspace's human-actionable inbox: list, act on, or dismiss a run tail.",
   webhook:
-    "The workspace's one outbound endpoint: register, inspect or remove the receiver that notifications, run-lifecycle events and health alerts are pushed to.",
+    "The workspace's outbound endpoints: register, inspect or remove the receivers that notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address the `default` endpoint; the named ones let an integration enroll its own receiver, with its own signing secret and filters, beside whatever else is registered.",
   usage: "The billing period's metered budget position and the per-model breakdown behind it.",
   me: 'What the calling key is and what it may do — the self-check an integration runs at startup.',
   decisions:

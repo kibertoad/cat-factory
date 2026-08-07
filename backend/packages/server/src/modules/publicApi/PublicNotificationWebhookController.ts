@@ -1,6 +1,11 @@
 import {
+  DEFAULT_NOTIFICATION_WEBHOOK_ID,
+  deletePublicNamedNotificationWebhookContract,
   deletePublicNotificationWebhookContract,
+  getPublicNamedNotificationWebhookContract,
   getPublicNotificationWebhookContract,
+  listPublicNotificationWebhooksContract,
+  putPublicNamedNotificationWebhookContract,
   putPublicNotificationWebhookContract,
 } from '@cat-factory/contracts'
 import type { NotificationWebhookService } from '@cat-factory/integrations'
@@ -31,7 +36,7 @@ import { authorize, refuse } from './publicApiAuth.js'
 //     one is the reversible one.
 //  2. **No parallel logic.** Every verb delegates to the same `NotificationWebhookService` method
 //     the session controller calls, so the SSRF guard on the endpoint, the keep-on-omit rule for
-//     each field and the one-row-per-workspace invariant hold identically whichever surface
+//     each field and the per-workspace endpoint cap hold identically whichever surface
 //     writes. A `ValidationError` from the URL guard propagates to `handleError` rather than being
 //     re-mapped here, so the refusal keeps its `details`.
 //  3. **The secret stays write-only.** `put` accepts one and `get` reports `hasSecret`; nothing
@@ -64,7 +69,10 @@ export function publicNotificationWebhookController(): Hono<AppEnv> {
     if ('fail' in gate) return refuse(c, gate.fail)
     const webhooks = webhooksOf(c)
     if (!webhooks) return unavailable(c)
-    return c.json({ webhook: await webhooks.get(gate.auth.workspaceId) }, 200)
+    return c.json(
+      { webhook: await webhooks.get(gate.auth.workspaceId, DEFAULT_NOTIFICATION_WEBHOOK_ID) },
+      200,
+    )
   })
 
   // Register, edit or rotate. A field the body omits KEEPS its stored value (the service's rule,
@@ -75,7 +83,11 @@ export function publicNotificationWebhookController(): Hono<AppEnv> {
     if ('fail' in gate) return refuse(c, gate.fail)
     const webhooks = webhooksOf(c)
     if (!webhooks) return unavailable(c)
-    const saved = await webhooks.put(gate.auth.workspaceId, c.req.valid('json'))
+    const saved = await webhooks.put(
+      gate.auth.workspaceId,
+      DEFAULT_NOTIFICATION_WEBHOOK_ID,
+      c.req.valid('json'),
+    )
     return c.json(saved, 200)
   })
 
@@ -85,7 +97,53 @@ export function publicNotificationWebhookController(): Hono<AppEnv> {
     if ('fail' in gate) return refuse(c, gate.fail)
     const webhooks = webhooksOf(c)
     if (!webhooks) return unavailable(c)
-    await webhooks.remove(gate.auth.workspaceId)
+    await webhooks.remove(gate.auth.workspaceId, DEFAULT_NOTIFICATION_WEBHOOK_ID)
+    return c.body(null, 204)
+  })
+
+  // ---- the collection: several named endpoints, one per integration ----
+  //
+  // Every one of these is the corresponding singular route with the id supplied instead of
+  // defaulted. That is the whole difference, deliberately: the enrolment rules a caller has to
+  // reason about (keep-on-omit, the write-only secret, the SSRF guard, `admin` scope) must not
+  // depend on which of the two shapes it happened to call.
+
+  buildHonoRoute(app, listPublicNotificationWebhooksContract, async (c) => {
+    const gate = await authorize(c, listPublicNotificationWebhooksContract.minScope)
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const webhooks = webhooksOf(c)
+    if (!webhooks) return unavailable(c)
+    return c.json({ webhooks: await webhooks.list(gate.auth.workspaceId) }, 200)
+  })
+
+  buildHonoRoute(app, getPublicNamedNotificationWebhookContract, async (c) => {
+    const gate = await authorize(c, getPublicNamedNotificationWebhookContract.minScope)
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const webhooks = webhooksOf(c)
+    if (!webhooks) return unavailable(c)
+    const webhook = await webhooks.get(gate.auth.workspaceId, c.req.valid('param').webhookId)
+    return c.json({ webhook }, 200)
+  })
+
+  buildHonoRoute(app, putPublicNamedNotificationWebhookContract, async (c) => {
+    const gate = await authorize(c, putPublicNamedNotificationWebhookContract.minScope)
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const webhooks = webhooksOf(c)
+    if (!webhooks) return unavailable(c)
+    const saved = await webhooks.put(
+      gate.auth.workspaceId,
+      c.req.valid('param').webhookId,
+      c.req.valid('json'),
+    )
+    return c.json(saved, 200)
+  })
+
+  buildHonoRoute(app, deletePublicNamedNotificationWebhookContract, async (c) => {
+    const gate = await authorize(c, deletePublicNamedNotificationWebhookContract.minScope)
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const webhooks = webhooksOf(c)
+    if (!webhooks) return unavailable(c)
+    await webhooks.remove(gate.auth.workspaceId, c.req.valid('param').webhookId)
     return c.body(null, 204)
   })
 

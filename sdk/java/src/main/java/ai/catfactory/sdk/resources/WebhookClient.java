@@ -13,8 +13,10 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The workspace's one outbound endpoint: register, inspect or remove the receiver that
- * notifications, run-lifecycle events and health alerts are pushed to.
+ * The workspace's outbound endpoints: register, inspect or remove the receivers that
+ * notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address
+ * the `default` endpoint; the named ones let an integration enroll its own receiver, with its own
+ * signing secret and filters, beside whatever else is registered.
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
 public final class WebhookClient {
@@ -35,6 +37,17 @@ public final class WebhookClient {
     }
 
     /**
+     * Remove one named outbound webhook
+     * Deregister this endpoint; its deliveries stop and the workspace's other endpoints are
+     * untouched. Idempotent.
+     * {@code DELETE /api/v1/notification-webhooks/{webhookId}} (operation {@code
+     * deletePublicNamedNotificationWebhook}).
+     */
+    public void deleteNamed(String webhookId) {
+        transport.requestNoContent("DELETE", "/api/v1/notification-webhooks/" + Transport.pathSegment(webhookId), null, Map.of());
+    }
+
+    /**
      * Read the workspace's outbound webhook
      * The endpoint this workspace delivers notifications, run-lifecycle events and platform-health
      * alerts to, or `{ "webhook": null }` when none is registered. The signing secret is never
@@ -43,6 +56,31 @@ public final class WebhookClient {
      */
     public PublicNotificationWebhook get() {
         return transport.request("GET", "/api/v1/notification-webhook", null, Map.of(), new TypeReference<PublicNotificationWebhook>() {});
+    }
+
+    /**
+     * Read one named outbound webhook
+     * The endpoint registered under this id, or `{ "webhook": null }` when there is none — the
+     * same shape the unnamed read answers, so an integration's startup self-check does not branch
+     * on a status code. The signing secret is never returned.
+     * {@code GET /api/v1/notification-webhooks/{webhookId}} (operation {@code
+     * getPublicNamedNotificationWebhook}).
+     */
+    public PublicNotificationWebhook getNamed(String webhookId) {
+        return transport.request("GET", "/api/v1/notification-webhooks/" + Transport.pathSegment(webhookId), null, Map.of(), new TypeReference<PublicNotificationWebhook>() {});
+    }
+
+    /**
+     * List the workspace's outbound webhooks
+     * Every endpoint this workspace delivers to, ordered by id. The endpoint the unnamed routes
+     * address appears here under the id `default`. Not paginated: the number of endpoints a
+     * workspace may register is capped, so the whole set fits in one response. No signing secret
+     * is returned for any of them.
+     * {@code GET /api/v1/notification-webhooks} (operation {@code
+     * listPublicNotificationWebhooks}).
+     */
+    public PublicNotificationWebhookList list() {
+        return transport.request("GET", "/api/v1/notification-webhooks", null, Map.of(), new TypeReference<PublicNotificationWebhookList>() {});
     }
 
     /**
@@ -58,5 +96,23 @@ public final class WebhookClient {
      */
     public NotificationWebhook set(PutNotificationWebhook body) {
         return transport.request("PUT", "/api/v1/notification-webhook", body, Map.of(), new TypeReference<NotificationWebhook>() {});
+    }
+
+    /**
+     * Register or update one named outbound webhook
+     * Register an endpoint under an id YOU choose (1-63 characters of lowercase letters, digits,
+     * `-` or `_`), or update the one already there. Idempotent by id, so an integration can enroll
+     * its own receiver on every cold start without tracking whether it has enrolled before, and
+     * without displacing anything else the workspace registered. Every field follows the same
+     * keep-on-omit rule as the unnamed route, `url` being required only when there is nothing
+     * under this id to keep, and a supplied `secret` rotating this endpoint's own signing secret.
+     * Refused with `reason: "invalid_webhook_id"` for an id that is not a slug, and `reason:
+     * "webhook_limit_reached"` (409) when registering a NEW id would exceed the per-workspace cap;
+     * editing an existing one is admitted either way.
+     * {@code PUT /api/v1/notification-webhooks/{webhookId}} (operation {@code
+     * putPublicNamedNotificationWebhook}).
+     */
+    public NotificationWebhook setNamed(String webhookId, PutNotificationWebhook body) {
+        return transport.request("PUT", "/api/v1/notification-webhooks/" + Transport.pathSegment(webhookId), body, Map.of(), new TypeReference<NotificationWebhook>() {});
     }
 }
