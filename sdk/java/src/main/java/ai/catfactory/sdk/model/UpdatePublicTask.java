@@ -6,17 +6,22 @@ package ai.catfactory.sdk.model;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code UpdatePublicTask} wire model.
  * @param description May be absent entirely. Length 0..2000.
+ * @param fields May be absent entirely.
  * @param title May be absent entirely. Length 1..200.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record UpdatePublicTask(
     /** May be absent entirely. Length 0..2000. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("description") @Nullable String description,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("fields") @Nullable Map<String, CreatePublicTaskFieldsValue> fields,
 
     /** May be absent entirely. Length 1..200. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("title") @Nullable String title
@@ -35,11 +40,18 @@ public record UpdatePublicTask(
      */
     public static final class Builder {
         private @Nullable String description;
+        private @Nullable Map<String, CreatePublicTaskFieldsValue> fields;
         private @Nullable String title;
 
         /** Set {@code description}. */
         public Builder description(@Nullable String description) {
             this.description = description;
+            return this;
+        }
+
+        /** Set {@code fields}. */
+        public Builder fields(@Nullable Map<String, CreatePublicTaskFieldsValue> fields) {
+            this.fields = fields;
             return this;
         }
 
@@ -51,7 +63,7 @@ public record UpdatePublicTask(
 
         /** Build the {@link UpdatePublicTask}. */
         public UpdatePublicTask build() {
-            return new UpdatePublicTask(description, title);
+            return new UpdatePublicTask(description, fields, title);
         }
     }
 }
