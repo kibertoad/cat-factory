@@ -1,5 +1,164 @@
 # @cat-factory/node-server
 
+## 0.186.1
+
+### Patch Changes
+
+- Updated dependencies [1025674]
+- Updated dependencies [e5f7eb0]
+  - @cat-factory/contracts@0.263.0
+  - @cat-factory/server@0.241.0
+  - @cat-factory/orchestration@0.231.0
+  - @cat-factory/agents@0.117.1
+  - @cat-factory/consensus@0.14.47
+  - @cat-factory/eks@0.1.259
+  - @cat-factory/gates@0.9.27
+  - @cat-factory/gitlab@0.16.18
+  - @cat-factory/integrations@0.141.1
+  - @cat-factory/kernel@0.262.1
+  - @cat-factory/observability-otel@0.17.2
+  - @cat-factory/prompt-fragments@1.0.11
+  - @cat-factory/spend@0.15.29
+  - @cat-factory/provider-bedrock@0.7.408
+  - @cat-factory/provider-cloudflare@0.7.409
+  - @cat-factory/caching@0.18.2
+  - @cat-factory/observability-langfuse@0.10.31
+  - @cat-factory/provider-s3@0.2.328
+
+## 0.186.0
+
+### Minor Changes
+
+- 8cbd518: Let a code-registered prompt fragment name a LIVING document.
+
+  A `documentRef` on a deployment-registered fragment used to be refused at boot, because every
+  document source authenticated per workspace and there was no deployment-wide credential to read one
+  with. A deployment now configures its own (`DOC_SOURCE_<SOURCE>_<FIELD>`, the field names taken from
+  each provider's existing connect-form declaration), and a `builtin`-tier `documentRef` resolves
+  through a new `DeploymentDocumentResolver` port, version-probed and cached under one
+  deployment-wide group so a hundred workspaces folding one standard cost one fetch and one
+  invalidation.
+
+  The deployment's own credentials are read from the environment and nothing else. `DOCUMENT_SOURCES`
+  governs which sources a WORKSPACE may connect, and `DOCUMENTS_ENABLED` and the connection encryption
+  key govern whether tenant connections are stored at all; none of the three has any bearing on a
+  standard the deployment configured centrally, whose credentials live in plaintext variables and are
+  never persisted. So setting `DOC_SOURCE_NOTION_API_TOKEN` is the whole configuration, with no
+  unrelated prerequisite to discover.
+
+  `github` is the exception and it is declared, not inferred: its credential is a workspace's App
+  installation, so the new `deploymentScoped` source trait is false for it and both boot validation
+  and the provider refuse the scope. Boot now refuses only a `documentRef` this deployment cannot
+  serve, naming which of the two causes applies.
+
+  An unreachable source still degrades to the fragment's registered body, but no longer silently: the
+  fallback logs a warning naming the fragment, tier and source, because the prompt is byte-identical
+  either way and nothing downstream could otherwise tell a stale standard from a current one.
+
+  In mothership mode the credential stays on the mothership and the node reads the resolved body over
+  `POST /internal/prompt-fragments/document-bodies`.
+
+  `DocumentSourceProvider.fetchDocument` / `probeVersion` now take `workspaceId: string | null`, where
+  `null` is the deployment scope. An internal interface with no external consumers.
+
+- 8cbd518: Make a runtime facade the whole extension surface a deployment needs.
+
+  Each facade now re-exports the CONSTRUCTOR and the types for every app-owned registry it lets a
+  deployment inject, not only the option that takes one. `gateRegistry`, `judgeRegistry`,
+  `stepResolverRegistry`, `vcsRegistry` and `promptFragmentRegistry` were reachable options with no
+  exported way to build a value, so the only route was a direct dependency on `@cat-factory/kernel` /
+  `@cat-factory/gates` / `@cat-factory/prompt-fragments`, which publish at exact versions, so
+  floating one past what the facade pins resolves a second physical copy and the registration lands
+  where nothing reads it. The reusable-operation authoring types (`CustomTaskType`,
+  `TaskTypePresentation`, `TaskTypeFieldDescriptor`, `TaskTypeFieldOption`, the shared
+  `DescriptorField*` shapes, `PromptFragment`), the four descriptor helpers, the built-in
+  `*_PIPELINE_ID` constants and `RegistrationProblem` come with them.
+
+  `start()` / `startLocal()` / `createWorker()` take an `escalateRegistrationWarning` predicate,
+  raising selected boot-validation warnings to errors. Boot must WARN on an unresolvable
+  `defaultFragmentIds` id because it cannot tell a typo from an account/workspace-tier id that merges
+  per workspace at run time; a deployment whose operations reference only fragments it registers
+  itself knows that second cause does not apply, and can now say so instead of re-deriving the check
+  in its own test suite.
+
+  Additive throughout: no existing registration, option or export changes shape.
+
+- 7a2730a: Fold a board's un-rolled spend inside its own delete, so the durable record ends where the board did
+
+  `spend_days` is deliberately outside the workspace-delete cascade: money already spent is an
+  account-level fact, and reclaiming it would shrink last quarter's TCO retroactively and silently.
+  Keeping it out of that list was made real by bounding the sweep's rewrite to boards that still
+  exist, because `token_usage` IS cascaded and an unbounded window DELETE would otherwise re-fold
+  nothing and reclaim the deleted board's most recent days on the sweep's own schedule.
+
+  That bound left the mirror-image gap, which this closes. The sweep reaches only boards that still
+  exist, so a board's spend SINCE the last completed rollup day has never been folded when its delete
+  begins, and its ledger rows go with the cascade before any later pass could see them. The loss was
+  bounded by the sweep interval, permanent, and skewed worst for exactly the boards an operator
+  deleted because they were expensive. `WorkspaceService.delete` now runs one final per-workspace fold
+  before the cascade, beside the binary-artifact purge and for the same reason: afterwards there is
+  nothing left to read.
+
+  Three things make that fold a different shape from a sweep pass, and each was a decision rather than
+  a detail:
+
+  - **It walks to now in chunks instead of capping its window.** A sweep can leave a wide catch-up for
+    its next pass; this board has no next pass, so the span cap becomes a chunk size rather than a
+    truncation. Truncating would have introduced a second, quieter version of the same loss.
+  - **It walks newest-first, on a budget, and one bad chunk does not end it.** The walk is unbounded
+    by construction (a watermark left stale by an outage plans a ledger-retention's worth of chunks)
+    and it runs inside a user's delete request rather than on a cron. Unbounded, on the Worker, it
+    stops preserving the board's spend and starts preventing its deletion: the invocation dies before
+    the cascade, and the retry reads the same watermark and plans the same walk. So the walk stops at
+    `FINAL_SPEND_FOLD_BUDGET_MS` and a failing chunk costs only itself, which makes the ORDER decide
+    what survives: newest-first, because every report window this rollup serves is anchored at now
+    while the far end of a stale catch-up falls outside even the 90-day one.
+  - **It does not touch the coverage marker.** `rolledUpThrough` is deployment-scoped and states how
+    far the SWEEP has covered every board at once. One board's final fold covers no other board's
+    days, and the marker only ever moves forward, so advancing it there would permanently present
+    days nothing folded as covered.
+  - **It keeps the still-exists guard anyway.** Called after the cascade the fold reads nothing, and
+    an unguarded window DELETE would then reclaim the frozen rows the exclusion exists to keep. The
+    guard makes the fold-then-cascade ordering a property of the query rather than of the call site,
+    so both halves of "a rewrite may only delete what it can reproduce" live in the same statement.
+
+  The resume point and the ledger-retention horizon are the sweep's own, which is why the pure walk
+  (`spendRollupWindow` plus the new `finalSpendFoldPlan`) moved from `@cat-factory/orchestration` into
+  kernel: the two callers sit in different layers and restating the horizon rule per caller is exactly
+  how the delete path would end up stepping over days a sweep would still have folded. Facades now
+  wire `tokenUsageRetentionMs` onto `CoreDependencies` so both derive it from one number.
+
+  The fold is best-effort, which is a trade worth reviewing: refusing the delete on a sick rollup query
+  would keep the spend foldable for a retry, but it would also render a reporting outage as a board
+  that cannot be deleted. So the delete proceeds and what was not folded is named on one `warn`, whose
+  fields keep the causes apart because they need different responses: what the ledger no longer holds
+  (already unfoldable before the delete began), what the store refused, what the budget never reached,
+  and a resume point that could not be read at all.
+
+### Patch Changes
+
+- Updated dependencies [8cbd518]
+- Updated dependencies [8cbd518]
+- Updated dependencies [7a2730a]
+  - @cat-factory/contracts@0.262.0
+  - @cat-factory/kernel@0.262.0
+  - @cat-factory/integrations@0.141.0
+  - @cat-factory/agents@0.117.0
+  - @cat-factory/orchestration@0.230.0
+  - @cat-factory/server@0.240.0
+  - @cat-factory/consensus@0.14.46
+  - @cat-factory/eks@0.1.258
+  - @cat-factory/gates@0.9.26
+  - @cat-factory/gitlab@0.16.17
+  - @cat-factory/observability-otel@0.17.1
+  - @cat-factory/prompt-fragments@1.0.10
+  - @cat-factory/spend@0.15.28
+  - @cat-factory/caching@0.18.1
+  - @cat-factory/observability-langfuse@0.10.30
+  - @cat-factory/provider-bedrock@0.7.407
+  - @cat-factory/provider-cloudflare@0.7.408
+  - @cat-factory/provider-s3@0.2.327
+
 ## 0.185.2
 
 ### Patch Changes

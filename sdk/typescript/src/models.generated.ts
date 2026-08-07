@@ -505,6 +505,175 @@ export type GetDebugLlmCallView = 'raw' | 'messages'
 /** Every `GetDebugLlmCallView` value, for exhaustive handling and runtime validation. */
 export const GET_DEBUG_LLM_CALL_VIEW_VALUES = ['raw', 'messages'] as const
 
+export interface GetPublicRunOutcomeResponse {
+  /** Always present; `null` when the server has no value for it. */
+  ask: string | null
+  checks: GetPublicRunOutcomeResponseCheck[]
+  disposition: GetPublicRunOutcomeResponseDisposition
+  pullRequests: GetPublicRunOutcomeResponsePullRequest[]
+  requirements: GetPublicRunOutcomeResponseRequirements
+  tests: GetPublicRunOutcomeResponseTests
+  title: string
+  truncations: string[]
+  version: number
+  visuals: GetPublicRunOutcomeResponseVisuals
+}
+
+export interface GetPublicRunOutcomeResponseCheck {
+  kind: GetPublicRunOutcomeResponseCheckKind
+  /** Always present; `null` when the server has no value for it. */
+  reproduction: PrReportReproductionVerdict | null
+  state: GetPublicRunOutcomeResponseCheckState
+}
+
+export type GetPublicRunOutcomeResponseCheckKind = 'ci' | 'validation' | 'reproduction'
+
+/** Every `GetPublicRunOutcomeResponseCheckKind` value, for exhaustive handling and runtime validation. */
+export const GET_PUBLIC_RUN_OUTCOME_RESPONSE_CHECK_KIND_VALUES = ['ci', 'validation', 'reproduction'] as const
+
+export type GetPublicRunOutcomeResponseCheckState = 'pass' | 'fail' | 'pending' | 'inconclusive'
+
+/** Every `GetPublicRunOutcomeResponseCheckState` value, for exhaustive handling and runtime validation. */
+export const GET_PUBLIC_RUN_OUTCOME_RESPONSE_CHECK_STATE_VALUES = ['pass', 'fail', 'pending', 'inconclusive'] as const
+
+export type GetPublicRunOutcomeResponseDisposition = 'merged' | 'awaiting_merge' | 'in_flight' | 'needs_attention' | 'not_run' | 'unknown'
+
+/** Every `GetPublicRunOutcomeResponseDisposition` value, for exhaustive handling and runtime validation. */
+export const GET_PUBLIC_RUN_OUTCOME_RESPONSE_DISPOSITION_VALUES = ['merged', 'awaiting_merge', 'in_flight', 'needs_attention', 'not_run', 'unknown'] as const
+
+export interface GetPublicRunOutcomeResponsePullRequest {
+  /** Always present; `null` when the server has no value for it. */
+  branch: string | null
+  /** Always present; `null` when the server has no value for it. */
+  number: number | null
+  /** Always present; `null` when the server has no value for it. */
+  repo: string | null
+  url: string
+}
+
+/** Discriminated by `status`. */
+export type GetPublicRunOutcomeResponseRequirements =
+  | GetPublicRunOutcomeResponseRequirementsVariant0
+  | GetPublicRunOutcomeResponseRequirementsVariant1
+
+export interface GetPublicRunOutcomeResponseRequirementsVariant0 {
+  gap: GetPublicRunOutcomeResponseRequirementsVariant0Gap
+  status: 'absent'
+}
+
+export type GetPublicRunOutcomeResponseRequirementsVariant0Gap = 'run_unavailable' | 'no_tester_step' | 'tester_not_reported' | 'no_verdicts' | 'no_requirements'
+
+/** Every `GetPublicRunOutcomeResponseRequirementsVariant0Gap` value, for exhaustive handling and runtime validation. */
+export const GET_PUBLIC_RUN_OUTCOME_RESPONSE_REQUIREMENTS_VARIANT0_GAP_VALUES = ['run_unavailable', 'no_tester_step', 'tester_not_reported', 'no_verdicts', 'no_requirements'] as const
+
+export interface GetPublicRunOutcomeResponseRequirementsVariant1 {
+  entries: GetPublicRunOutcomeResponseRequirementsVariant1Entry[]
+  met: number
+  notCovered: number
+  notMet: number
+  regressions: number
+  spec: GetPublicRunOutcomeResponseRequirementsVariant1Spec
+  status: 'reported'
+  total: number
+  unmatchedVerdicts: number
+}
+
+export interface GetPublicRunOutcomeResponseRequirementsVariant1Entry {
+  /** Always present; `null` when the server has no value for it. */
+  detail: string | null
+  id: string
+  regression: boolean
+  /** Always present; `null` when the server has no value for it. */
+  state: PrReportRequirementsEntryState | null
+  /** Always present; `null` when the server has no value for it. */
+  title: string | null
+  verdict: PrReportRequirementsEntryVerdict
+}
+
+export type GetPublicRunOutcomeResponseRequirementsVariant1Spec = 'joined' | 'not_read'
+
+/** Every `GetPublicRunOutcomeResponseRequirementsVariant1Spec` value, for exhaustive handling and runtime validation. */
+export const GET_PUBLIC_RUN_OUTCOME_RESPONSE_REQUIREMENTS_VARIANT1_SPEC_VALUES = ['joined', 'not_read'] as const
+
+/** Discriminated by `status`. */
+export type GetPublicRunOutcomeResponseTests =
+  | GetPublicRunOutcomeResponseTestsVariant0
+  | GetPublicRunOutcomeResponseTestsVariant1
+
+export interface GetPublicRunOutcomeResponseTestsVariant0 {
+  gap: GetPublicRunOutcomeResponseTestsVariant0Gap
+  status: 'absent'
+}
+
+export type GetPublicRunOutcomeResponseTestsVariant0Gap = 'run_unavailable' | 'no_tester_step' | 'tester_not_reported'
+
+/** Every `GetPublicRunOutcomeResponseTestsVariant0Gap` value, for exhaustive handling and runtime validation. */
+export const GET_PUBLIC_RUN_OUTCOME_RESPONSE_TESTS_VARIANT0_GAP_VALUES = ['run_unavailable', 'no_tester_step', 'tester_not_reported'] as const
+
+export interface GetPublicRunOutcomeResponseTestsVariant1 {
+  /** Always present; `null` when the server has no value for it. */
+  abortReason: string | null
+  areas: string[]
+  concerns: GetPublicRunOutcomeResponseTestsVariant1Concern[]
+  /** Always present; `null` when the server has no value for it. */
+  environment: PrReportEnvironmentsEvidenceRanAgainst | null
+  failed: number
+  passed: number
+  skipped: number
+  status: 'reported'
+  /** Always present; `null` when the server has no value for it. */
+  summary: string | null
+  verdict: GetPublicRunOutcomeResponseTestsVariant1Verdict
+}
+
+export interface GetPublicRunOutcomeResponseTestsVariant1Concern {
+  severity: Severity
+  title: string
+}
+
+export type GetPublicRunOutcomeResponseTestsVariant1Verdict = 'greenlit' | 'concerns' | 'could_not_run'
+
+/** Every `GetPublicRunOutcomeResponseTestsVariant1Verdict` value, for exhaustive handling and runtime validation. */
+export const GET_PUBLIC_RUN_OUTCOME_RESPONSE_TESTS_VARIANT1_VERDICT_VALUES = ['greenlit', 'concerns', 'could_not_run'] as const
+
+/** Discriminated by `status`. */
+export type GetPublicRunOutcomeResponseVisuals =
+  | GetPublicRunOutcomeResponseVisualsVariant0
+  | GetPublicRunOutcomeResponseVisualsVariant1
+
+export interface GetPublicRunOutcomeResponseVisualsVariant0 {
+  /** Always present; `null` when the server has no value for it. */
+  detail: string | null
+  gap: GetPublicRunOutcomeResponseVisualsVariant0Gap
+  status: 'absent'
+}
+
+export type GetPublicRunOutcomeResponseVisualsVariant0Gap = 'run_unavailable' | 'no_visual_step' | 'none_captured'
+
+/** Every `GetPublicRunOutcomeResponseVisualsVariant0Gap` value, for exhaustive handling and runtime validation. */
+export const GET_PUBLIC_RUN_OUTCOME_RESPONSE_VISUALS_VARIANT0_GAP_VALUES = ['run_unavailable', 'no_visual_step', 'none_captured'] as const
+
+export interface GetPublicRunOutcomeResponseVisualsVariant1 {
+  /** Always present; `null` when the server has no value for it. */
+  phase: PublicVisualConfirmDecisionPhase | null
+  source: GetPublicRunOutcomeResponseVisualsVariant1Source
+  status: 'reported'
+  views: GetPublicRunOutcomeResponseVisualsVariant1View[]
+}
+
+export type GetPublicRunOutcomeResponseVisualsVariant1Source = 'visual_confirm' | 'tester'
+
+/** Every `GetPublicRunOutcomeResponseVisualsVariant1Source` value, for exhaustive handling and runtime validation. */
+export const GET_PUBLIC_RUN_OUTCOME_RESPONSE_VISUALS_VARIANT1_SOURCE_VALUES = ['visual_confirm', 'tester'] as const
+
+export interface GetPublicRunOutcomeResponseVisualsVariant1View {
+  /** Always present; `null` when the server has no value for it. */
+  artifactId: string | null
+  /** Always present; `null` when the server has no value for it. */
+  referenceArtifactId: string | null
+  view: string
+}
+
 export interface ListDebugAgentContextResponse {
   /** Always present; `null` when the server has no value for it. */
   nextCursor: string | null
@@ -1051,6 +1220,7 @@ export interface PrReportRequirements {
   regressions: number
   status: PrReportCiStatus
   total: number
+  unmatchedVerdicts?: number
 }
 
 export interface PrReportRequirementsEntry {

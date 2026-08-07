@@ -334,7 +334,7 @@ function registerUsageRoutes(app: Hono<AppEnv>): void {
   // scope story. The account/user budget tiers are deliberately NOT reachable here: they are
   // cross-workspace, and a workspace-scoped key must never learn a sibling workspace's spend.
   buildHonoRoute(app, getPublicUsageContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, getPublicUsageContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -379,7 +379,7 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
   // Start a headless job: validate the pipeline is public + inline, create a headless internal
   // block to anchor the run, and start it. Returns 202 with the job id + follow-up links.
   buildHonoRoute(app, createPublicJobContract, async (c) => {
-    const gate = await authorize(c, 'write')
+    const gate = await authorize(c, createPublicJobContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -501,7 +501,7 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
   // is applied IN SQL by `listInternal` (the list form of `loadPublicJob`'s double-scope), so it
   // can never enumerate the workspace's ordinary board runs.
   buildHonoRoute(app, listPublicJobsContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, listPublicJobsContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -546,7 +546,7 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
   // Poll a job's status + result. Scoped to the key's workspace AND to headless job runs
   // (see loadPublicJob), so a job in another workspace — or a normal board run — is a 404.
   buildHonoRoute(app, getPublicJobContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, getPublicJobContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -569,7 +569,7 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
   // readable afterwards. `write` (not `decide`): giving up on your own run is an ordinary
   // mutation, and a caller must never be locked out of cleaning up work it started.
   buildHonoRoute(app, cancelPublicJobContract, async (c) => {
-    const gate = await authorize(c, 'write')
+    const gate = await authorize(c, cancelPublicJobContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -690,7 +690,7 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
 
   // List the workspace's services (board service frames).
   buildHonoRoute(app, listPublicServicesContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, listPublicServicesContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -705,7 +705,7 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
   // documents the work is to be built against. The ordering of those attachments IS the contract
   // and lives in `taskCreation.ts`, which is where to read before changing any of it.
   buildHonoRoute(app, createPublicTaskContract, async (c) => {
-    const gate = await authorize(c, 'write')
+    const gate = await authorize(c, createPublicTaskContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -729,7 +729,7 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
   // and the status filter into SQL. Ordering is by the stable task id (blocks carry no
   // timestamp), which is why there is no `since` filter here — see the query contract.
   buildHonoRoute(app, listPublicServiceTasksContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, listPublicServiceTasksContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -771,7 +771,7 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
 
   // Get a task's status.
   buildHonoRoute(app, getPublicTaskContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, getPublicTaskContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -789,7 +789,7 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
 
   // Start (run) a task.
   buildHonoRoute(app, startPublicTaskContract, async (c) => {
-    const gate = await authorize(c, 'write')
+    const gate = await authorize(c, startPublicTaskContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -928,7 +928,7 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
   // run. That is deliberate and is what makes the input gate's park recoverable: a run parked on a
   // missing field is cleared by supplying it here and then `recheck`ing.
   buildHonoRoute(app, updatePublicTaskContract, async (c) => {
-    const gate = await authorize(c, 'write')
+    const gate = await authorize(c, updatePublicTaskContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -965,7 +965,7 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
   // run is returned as-is): it records a `cancelled` terminal state on the run rather than
   // deleting it, so the run stays retryable (composing with the retry endpoint below).
   buildHonoRoute(app, stopPublicTaskContract, async (c) => {
-    const gate = await authorize(c, 'write')
+    const gate = await authorize(c, stopPublicTaskContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -1000,7 +1000,7 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
   // `ExecutionService.retry` validates. The engine's `retry` then throws `run_not_retryable`
   // (→ 409) unless the run actually failed.
   buildHonoRoute(app, retryPublicTaskContract, async (c) => {
-    const gate = await authorize(c, 'write')
+    const gate = await authorize(c, retryPublicTaskContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -1048,7 +1048,7 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
   // and the PR (url + branch). A larger projection than the coarse task status — for a caller
   // that wants to render live run progress or diagnose a failure.
   buildHonoRoute(app, getPublicRunContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, getPublicRunContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -1081,7 +1081,7 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
   // deletable; the unfinished-work guard in `removeBlock` only protects top-level service frames,
   // which this task-scoped route never targets.)
   buildHonoRoute(app, deletePublicTaskContract, async (c) => {
-    const gate = await authorize(c, 'admin')
+    const gate = await authorize(c, deletePublicTaskContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -1194,7 +1194,7 @@ function registerPipelineRoutes(app: Hono<AppEnv>): void {
   // (closing the `pipeline_required`-with-no-way-to-discover gap) and whether each is safe to
   // run headlessly. Archived pipelines are hidden.
   buildHonoRoute(app, listPublicPipelinesContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, listPublicPipelinesContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -1228,7 +1228,7 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
   // List the workspace's OPEN notifications (the inbox). The set is naturally bounded (only
   // `open` cards, resolved by a human), so it is unpaginated like the SPA inbox it mirrors.
   buildHonoRoute(app, listPublicNotificationsContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, listPublicNotificationsContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -1252,7 +1252,7 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
   // no personal-credential unlock (`ci_failed`/`test_failed` are the only side-effects that
   // resume LLM work; the merge tails need no personal credential).
   buildHonoRoute(app, actPublicNotificationContract, async (c) => {
-    const gate = await authorize(c, 'admin')
+    const gate = await authorize(c, actPublicNotificationContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },
@@ -1332,7 +1332,7 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
   // no external side-effect, so it needs `write` (not `admin`). `resolve` is idempotent and
   // workspace-scoped: an unknown/foreign id throws NotFound → 404 via the shared handler.
   buildHonoRoute(app, dismissPublicNotificationContract, async (c) => {
-    const gate = await authorize(c, 'write')
+    const gate = await authorize(c, dismissPublicNotificationContract.minScope)
     if ('fail' in gate) {
       return c.json(
         { error: { code: gate.fail.code, message: gate.fail.message } },

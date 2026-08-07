@@ -523,13 +523,14 @@ export function isConsensusEligibleKind(kind: string): boolean {
 }
 
 /**
- * Whether an agent kind is one of the Tester gate kinds (API or UI). Mirrors the backend
- * `isTesterKind`; used by the pipeline builder to surface the test quality-control companion
- * toggle only on Tester steps.
+ * Whether an agent kind is one of the Tester gate kinds (API or UI). Used by the pipeline builder
+ * to surface the test quality-control companion toggle only on Tester steps.
+ *
+ * Re-exported from `@cat-factory/contracts` rather than mirrored: it used to be a hand-written
+ * copy of the engine's rule with the two slugs spelled out as literals, which is the shape that
+ * silently stops matching the day a third tester kind ships.
  */
-export function isTesterKind(kind: string): boolean {
-  return kind === 'tester-api' || kind === 'tester-ui'
-}
+export { isTesterKind } from '@cat-factory/contracts'
 
 /**
  * Display metadata for the engine-driven "system" kinds — the gate/automation

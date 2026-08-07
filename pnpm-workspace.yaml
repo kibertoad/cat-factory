@@ -55,6 +55,7 @@ packages:
   # facade over the published operations, built on the TypeScript one.
   - 'sdk/typescript'
   - 'sdk/mcp'
+  - 'sdk/gatekeeper'
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true

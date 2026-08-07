@@ -40,6 +40,25 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
       expect(res.body.spec).toBeNull()
       expect(res.body.features).toEqual([])
     })
+
+    it('serves an empty view for a run whose spec cannot be read, rather than 404-ing', async () => {
+      // The RUN-scoped sibling, which the outcome card joins its requirement verdicts against.
+      // It reads the branch the run pushed to (the service read above reads the repo default),
+      // through the engine's own evidence loader, so it must be mounted and answer identically
+      // on both facades. A run this workspace does not have is the same answer as one whose
+      // spec could not be read: the card states either as `spec: 'not_read'`, and a 404 would
+      // make it an error on a run it is already rendering.
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const res = await call<{ present: boolean; spec: unknown; features: unknown[] }>(
+        'GET',
+        `/workspaces/${workspace.id}/executions/exec_nope/spec`,
+      )
+      expect(res.status).toBe(200)
+      expect(res.body.present).toBe(false)
+      expect(res.body.spec).toBeNull()
+      expect(res.body.features).toEqual([])
+    })
   })
 
   registerBoardPlanningTests(harness)

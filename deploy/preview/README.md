@@ -128,6 +128,17 @@ config error would be useless. It is **not** used to reach GitHub in a preview, 
 App (or a self-signed key) is the right thing to put there. Never the production App's key: a
 preview runs unreviewed branch code.
 
+The preview Worker pulls the executor image from **this account's managed registry**, at the
+tag pinned in `deploy/backend/wrangler.toml` (Cloudflare Containers cannot pull the GHCR
+image). Once the environment above exists, `docker-publish.yml`'s `mirror-preview-registry`
+job keeps the registry stocked automatically on every image change. The currently pinned tag
+was published before that, so seed it once by hand with the preview account's credentials:
+
+```sh
+CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=... \
+  pnpm --filter @cat-factory/deploy-backend image:publish
+```
+
 Then, on cat-factory: fill in the built-in **Cloudflare Workers** handler (subdomain + token)
 and set the backend service frame's provisioning type to `cloudflare`; see
 [`docs/internal/dogfooding.md`](../../docs/internal/dogfooding.md).

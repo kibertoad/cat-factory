@@ -3,6 +3,7 @@ import {
   createHeadlessPublicApiKeySchema,
   createPublicApiKeySchema,
   createdPublicApiKeySchema,
+  HEADLESS_KEY_MINT_SCOPE,
   publicApiKeyListResultSchema,
 } from '../public-api-keys.js'
 import { notificationSchema } from '../notifications.js'
@@ -26,7 +27,7 @@ import {
   updatePublicTaskSchema,
 } from '../public-api.js'
 import { publicTaskTypeListSchema } from '../public-task-types.js'
-import { errorResponses, singleStringParam } from './_shared.js'
+import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Public-API route contracts. Two surfaces:
@@ -75,31 +76,40 @@ export const revokePublicApiKeyContract = defineApiContract({
  * resource root; the create used to sit apart at `POST /api/v1/initiatives`, which split the
  * resource across two path roots for no reason a caller could see.
  */
-export const createPublicJobContract = defineApiContract({
-  method: 'post',
-  pathResolver: () => '/api/v1/jobs',
-  requestBodySchema: createPublicJobSchema,
-  responsesByStatusCode: { 202: publicJobAcceptedSchema, ...errorResponses },
-})
+export const createPublicJobContract = withMinScope(
+  'write',
+  defineApiContract({
+    method: 'post',
+    pathResolver: () => '/api/v1/jobs',
+    requestBodySchema: createPublicJobSchema,
+    responsesByStatusCode: { 202: publicJobAcceptedSchema, ...errorResponses },
+  }),
+)
 
 /**
  * List the workspace's headless jobs (newest first, keyset-paginated). Scoped to the
  * runs THIS surface created — an internal-anchored run — exactly like the single-job read, so an
  * external key can never enumerate the workspace's ordinary board runs.
  */
-export const listPublicJobsContract = defineApiContract({
-  method: 'get',
-  pathResolver: () => '/api/v1/jobs',
-  requestQuerySchema: listPublicJobsQuerySchema,
-  responsesByStatusCode: { 200: publicJobListSchema, ...errorResponses },
-})
+export const listPublicJobsContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/jobs',
+    requestQuerySchema: listPublicJobsQuerySchema,
+    responsesByStatusCode: { 200: publicJobListSchema, ...errorResponses },
+  }),
+)
 
-export const getPublicJobContract = defineApiContract({
-  method: 'get',
-  requestPathParamsSchema: idParams,
-  pathResolver: ({ id }) => `/api/v1/jobs/${id}`,
-  responsesByStatusCode: { 200: publicJobSchema, ...errorResponses },
-})
+export const getPublicJobContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: idParams,
+    pathResolver: ({ id }) => `/api/v1/jobs/${id}`,
+    responsesByStatusCode: { 200: publicJobSchema, ...errorResponses },
+  }),
+)
 
 /**
  * Cancel a headless job run. The escape hatch that makes admitting a PARKING pipeline
@@ -109,104 +119,137 @@ export const getPublicJobContract = defineApiContract({
  * back as-is. Board tasks have had `POST /api/v1/tasks/:taskId/stop` all along; this is its
  * counterpart on the jobs surface.
  */
-export const cancelPublicJobContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: idParams,
-  pathResolver: ({ id }) => `/api/v1/jobs/${id}/cancel`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: publicJobSchema, ...errorResponses },
-})
+export const cancelPublicJobContract = withMinScope(
+  'write',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: idParams,
+    pathResolver: ({ id }) => `/api/v1/jobs/${id}/cancel`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicJobSchema, ...errorResponses },
+  }),
+)
 
 // ---- basic board workloads: services + tasks (key-authenticated) -----------
 
 /** List the workspace's services (board service frames). */
-export const listPublicServicesContract = defineApiContract({
-  method: 'get',
-  pathResolver: () => '/api/v1/services',
-  responsesByStatusCode: { 200: publicServiceListSchema, ...errorResponses },
-})
+export const listPublicServicesContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/services',
+    responsesByStatusCode: { 200: publicServiceListSchema, ...errorResponses },
+  }),
+)
 
 /** Create a task under a service. */
-export const createPublicTaskContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: serviceIdParams,
-  pathResolver: ({ serviceId }) => `/api/v1/services/${serviceId}/tasks`,
-  requestBodySchema: createPublicTaskSchema,
-  responsesByStatusCode: { 201: publicTaskSchema, ...errorResponses },
-})
+export const createPublicTaskContract = withMinScope(
+  'write',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: serviceIdParams,
+    pathResolver: ({ serviceId }) => `/api/v1/services/${serviceId}/tasks`,
+    requestBodySchema: createPublicTaskSchema,
+    responsesByStatusCode: { 201: publicTaskSchema, ...errorResponses },
+  }),
+)
 
 /**
  * List a service's tasks (the whole subtree — tasks under the frame and its modules), bounded
  * and keyset-paginated with an optional status filter. Ordered by the stable task id, which is
  * deterministic but NOT chronological (see `listPublicServiceTasksQuerySchema`).
  */
-export const listPublicServiceTasksContract = defineApiContract({
-  method: 'get',
-  requestPathParamsSchema: serviceIdParams,
-  requestQuerySchema: listPublicServiceTasksQuerySchema,
-  pathResolver: ({ serviceId }) => `/api/v1/services/${serviceId}/tasks`,
-  responsesByStatusCode: { 200: publicTaskListSchema, ...errorResponses },
-})
+export const listPublicServiceTasksContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: serviceIdParams,
+    requestQuerySchema: listPublicServiceTasksQuerySchema,
+    pathResolver: ({ serviceId }) => `/api/v1/services/${serviceId}/tasks`,
+    responsesByStatusCode: { 200: publicTaskListSchema, ...errorResponses },
+  }),
+)
 
 /** Get a task's status. */
-export const getPublicTaskContract = defineApiContract({
-  method: 'get',
-  requestPathParamsSchema: taskIdParams,
-  pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}`,
-  responsesByStatusCode: { 200: publicTaskSchema, ...errorResponses },
-})
+export const getPublicTaskContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: taskIdParams,
+    pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}`,
+    responsesByStatusCode: { 200: publicTaskSchema, ...errorResponses },
+  }),
+)
 
 /** Start (run) a task. */
-export const startPublicTaskContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: taskIdParams,
-  pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/start`,
-  requestBodySchema: startPublicTaskSchema,
-  responsesByStatusCode: { 202: publicTaskSchema, ...errorResponses },
-})
+export const startPublicTaskContract = withMinScope(
+  'write',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: taskIdParams,
+    pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/start`,
+    requestBodySchema: startPublicTaskSchema,
+    responsesByStatusCode: { 202: publicTaskSchema, ...errorResponses },
+  }),
+)
 
 /** Edit a task's title/description (pre-start edits). */
-export const updatePublicTaskContract = defineApiContract({
-  method: 'patch',
-  requestPathParamsSchema: taskIdParams,
-  pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}`,
-  requestBodySchema: updatePublicTaskSchema,
-  responsesByStatusCode: { 200: publicTaskSchema, ...errorResponses },
-})
+export const updatePublicTaskContract = withMinScope(
+  'write',
+  defineApiContract({
+    method: 'patch',
+    requestPathParamsSchema: taskIdParams,
+    pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}`,
+    requestBodySchema: updatePublicTaskSchema,
+    responsesByStatusCode: { 200: publicTaskSchema, ...errorResponses },
+  }),
+)
 
 /** Stop a task's in-flight run (records a `cancelled` terminal state, leaving it retryable). */
-export const stopPublicTaskContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: taskIdParams,
-  pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/stop`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: publicTaskSchema, ...errorResponses },
-})
+export const stopPublicTaskContract = withMinScope(
+  'write',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: taskIdParams,
+    pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/stop`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: publicTaskSchema, ...errorResponses },
+  }),
+)
 
 /** Retry a task's failed run. */
-export const retryPublicTaskContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: taskIdParams,
-  pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/retry`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 202: publicTaskSchema, ...errorResponses },
-})
+export const retryPublicTaskContract = withMinScope(
+  'write',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: taskIdParams,
+    pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/retry`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 202: publicTaskSchema, ...errorResponses },
+  }),
+)
 
 /** Read a task's rich run projection (per-step status, subtasks, failure, PR branch). */
-export const getPublicRunContract = defineApiContract({
-  method: 'get',
-  requestPathParamsSchema: taskIdParams,
-  pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/run`,
-  responsesByStatusCode: { 200: publicRunSchema, ...errorResponses },
-})
+export const getPublicRunContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: taskIdParams,
+    pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/run`,
+    responsesByStatusCode: { 200: publicRunSchema, ...errorResponses },
+  }),
+)
 
 /** Delete a task (and its run history). Destructive — requires an `admin`-scoped key. */
-export const deletePublicTaskContract = defineApiContract({
-  method: 'delete',
-  requestPathParamsSchema: taskIdParams,
-  pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
-})
+export const deletePublicTaskContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'delete',
+    requestPathParamsSchema: taskIdParams,
+    pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}`,
+    responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  }),
+)
 
 // ---- pipeline discovery (key-authenticated) --------------------------------
 
@@ -215,18 +258,24 @@ export const deletePublicTaskContract = defineApiContract({
  * half of `createPublicTaskSchema.fields`: a caller reads the descriptors here and fills them
  * there, rather than guessing at a shape the create call would then refuse.
  */
-export const listPublicTaskTypesContract = defineApiContract({
-  method: 'get',
-  pathResolver: () => '/api/v1/task-types',
-  responsesByStatusCode: { 200: publicTaskTypeListSchema, ...errorResponses },
-})
+export const listPublicTaskTypesContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/task-types',
+    responsesByStatusCode: { 200: publicTaskTypeListSchema, ...errorResponses },
+  }),
+)
 
 /** List the workspace's pipelines (id/name/steps + a headless-startable flag). */
-export const listPublicPipelinesContract = defineApiContract({
-  method: 'get',
-  pathResolver: () => '/api/v1/pipelines',
-  responsesByStatusCode: { 200: publicPipelineListSchema, ...errorResponses },
-})
+export const listPublicPipelinesContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/pipelines',
+    responsesByStatusCode: { 200: publicPipelineListSchema, ...errorResponses },
+  }),
+)
 
 // ---- notification inbox: merge / confirm / retry the run tails -------------
 // The external counterparts of the SPA's notification-inbox operations, scoped to the
@@ -236,29 +285,38 @@ export const listPublicPipelinesContract = defineApiContract({
 // top of the scope ladder (`admin`); `dismiss` is `write`; the list is `read`.
 
 /** List the workspace's OPEN notifications (the inbox). */
-export const listPublicNotificationsContract = defineApiContract({
-  method: 'get',
-  pathResolver: () => '/api/v1/notifications',
-  responsesByStatusCode: { 200: publicNotificationListSchema, ...errorResponses },
-})
+export const listPublicNotificationsContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/notifications',
+    responsesByStatusCode: { 200: publicNotificationListSchema, ...errorResponses },
+  }),
+)
 
 /** Act on a notification (run its typed side-effect, then resolve it). Requires an `admin` key. */
-export const actPublicNotificationContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: idParams,
-  pathResolver: ({ id }) => `/api/v1/notifications/${id}/act`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: notificationSchema, ...errorResponses },
-})
+export const actPublicNotificationContract = withMinScope(
+  'admin',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: idParams,
+    pathResolver: ({ id }) => `/api/v1/notifications/${id}/act`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: notificationSchema, ...errorResponses },
+  }),
+)
 
 /** Dismiss a notification without acting on it. */
-export const dismissPublicNotificationContract = defineApiContract({
-  method: 'post',
-  requestPathParamsSchema: idParams,
-  pathResolver: ({ id }) => `/api/v1/notifications/${id}/dismiss`,
-  requestBodySchema: ContractNoBody,
-  responsesByStatusCode: { 200: notificationSchema, ...errorResponses },
-})
+export const dismissPublicNotificationContract = withMinScope(
+  'write',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: idParams,
+    pathResolver: ({ id }) => `/api/v1/notifications/${id}/dismiss`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 200: notificationSchema, ...errorResponses },
+  }),
+)
 
 // ---- key introspection (`read` scope) --------------------------------------
 
@@ -274,11 +332,14 @@ export const dismissPublicNotificationContract = defineApiContract({
  * Before this, "can I do X" was answerable only by attempting X and reading the `403`, which for
  * a destructive operation is not a check at all.
  */
-export const getPublicIdentityContract = defineApiContract({
-  method: 'get',
-  pathResolver: () => '/api/v1/me',
-  responsesByStatusCode: { 200: publicIdentitySchema, ...errorResponses },
-})
+export const getPublicIdentityContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/me',
+    responsesByStatusCode: { 200: publicIdentitySchema, ...errorResponses },
+  }),
+)
 
 // ---- usage & spend (the external dashboard read) ---------------------------
 
@@ -287,11 +348,14 @@ export const getPublicIdentityContract = defineApiContract({
  * per-model breakdown behind it. Workspace-scoped by construction (the aggregate names no
  * resource ids and no account/user dimension), so `read` is the whole scope story.
  */
-export const getPublicUsageContract = defineApiContract({
-  method: 'get',
-  pathResolver: () => '/api/v1/usage',
-  responsesByStatusCode: { 200: publicUsageSchema, ...errorResponses },
-})
+export const getPublicUsageContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/usage',
+    responsesByStatusCode: { 200: publicUsageSchema, ...errorResponses },
+  }),
+)
 
 // ---- headless key provisioning (`admin` scope) -----------------------------
 // The external counterpart of the session-authed `/public-api-keys` routes above, and the same
@@ -305,22 +369,28 @@ export const getPublicUsageContract = defineApiContract({
 // own revocation). See `HEADLESS_MINTABLE_SCOPES`.
 
 /** List the workspace's live keys: metadata only; a secret is never readable back. */
-export const listPublicKeysContract = defineApiContract({
-  method: 'get',
-  pathResolver: () => '/api/v1/keys',
-  responsesByStatusCode: { 200: publicApiKeyListResultSchema, ...errorResponses },
-})
+export const listPublicKeysContract = withMinScope(
+  HEADLESS_KEY_MINT_SCOPE,
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/keys',
+    responsesByStatusCode: { 200: publicApiKeyListResultSchema, ...errorResponses },
+  }),
+)
 
 /**
  * Mint a key for the calling key's own workspace, returning the raw secret exactly once.
  * Omitting `scope` mints a `write` key. `admin` is refused: see the section note above.
  */
-export const createPublicKeyContract = defineApiContract({
-  method: 'post',
-  pathResolver: () => '/api/v1/keys',
-  requestBodySchema: createHeadlessPublicApiKeySchema,
-  responsesByStatusCode: { 201: createdPublicApiKeySchema, ...errorResponses },
-})
+export const createPublicKeyContract = withMinScope(
+  HEADLESS_KEY_MINT_SCOPE,
+  defineApiContract({
+    method: 'post',
+    pathResolver: () => '/api/v1/keys',
+    requestBodySchema: createHeadlessPublicApiKeySchema,
+    responsesByStatusCode: { 201: createdPublicApiKeySchema, ...errorResponses },
+  }),
+)
 
 /**
  * Revoke a key, and with it every key that key minted. Idempotent.
@@ -332,9 +402,12 @@ export const createPublicKeyContract = defineApiContract({
  * provisioned over this API cannot revoke ITSELF (or anything else); its holder hands it back by
  * asking whoever provisioned it, or the provisioner revokes itself and takes it along.
  */
-export const revokePublicKeyContract = defineApiContract({
-  method: 'delete',
-  requestPathParamsSchema: keyIdParams,
-  pathResolver: ({ keyId }) => `/api/v1/keys/${keyId}`,
-  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
-})
+export const revokePublicKeyContract = withMinScope(
+  HEADLESS_KEY_MINT_SCOPE,
+  defineApiContract({
+    method: 'delete',
+    requestPathParamsSchema: keyIdParams,
+    pathResolver: ({ keyId }) => `/api/v1/keys/${keyId}`,
+    responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+  }),
+)

@@ -41,6 +41,8 @@
     // The MCP facade over that same surface, for the same reason. It depends on the SDK above,
     // so it is reachable transitively today — which is exactly the state that silently drops a
     // package out of the build the day that dependency changes.
-    { "path": "../sdk/mcp/tsconfig.build.json" }
+    { "path": "../sdk/mcp/tsconfig.build.json" },
+    // The gatekeeper bindings over that same surface, for the same reason again.
+    { "path": "../sdk/gatekeeper/tsconfig.build.json" }
   ]
 }

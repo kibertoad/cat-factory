@@ -5,8 +5,10 @@
 # file is all the per-deployment configuration. Copy this package, set the values
 # below to your own resources, and run `pnpm deploy`.
 #
-# Every value here is per-deployment. The IDs/origins shown are the maintainer's
-# own deployment (kept so the repo is also a working deployment); change them.
+# It is a TEMPLATE, not a live deployment. Every account id, resource id and
+# origin below is a `REPLACE_WITH_*` placeholder or an `example.com` hostname, so
+# `wrangler deploy` fails loudly against it until you have filled them in, rather
+# than silently landing on somebody else's account.
 name = "cat-factory-backend"
 main = "src/index.ts"
 compatibility_date = "2025-06-01"
@@ -32,7 +34,7 @@ head_sampling_rate = 1
 [[d1_databases]]
 binding = "DB"
 database_name = "cat_factory"
-database_id = "30748a59-c500-4f31-804f-e48f1588d4ac"
+database_id = "REPLACE_WITH_cat_factory_DATABASE_ID"
 migrations_dir = "node_modules/@cat-factory/worker/migrations"
 
 # Dedicated telemetry database (llm_call_metrics + agent_context_snapshots) — required.
@@ -41,7 +43,7 @@ migrations_dir = "node_modules/@cat-factory/worker/migrations"
 [[d1_databases]]
 binding = "TELEMETRY_DB"
 database_name = "cat_factory_telemetry"
-database_id = "bd8a599d-04f0-4cdf-b9c6-5e27f78012c9"
+database_id = "REPLACE_WITH_cat_factory_telemetry_DATABASE_ID"
 migrations_dir = "node_modules/@cat-factory/worker/telemetry-migrations"
 
 # OPTIONAL: dedicated D1 for the Sandbox (the parallel prompt/model testing surface).
@@ -54,7 +56,7 @@ migrations_dir = "node_modules/@cat-factory/worker/telemetry-migrations"
 [[d1_databases]]
 binding = "SANDBOX_DB"
 database_name = "cat_factory_sandbox"
-database_id = "3f228c93-535e-4d30-a221-e73615cf0ad2"
+database_id = "REPLACE_WITH_cat_factory_sandbox_DATABASE_ID"
 migrations_dir = "node_modules/@cat-factory/worker/sandbox-migrations"
 
 # REQUIRED: dedicated D1 database for the account audit log (who did what, when, for
@@ -73,7 +75,7 @@ migrations_dir = "node_modules/@cat-factory/worker/sandbox-migrations"
 [[d1_databases]]
 binding = "AUDIT_DB"
 database_name = "cat_factory_audit"
-database_id = "ba0ae32f-0406-4ecf-8a1a-e0372db1b680"
+database_id = "REPLACE_WITH_cat_factory_audit_DATABASE_ID"
 migrations_dir = "node_modules/@cat-factory/worker/audit-migrations"
 
 # OPTIONAL: SEPARATE D1 database for the high-churn provisioning event log (its own binding
@@ -162,10 +164,10 @@ class_name = "EnvironmentTestWorkflow"
 # Publish/refresh the managed-registry image before deploying:
 #   pnpm image:publish          # = wrangler containers build ... --push
 # It prints the exact registry.cloudflare.com/<account_id>/<image>:<tag> ref;
-# pin that tag here (the account id below is THIS deployment's — change it).
+# pin that tag here, with your own account id in place of the placeholder below.
 [[containers]]
 class_name = "ExecutionContainer"
-image = "registry.cloudflare.com/fe0047c6e869c8cb875ca425a9c341af/cat-factory-executor:1.94.0"
+image = "registry.cloudflare.com/REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID/cat-factory-executor:1.94.0"
 max_instances = 10
 # Coding/bootstrap runs legitimately install dependencies and run build/test/e2e
 # suites inside the box. The default `dev` tier (~256 MiB / ~1/16 vCPU) thrashes
@@ -185,12 +187,12 @@ class_name = "ExecutionContainer"
 # Containers can PULL from (registry.cloudflare.com / Docker Hub / ECR — NOT GHCR).
 # Publish/refresh it before deploying:
 #   pnpm image:publish:deploy   # = wrangler containers build ../../backend/internal/deploy-harness ...
-# Then pin that managed-registry tag here (the account id is THIS deployment's). Omit
+# Then pin that managed-registry tag here, with your own account id. Omit
 # this binding to leave container-backed Kubernetes provisioning off (the synchronous
 # raw-manifest REST path still works); a render-needing config then fails loudly.
 [[containers]]
 class_name = "DeployContainer"
-image = "registry.cloudflare.com/fe0047c6e869c8cb875ca425a9c341af/cat-factory-deploy:0.2.11"
+image = "registry.cloudflare.com/REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID/cat-factory-deploy:0.2.11"
 max_instances = 10
 # kustomize/helm rendering + kubectl apply/rollout is light vs a coding run, but the
 # slim base still wants real headroom for a large manifest tree; standard-1 matches the
@@ -346,7 +348,7 @@ DECISION_TIMEOUT = "24 hours"
 # WAF/Bot-Fight rules block its POSTs to the proxy with "403 ... blocked." before
 # the Worker ever runs (browsers pass the bot checks, so the SPA is unaffected).
 # workers.dev is not in that zone, so the container reaches the proxy unblocked.
-WORKER_PUBLIC_URL = "https://cat-factory-backend.iselwin.workers.dev"
+WORKER_PUBLIC_URL = "https://cat-factory-backend.REPLACE_WITH_WORKERS_SUBDOMAIN.workers.dev"
 # Container coding jobs run asynchronously: the driver dispatches the job and
 # then polls it on this cadence between durable sleeps. JOB_MAX_POLLS is a
 # backstop in case a container never reports a terminal state.
@@ -415,11 +417,11 @@ WORKER_PUBLIC_URL = "https://cat-factory-backend.iselwin.workers.dev"
 # and the private key (PKCS#8 PEM) + webhook secret as secrets:
 #   wrangler secret put GITHUB_APP_PRIVATE_KEY
 #   wrangler secret put GITHUB_WEBHOOK_SECRET
-GITHUB_APP_ID = "4067384"
-GITHUB_APP_SLUG = "cat-factory-app"
+GITHUB_APP_ID = "REPLACE_WITH_GITHUB_APP_ID"
+GITHUB_APP_SLUG = "REPLACE_WITH_GITHUB_APP_SLUG"
 GITHUB_API_BASE = "https://api.github.com"
 # Where to send the browser after a successful install:
-GITHUB_SETUP_REDIRECT_URL = "https://catfactory.kiberion.com"
+GITHUB_SETUP_REDIRECT_URL = "https://board.example.com"
 
 # "Login with GitHub". REQUIRED in production: the auth gate fails closed, so
 # until an OAuth app is configured the protected API returns 503. Set the client
@@ -428,9 +430,9 @@ GITHUB_SETUP_REDIRECT_URL = "https://catfactory.kiberion.com"
 #   wrangler secret put AUTH_SESSION_SECRET   # any high-entropy random string
 # Register the callback URL as <worker-origin>/auth/callback. (Local dev/tests
 # run open via AUTH_DEV_OPEN=true in .dev.vars — NEVER set that here.)
-GITHUB_OAUTH_CLIENT_ID = "Iv23liSy37MggMK0afZL"
+GITHUB_OAUTH_CLIENT_ID = "REPLACE_WITH_GITHUB_OAUTH_CLIENT_ID"
 # Fixed SPA landing URL after login (strongly recommended in production):
-AUTH_SUCCESS_REDIRECT_URL = "https://catfactory.kiberion.com"
+AUTH_SUCCESS_REDIRECT_URL = "https://board.example.com"
 # Deployment-environment marker. When production-like, the worker REFUSES the
 # AUTH_DEV_OPEN escape hatch even if it leaks in — belt-and-braces so a stray dev
 # flag can't re-open a live deployment. Always set this in a real deployment.
@@ -442,14 +444,14 @@ ENVIRONMENT = "production"
 # in AUTH_ALLOWED_LOGINS OR the members of the organizations named in
 # AUTH_ALLOWED_ORGS — the two lists combine as an OR. Both empty => NOBODY can
 # sign in. At least one MUST be set or the deployment locks everyone out.
-AUTH_ALLOWED_LOGINS = "kibertoad"
+AUTH_ALLOWED_LOGINS = "REPLACE_WITH_GITHUB_LOGIN"
 # AUTH_ALLOWED_ORGS = "my-org,another-org"
 
 # CORS allowlist. Comma-separated browser Origins the API answers cross-origin —
 # set this to YOUR frontend origin(s) when provisioning. Unset or "*" allows any
 # origin, which is safe because every route is bearer-gated and fails closed;
 # pinning is defense-in-depth. No trailing slash.
-CORS_ALLOWED_ORIGINS = "https://catfactory.kiberion.com"
+CORS_ALLOWED_ORIGINS = "https://board.example.com"
 
 # Credential encryption. ONE shared master key (a secret) encrypts every integration's
 # per-workspace credentials at rest — documents, tasks, environments and runner pools.
