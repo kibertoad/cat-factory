@@ -50,10 +50,10 @@ jobs:
       #   backendCode — backend source OR a root build/dependency input changed. Gates the
       #                 pure-backend lanes (`test-worker`, `test-db`); a frontend- or
       #                 docs-only PR leaves it false so those lanes skip.
-      #   code        — ANY real source changed (backend, frontend, a `deploy/*` example, or
-      #                 a root build input), i.e. NOT a docs-/prose-only diff. Gates the
-      #                 cross-stack lanes (`test-units`, `test-e2e`) AND the build lanes
-      #                 (`build-typecheck`, `publish-integrity`, `frontend-check`), so a
+      #   code        — ANY real source changed (backend, frontend, `sdk/*`, a `deploy/*`
+      #                 example, or a root build input), i.e. NOT a docs-/prose-only diff.
+      #                 Gates the cross-stack lanes (`test-units`, `test-e2e`) AND the build
+      #                 lanes (`build-typecheck`, `publish-integrity`, `frontend-check`), so a
       #                 docs-only PR runs no tests and no builds — only lint, the repo
       #                 guards, changeset, and zizmor. (On non-PR events both flags are
       #                 forced true — see `scope`.)
@@ -153,8 +153,15 @@ jobs:
             # on either. This lane is its own for the same reason it is NON-BLOCKING (not in the
             # aggregated `Test` gate, the shape `test-eks` has): the Cloudflare OS protocol is
             # still moving, and a partner-side breaking change must not turn this repo's CI red.
-            # What it adds is the workerd suite; the machinery package is a published library, so
-            # its build and typecheck are already gated by `Build & typecheck` like any other.
+            #
+            # The non-blockingness is scoped to the RUNTIME suite, which is where a moving
+            # protocol actually bites: `test-units` excludes `@cat-factory/gatekeeper-worker` so
+            # its workerd run happens only here. Build and typecheck are the opposite case and
+            # deliberately DO block: the machinery is a published npm package, so a `dist` that
+            # does not compile is our break to fix before it ships, and `publish-integrity` has
+            # to see that `dist` to run publint/attw over it. `sdkSrc` in the `src` filter below
+            # is what makes that true rather than merely intended: without it an
+            # `sdk/gatekeeper-worker/**`-only diff left `code` false and skipped both lanes.
             gatekeeper:
               - 'deploy/gatekeeper/**'
               - 'sdk/gatekeeper/**'
@@ -227,6 +234,20 @@ jobs:
             frontendSrc:
               - 'frontend/**'
               - '!**/*.md'
+            # The `sdk/*` tree: the four published clients, the MCP and gatekeeper projections
+            # over them, and the Gatekeeper Worker machinery. Real source that the `code` flag
+            # used to miss entirely, which meant an sdk-ONLY diff (a hand-written transport, the
+            # Gatekeeper machinery) skipped `build-typecheck`, `publish-integrity` and
+            # `test-units`, the three lanes that compile the published `dist`, run publint/attw
+            # over it and run these packages' own unit suites. `sdk-smoketest` has its own filter
+            # and stayed green on its own, so the `Test` and `Build` gates read as passes with
+            # nothing having typechecked the diff. It also drags `test-e2e` in, which an sdk
+            # change cannot affect: accepted, because an sdk-only PR is rare (a generated change
+            # rides a contracts edit, which is `backendSrc` already) and a fourth flag to shave it
+            # would buy less than it costs in scope to reason about.
+            sdkSrc:
+              - 'sdk/**'
+              - '!**/*.md'
             # Example deployments (`deploy/*`) — the assembled-product wiring. `test-e2e`
             # builds and serves `deploy/frontend` as its real SPA (Playwright's webServer
             # runs `pnpm --filter @cat-factory/deploy-frontend run build && ... preview`), so a
@@ -247,13 +268,14 @@ jobs:
           BACKEND_SRC: ${{ steps.src.outputs.backendSrc }}
           FRONTEND_SRC: ${{ steps.src.outputs.frontendSrc }}
           DEPLOY_SRC: ${{ steps.src.outputs.deploySrc }}
+          SDK_SRC: ${{ steps.src.outputs.sdkSrc }}
           ROOT_BUILD: ${{ steps.filter.outputs.rootBuild }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           backend=false
           code=false
           if [ "$BACKEND_SRC" = 'true' ] || [ "$ROOT_BUILD" = 'true' ]; then backend=true; fi
-          if [ "$backend" = 'true' ] || [ "$FRONTEND_SRC" = 'true' ] || [ "$DEPLOY_SRC" = 'true' ]; then code=true; fi
+          if [ "$backend" = 'true' ] || [ "$FRONTEND_SRC" = 'true' ] || [ "$DEPLOY_SRC" = 'true' ] || [ "$SDK_SRC" = 'true' ]; then code=true; fi
           # Change-gating only makes sense against a PR base. On non-PR events (a push to
           # `main`, or a manual `workflow_dispatch`) paths-filter diffs against the default
           # branch, so a dispatch on `main` — HEAD == base tip — yields an EMPTY diff and every
@@ -266,7 +288,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "backendCode=$backend | code=$code" \
             "(backendSrc=$BACKEND_SRC frontendSrc=$FRONTEND_SRC deploySrc=$DEPLOY_SRC" \
-            "rootBuild=$ROOT_BUILD event=$EVENT_NAME)"
+            "sdkSrc=$SDK_SRC rootBuild=$ROOT_BUILD event=$EVENT_NAME)"
 
       # Pick the shard shape for the sharded test lanes. Gate on `push` specifically (not
       # "not a PR") so a manual workflow_dispatch — the way CI timing is measured before a
@@ -771,14 +793,21 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
-      # Exclude the worker (its own sharded job) and the two Postgres facades (the
-      # test-db job below). Everything left is database-free pure-unit work.
+      # Exclude the worker (its own sharded job), the two Postgres facades (the test-db job
+      # below) and the Gatekeeper machinery, whose suite boots real `workerd` and belongs to
+      # the non-blocking `test-gatekeeper` lane. Everything left is infra-free pure-unit work.
+      # `@cat-factory/deploy-gatekeeper` deliberately stays: its remaining suite is a plain-Node
+      # check that the template's policy still compiles against the generated operation table,
+      # and that one SHOULD gate, because a policy the table no longer supports is our break
+      # rather than a partner's. `scripts/check-test-lane-parity.mjs` holds this list and
+      # `pnpm test:quick` to the same set.
       - name: Run unit packages
         run: >-
           pnpm
           --filter='!@cat-factory/worker'
           --filter='!@cat-factory/node-server'
           --filter='!@cat-factory/local-server'
+          --filter='!@cat-factory/gatekeeper-worker'
           -r run test:run
 
       # `cat-factory supervise` driven as its own process against the `dist/bin.js` built above.

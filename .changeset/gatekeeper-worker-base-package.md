@@ -9,3 +9,6 @@ verified outbound-webhook receiver and the approval inbox that answers every par
 A deployment supplies only its policy, through `createGatekeeperWorker({ policy })`, and gets the
 policy vocabulary from the runtime-free `@cat-factory/gatekeeper-worker/policy` entry point.
 `deploy/gatekeeper` is the template that installs it; it was previously a copy of all of the above.
+
+`@cloudflare/workers-types` is a required peer dependency: every type this package publishes is
+stated in terms of the Worker globals, so a consumer without them cannot compile against it.

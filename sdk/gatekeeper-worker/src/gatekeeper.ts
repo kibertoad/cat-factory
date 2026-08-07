@@ -95,8 +95,8 @@ export class Gatekeeper {
     if (tier === null) {
       throw new GatekeeperError(
         'unknown_actor',
-        `No tier is granted to '${actor.id}'. Add a grant in policy.config.ts, or set a ` +
-          'defaultTier if this deployment means every OS user to have one.',
+        `No tier is granted to '${actor.id}'. Add them to this Gatekeeper's policy under ` +
+          'grants, or set a defaultTier if this deployment means every OS user to have one.',
       )
     }
     return buildCapability({ actor, tier, keys: this.#keys, state: this.#state })

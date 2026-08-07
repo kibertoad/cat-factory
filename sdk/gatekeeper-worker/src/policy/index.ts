@@ -1,5 +1,5 @@
-// The POLICY surface: everything a deployment needs to WRITE its `policy.config.ts`, and nothing
-// that needs a Worker runtime to import.
+// The POLICY surface: everything a deployment needs to WRITE its policy, and nothing that needs a
+// Worker runtime to import.
 //
 // It is a separate entry point (`@cat-factory/gatekeeper-worker/policy`) for one reason: the
 // package's main entry reaches `cloudflare:workers` for the Durable Object, so a policy file that

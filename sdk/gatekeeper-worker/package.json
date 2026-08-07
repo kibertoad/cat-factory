@@ -56,11 +56,6 @@
   "peerDependencies": {
     "@cloudflare/workers-types": ">=4"
   },
-  "peerDependenciesMeta": {
-    "@cloudflare/workers-types": {
-      "optional": true
-    }
-  },
   "engines": {
     "node": ">=20"
   }

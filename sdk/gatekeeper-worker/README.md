@@ -51,6 +51,13 @@ export const POLICY: GatekeeperPolicy = {
 }
 ```
 
+`@cloudflare/workers-types` is a **required** peer, not an optional one. Every type this package
+publishes is stated in terms of the Worker globals (`ExportedHandler`, `DurableObjectNamespace`,
+`Request`) and the Durable Object base class comes from `cloudflare:workers`, so a consumer without
+those types cannot compile the three lines above, let alone anything else. It is a peer rather than
+a dependency because the globals are ambient: two copies in one tree redeclare each other, so the
+version has to be the consumer's.
+
 Bindings the Worker reads from its environment: `CAT_FACTORY_BASE_URL`, `PUBLIC_URL`, `WEBHOOK_ID`
 as vars, and `PROVISIONING_KEY` (an `admin` cat-factory key), `WEBHOOK_SECRET`, `OS_SHARED_TOKEN`
 as secrets, plus a `STATE` Durable Object namespace bound to `GatekeeperState`. A missing one is

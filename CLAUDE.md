@@ -476,11 +476,12 @@ GitLab deployments.
 ## Public-API SDK clients: generated from the spec, never hand-edited
 
 Four official clients for `/api/v1` live under `sdk/` (TypeScript, Python, Go, and Java, which also
-serves Kotlin), plus two projections over the TypeScript client: `sdk/mcp` (the operations as MCP
-tools) and `sdk/gatekeeper` (a policy table of per-operation scope floors, from the contracts' `minScope`). The chain is **contracts → `docs/openapi.json` → `sdk/*`** with no hand-editing at
-any link: `pnpm gen:sdk` renders the committed spec, and `pnpm check:sdk` fails CI on drift and version
-skew. Design, the shared client invariants, and the Java/Kotlin trade: [`sdk/README.md`](./sdk/README.md).
-Two rules bite from outside that tree:
+serves Kotlin), plus two projections over it: `sdk/mcp` (the operations as MCP tools) and
+`sdk/gatekeeper` (per-operation scope floors, from the contracts' `minScope`). THOSE SIX are the chain
+**contracts → `docs/openapi.json` → `sdk/*`** with no hand-editing at any link: `pnpm gen:sdk` renders
+the spec and `pnpm check:sdk` fails CI on drift and version skew. `sdk/gatekeeper-worker` is the ONE
+member outside it, hand-written throughout: a published library CONSUMING that table. Design, the
+Java/Kotlin trade and that exception: [`sdk/README.md`](./sdk/README.md). Two rules bite from outside:
 
 - **Never edit a file whose header says GENERATED**; change the contracts or the emitter. Only models
   and operations are generated; each transport is hand-written beside them.
@@ -488,8 +489,7 @@ Two rules bite from outside that tree:
   group and method. Generation FAILS without one, so a new endpoint cannot ship as an un-callable hole
   in four clients. The same entry becomes an MCP tool with no second decision, except a STREAMING
   endpoint, which must be named in `MCP_OMITTED_OPERATIONS` with the reason (generation fails on an
-  unclassified one). `backend/internal/sdk-smoketest` is the only check that can see the four clients
-  DISAGREE; a scenario step added to one must be added to all four.
+  unclassified one). A scenario step added to one `sdk-smoketest` client must be added to all four.
 
 ## Migrations
 
