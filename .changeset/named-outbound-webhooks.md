@@ -6,6 +6,9 @@
 '@cat-factory/worker': minor
 '@cat-factory/node-server': minor
 '@cat-factory/app': minor
+'@cat-factory/sdk': minor
+'@cat-factory/mcp-server': minor
+'@cat-factory/gatekeeper-bindings': minor
 ---
 
 Register several NAMED outbound webhooks per workspace, instead of one that each integration overwrites
@@ -26,19 +29,26 @@ pushed exactly that state back onto the caller.
 
 Each endpoint carries its own sealed signing secret and its own three filters, and every rule the
 singular routes enforce holds identically: the `admin` floor, keep-on-omit in every field, the
-write-only secret, the SSRF guard at the write boundary and per redirect hop. Deliveries FAN OUT
-concurrently to every subscribed endpoint, isolated per endpoint. Both properties are deliberate:
-the caller awaits the fan-out on a run's terminal path, so serial delivery would make enrolling a
-second integration a latency cost on every run, and a shared failure path would let one permanently
-broken receiver mask every sibling's health. `deliveryId` is unchanged and carries no endpoint
-segment, because each receiver only ever sees its own copy.
+write-only secret, the SSRF guard at the write boundary and per redirect hop. Deliveries FAN OUT to
+every subscribed endpoint, concurrently but BOUNDED at six in flight, isolated per endpoint, and
+sharing ONE wall-clock budget. All three are deliberate: the caller awaits the fan-out on a run's
+terminal path, so serial delivery would make enrolling a second integration a latency cost on every
+run; six is the Workers ceiling on simultaneous connections, past which a `fetch` queues invisibly
+while the delivery's clock runs, so an unbounded fan-out reports failures it never attempted; and a
+shared failure path would let one permanently broken receiver mask every sibling's health. An
+endpoint the budget never reached is reported as not attempted rather than as a delivery failure.
+`deliveryId` is unchanged and carries no endpoint segment, because each receiver only ever sees its
+own copy.
 
 Watch for two things in review. `notification_webhooks` is re-keyed to `(workspace_id, id)` on both
 stores, and neither generator produces a migration that survives existing rows: the D1 side is the
 usual SQLite rebuild, and drizzle-kit's in-place `ALTER` adds `name` as `NOT NULL` with no default,
 so both are hand-healed (add nullable, backfill to `default` / `Default`, then constrain). And the
 per-workspace cap of 10 is a 409 `webhook_limit_reached` that bounds only what CREATES an endpoint,
-since disabling and deleting are the actions an operator at the cap needs.
+since disabling and deleting are the actions an operator at the cap needs. The cap is enforced in
+the STORE, because counting in the service and writing a statement later admits two racing
+enrolments, which is the access pattern this exists for: D1 gets it from one conditional upsert,
+Postgres from a transaction-scoped advisory lock per workspace.
 
 Additive on the public surface throughout: four new operations, and two new response fields (`id`,
 `name`) on a projection consumers already tolerate unknown members of. OpenAPI `info.version` goes to

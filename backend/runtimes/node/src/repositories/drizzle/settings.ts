@@ -16,6 +16,7 @@ import type {
   LocalSettingsRepository,
   ModelPreset,
   ModelPresetRepository,
+  NotificationWebhookPutOutcome,
   NotificationWebhookRecord,
   NotificationWebhookRepository,
   ReviewQuestionPostClaimWindow,
@@ -355,7 +356,14 @@ export class DrizzleTrackerSettingsRepository implements TrackerSettingsReposito
 }
 
 /**
- * A workspace's outbound notification webhooks — keyed by (workspace, endpoint id) in
+ * The advisory-lock class for the per-workspace webhook cap. Advisory keys are global to the
+ * database, so the pair `(this, hashtext(workspaceId))` is what keeps this lock from meeting an
+ * unrelated one; `migrate.ts` holds the other advisory lock in this codebase, on a single-int key.
+ */
+const WEBHOOK_CAP_LOCK_CLASS = 0x7768_6b21
+
+/**
+ * A workspace's outbound notification webhooks, keyed by (workspace, endpoint id) in
  * `notification_webhooks` (mirror of the D1 `D1NotificationWebhookRepository`). The filters are
  * JSON arrays decoded through the SHARED parsers both runtimes use, so the columns can't drift.
  */
@@ -377,11 +385,22 @@ export class DrizzleNotificationWebhookRepository implements NotificationWebhook
       .select()
       .from(notificationWebhooks)
       .where(eq(notificationWebhooks.workspace_id, workspaceId))
-      .orderBy(notificationWebhooks.id)
+      // `COLLATE "C"`, not the column's default collation. The port documents ONE order and both
+      // stores have to produce it, but a bare `ORDER BY id` means byte order on D1 (SQLite's
+      // BINARY, its only collation for text) and the DATABASE's locale collation here, which is
+      // typically `en_US.UTF-8` and sorts punctuation as if it were absent. Webhook ids are a
+      // lowercase slug that admits `-` and `_`, so the two disagree on exactly the ids an operator
+      // is most likely to pick: `web-hook` sorts before `webhook` under BINARY (`-` is 0x2D) and
+      // after it under a locale collation, which ignores the `-` and then breaks the tie on
+      // length. `C` is byte order by definition, so this is the same sequence D1 returns.
+      .orderBy(sql`${notificationWebhooks.id} COLLATE "C"`)
     return rows.map(rowToNotificationWebhook)
   }
 
-  async put(record: NotificationWebhookRecord): Promise<void> {
+  async put(
+    record: NotificationWebhookRecord,
+    limit: number,
+  ): Promise<NotificationWebhookPutOutcome> {
     const values = {
       name: record.name,
       url: record.url,
@@ -392,13 +411,48 @@ export class DrizzleNotificationWebhookRepository implements NotificationWebhook
       secret_sealed: record.secretSealed,
       updated_at: record.updatedAt,
     }
-    await this.db
-      .insert(notificationWebhooks)
-      .values({ workspace_id: record.workspaceId, id: record.id, ...values })
-      .onConflictDoUpdate({
-        target: [notificationWebhooks.workspace_id, notificationWebhooks.id],
-        set: values,
-      })
+    // The cap needs the count and the insert to be ONE indivisible step, and unlike SQLite (where
+    // the D1 mirror gets that from a single conditional statement) Postgres cannot express it that
+    // way: at READ COMMITTED there is no row yet to lock, so two enrolments each counting nine
+    // both insert and the workspace lands at eleven. A transaction alone does not help, for the
+    // same reason a `DELETE`-then-`INSERT` transaction does not enforce "one live row per X".
+    //
+    // So writes for one workspace are serialized on a transaction-scoped advisory lock. Two ints,
+    // not one: the key space is global to the database, so the first names THIS cap and the second
+    // names the workspace, which keeps it from colliding with any other advisory-lock user
+    // (`migrate.ts` holds one). It is released when the transaction ends, commit or abort.
+    return await this.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(${WEBHOOK_CAP_LOCK_CLASS}, hashtext(${record.workspaceId}))`,
+      )
+      // Read under the lock. An endpoint that already exists is admitted whatever the count says:
+      // the count includes it, so testing the count alone would freeze a full workspace out of
+      // disabling and deleting, the two edits that get it back under the limit.
+      const [existing] = await tx
+        .select({ id: notificationWebhooks.id })
+        .from(notificationWebhooks)
+        .where(
+          and(
+            eq(notificationWebhooks.workspace_id, record.workspaceId),
+            eq(notificationWebhooks.id, record.id),
+          ),
+        )
+      if (!existing) {
+        const [counted] = await tx
+          .select({ total: sql<number>`count(*)::int` })
+          .from(notificationWebhooks)
+          .where(eq(notificationWebhooks.workspace_id, record.workspaceId))
+        if ((counted?.total ?? 0) >= limit) return 'limit_reached'
+      }
+      await tx
+        .insert(notificationWebhooks)
+        .values({ workspace_id: record.workspaceId, id: record.id, ...values })
+        .onConflictDoUpdate({
+          target: [notificationWebhooks.workspace_id, notificationWebhooks.id],
+          set: values,
+        })
+      return 'stored'
+    })
   }
 
   async delete(workspaceId: string, id: string): Promise<void> {

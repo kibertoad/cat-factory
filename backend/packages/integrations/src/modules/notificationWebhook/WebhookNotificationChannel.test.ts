@@ -39,7 +39,7 @@ function repoWith(
   return {
     get: async (_workspaceId, id) => present.find((record) => record.id === id) ?? null,
     list: async () => present,
-    put: async () => {},
+    put: async () => 'stored' as const,
     delete: async () => {},
   }
 }

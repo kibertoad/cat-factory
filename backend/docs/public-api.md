@@ -1293,10 +1293,16 @@ same write-only secret, same SSRF guard, same `webhook_url_required` refusal. Th
 `name`, an operator-facing label that defaults to the id.
 
 A delivery **fans out**: every enabled endpoint subscribed to the family gets its own copy, signed
-with its own secret, and the copies are delivered concurrently so a second receiver costs a run's
+with its own secret, delivered concurrently (up to six at a time) so a second receiver costs a run's
 settlement no extra latency. One receiver failing costs only its own delivery. `deliveryId` is
 unchanged and carries no endpoint segment: each receiver sees only its own copy, so the key it
 dedupes on is the same one it always was.
+
+The whole fan-out shares ONE retry budget rather than giving each endpoint its own, because the
+budget exists to bound what a run's settlement waits for. Delivery stays best-effort, as it always
+was: if enough subscribed receivers are slow enough to spend that budget between them, the endpoints
+behind them are logged as not attempted rather than delivered late. A receiver that needs a
+guarantee should treat the push as a prompt and reconcile over the polling endpoints.
 
 Registering an 11th endpoint is refused with `409` and
 `details.reason: "webhook_limit_reached"` (`details.limit` carries the cap). Editing or removing an

@@ -108,7 +108,14 @@ Three decisions worth carrying forward:
 
 The cap is 10 per workspace (`webhook_limit_reached`, 409), and it bounds only what CREATES an
 endpoint: a workspace at the cap can still disable and delete, which are the actions that resolve
-it.
+it. It is enforced by the STORE, inside `put`, which takes the limit as an argument and admits or
+refuses under it atomically. Counting in the service and writing a statement later would not hold
+against the access pattern this whole slice exists for: two instances of a cold-booting Worker
+enrolling at once would both see room and both take it, and neither engine makes that safe by
+itself (Postgres takes no predicate lock on a row that does not exist, and SQLite serializes each
+statement rather than a read-then-write pair). D1 gets it from one conditional upsert; Postgres
+needs a transaction-scoped advisory lock per workspace. The conformance suite races ten creates for
+four slots, which is the only shape that can see the difference.
 
 ### 3. Key provisioning metadata
 

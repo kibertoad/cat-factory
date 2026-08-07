@@ -87,21 +87,12 @@ export class NotificationWebhookService {
     if (input.url !== undefined) {
       assertSafeNotificationWebhookUrl(input.url, this.deps.urlSafetyPolicy)
     }
-    // ONE read serves both the keep-on-omit merge and the cap check below. Asking for the
-    // addressed row and then counting the rest would be two queries for one decision, and the
-    // count would be read a moment after the row it is meant to bound.
-    const registered = await this.deps.notificationWebhookRepository.list(workspaceId)
-    const existing = registered.find((record) => record.id === id)
-    // The cap bounds only what CREATES an endpoint: editing one that already exists is admitted
-    // even on a workspace that is at (or, after a lowered cap, over) the limit, because the edits
-    // an operator makes to react to being over the limit are exactly disabling and deleting.
-    if (!existing && registered.length >= MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE) {
-      throw new ConflictError(
-        `This workspace already has ${MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE} notification webhooks registered`,
-        'webhook_limit_reached',
-        { limit: MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE },
-      )
-    }
+    // Read for the keep-on-omit merge ONLY. The cap is not decided here: a count read now and
+    // acted on a statement later binds nothing, because two enrolments racing each other would
+    // both see room. `put` takes the limit and admits or refuses under it atomically, which is the
+    // only place the two can be one step. This read can therefore be stale about the count without
+    // costing anything, which it always could have been.
+    const existing = await this.deps.notificationWebhookRepository.get(workspaceId, id)
     // Keep-on-omit needs something to keep. Refusing here is what keeps the rule uniform across
     // every field without letting a body that names no endpoint store a half-registered row.
     const url = input.url ?? existing?.url
@@ -134,7 +125,21 @@ export class NotificationWebhookService {
         : (existing?.secretSealed ?? null),
       updatedAt: this.deps.clock.now(),
     }
-    await this.deps.notificationWebhookRepository.put(record)
+    // The cap bounds only what CREATES an endpoint: replacing one that already exists is admitted
+    // even on a workspace at (or, after a lowered cap, over) the limit, because disabling and
+    // deleting are exactly the edits an operator makes to get back under it. The store decides
+    // that under its own lock and reports which happened; this layer only chooses the status.
+    const outcome = await this.deps.notificationWebhookRepository.put(
+      record,
+      MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE,
+    )
+    if (outcome === 'limit_reached') {
+      throw new ConflictError(
+        `This workspace already has ${MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE} notification webhooks registered`,
+        'webhook_limit_reached',
+        { limit: MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE },
+      )
+    }
     return toWire(record)
   }
 

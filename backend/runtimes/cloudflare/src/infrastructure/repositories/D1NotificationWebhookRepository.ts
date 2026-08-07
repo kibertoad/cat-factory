@@ -1,4 +1,8 @@
-import type { NotificationWebhookRecord, NotificationWebhookRepository } from '@cat-factory/kernel'
+import type {
+  NotificationWebhookPutOutcome,
+  NotificationWebhookRecord,
+  NotificationWebhookRepository,
+} from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 import {
   parseNotificationWebhookTypes,
@@ -41,19 +45,43 @@ export class D1NotificationWebhookRepository implements NotificationWebhookRepos
   }
 
   async list(workspaceId: string): Promise<NotificationWebhookRecord[]> {
+    // `COLLATE BINARY` is SQLite's default for a text column and is spelled out only to name the
+    // order this port promises: the Drizzle mirror has to ask Postgres for `COLLATE "C"` to match,
+    // because its database-locale default would sort `web-hook` after `webhook` by ignoring the
+    // punctuation. Byte order on both, so the two runtimes return one sequence.
     const { results } = await this.db
-      .prepare(`SELECT * FROM notification_webhooks WHERE workspace_id = ? ORDER BY id`)
+      .prepare(
+        `SELECT * FROM notification_webhooks WHERE workspace_id = ? ORDER BY id COLLATE BINARY`,
+      )
       .bind(workspaceId)
       .all<NotificationWebhookRow>()
     return (results ?? []).map(toRecord)
   }
 
-  async put(record: NotificationWebhookRecord): Promise<void> {
-    await this.db
+  async put(
+    record: NotificationWebhookRecord,
+    limit: number,
+  ): Promise<NotificationWebhookPutOutcome> {
+    // ONE statement, so the cap and the write cannot be separated by another writer. The row
+    // source is a `SELECT ... WHERE` rather than `VALUES` precisely so the admission test rides
+    // inside the insert: SQLite serializes statements, so a concurrent enrolment either sees this
+    // row or is seen by it, and can never read the same free slot twice.
+    //
+    // The predicate admits an existing endpoint unconditionally (`EXISTS`) before it consults the
+    // count, because the count includes that row: without the first half, a workspace sitting
+    // exactly at the limit could no longer edit, disable or re-point what it had already
+    // registered, which are the only ways back under it.
+    //
+    // The `WHERE` also disambiguates the parse. SQLite cannot otherwise tell an upsert's `ON
+    // CONFLICT` from a join's `ON` in an `INSERT ... SELECT`, and its documented fix is exactly a
+    // `WHERE` clause on the SELECT, which this needs anyway.
+    const result = await this.db
       .prepare(
         `INSERT INTO notification_webhooks
            (workspace_id, id, name, url, types, run_events, alert_events, enabled, secret_sealed, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+         WHERE EXISTS (SELECT 1 FROM notification_webhooks WHERE workspace_id = ? AND id = ?)
+            OR (SELECT COUNT(*) FROM notification_webhooks WHERE workspace_id = ?) < ?
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            name = excluded.name,
            url = excluded.url,
@@ -75,8 +103,15 @@ export class D1NotificationWebhookRepository implements NotificationWebhookRepos
         record.enabled ? 1 : 0,
         record.secretSealed,
         record.updatedAt,
+        record.workspaceId,
+        record.id,
+        record.workspaceId,
+        limit,
       )
       .run()
+    // A filtered-out row writes nothing, which is the refusal. An admitted one always reports a
+    // change, whether it inserted or took the conflict branch.
+    return (result.meta?.changes ?? 0) > 0 ? 'stored' : 'limit_reached'
   }
 
   async delete(workspaceId: string, id: string): Promise<void> {

@@ -27,8 +27,12 @@ function repo(initial: readonly NotificationWebhookRecord[] = []): NotificationW
   return {
     get: async (_workspaceId, id) => records.get(id) ?? null,
     list: async () => [...records.values()].sort((a, b) => a.id.localeCompare(b.id)),
-    put: async (next) => {
+    // Mirrors what the real stores enforce under their lock: the cap gates CREATES only, so an
+    // id already present is replaced whatever the count says.
+    put: async (next, limit) => {
+      if (!records.has(next.id) && records.size >= limit) return 'limit_reached'
       records.set(next.id, next)
+      return 'stored'
     },
     delete: async (_workspaceId, id) => {
       records.delete(id)

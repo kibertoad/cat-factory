@@ -14,8 +14,9 @@ import { signWebhookDelivery } from './webhookSignature.js'
 //
 // A workspace registers SEVERAL endpoints, so the three families reach this through
 // `fanOutSignedWebhook` rather than calling `postSignedWebhook` per endpoint themselves: the
-// concurrency and the per-endpoint isolation are properties of the fan-out, and three hand-rolled
-// copies of it is exactly the drift this file exists to prevent one layer down.
+// bounded concurrency, the shared wall-clock budget and the per-endpoint isolation are properties
+// of the fan-out, and three hand-rolled copies of it is exactly the drift this file exists to
+// prevent one layer down.
 
 /** How many attempts one delivery gets, and how long to wait between them (exponential). */
 const MAX_ATTEMPTS = 3
@@ -25,16 +26,21 @@ const BASE_RETRY_MS = 250
 const REQUEST_TIMEOUT_MS = 5000
 
 /**
- * The ceiling on ONE delivery across all of its attempts. This is the number that matters, and it
- * is not the per-attempt timeout multiplied out: the caller AWAITS the delivery, so every
- * millisecond spent here is latency added to the engine step that produced the event — the very
- * step that parks or settles a run. Three 5s attempts plus backoff would let a dead receiver add
- * ~15.8s, which the in-app and Slack channels never do.
+ * The ceiling on one EMISSION: a single delivery, or a whole fan-out across every subscribed
+ * endpoint. This is the number that matters, and it is not the per-attempt timeout multiplied out.
+ * The caller AWAITS it, so every millisecond spent here is latency added to the engine step that
+ * produced the event, the very step that parks or settles a run. Three 5s attempts plus backoff
+ * would let a dead receiver add ~15.8s, which the in-app and Slack channels never do.
  *
  * So the retry budget is a WALL-CLOCK deadline, not an attempt count: attempts stop as soon as the
  * remaining budget is gone, and each attempt's own timeout is clamped to what is left. Delivery is
  * best-effort by contract, so a receiver too slow to answer inside the budget is treated exactly
  * like one that failed.
+ *
+ * `fanOutSignedWebhook` hands the SAME deadline to every endpoint it drives rather than giving each
+ * a fresh one, so registering a tenth webhook cannot turn a bounded wait into a ten-times-bounded
+ * one. What that trades away is stated at the fan-out: past the budget, endpoints are reported as
+ * not attempted rather than delivered late.
  */
 const TOTAL_DELIVERY_BUDGET_MS = 6000
 
@@ -54,6 +60,24 @@ export interface SignedDeliveryDependencies {
   urlSafetyPolicy?: UrlSafetyPolicy
 }
 
+/**
+ * How many deliveries may be in flight at once during a fan-out.
+ *
+ * Six because that is the Cloudflare Workers ceiling on simultaneous open connections per
+ * invocation: a seventh `fetch` does not fail, it QUEUES, invisibly to the code that issued it. An
+ * unbounded fan-out therefore does not buy parallelism past six, it only hides the queue, and the
+ * hiding is the bug: each delivery's wall-clock budget starts when `postSignedWebhook` is entered,
+ * so a queued endpoint spends its budget waiting for a connection and is then reported as a
+ * failure it never actually attempted. Bounding the fan-out is what makes a reported failure mean
+ * the receiver failed.
+ *
+ * Deliberately ONE number rather than a per-runtime one. Node has no such ceiling, but the cap is
+ * ten endpoints, so the parallelism it would unlock is a second wave at most, and both facades
+ * behaving identically is worth more than that: the fan-out's timing is what the conformance and
+ * unit suites assert against.
+ */
+const MAX_CONCURRENT_DELIVERIES = 6
+
 /** One delivery: where to POST, how to sign it, and the already-serialized body. */
 export interface SignedDeliveryRequest {
   url: string
@@ -63,6 +87,30 @@ export interface SignedDeliveryRequest {
   payload: string
   /** The epoch-ms stamp inside the payload; signed alongside it so a replay is detectable. */
   sentAt: number
+  /**
+   * Absolute epoch-ms ceiling for this delivery across all of its attempts. Omitted ⇒
+   * {@link TOTAL_DELIVERY_BUDGET_MS} from now, which is the single-delivery case.
+   *
+   * A fan-out supplies its own so that N endpoints share ONE budget: the whole point of the number
+   * is the latency the caller pays on a run's terminal path, and that is a property of the fan-out,
+   * not of each delivery in it.
+   */
+  deadline?: number
+}
+
+/**
+ * Raised for an endpoint the fan-out never got to before the shared budget ran out. Distinct from
+ * a delivery error on purpose: "the receiver rejected us" and "we ran out of time to ask" need
+ * different fixes, and reporting the second as the first would send an operator to debug a
+ * receiver that was never contacted.
+ */
+export class WebhookDeliveryNotAttemptedError extends Error {
+  constructor(endpointId: string) {
+    super(
+      `Webhook delivery to \`${endpointId}\` was not attempted: the fan-out spent its ${TOTAL_DELIVERY_BUDGET_MS}ms budget on earlier endpoints`,
+    )
+    this.name = 'WebhookDeliveryNotAttemptedError'
+  }
 }
 
 /**
@@ -95,7 +143,7 @@ export async function postSignedWebhook(
   // host cannot bounce the delivery to a different one.
   const assertSafe = (u: string) => assertSafeNotificationWebhookUrl(u, deps.urlSafetyPolicy)
 
-  const deadline = deps.clock.now() + TOTAL_DELIVERY_BUDGET_MS
+  const deadline = request.deadline ?? deps.clock.now() + TOTAL_DELIVERY_BUDGET_MS
   let lastError: unknown
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     if (attempt > 0) {
@@ -150,21 +198,30 @@ export interface SignedDeliveryTarget {
 /**
  * POST one already-composed body to EVERY subscribed endpoint, isolating each.
  *
- * Two properties are the whole reason this is a helper rather than a loop at each of the three
+ * Three properties are the whole reason this is a helper rather than a loop at each of the three
  * call sites:
  *
- * - **Concurrent, not sequential.** The caller awaits the fan-out, so its cost is latency on the
- *   engine step that produced the event — the step that parks or settles a run. Each delivery
- *   already carries a wall-clock budget chosen against exactly that (`TOTAL_DELIVERY_BUDGET_MS`);
- *   running them in series would multiply that budget by the number of endpoints, so a workspace
- *   would pay for enrolling a second integration in the latency of every run.
+ * - **Concurrent, but BOUNDED.** The caller awaits the fan-out, so its cost is latency on the
+ *   engine step that produced the event: the step that parks or settles a run. Running the
+ *   deliveries in series would multiply the budget by the endpoint count, so a workspace would pay
+ *   for enrolling a second integration in the latency of every run. Running them all at once is
+ *   the opposite mistake, and a quieter one, because the concurrency past `MAX_CONCURRENT_DELIVERIES`
+ *   is imaginary on the Worker (see that constant) while the budget it burns is real.
+ * - **ONE wall-clock budget for the whole fan-out**, not one per endpoint. The number exists to
+ *   bound what the caller waits for, and the caller waits for all of this, so a per-endpoint budget
+ *   would let ten endpoints bound nothing at all. Each delivery is clamped to what is left when it
+ *   actually starts, so its own retry loop still stops on time.
  * - **One failing receiver costs only its own delivery.** A rejected `Promise.all` would abandon
  *   nothing (the others are already in flight) but would report ONE failure for the batch, so a
  *   permanently broken endpoint would mask the health of every sibling. Each result is settled and
  *   reported on its own, naming the endpoint.
  *
- * Never throws: a delivery that spends its budget is reported through `onEndpointError` and the
- * fan-out carries on, which is what "best-effort" means for this transport.
+ * An endpoint the budget never reached is reported too, as {@link WebhookDeliveryNotAttemptedError}
+ * rather than as a delivery failure: it is a cap, and a cap records what it dropped. Silence there
+ * would read as a delivery that succeeded, and a generic failure would read as a broken receiver.
+ *
+ * Never throws: every outcome goes to `onEndpointError` and the fan-out carries on, which is what
+ * "best-effort" means for this transport.
  */
 export async function fanOutSignedWebhook(
   deps: SignedDeliveryDependencies,
@@ -172,19 +229,37 @@ export async function fanOutSignedWebhook(
   delivery: { payload: string; sentAt: number },
   onEndpointError: (error: unknown, target: SignedDeliveryTarget) => void,
 ): Promise<void> {
-  await Promise.all(
-    targets.map(async (target) => {
+  const deadline = deps.clock.now() + TOTAL_DELIVERY_BUDGET_MS
+  // A shared cursor rather than pre-sliced waves: a worker that finishes early picks up the next
+  // endpoint immediately, so one slow receiver delays only itself and not the whole batch behind
+  // it. With fixed waves, six healthy endpoints would all wait on the slowest of their six.
+  let next = 0
+  const deliverFrom = async (): Promise<void> => {
+    for (;;) {
+      const index = next
+      next += 1
+      const target = targets[index]
+      if (!target) return
+      if (deps.clock.now() >= deadline) {
+        onEndpointError(new WebhookDeliveryNotAttemptedError(target.id), target)
+        continue
+      }
       try {
         await postSignedWebhook(deps, {
           url: target.url,
           secretSealed: target.secretSealed,
           payload: delivery.payload,
           sentAt: delivery.sentAt,
+          deadline,
         })
       } catch (error) {
         onEndpointError(error, target)
       }
-    }),
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(MAX_CONCURRENT_DELIVERIES, targets.length) }, deliverFrom),
   )
 }
 
