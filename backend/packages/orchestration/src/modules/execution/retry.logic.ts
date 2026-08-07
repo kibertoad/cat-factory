@@ -241,6 +241,12 @@ export function buildResumedInstance(input: {
     // LIVE run over the same work — the sandbox exactly one restart deep, through the ordinary
     // affordance. A dry run stays a dry run; only a fresh start can settle a new mode.
     ...(previous.initiatedByRole != null ? { initiatedByRole: previous.initiatedByRole } : {}),
+    // Who the run was started FOR travels with it too, and is NOT re-taken from whoever drives
+    // the re-drive: a retry is the same work for the same requester, so re-pinning it would
+    // hand a run to the operator who pressed retry (or, from a sweeper, to nobody at all).
+    ...(previous.initiatedByExternalIdentity != null
+      ? { initiatedByExternalIdentity: previous.initiatedByExternalIdentity }
+      : {}),
     ...(previous.mode != null ? { mode: previous.mode } : {}),
     // Preserve the error trail: the failure this attempt clears is appended to the history so it
     // stays viewable after the top banner disappears on restart.

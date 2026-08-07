@@ -1316,6 +1316,11 @@ export const publicApiKeys = pgTable(
     // minted, which is what the `idx_public_api_keys_minter` index below serves. Not a FK, for
     // the same reason `created_by_user_id` is not: the row must survive its minter's removal.
     created_by_key_id: text('created_by_key_id'),
+    // Who the key acts for on the PROVISIONER's side, supplied at a headless mint (D1 migration
+    // 0086). Opaque: never parsed, never resolved, never an authorization input — so it carries no
+    // index and no constraint beyond nullability. Written once; a run pins its own copy at
+    // admission rather than joining back to here.
+    external_identity: text('external_identity'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     last_used_at: bigint('last_used_at', { mode: 'number' }),
     revoked_at: bigint('revoked_at', { mode: 'number' }),

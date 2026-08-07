@@ -46,7 +46,13 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   read as such inlined between route registrations: `ticketLinkage.ts` (file a task FROM a tracker
   ticket: resolve and refuse before the block exists, claim after) and `documentAttachment.ts`
   (attach the requirements documents a task is built against, imported from a connected source or
-  uploaded whole, with the task rolled back if an attachment does not land). `taskTypeFields.ts`
+  uploaded whole, with the task rolled back if an attachment does not land). `keyProjection.ts` holds the ONE
+  record-to-wire projection of a public-API key, shared by the session-authed management routes and
+  the headless provisioning ones (they had a copy each, which is how a field lands on one surface
+  and silently not the other), and `runIdentityVisibility.ts` decides who may read the
+  `externalIdentity` a run was pinned with: an identity-bearing key sees only its own runs', and a
+  withheld one is FLAGGED rather than blanked, since `null` already means "this run names nobody".
+  `taskTypeFields.ts`
   serves the task-type CATALOG and maps a caller's `fields` bag onto the internal shape at both
   doors; the PATCH half MERGES over what the task already carries where creation takes the bag
   whole, because the surface never serves that bag back, so a replacing patch would ask a caller
