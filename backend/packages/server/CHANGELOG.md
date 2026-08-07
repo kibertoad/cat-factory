@@ -1,5 +1,102 @@
 # @cat-factory/server
 
+## 0.238.0
+
+### Minor Changes
+
+- ae44914: Let a person ask a document source whether the copy on the board is still the current one
+
+  Runs re-confirm every linked document against its source at dispatch, so an agent no longer builds
+  from whatever import happened to store. The person deciding whether to START a run still could not
+  see any of it: the board showed a title and an excerpt frozen at import time, so "is the frame I
+  just edited the one the agents will read" was unanswerable without opening Figma and comparing by
+  eye. The imported-documents list and a task's context panel now carry the `syncedAt` stamp and a
+  member-tier action that runs the same probe → compare → re-import ladder on demand, answering with
+  the refreshed row and what the check concluded.
+
+  The manual path drops the cached verdict before it asks, and that is the reason it is a separate
+  entry point rather than a second caller of the batch one. The 60-second cache exists so a
+  pipeline's worth of step dispatches costs one round trip per document and so a source that is down
+  is remembered as down instead of being re-probed by every dispatch; both are exactly wrong for a
+  click, whose commonest cause is that the last answer reported an outage. Served from the cache, the
+  button would report the very failure the person is retrying past and no amount of clicking would
+  clear it.
+
+  What a click may leave BEHIND in that cache is asymmetric, and the asymmetry is the whole safety
+  property. A success is stored, so the dispatches that follow a manual refresh inherit it. A failure
+  is not: the entry has just been dropped, so re-filling it with whatever one click found would let a
+  person retrying past a flaky source install an `unreachable` verdict every dispatch reads for the
+  rest of the TTL window, degrading the run path with a failure no dispatch ever observed and
+  renewing it with each further click. For the same reason a click never increments
+  `document.freshness_gap`: that counter measures runs handed a copy the source has moved past, and
+  one person clicking through an outage could otherwise move a deployment-wide rate as far as they
+  have patience for.
+
+  A moved REVISION is no longer reported as a changed document. `DocumentFreshness.confirmed` carries
+  a three-member `change` where it carried a `reimported` boolean, because a whole-file source
+  routinely moves its token without changing anything a reader sees: a Figma file's version bumps on
+  any edit anywhere in it, including frames a given document does not cover. That case now says so
+  (`revision_only`), and the write that records the moved token no longer moves `syncedAt`, which
+  means "when the body was last written" and would otherwise put a fresh timestamp on bytes nobody
+  changed. INTERNAL BREAK: the boolean is gone rather than kept beside the enum.
+
+  `syncedAt` and the verdict stay two facts. The stamp is when the body was last WRITTEN, and a
+  refresh that finds nothing changed writes nothing, so folding the check into the stamp would either
+  claim a write that never happened or leave a confirmation sitting on a row the source has since
+  moved past. An absent verdict therefore means "nobody has asked", never "unknown": listing
+  documents deliberately probes nothing, because confirming costs a round trip per page and a
+  board-wide sweep is a rate limit waiting to happen. Both facts are rendered WITH their time, since
+  each is a claim about a moment in the history of a page someone else is still editing and a moment
+  stated without its time is read as "now". A verdict is also scoped to the BOARD it was asked on: the
+  same file can be imported into two of them, and a verdict keyed by source and id alone would render
+  one board's confirmation against another board's row that nobody had checked.
+
+  Two shapes worth noting for a reviewer. The freshness vocabulary moved from kernel to
+  `@cat-factory/contracts`, since this is the point at which a human reads the same conclusion the
+  agent does and the backend does not localize prose; kernel keeps the agent-facing renderer and
+  re-exports the types, so nothing importing them changes. And the refresh route takes the narrow
+  `DocumentSourceKind` rather than a stored row's wider origin, so an `upload` is refused at the
+  schema: a 200 carrying "not applicable" would leave a caller unable to tell "this document has no
+  source" from "the check ran and found nothing to compare", which is the distinction the whole
+  vocabulary exists to keep.
+
+- 4be3510: Refuse to auto-merge when no merge policy resolves at all
+
+  A run whose task pinned no preset, in a workspace whose preset library had not been seeded (or a
+  deployment with no preset repository wired), used to fall back to `DEFAULT_RISK_POLICY`, which is
+  `Balanced` with auto-merge ON. So a deployment that had configured no merge policy still landed
+  pull requests on a merger model's own scores.
+
+  That unresolved case now resolves the new `FALLBACK_RISK_POLICY`, which auto-merges nothing. The
+  shipped `Balanced` preset is unchanged: still `autoMergeEnabled: true`, still the seeded default,
+  still no per-class floors. The refusal carries its own merge-decision reason,
+  `no_policy_configured`, kept apart from `auto_merge_disabled` because the remedies differ in kind:
+  one names a preset somebody chose and is fixed by editing it, the other says the deployment has
+  stated no merge policy at all.
+
+  A board's built-in preset library is now written when the board is CREATED rather than by the
+  first `list()`. The engine resolves a task's governing preset without listing anything, so seeding
+  on a read left a board nobody had opened with no library at all: a run started over the public API
+  resolved the fallback and refused, while the identical run after one board load merged.
+  `RiskPolicyService` still repairs an empty library on read, for boards that predate this.
+
+  The `merge_review` inbox card is now worded from the decision's own reason rather than from a pair
+  of booleans beside it, so every rung of the merge ladder describes what actually refused. Only
+  `exceeded_thresholds` still blames the ceilings; the other reasons no longer report a PR as scored
+  "outside the task's auto-merge thresholds" when no threshold took part in the decision.
+
+### Patch Changes
+
+- Updated dependencies [ae44914]
+- Updated dependencies [4be3510]
+- Updated dependencies [3b89686]
+  - @cat-factory/contracts@0.260.0
+  - @cat-factory/integrations@0.139.0
+  - @cat-factory/orchestration@0.227.0
+  - @cat-factory/kernel@0.258.0
+  - @cat-factory/agents@0.116.5
+  - @cat-factory/spend@0.15.24
+
 ## 0.237.1
 
 ### Patch Changes
