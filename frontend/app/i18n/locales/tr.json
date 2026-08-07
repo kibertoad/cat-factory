@@ -1263,6 +1263,7 @@
         "within_thresholds": "Tüm puanlar {preset} eşiklerinin içinde olduğundan PR otomatik olarak birleştirildi.",
         "exceeded_thresholds": "{axes} {preset} eşiklerini aştığından PR bir kişinin birleştirmesini bekliyor.",
         "auto_merge_disabled": "{preset} ön ayarı her PR'yi bir kişiye yönlendirir, bu yüzden bu PR inceleme bekliyor.",
+        "no_policy_configured": "Bu çalıştırmayı yöneten bir birleştirme politikası yoktu, bu yüzden hiçbir PR kendiliğinden birleşmez. Bu dağıtımda birleştirme ön ayarı kitaplığı kurulu değil; bunu yalnızca bir operatör düzeltebilir.",
         "no_rationale": "Birleştirici PR'yi puanladı ancak bir gerekçe vermedi, bu yüzden karara otomatik birleştirme için güvenilemedi; PR bir kişinin birleştirmesini bekliyor.",
         "no_assessment": "Birleştirici ayrıştırılabilir bir değerlendirme döndürmedi, bu yüzden PR bir kişinin birleştirmesini bekliyor.",
         "merge_failed": "Puanlar {preset} eşiklerinin içindeydi ancak otomatik birleştirme tamamlanamadı (örneğin dal koruması veya bir çakışma), bu yüzden PR bir kişinin birleştirmesini bekliyor.",

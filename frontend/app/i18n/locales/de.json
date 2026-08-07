@@ -1832,6 +1832,7 @@
         "within_thresholds": "Jede Bewertung liegt innerhalb der {preset}-Schwellenwerte, daher wurde der PR automatisch gemergt.",
         "exceeded_thresholds": "{axes} überschritt die {preset}-Schwellenwerte, daher wartet der PR darauf, dass ein Mensch mergt.",
         "auto_merge_disabled": "Das {preset}-Preset sendet jeden PR an einen Menschen, daher wartet dieser auf Prüfung.",
+        "no_policy_configured": "Für diesen Lauf galt keine Merge-Richtlinie, daher wird kein PR selbstständig gemergt. Diese Installation hat keine Merge-Preset-Bibliothek eingerichtet; das kann nur ein Betreiber ändern.",
         "no_rationale": "Der Merger hat den PR bewertet, aber keine Begründung gegeben, daher konnte dem Urteil zum automatischen Mergen nicht vertraut werden; der PR wartet darauf, dass ein Mensch mergt.",
         "no_assessment": "Der Merger hat keine parsbare Bewertung zurückgegeben, daher wartet der PR darauf, dass ein Mensch mergt.",
         "merge_failed": "Die Bewertungen lagen innerhalb der {preset}-Schwellenwerte, aber der automatische Merge konnte nicht abgeschlossen werden (zum Beispiel Branch-Schutz oder ein Konflikt), daher wartet der PR darauf, dass ein Mensch mergt.",
