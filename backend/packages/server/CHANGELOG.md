@@ -1,5 +1,94 @@
 # @cat-factory/server
 
+## 0.240.0
+
+### Minor Changes
+
+- 8cbd518: Let a code-registered prompt fragment name a LIVING document.
+
+  A `documentRef` on a deployment-registered fragment used to be refused at boot, because every
+  document source authenticated per workspace and there was no deployment-wide credential to read one
+  with. A deployment now configures its own (`DOC_SOURCE_<SOURCE>_<FIELD>`, the field names taken from
+  each provider's existing connect-form declaration), and a `builtin`-tier `documentRef` resolves
+  through a new `DeploymentDocumentResolver` port, version-probed and cached under one
+  deployment-wide group so a hundred workspaces folding one standard cost one fetch and one
+  invalidation.
+
+  The deployment's own credentials are read from the environment and nothing else. `DOCUMENT_SOURCES`
+  governs which sources a WORKSPACE may connect, and `DOCUMENTS_ENABLED` and the connection encryption
+  key govern whether tenant connections are stored at all; none of the three has any bearing on a
+  standard the deployment configured centrally, whose credentials live in plaintext variables and are
+  never persisted. So setting `DOC_SOURCE_NOTION_API_TOKEN` is the whole configuration, with no
+  unrelated prerequisite to discover.
+
+  `github` is the exception and it is declared, not inferred: its credential is a workspace's App
+  installation, so the new `deploymentScoped` source trait is false for it and both boot validation
+  and the provider refuse the scope. Boot now refuses only a `documentRef` this deployment cannot
+  serve, naming which of the two causes applies.
+
+  An unreachable source still degrades to the fragment's registered body, but no longer silently: the
+  fallback logs a warning naming the fragment, tier and source, because the prompt is byte-identical
+  either way and nothing downstream could otherwise tell a stale standard from a current one.
+
+  In mothership mode the credential stays on the mothership and the node reads the resolved body over
+  `POST /internal/prompt-fragments/document-bodies`.
+
+  `DocumentSourceProvider.fetchDocument` / `probeVersion` now take `workspaceId: string | null`, where
+  `null` is the deployment scope. An internal interface with no external consumers.
+
+### Patch Changes
+
+- Updated dependencies [8cbd518]
+- Updated dependencies [8cbd518]
+- Updated dependencies [7a2730a]
+  - @cat-factory/contracts@0.262.0
+  - @cat-factory/kernel@0.262.0
+  - @cat-factory/integrations@0.141.0
+  - @cat-factory/agents@0.117.0
+  - @cat-factory/orchestration@0.230.0
+  - @cat-factory/spend@0.15.28
+
+## 0.239.2
+
+### Patch Changes
+
+- f7882cf: Stop the run-debug surface and the decision-list description from telling callers things that are
+  no longer true.
+
+  The `tool_retry_loop` signal handed the reader `?ok=false`, a tool-call filter replaced by
+  `?outcome=error`. An unknown query param is ignored rather than refused, so the link answered with
+  the run's WHOLE trajectory and a follower reading it as the failing subset saw every call as a
+  failure. Now pinned by a test, which is what was missing when the param was renamed.
+
+  `listPublicRunDecisions` described two decision kinds out of the thirteen the response can carry,
+  and claimed `parked` gates the list. It does not: a `follow-ups` entry is answerable while the run
+  is still working, so a caller that polls only when `parked` waits for a stop that never comes. The
+  regenerated description names every kind and points an empty `decisions` at `unanswerable`. It
+  reaches the spec, the four SDK clients and the MCP tool descriptions, which is the surface LLM
+  callers read instead of the docs.
+
+- Updated dependencies [f7882cf]
+- Updated dependencies [e6aa37d]
+- Updated dependencies [aabfb4d]
+  - @cat-factory/orchestration@0.229.0
+  - @cat-factory/contracts@0.261.1
+  - @cat-factory/mcp-server@0.16.1
+  - @cat-factory/kernel@0.261.0
+  - @cat-factory/agents@0.116.8
+  - @cat-factory/integrations@0.140.2
+  - @cat-factory/spend@0.15.27
+
+## 0.239.1
+
+### Patch Changes
+
+- Updated dependencies [9d6bce0]
+  - @cat-factory/kernel@0.260.0
+  - @cat-factory/agents@0.116.7
+  - @cat-factory/integrations@0.140.1
+  - @cat-factory/orchestration@0.228.1
+  - @cat-factory/spend@0.15.26
+
 ## 0.239.0
 
 ### Minor Changes

@@ -2000,11 +2000,11 @@
           "unknown": "war nicht verfügbar ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Führen Sie den Schritt auf einer Agenten-CLI mit MCP aus, oder erweitern Sie die Harness-Liste des Servers.",
+          "harnessUnsupported": "Führen Sie den Schritt auf einer Agenten-CLI mit MCP aus, oder erweitern Sie die Harness-Liste des Servers. Ein Codex-Lauf mit Ihrer eigenen CLI-Anmeldung hat keinen laufspezifischen Ablageort für den Server; verwenden Sie stattdessen Zugangsdaten der Plattform.",
           "transportUnsupported": "Deklarieren Sie dafür einen stdio-Server, oder führen Sie den Schritt auf einer Agenten-CLI aus, die HTTP-Server erreicht.",
-          "missingSecret": "Hinterlegen Sie die genannte Zugangsinformation im Infrastruktur-Fenster unter den Capability-Zugangsdaten.",
+          "missingSecret": "Hinterlegen Sie die genannte Zugangsinformation entweder als Umgebungsvariable des Deployments oder im Infrastruktur-Fenster unter den Capability-Zugangsdaten.",
           "reservedSecret": "Ändern Sie die Deklaration auf einen anderen Schlüssel; das Setzen dieser Variablen hilft gerade nicht.",
-          "oauthNotConnected": "Verbinden Sie dieses Board im Infrastruktur-Fenster damit.",
+          "oauthNotConnected": "Verbinden Sie dieses Board im Infrastruktur-Fenster damit. Ein Deployment ohne ENCRYPTION_KEY hat keinen Ort für eine Berechtigung, das muss ein Betreiber also zuerst setzen.",
           "oauthTokenFailed": "Verbinden Sie es im Infrastruktur-Fenster neu, oder warten Sie die Störung des Anbieters ab.",
           "overBudget": "Kürzen Sie, was der Agent deklariert, damit ein Lauf alles mitführen kann."
         }
@@ -6131,11 +6131,8 @@
       "notCovered": "Nicht geprüft: {count}",
       "regressions": "Regressionen: {count}",
       "regressionTag": "Regression",
-      "idOnly": "nur ID",
-      "idOnlyHint": "Diese ID steht nicht in der Service-Spezifikation, deshalb gibt es dafür keinen Titel.",
       "spec": {
-        "not_read": "Die Service-Spezifikation wurde nicht gelesen, deshalb stehen hier die vom Tester gemeldeten Anforderungs-IDs ohne ihre Titel.",
-        "unmatched": "Keine dieser Anforderungs-IDs steht in der gelesenen Service-Spezifikation, deshalb werden nur die vom Tester gemeldeten IDs gezeigt."
+        "not_read": "Die Service-Spezifikation wurde nicht gelesen, deshalb decken diese Zahlen nur das ab, worüber der Tester entschieden hat, nach ID."
       },
       "verdict": {
         "met": "Bestätigt",
@@ -6145,8 +6142,10 @@
       "gap": {
         "no_tester_step": "Diese Pipeline hat keinen Test-Schritt, daher wurde keine Anforderung geprüft.",
         "tester_not_reported": "Der Tester hat noch nicht berichtet, daher wurde über keine Anforderung entschieden.",
-        "no_verdicts": "Der Tester hat berichtet, ohne über eine Anforderung der Spezifikation zu entscheiden."
-      }
+        "no_verdicts": "Der Tester hat berichtet, ohne über eine Anforderung der Spezifikation zu entscheiden.",
+        "no_requirements": "Die Service-Spezifikation enthält keine Anforderungen, daher gab es für den Tester nichts zu entscheiden."
+      },
+      "unmatchedVerdicts": "Der Tester hat zusätzlich über {count} ID(s) entschieden, die in dieser Spezifikation nicht vorkommen; seine eigene Zählung liegt deshalb höher als die Zahlen oben."
     },
     "tests": {
       "title": "Wie getestet wurde",

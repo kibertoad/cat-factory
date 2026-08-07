@@ -120,14 +120,18 @@ const API_PREFIX = '/api/v1'
 // `extras` bag, which keeps serving them until the window in `public-api.md` closes, so no
 // consumer has to move on this version. 1.20.0 is main's published number as of this branch's last
 // merge; re-read this line after any merge rather than trusting that the VERSION auto-merged clean.
-// 1.22.0: every operation gains `x-min-scope`, the key-scope floor its route enforces (read off
+// 1.23.0: every operation gains `x-min-scope`, the key-scope floor its route enforces (read off
 // each contract's `minScope`; see `withMinScope` in the contracts routes). Additive metadata: no
 // path, shape or vocabulary moves, and a consumer that ignores the extension sees the surface it
 // always saw. It is the floor only: a run-starting operation can still escalate to `decide` at
-// request time when the named pipeline can park. 1.21.0 is main's published number as of this
-// branch's last merge; re-read this line after any merge rather than trusting that the VERSION
-// auto-merged clean.
-const API_VERSION = '1.22.0'
+// request time when the named pipeline can park.
+//
+// 1.22.0 is main's published number as of this branch's last merge, and it is NOT this change:
+// it belongs to `GET /api/v1/runs/:runId/outcome` and the verification report's new optional
+// `requirements.unmatchedVerdicts`. Two diffs claiming one number is a lie a consumer pinning
+// the version would act on, so re-read this line after any merge rather than trusting that the
+// VERSION auto-merged clean.
+const API_VERSION = '1.23.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -421,7 +425,7 @@ const OPERATION_DOCS = {
     tag: 'Decisions',
     summary: "List a run's parked decisions",
     description:
-      'Read what a run is currently asking a human: requirement-review findings (with the stable item ids a reply addresses) and any implementation-fork choice. `parked` is true while the run is blocked awaiting one of them.',
+      'Read what a run is currently asking a human. Each entry names its `kind`, and every kind this surface can answer is listed: `requirements-review`, `clarity-review`, `brainstorm`, `interview`, `input-gate`, `approval-gate`, `judge`, `fork`, `agent-decision`, `pr-review`, `human-test`, `visual-confirmation`, `follow-ups`. Each carries the stable ids (item, approval, decision, finding) that its answering route addresses. `parked` reports only whether the run has STOPPED (`status` is `blocked`); it is not a precondition for `decisions` being non-empty, since a `follow-ups` entry is answerable while the run is still working, so poll this regardless of `parked`. An empty `decisions` beside a non-empty `unanswerable` means a wait no route here can settle (a person reviewing the pull request, a deployment-registered gate), each named with its reason and step.',
   },
   replyPublicRunFinding: {
     tag: 'Decisions',
@@ -711,6 +715,12 @@ const OPERATION_DOCS = {
     description:
       'The engine’s bundle of CAPTURED FACTS about a run: the CI gate’s verdict and failing checks, the platform’s own run of the service’s lint/test/build commands (with the failing output), the red-then-green reproduction proof for a bugfix, the tester’s structured report, requirement coverage, the throwaway-environment lifecycle, judge verdicts and the merge decision. Byte-for-byte the JSON block the pull-request body carries, composed on read, so it also answers for a run that never opened a pull request. Each section states `reported` or `absent` with a note, so a step that did not run never looks like a step that found nothing.',
   },
+  getPublicRunOutcome: {
+    tag: 'Evidence',
+    summary: "Get a run's outcome summary",
+    description:
+      'What the run changed and what backs that up, in product language, for a reader who will not open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, and the machine checks that ran. The same reduction the app’s outcome card renders, over the same evidence the verification report is built from, so the two cannot state different totals for one run. Nothing here is asserted by a model: every count is derived from recorded verdicts. Prefer the verification report when you need a reviewer’s full bundle; prefer this when you need to say what shipped. Sections state `reported` or `absent` with a machine-readable gap code, and `truncations` names any list the response had to bound.',
+  },
   listPublicRunArtifacts: {
     tag: 'Evidence',
     summary: "List a run's captured artifacts",
@@ -754,7 +764,7 @@ const TAG_DESCRIPTIONS = {
   Webhook:
     'The workspace’s one outbound endpoint: register it to receive notifications, run-lifecycle events and platform-health alerts by push instead of polling. Requires an `admin`-scope key; the signing secret is write-only.',
   Decisions:
-    'A run’s parked human decisions — requirement-review findings and implementation-fork choices — so a headless caller can drive the clarification loop instead of the run hanging. Answering requires a `decide`-scope key.',
+    'A run’s human decisions, from requirement-review and clarity findings through approval gates, judge verdicts, interviews and follow-ups, so a headless caller can drive the clarification loop instead of the run hanging. Answering requires a `decide`-scope key.',
   Evidence:
     'What a run PROVED: the engine’s own verification report (the same bundle it writes onto the pull request) and the binary artifacts the run captured, bytes included. The surface for a consumer that has to judge a run (accept the change, score the fleet) rather than debug one. Read-only (`read` scope).',
   Keys: 'The workspace’s public-API keys, provisioned headlessly. Requires an `admin`-scope key; a key minted here can never reach `admin` itself, and revoking a key revokes everything it minted.',

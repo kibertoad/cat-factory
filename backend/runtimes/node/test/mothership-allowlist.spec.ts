@@ -289,13 +289,16 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // endpoint as the ledger-side ones above, so they stay mothership-internal for the same
   // reason. Materialising it is the retention sweep's own write, which the mothership runs
   // against its own Postgres; a node never drives it, and there is no prune to classify
-  // because the table has none. `scopeWhere` is a private query-scope helper.
+  // because the table has none. The per-workspace fold rides `workspaceRepository.delete`,
+  // which is itself mothership-internal, so a node never reaches it either. `scopeWhere` is a
+  // private query-scope helper.
   spendRollupRepository: {
     scopeWhere: 'helper',
     spendByDimension: 'admin',
     spendTrend: 'admin',
     spendRollupWatermark: 'admin',
     rollupSpendDays: 'sweeper',
+    rollupWorkspaceSpendDays: 'sweeper',
   },
   // The spend LEDGER is the one member of the telemetry family that is NOT local-first: it is the
   // org's budget safeguard, and its three rollups are read remotely by the spend gate, so `record`

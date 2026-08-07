@@ -48,7 +48,7 @@ export class LinearDocumentProvider implements DocumentSourceProvider {
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
-    _workspaceId: string,
+    _workspaceId: string | null,
   ): Promise<DocumentContent> {
     const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
     const data = await client.query<{
@@ -64,7 +64,7 @@ export class LinearDocumentProvider implements DocumentSourceProvider {
   async probeVersion(
     credentials: DocumentCredentials,
     externalId: string,
-    _workspaceId: string,
+    _workspaceId: string | null,
   ): Promise<string> {
     const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
     const data = await client.query<{ document?: { updatedAt?: string | null } | null }>(

@@ -50,7 +50,16 @@ it only reaches the logger the Worker writes through while both imports resolve 
   container agent-executor **wiring** (same class names as `@cat-factory/server`'s `agents/`;
   those are the shared abstraction, these are the runtime wiring; see `docs/glossary.md`).
 - `durable-objects/`, `workflows/`, `containers/`, `runners/`: durable execution + real-time
-  - per-run-container machinery.
+  - per-run-container machinery. `CacheGenerationDirectory` is the cache-coherency
+    directory (per-group generation counters); its Worker-side client, the module-scope
+    app-cache bag (one per ISOLATE, profile picked by the `CACHE_GENERATIONS` binding) and
+    the `ctx.waitUntil` adopter for loader background work live in `appCachesHost.ts` +
+    `requestContext.ts` (the ambient ExecutionContext every entry point brackets). That
+    ambient is read for TWO things, and the second is the trap: `currentExecutionContext`
+    adopts background work, and `currentInvocation` scopes the cache's IN-FLIGHT promises,
+    because a bag that outlives the invocation would otherwise let one request await a
+    promise another created, which workerd punishes by destroying the joining request
+    UNCATCHABLY. Anything else hoisted to module scope owes the same question.
 - `observability/`: the per-ISOLATE telemetry buffers and their flushes (`operationalFlush.ts`,
   `logExport.ts`, `logSettings.ts`, `platformMetrics.ts`, `cronSweep.ts`). Every entry point
   applies `applyLogSettings` and flushes what its isolate holds as a post-response `waitUntil`,
@@ -64,8 +73,18 @@ Package root (not under `src/`): `migrations/` + `telemetry-migrations/` +
 `sandbox-migrations/` + `migrations-provisioning/` + `audit-migrations/` hold the D1 schema, the
 twin of the Node facade's `drizzle/` + `db/schema.ts`. One lineage per BINDING: a new one is also a
 new `[[d1_databases]]` entry, a `files` entry in package.json, and a line in `deploy/backend`'s
-`db:migrate:*` scripts plus deploy.yml's `migrations` path filter, or its schema never reaches
-production.
+`db:migrate:*` scripts, or a deployment copying that template never applies the lineage and its
+schema never reaches production.
+
+## The deployment extension surface
+
+`src/index.ts` publishes every app-owned registry constructor plus the authoring types, so a
+deployment's only cat-factory runtime dependency is this facade
+([ADR 0044](../../docs/adr/0044-facade-extension-surface.md)). This runtime takes its registries as
+`overrides: Partial<CoreDependencies>`, so it accepts every seam by construction and the
+reachability guard has nothing to say here; what still binds is constructibility, asserted by
+`test/extension-surface.test.ts`. That list is a SYMMETRY copy of the Node facade's classification
+(no shared dependency could carry one), so a seam added there lands here in the same change.
 
 **See also:** `CLAUDE.md` → "Multi-runtime facades & cross-runtime conformance", "Execution
 flow", "Repo bootstrap flow".

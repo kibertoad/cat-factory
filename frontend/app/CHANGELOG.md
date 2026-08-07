@@ -1,5 +1,113 @@
 # @cat-factory/app
 
+## 0.241.3
+
+### Patch Changes
+
+- 8cbd518: Make a runtime facade the whole extension surface a deployment needs.
+
+  Each facade now re-exports the CONSTRUCTOR and the types for every app-owned registry it lets a
+  deployment inject, not only the option that takes one. `gateRegistry`, `judgeRegistry`,
+  `stepResolverRegistry`, `vcsRegistry` and `promptFragmentRegistry` were reachable options with no
+  exported way to build a value, so the only route was a direct dependency on `@cat-factory/kernel` /
+  `@cat-factory/gates` / `@cat-factory/prompt-fragments`, which publish at exact versions, so
+  floating one past what the facade pins resolves a second physical copy and the registration lands
+  where nothing reads it. The reusable-operation authoring types (`CustomTaskType`,
+  `TaskTypePresentation`, `TaskTypeFieldDescriptor`, `TaskTypeFieldOption`, the shared
+  `DescriptorField*` shapes, `PromptFragment`), the four descriptor helpers, the built-in
+  `*_PIPELINE_ID` constants and `RegistrationProblem` come with them.
+
+  `start()` / `startLocal()` / `createWorker()` take an `escalateRegistrationWarning` predicate,
+  raising selected boot-validation warnings to errors. Boot must WARN on an unresolvable
+  `defaultFragmentIds` id because it cannot tell a typo from an account/workspace-tier id that merges
+  per workspace at run time; a deployment whose operations reference only fragments it registers
+  itself knows that second cause does not apply, and can now say so instead of re-deriving the check
+  in its own test suite.
+
+  Additive throughout: no existing registration, option or export changes shape.
+
+- Updated dependencies [8cbd518]
+  - @cat-factory/contracts@0.262.0
+
+## 0.241.2
+
+### Patch Changes
+
+- e6aa37d: Say what to change for every cause a dropped tool server's reason covers, and state what an absent
+  tool-server record now means.
+
+  Three remedy lines named one cause of several, which costs an operator the attempt as well as the
+  answer. `harness_unsupported` also fires for an ambient-auth Codex run, reached only after the
+  harness-allow-list and transport checks have both passed, so "run it on a CLI that speaks MCP" and
+  "widen the harness list" are already satisfied there and only a leased credential helps.
+  `missing_secret` is one answer from a COMPOSED resolver whose default half both facades wire is a
+  deployment environment variable, so copy naming only the workspace credential store points a
+  store-less deployment at a surface it does not have. `oauth_not_connected` also fires where no
+  grant store is wired at all, where connecting cannot work until an operator sets `ENCRYPTION_KEY`.
+  All three are restated across ten locales.
+
+  Every one of those gaps came from writing operator copy off a member's NAME, so the multi-cause
+  members are now enumerated on kernel's `UnavailableToolServer`, where the per-member reasoning
+  already lived, and the SPA's remedy mapping points at it.
+
+  Dropping `step.toolServers` on a re-run reset also widened what an ABSENT record means, and the
+  rule was documented in four places that did not move with it. Absent now means the step's CURRENT
+  attempt holds no resolution: an inline step, a run predating the field, or a step re-armed and not
+  yet re-dispatched. The distinction the rule exists for is untouched (a step that lost every server
+  it declared still never reads as one that declared none), but absent no longer implies the step
+  never ran, and `attempts`/`dispatches` outlive the reset precisely so that question keeps an
+  answer. The field was already optional on the wire and on `/api/v1/debug/*`, so no consumer sees a
+  shape it was not already required to tolerate.
+
+  Outside the SPA copy and that documented rule, the kernel, contracts and orchestration changes are
+  comments and one test.
+
+- Updated dependencies [f7882cf]
+- Updated dependencies [e6aa37d]
+  - @cat-factory/contracts@0.261.1
+
+## 0.241.1
+
+### Patch Changes
+
+- 79468ec: Keep an inbox card a run raised while a snapshot refresh was in flight
+
+  The `pr-review` e2e spec failed in CI waiting 30s for `notifications-bell`, which never rendered.
+  The bell is gated on `notifications.count`, and the card was in the store: a full-snapshot
+  `refresh()` had already replaced it away.
+
+  Two delivery shapes meet at the moment a run parks. The card arrives as a targeted `notification`
+  event, and the park also fans out coarse `board` events whose debounced `workspace.refresh()` is
+  routinely mid-flight right then. That refresh READ its snapshot before the card existed, and the
+  notifications store's `hydrate` was a plain replace, so the card was overwritten by a list that
+  predates it. Nothing re-sends a notification, so there is no second delivery: the run stays parked
+  with no way for anyone to see it. This is the documented full-refresh clobber, on the one entity
+  that cannot re-derive its state, which is why it presents as a rare flake rather than a visible
+  bug.
+
+  The board store already guards its own half with a watermark, and that guard is why the same
+  refresh left the task card's `blocked` status intact while wiping the notification beside it. The
+  notifications store now takes the same shape: each live write is stamped with a monotonic
+  sequence, `refresh()` captures both stores' baselines before its fetch, and a hydrate keeps every
+  write newer than the baseline it was handed. The two baselines travel as one `LiveWriteBaselines`
+  object rather than a second positional argument, so a third store joining is an added field.
+
+  The guard tracks REMOVALS as well as inserts, which the board's does not need to. A notification
+  resolved live (acted on in another tab, cleared by the engine) is absent from the store but still
+  open in a snapshot read before it resolved, so an insert-only watermark would resurrect a card
+  offering an action the server has already taken. Both directions are pinned in
+  `stores/workspace.spec.ts`.
+
+  Widening the e2e assertion or retrying the spec was not on the table: a flaky e2e test is a real
+  product race and this one was reproducible on demand once the snapshot response was held open
+  across the park, which is exactly what CI latency does by accident. That repro fails before this
+  change and passes after; the pr-review and notifications specs then ran 48 consecutive green
+  passes.
+
+  Worth a reviewer's attention: the live-write map is pruned on every guarded hydrate (entries at or
+  below the committing baseline are reconciled and dropped), which relies on `refreshSeq` letting
+  only the latest-issued refresh commit, so baselines commit in non-decreasing order.
+
 ## 0.241.0
 
 ### Minor Changes

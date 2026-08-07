@@ -96,7 +96,10 @@ account and board names. A read of it joins nothing.
   has to reproduce exactly rather than merely resemble.
 - **A rollup with a window would be pointless**, so it has none: no prune in either facade's
   sweep, no `deleteOlderThan` on the port, and it is excluded from the workspace-delete cascade.
-  The storage arithmetic that makes that affordable is in
+  Surviving the cascade takes a second half, since the sweep folds only boards that still exist:
+  the delete itself folds the board's un-rolled days first, so what the table keeps of a deleted
+  board ends where the board did. The storage arithmetic that makes the no-retention choice
+  affordable, and the three ways that final fold differs from a sweep pass, are in
   [`storage-and-retention.md`](./storage-and-retention.md) §1c.
 - **Freshness is the trade.** On the Worker the sweep is a daily cron, so a `30d` window can be
   up to a day behind. That is what `rolledUpThrough` is for; it is not hidden.

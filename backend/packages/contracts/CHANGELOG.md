@@ -1,5 +1,89 @@
 # @cat-factory/contracts
 
+## 0.262.0
+
+### Minor Changes
+
+- 8cbd518: Let a code-registered prompt fragment name a LIVING document.
+
+  A `documentRef` on a deployment-registered fragment used to be refused at boot, because every
+  document source authenticated per workspace and there was no deployment-wide credential to read one
+  with. A deployment now configures its own (`DOC_SOURCE_<SOURCE>_<FIELD>`, the field names taken from
+  each provider's existing connect-form declaration), and a `builtin`-tier `documentRef` resolves
+  through a new `DeploymentDocumentResolver` port, version-probed and cached under one
+  deployment-wide group so a hundred workspaces folding one standard cost one fetch and one
+  invalidation.
+
+  The deployment's own credentials are read from the environment and nothing else. `DOCUMENT_SOURCES`
+  governs which sources a WORKSPACE may connect, and `DOCUMENTS_ENABLED` and the connection encryption
+  key govern whether tenant connections are stored at all; none of the three has any bearing on a
+  standard the deployment configured centrally, whose credentials live in plaintext variables and are
+  never persisted. So setting `DOC_SOURCE_NOTION_API_TOKEN` is the whole configuration, with no
+  unrelated prerequisite to discover.
+
+  `github` is the exception and it is declared, not inferred: its credential is a workspace's App
+  installation, so the new `deploymentScoped` source trait is false for it and both boot validation
+  and the provider refuse the scope. Boot now refuses only a `documentRef` this deployment cannot
+  serve, naming which of the two causes applies.
+
+  An unreachable source still degrades to the fragment's registered body, but no longer silently: the
+  fallback logs a warning naming the fragment, tier and source, because the prompt is byte-identical
+  either way and nothing downstream could otherwise tell a stale standard from a current one.
+
+  In mothership mode the credential stays on the mothership and the node reads the resolved body over
+  `POST /internal/prompt-fragments/document-bodies`.
+
+  `DocumentSourceProvider.fetchDocument` / `probeVersion` now take `workspaceId: string | null`, where
+  `null` is the deployment scope. An internal interface with no external consumers.
+
+## 0.261.1
+
+### Patch Changes
+
+- f7882cf: Stop the run-debug surface and the decision-list description from telling callers things that are
+  no longer true.
+
+  The `tool_retry_loop` signal handed the reader `?ok=false`, a tool-call filter replaced by
+  `?outcome=error`. An unknown query param is ignored rather than refused, so the link answered with
+  the run's WHOLE trajectory and a follower reading it as the failing subset saw every call as a
+  failure. Now pinned by a test, which is what was missing when the param was renamed.
+
+  `listPublicRunDecisions` described two decision kinds out of the thirteen the response can carry,
+  and claimed `parked` gates the list. It does not: a `follow-ups` entry is answerable while the run
+  is still working, so a caller that polls only when `parked` waits for a stop that never comes. The
+  regenerated description names every kind and points an empty `decisions` at `unanswerable`. It
+  reaches the spec, the four SDK clients and the MCP tool descriptions, which is the surface LLM
+  callers read instead of the docs.
+
+- e6aa37d: Say what to change for every cause a dropped tool server's reason covers, and state what an absent
+  tool-server record now means.
+
+  Three remedy lines named one cause of several, which costs an operator the attempt as well as the
+  answer. `harness_unsupported` also fires for an ambient-auth Codex run, reached only after the
+  harness-allow-list and transport checks have both passed, so "run it on a CLI that speaks MCP" and
+  "widen the harness list" are already satisfied there and only a leased credential helps.
+  `missing_secret` is one answer from a COMPOSED resolver whose default half both facades wire is a
+  deployment environment variable, so copy naming only the workspace credential store points a
+  store-less deployment at a surface it does not have. `oauth_not_connected` also fires where no
+  grant store is wired at all, where connecting cannot work until an operator sets `ENCRYPTION_KEY`.
+  All three are restated across ten locales.
+
+  Every one of those gaps came from writing operator copy off a member's NAME, so the multi-cause
+  members are now enumerated on kernel's `UnavailableToolServer`, where the per-member reasoning
+  already lived, and the SPA's remedy mapping points at it.
+
+  Dropping `step.toolServers` on a re-run reset also widened what an ABSENT record means, and the
+  rule was documented in four places that did not move with it. Absent now means the step's CURRENT
+  attempt holds no resolution: an inline step, a run predating the field, or a step re-armed and not
+  yet re-dispatched. The distinction the rule exists for is untouched (a step that lost every server
+  it declared still never reads as one that declared none), but absent no longer implies the step
+  never ran, and `attempts`/`dispatches` outlive the reset precisely so that question keeps an
+  answer. The field was already optional on the wire and on `/api/v1/debug/*`, so no consumer sees a
+  shape it was not already required to tolerate.
+
+  Outside the SPA copy and that documented rule, the kernel, contracts and orchestration changes are
+  comments and one test.
+
 ## 0.261.0
 
 ### Minor Changes

@@ -345,8 +345,8 @@ importers:
         specifier: workspace:*
         version: link:../kernel
       layered-loader:
-        specifier: ^16.0.0
-        version: 16.0.0(ioredis@6.0.0)
+        specifier: ^16.1.0
+        version: 16.1.0(ioredis@6.0.0)
     devDependencies:
       '@types/node':
         specifier: ^26.1.2
@@ -1076,8 +1076,8 @@ importers:
         specifier: ^4.13.0
         version: 4.13.0
       layered-loader:
-        specifier: ^16.0.0
-        version: 16.0.0(ioredis@6.0.0)
+        specifier: ^16.1.0
+        version: 16.1.0(ioredis@6.0.0)
       pg:
         specifier: ^8.22.0
         version: 8.22.0
@@ -7090,8 +7090,8 @@ packages:
   launch-editor@2.14.1:
     resolution: {integrity: sha512-QWBrQsMpH7gPr965dsKD/3cKWiNoTjpATQf++Xq63N6sKRGMwlVXz41O1IZTMfZQgBctD/K5Zt06+/I6pP6+HA==}
 
-  layered-loader@16.0.0:
-    resolution: {integrity: sha512-kF962i8fhNAffcbnkGyw5aewfh9vOFXaWURyFTOyLqpjlBU/rHdJcJ5GdSz3RF3UMXFTO1bG3XOzylJr1xZ6gQ==}
+  layered-loader@16.1.0:
+    resolution: {integrity: sha512-tS/cJOGnuvc0cI2Scpdq20hNBqVkZW3Z5b3jcm4sXXYey7XAlSH2FY8VV+C3+NXegCbhEpqc3tXbSQuX/o7Ibg==}
     engines: {node: '>=22'}
     peerDependencies:
       ioredis: ^6.0.0
@@ -15750,7 +15750,7 @@ snapshots:
       picocolors: 1.1.1
       shell-quote: 1.10.0
 
-  layered-loader@16.0.0(ioredis@6.0.0):
+  layered-loader@16.1.0(ioredis@6.0.0):
     dependencies:
       toad-cache: 3.7.4
     optionalDependencies:

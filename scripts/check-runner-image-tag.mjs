@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Guards the per-run container image tags against the footgun that turns `main` red
-// post-merge: each pinned tag is hand-maintained in THREE places that must stay in
-// lockstep, and a change to the image sources that forgets to bump the tag means
-// `wrangler deploy` republishes over the live tag without rolling out a new digest (new
-// per-run containers then keep running stale code — see CLAUDE.md → Releases & changesets).
+// Guards the per-run container image tags: each pinned tag is hand-maintained in THREE
+// places that must stay in lockstep, and a change to the image sources that forgets to
+// bump the tag would republish over the live tag without minting a new version, so a
+// deployment mirroring that tag never rolls out the change (its per-run containers keep
+// running stale code; see CLAUDE.md, Releases & changesets).
 //
 // Two container images are covered, each with its own harness package + registry tag:
 //   - executor (the Pi coding-agent image): @cat-factory/executor-harness ⇄ cat-factory-executor:<tag>
@@ -19,7 +19,10 @@
 //   node scripts/check-runner-image-tag.mjs                 # consistency only
 //   node scripts/check-runner-image-tag.mjs --since <ref>   # + bump-vs-base
 //
-// The deploy.yml guard runs the same logic post-merge; this lets PR CI catch it first.
+// This repo publishes the images but operates no deployment of its own; the pins are what a
+// deployment reads as the supported tag. PR CI (repo-guards) is the primary enforcement, and
+// docker-publish.yml re-runs the guard against the pushed range before any tag is pushed, so
+// a direct-to-main change cannot silently republish over a live tag either.
 
 import { execFileSync } from 'node:child_process'
 import {

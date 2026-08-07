@@ -1755,6 +1755,9 @@
           },
           "total": {
             "type": "number"
+          },
+          "unmatchedVerdicts": {
+            "type": "number"
           }
         },
         "required": [
@@ -4807,7 +4810,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.22.0"
+    "version": "1.23.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -9237,7 +9240,7 @@
     },
     "/api/v1/runs/{runId}/decisions": {
       "get": {
-        "description": "Read what a run is currently asking a human: requirement-review findings (with the stable item ids a reply addresses) and any implementation-fork choice. `parked` is true while the run is blocked awaiting one of them.",
+        "description": "Read what a run is currently asking a human. Each entry names its `kind`, and every kind this surface can answer is listed: `requirements-review`, `clarity-review`, `brainstorm`, `interview`, `input-gate`, `approval-gate`, `judge`, `fork`, `agent-decision`, `pr-review`, `human-test`, `visual-confirmation`, `follow-ups`. Each carries the stable ids (item, approval, decision, finding) that its answering route addresses. `parked` reports only whether the run has STOPPED (`status` is `blocked`); it is not a precondition for `decisions` being non-empty, since a `follow-ups` entry is answerable while the run is still working, so poll this regardless of `parked`. An empty `decisions` beside a non-empty `unanswerable` means a wait no route here can settle (a person reviewing the pull request, a deployment-registered gate), each named with its reason and step.",
         "operationId": "listPublicRunDecisions",
         "parameters": [
           {
@@ -11876,6 +11879,564 @@
         "x-min-scope": "decide"
       }
     },
+    "/api/v1/runs/{runId}/outcome": {
+      "get": {
+        "description": "What the run changed and what backs that up, in product language, for a reader who will not open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, and the machine checks that ran. The same reduction the app’s outcome card renders, over the same evidence the verification report is built from, so the two cannot state different totals for one run. Nothing here is asserted by a model: every count is derived from recorded verdicts. Prefer the verification report when you need a reviewer’s full bundle; prefer this when you need to say what shipped. Sections state `reported` or `absent` with a machine-readable gap code, and `truncations` names any list the response had to bound.",
+        "operationId": "getPublicRunOutcome",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ask": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "checks": {
+                      "items": {
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "ci",
+                              "validation",
+                              "reproduction"
+                            ],
+                            "type": "string"
+                          },
+                          "reproduction": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "reproduced",
+                                  "inconclusive",
+                                  "declared_infeasible"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "state": {
+                            "enum": [
+                              "pass",
+                              "fail",
+                              "pending",
+                              "inconclusive"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "state",
+                          "reproduction"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "disposition": {
+                      "enum": [
+                        "merged",
+                        "awaiting_merge",
+                        "in_flight",
+                        "needs_attention",
+                        "not_run",
+                        "unknown"
+                      ],
+                      "type": "string"
+                    },
+                    "pullRequests": {
+                      "items": {
+                        "properties": {
+                          "branch": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "number": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "repo": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "url": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "number",
+                          "branch",
+                          "repo"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "requirements": {
+                      "oneOf": [
+                        {
+                          "properties": {
+                            "gap": {
+                              "enum": [
+                                "run_unavailable",
+                                "no_tester_step",
+                                "tester_not_reported",
+                                "no_verdicts",
+                                "no_requirements"
+                              ],
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": "absent"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "gap"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "entries": {
+                              "items": {
+                                "properties": {
+                                  "detail": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "regression": {
+                                    "type": "boolean"
+                                  },
+                                  "state": {
+                                    "anyOf": [
+                                      {
+                                        "enum": [
+                                          "aspirational",
+                                          "established"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "title": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "verdict": {
+                                    "enum": [
+                                      "met",
+                                      "not_met",
+                                      "not_covered"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "title",
+                                  "verdict",
+                                  "detail",
+                                  "state",
+                                  "regression"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "met": {
+                              "type": "number"
+                            },
+                            "notCovered": {
+                              "type": "number"
+                            },
+                            "notMet": {
+                              "type": "number"
+                            },
+                            "regressions": {
+                              "type": "number"
+                            },
+                            "spec": {
+                              "enum": [
+                                "joined",
+                                "not_read"
+                              ],
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": "reported"
+                            },
+                            "total": {
+                              "type": "number"
+                            },
+                            "unmatchedVerdicts": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "spec",
+                            "met",
+                            "notMet",
+                            "notCovered",
+                            "regressions",
+                            "total",
+                            "unmatchedVerdicts",
+                            "entries"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "tests": {
+                      "oneOf": [
+                        {
+                          "properties": {
+                            "gap": {
+                              "enum": [
+                                "run_unavailable",
+                                "no_tester_step",
+                                "tester_not_reported"
+                              ],
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": "absent"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "gap"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "abortReason": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "areas": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "concerns": {
+                              "items": {
+                                "properties": {
+                                  "severity": {
+                                    "enum": [
+                                      "low",
+                                      "medium",
+                                      "high",
+                                      "critical"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "title": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "title",
+                                  "severity"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "environment": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "local",
+                                    "ephemeral"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "failed": {
+                              "type": "number"
+                            },
+                            "passed": {
+                              "type": "number"
+                            },
+                            "skipped": {
+                              "type": "number"
+                            },
+                            "status": {
+                              "const": "reported"
+                            },
+                            "summary": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "verdict": {
+                              "enum": [
+                                "greenlit",
+                                "concerns",
+                                "could_not_run"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "verdict",
+                            "summary",
+                            "abortReason",
+                            "areas",
+                            "passed",
+                            "failed",
+                            "skipped",
+                            "concerns",
+                            "environment"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "truncations": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "version": {
+                      "type": "number"
+                    },
+                    "visuals": {
+                      "oneOf": [
+                        {
+                          "properties": {
+                            "detail": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "gap": {
+                              "enum": [
+                                "run_unavailable",
+                                "no_visual_step",
+                                "none_captured"
+                              ],
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": "absent"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "gap",
+                            "detail"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "phase": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "awaiting_human",
+                                    "fixing",
+                                    "approved"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "source": {
+                              "enum": [
+                                "visual_confirm",
+                                "tester"
+                              ],
+                              "type": "string"
+                            },
+                            "status": {
+                              "const": "reported"
+                            },
+                            "views": {
+                              "items": {
+                                "properties": {
+                                  "artifactId": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "referenceArtifactId": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "view": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "view",
+                                  "artifactId",
+                                  "referenceArtifactId"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "source",
+                            "phase",
+                            "views"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "disposition",
+                    "title",
+                    "ask",
+                    "pullRequests",
+                    "requirements",
+                    "tests",
+                    "visuals",
+                    "checks",
+                    "truncations"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get a run's outcome summary",
+        "tags": [
+          "Evidence"
+        ],
+        "x-min-scope": "read"
+      }
+    },
     "/api/v1/runs/{runId}/report": {
       "get": {
         "description": "The engine’s bundle of CAPTURED FACTS about a run: the CI gate’s verdict and failing checks, the platform’s own run of the service’s lint/test/build commands (with the failing output), the red-then-green reproduction proof for a bugfix, the tester’s structured report, requirement coverage, the throwaway-environment lifecycle, judge verdicts and the merge decision. Byte-for-byte the JSON block the pull-request body carries, composed on read, so it also answers for a run that never opened a pull request. Each section states `reported` or `absent` with a note, so a step that did not run never looks like a step that found nothing.",
@@ -12811,7 +13372,7 @@
       "name": "Debug"
     },
     {
-      "description": "A run’s parked human decisions — requirement-review findings and implementation-fork choices — so a headless caller can drive the clarification loop instead of the run hanging. Answering requires a `decide`-scope key.",
+      "description": "A run’s human decisions, from requirement-review and clarity findings through approval gates, judge verdicts, interviews and follow-ups, so a headless caller can drive the clarification loop instead of the run hanging. Answering requires a `decide`-scope key.",
       "name": "Decisions"
     },
     {

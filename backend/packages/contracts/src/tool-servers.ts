@@ -100,8 +100,18 @@ export type ToolServerUnavailableReason = v.InferOutput<typeof toolServerUnavail
  * can re-derive it (see `recordDispatchAttribution`).
  *
  * ABSENT and `{ wired: [], unavailable: [] }` are different states and both are load-bearing:
- * absent means no container dispatch recorded here (an inline step, or a run that predates the
- * field), while both-empty means a dispatch ran and its kind declared no tool servers at all.
+ * absent means the step's CURRENT attempt holds no dispatch-recorded resolution (an inline step, a
+ * run that predates the field, or a step re-armed for a re-run and not yet re-dispatched), while
+ * both-empty means a dispatch ran and its kind declared no tool servers at all. The diagnostic
+ * weight survives that third case: a step which lost every server it declared still never reads as
+ * one that declared none.
+ *
+ * What absent does NOT say is that the step never ran. `resetStepForRerun` clears this field while
+ * leaving `attempts` and `dispatches` standing, and that asymmetry is deliberate: the counters are
+ * the record that the step ran before, while this describes ONE resolution against one harness, one
+ * secret resolver and one set of OAuth grants. A re-run resolves afresh against whatever the
+ * deployment now wires, so a reader asking what the step HAS is asking about the live attempt, and
+ * a re-armed step holding the previous round's answer would name servers nothing will ask for.
  */
 export const stepToolServersSchema = v.object({
   /** The servers whose transport, harness and credentials all resolved, so the agent could call them. */

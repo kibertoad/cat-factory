@@ -1,5 +1,213 @@
 # @cat-factory/kernel
 
+## 0.262.0
+
+### Minor Changes
+
+- 8cbd518: Let a code-registered prompt fragment name a LIVING document.
+
+  A `documentRef` on a deployment-registered fragment used to be refused at boot, because every
+  document source authenticated per workspace and there was no deployment-wide credential to read one
+  with. A deployment now configures its own (`DOC_SOURCE_<SOURCE>_<FIELD>`, the field names taken from
+  each provider's existing connect-form declaration), and a `builtin`-tier `documentRef` resolves
+  through a new `DeploymentDocumentResolver` port, version-probed and cached under one
+  deployment-wide group so a hundred workspaces folding one standard cost one fetch and one
+  invalidation.
+
+  The deployment's own credentials are read from the environment and nothing else. `DOCUMENT_SOURCES`
+  governs which sources a WORKSPACE may connect, and `DOCUMENTS_ENABLED` and the connection encryption
+  key govern whether tenant connections are stored at all; none of the three has any bearing on a
+  standard the deployment configured centrally, whose credentials live in plaintext variables and are
+  never persisted. So setting `DOC_SOURCE_NOTION_API_TOKEN` is the whole configuration, with no
+  unrelated prerequisite to discover.
+
+  `github` is the exception and it is declared, not inferred: its credential is a workspace's App
+  installation, so the new `deploymentScoped` source trait is false for it and both boot validation
+  and the provider refuse the scope. Boot now refuses only a `documentRef` this deployment cannot
+  serve, naming which of the two causes applies.
+
+  An unreachable source still degrades to the fragment's registered body, but no longer silently: the
+  fallback logs a warning naming the fragment, tier and source, because the prompt is byte-identical
+  either way and nothing downstream could otherwise tell a stale standard from a current one.
+
+  In mothership mode the credential stays on the mothership and the node reads the resolved body over
+  `POST /internal/prompt-fragments/document-bodies`.
+
+  `DocumentSourceProvider.fetchDocument` / `probeVersion` now take `workspaceId: string | null`, where
+  `null` is the deployment scope. An internal interface with no external consumers.
+
+- 8cbd518: Make a runtime facade the whole extension surface a deployment needs.
+
+  Each facade now re-exports the CONSTRUCTOR and the types for every app-owned registry it lets a
+  deployment inject, not only the option that takes one. `gateRegistry`, `judgeRegistry`,
+  `stepResolverRegistry`, `vcsRegistry` and `promptFragmentRegistry` were reachable options with no
+  exported way to build a value, so the only route was a direct dependency on `@cat-factory/kernel` /
+  `@cat-factory/gates` / `@cat-factory/prompt-fragments`, which publish at exact versions, so
+  floating one past what the facade pins resolves a second physical copy and the registration lands
+  where nothing reads it. The reusable-operation authoring types (`CustomTaskType`,
+  `TaskTypePresentation`, `TaskTypeFieldDescriptor`, `TaskTypeFieldOption`, the shared
+  `DescriptorField*` shapes, `PromptFragment`), the four descriptor helpers, the built-in
+  `*_PIPELINE_ID` constants and `RegistrationProblem` come with them.
+
+  `start()` / `startLocal()` / `createWorker()` take an `escalateRegistrationWarning` predicate,
+  raising selected boot-validation warnings to errors. Boot must WARN on an unresolvable
+  `defaultFragmentIds` id because it cannot tell a typo from an account/workspace-tier id that merges
+  per workspace at run time; a deployment whose operations reference only fragments it registers
+  itself knows that second cause does not apply, and can now say so instead of re-deriving the check
+  in its own test suite.
+
+  Additive throughout: no existing registration, option or export changes shape.
+
+- 7a2730a: Fold a board's un-rolled spend inside its own delete, so the durable record ends where the board did
+
+  `spend_days` is deliberately outside the workspace-delete cascade: money already spent is an
+  account-level fact, and reclaiming it would shrink last quarter's TCO retroactively and silently.
+  Keeping it out of that list was made real by bounding the sweep's rewrite to boards that still
+  exist, because `token_usage` IS cascaded and an unbounded window DELETE would otherwise re-fold
+  nothing and reclaim the deleted board's most recent days on the sweep's own schedule.
+
+  That bound left the mirror-image gap, which this closes. The sweep reaches only boards that still
+  exist, so a board's spend SINCE the last completed rollup day has never been folded when its delete
+  begins, and its ledger rows go with the cascade before any later pass could see them. The loss was
+  bounded by the sweep interval, permanent, and skewed worst for exactly the boards an operator
+  deleted because they were expensive. `WorkspaceService.delete` now runs one final per-workspace fold
+  before the cascade, beside the binary-artifact purge and for the same reason: afterwards there is
+  nothing left to read.
+
+  Three things make that fold a different shape from a sweep pass, and each was a decision rather than
+  a detail:
+
+  - **It walks to now in chunks instead of capping its window.** A sweep can leave a wide catch-up for
+    its next pass; this board has no next pass, so the span cap becomes a chunk size rather than a
+    truncation. Truncating would have introduced a second, quieter version of the same loss.
+  - **It walks newest-first, on a budget, and one bad chunk does not end it.** The walk is unbounded
+    by construction (a watermark left stale by an outage plans a ledger-retention's worth of chunks)
+    and it runs inside a user's delete request rather than on a cron. Unbounded, on the Worker, it
+    stops preserving the board's spend and starts preventing its deletion: the invocation dies before
+    the cascade, and the retry reads the same watermark and plans the same walk. So the walk stops at
+    `FINAL_SPEND_FOLD_BUDGET_MS` and a failing chunk costs only itself, which makes the ORDER decide
+    what survives: newest-first, because every report window this rollup serves is anchored at now
+    while the far end of a stale catch-up falls outside even the 90-day one.
+  - **It does not touch the coverage marker.** `rolledUpThrough` is deployment-scoped and states how
+    far the SWEEP has covered every board at once. One board's final fold covers no other board's
+    days, and the marker only ever moves forward, so advancing it there would permanently present
+    days nothing folded as covered.
+  - **It keeps the still-exists guard anyway.** Called after the cascade the fold reads nothing, and
+    an unguarded window DELETE would then reclaim the frozen rows the exclusion exists to keep. The
+    guard makes the fold-then-cascade ordering a property of the query rather than of the call site,
+    so both halves of "a rewrite may only delete what it can reproduce" live in the same statement.
+
+  The resume point and the ledger-retention horizon are the sweep's own, which is why the pure walk
+  (`spendRollupWindow` plus the new `finalSpendFoldPlan`) moved from `@cat-factory/orchestration` into
+  kernel: the two callers sit in different layers and restating the horizon rule per caller is exactly
+  how the delete path would end up stepping over days a sweep would still have folded. Facades now
+  wire `tokenUsageRetentionMs` onto `CoreDependencies` so both derive it from one number.
+
+  The fold is best-effort, which is a trade worth reviewing: refusing the delete on a sick rollup query
+  would keep the spend foldable for a retry, but it would also render a reporting outage as a board
+  that cannot be deleted. So the delete proceeds and what was not folded is named on one `warn`, whose
+  fields keep the causes apart because they need different responses: what the ledger no longer holds
+  (already unfoldable before the delete began), what the store refused, what the budget never reached,
+  and a resume point that could not be read at all.
+
+### Patch Changes
+
+- Updated dependencies [8cbd518]
+  - @cat-factory/contracts@0.262.0
+
+## 0.261.0
+
+### Minor Changes
+
+- aabfb4d: Worker cache-coherency pilot on layered-loader 16.1: caches of our own mutable state can
+  now hold a real TTL on Cloudflare, with cross-isolate staleness bounded by a pull
+  generation probe instead of being indefinite.
+
+  - `@cat-factory/caching`: new `CacheGenerationStore` seam + `coherencyWindowMsecs` profile
+    field (a probe of a shared per-(cache, group) generation directory before serving, with
+    layered-loader 16.1's fencing `applyRemoteInvalidation*` applied on a moved counter, and
+    a bump after every local invalidation; reads fail closed to pass-through, bumps fail
+    open onto the TTL backstop). New `ISOLATE_COHERENT_APP_CACHES_PROFILE` flips
+    `workspaceSettings` as the pilot. `scheduleBackgroundWork` is threaded to every loader.
+    layered-loader bumped to ^16.1.0 (ESM package; also bumped in the Node facade).
+  - `@cat-factory/caching`: a coherent cache declares `cacheWideInvalidation` when its
+    service calls `invalidateAll`; only those probe the reserved `'*'` epoch shard (one
+    globally placed Durable Object), and an undeclared `invalidateAll` on a coherent cache
+    throws rather than dropping entries locally while peers serve them to the TTL.
+  - `@cat-factory/caching`: new `currentInvocation` option for ISOLATE runtimes. Where it is
+    supplied, a cache MISS (and a coherency probe) never joins an in-flight promise created
+    by a different invocation, because Cloudflare destroys the joining invocation with an
+    uncatchable "Cannot perform I/O on behalf of a different request"; coalescing within one
+    invocation is unchanged, as is Node, which supplies nothing.
+  - `@cat-factory/worker`: new `CacheGenerationDirectory` sqlite Durable Object (migration
+    tag v5) behind the OPTIONAL `CACHE_GENERATIONS` binding; the app-cache bag is now one
+    per isolate (module scope) instead of one per invocation, with loader background work
+    adopted onto the current invocation's `ctx.waitUntil` and per-invocation load scoping
+    (above) via an ambient ExecutionContext.
+    Deployers: add the binding + v5 migration (see `deploy/backend/wrangler.toml`) to turn
+    the coherent profile on; without the wrangler edit the Worker keeps the previous
+    pass-through behaviour.
+  - `@cat-factory/kernel` + `@cat-factory/observability-otel`: four new operational
+    counters (`cache.coherency_probe`, `cache.coherency_invalidation`,
+    `cache.coherency_probe_failure`, `cache.coherency_bump_failure`) with their OTel names
+    and units.
+
+  Behaviour changes worth calling out beyond the Worker:
+
+  - `WorkspaceSettingsService.update` now reads its merge base from the repository instead of
+    through the cache. It is a read-modify-write of the whole settings row, so a base stale by
+    even one bounded-staleness window silently reverted a field a peer had committed inside it.
+  - On the ISOLATE profiles, `repoFiles` and `fragmentDocumentBody` widen their preemptive
+    refresh window to cover the whole TTL. Their entries now live that full TTL across requests
+    (the bag used to be rebuilt per invocation), and the claim that keeps them enabled on the
+    Worker at all is that their probe bounds staleness, so the window has to be the lifetime.
+  - The coherent `workspaceSettings` entry carries a 60s TTL rather than the Node profile's five
+    minutes: with bumps failing open, the TTL is the real bound when a bump fails, and that row
+    carries `allowInitiatorPat`, `storeAgentContext` and the spend caps.
+
+### Patch Changes
+
+- e6aa37d: Say what to change for every cause a dropped tool server's reason covers, and state what an absent
+  tool-server record now means.
+
+  Three remedy lines named one cause of several, which costs an operator the attempt as well as the
+  answer. `harness_unsupported` also fires for an ambient-auth Codex run, reached only after the
+  harness-allow-list and transport checks have both passed, so "run it on a CLI that speaks MCP" and
+  "widen the harness list" are already satisfied there and only a leased credential helps.
+  `missing_secret` is one answer from a COMPOSED resolver whose default half both facades wire is a
+  deployment environment variable, so copy naming only the workspace credential store points a
+  store-less deployment at a surface it does not have. `oauth_not_connected` also fires where no
+  grant store is wired at all, where connecting cannot work until an operator sets `ENCRYPTION_KEY`.
+  All three are restated across ten locales.
+
+  Every one of those gaps came from writing operator copy off a member's NAME, so the multi-cause
+  members are now enumerated on kernel's `UnavailableToolServer`, where the per-member reasoning
+  already lived, and the SPA's remedy mapping points at it.
+
+  Dropping `step.toolServers` on a re-run reset also widened what an ABSENT record means, and the
+  rule was documented in four places that did not move with it. Absent now means the step's CURRENT
+  attempt holds no resolution: an inline step, a run predating the field, or a step re-armed and not
+  yet re-dispatched. The distinction the rule exists for is untouched (a step that lost every server
+  it declared still never reads as one that declared none), but absent no longer implies the step
+  never ran, and `attempts`/`dispatches` outlive the reset precisely so that question keeps an
+  answer. The field was already optional on the wire and on `/api/v1/debug/*`, so no consumer sees a
+  shape it was not already required to tolerate.
+
+  Outside the SPA copy and that documented rule, the kernel, contracts and orchestration changes are
+  comments and one test.
+
+- Updated dependencies [f7882cf]
+- Updated dependencies [e6aa37d]
+  - @cat-factory/contracts@0.261.1
+
+## 0.260.0
+
+### Minor Changes
+
+- 9d6bce0: Seed a terminal `disposer` step into the built-in `pl_bug_triage` pipeline, so a scheduled triage
+  run reclaims the ephemeral environment it stood up instead of leaving it to the TTL sweep. Version
+  bumped to 5, which offers the reseed to already-seeded workspaces.
+
 ## 0.259.0
 
 ### Minor Changes

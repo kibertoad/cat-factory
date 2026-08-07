@@ -4,7 +4,7 @@ import {
   FIXER_AGENT_KIND,
   ON_CALL_AGENT_KIND,
 } from '@cat-factory/kernel'
-import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
+import { TESTER_AGENT_KIND, UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
 import {
   conflictResolverUserPrompt,
   MERGE_ASSESSMENT_SHAPE_HINT,
@@ -65,8 +65,12 @@ export const MERGER_AGENT_KIND = 'merger'
  * The agent kind of the general/API tester: it clones the PR branch, stands the service's test
  * dependencies up, runs the suite and returns a structured report. {@link UI_TESTER_AGENT_KIND}
  * is its browser-driven, screenshot-capturing sibling.
+ *
+ * Re-exported from `@cat-factory/contracts` for the same reason its UI sibling is: both slugs are
+ * read by `isTesterKind`, the rule every reduction of a run's test evidence starts from, and that
+ * rule has to be visible to the SPA as well as to the engine. The REGISTRATION stays here.
  */
-export const TESTER_AGENT_KIND = 'tester-api'
+export { TESTER_AGENT_KIND } from '@cat-factory/contracts'
 
 /** The agent kind of the container agent that builds WireMock mocks for a service's upstreams. */
 export const MOCKER_AGENT_KIND = 'mocker'

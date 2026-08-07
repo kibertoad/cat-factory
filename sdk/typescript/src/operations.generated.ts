@@ -18,6 +18,7 @@ import type {
   DebugLlmCall,
   DebugRunOverview,
   GetDebugLlmCallView,
+  GetPublicRunOutcomeResponse,
   ListDebugAgentContextResponse,
   ListDebugLlmCallsOrder,
   ListDebugLlmCallsResponse,
@@ -819,7 +820,7 @@ export class DecisionsResource {
 
   /**
    * List a run's parked decisions
-   * Read what a run is currently asking a human: requirement-review findings (with the stable item ids a reply addresses) and any implementation-fork choice. `parked` is true while the run is blocked awaiting one of them.
+   * Read what a run is currently asking a human. Each entry names its `kind`, and every kind this surface can answer is listed: `requirements-review`, `clarity-review`, `brainstorm`, `interview`, `input-gate`, `approval-gate`, `judge`, `fork`, `agent-decision`, `pr-review`, `human-test`, `visual-confirmation`, `follow-ups`. Each carries the stable ids (item, approval, decision, finding) that its answering route addresses. `parked` reports only whether the run has STOPPED (`status` is `blocked`); it is not a precondition for `decisions` being non-empty, since a `follow-ups` entry is answerable while the run is still working, so poll this regardless of `parked`. An empty `decisions` beside a non-empty `unanswerable` means a wait no route here can settle (a person reviewing the pull request, a deployment-registered gate), each named with its reason and step.
    * `GET /api/v1/runs/{runId}/decisions` — operation `listPublicRunDecisions`.
    */
   list(runId: string, options: RequestOptions = {}): Promise<PublicDecisionList> {
@@ -1403,7 +1404,7 @@ export class DebugResource {
   }
 }
 
-/** What a run proved: the engine's verification report and the artifacts it captured, bytes included. */
+/** What a run proved: the engine's verification report, the outcome summary behind it, and the artifacts it captured, bytes included. */
 export class EvidenceResource {
   readonly #transport: Transport
 
@@ -1420,6 +1421,19 @@ export class EvidenceResource {
     return this.#transport.bytes({
       method: 'GET',
       path: `/api/v1/artifacts/${encodePathSegment(artifactId)}/blob`,
+      options,
+    })
+  }
+
+  /**
+   * Get a run's outcome summary
+   * What the run changed and what backs that up, in product language, for a reader who will not open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, and the machine checks that ran. The same reduction the app’s outcome card renders, over the same evidence the verification report is built from, so the two cannot state different totals for one run. Nothing here is asserted by a model: every count is derived from recorded verdicts. Prefer the verification report when you need a reviewer’s full bundle; prefer this when you need to say what shipped. Sections state `reported` or `absent` with a machine-readable gap code, and `truncations` names any list the response had to bound.
+   * `GET /api/v1/runs/{runId}/outcome` — operation `getPublicRunOutcome`.
+   */
+  getOutcome(runId: string, options: RequestOptions = {}): Promise<GetPublicRunOutcomeResponse> {
+    return this.#transport.request<GetPublicRunOutcomeResponse>({
+      method: 'GET',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/outcome`,
       options,
     })
   }
@@ -1531,7 +1545,7 @@ export abstract class CatFactoryResources {
   readonly decisions: DecisionsResource
   /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
   readonly debug: DebugResource
-  /** What a run proved: the engine's verification report and the artifacts it captured, bytes included. */
+  /** What a run proved: the engine's verification report, the outcome summary behind it, and the artifacts it captured, bytes included. */
   readonly evidence: EvidenceResource
   /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */
   readonly keys: KeysResource

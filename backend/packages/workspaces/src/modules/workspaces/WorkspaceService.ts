@@ -1,9 +1,14 @@
 import type { CreateWorkspaceInput } from '@cat-factory/contracts'
 import {
   applyMountLayout,
+  describeError,
+  finalSpendFoldPlan,
+  noopLogger,
+  FINAL_SPEND_FOLD_BUDGET_MS,
   registerServiceForFrame,
   requireWorkspace,
   retiredPipelines,
+  runBestEffort,
   seedBlocks,
   seedRiskPolicies,
   riskPolicySeedRows,
@@ -13,7 +18,9 @@ import {
 import type {
   Block,
   ExecutionInstance,
+  LogFields,
   Logger,
+  SpendFoldSpan,
   Workspace,
   WorkspaceAccessRow,
   WorkspaceMount,
@@ -32,6 +39,7 @@ import type {
   RiskPolicyRepository,
   ServiceRehome,
   ServiceRepository,
+  SpendRollupRepository,
   WorkspaceAccessCacheValue,
   WorkspaceMemberRepository,
   WorkspaceMountRepository,
@@ -41,6 +49,21 @@ import type {
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 
 export { requireWorkspace } from '@cat-factory/kernel'
+
+/**
+ * The one line that reports spend a deleted board took with it. Shared by every way the final
+ * fold can come up short so an operator greps ONE message: what separates the causes are the
+ * line's FIELDS (`failedSpans` vs `unattemptedSpans`, or `reason` in the one case that has no
+ * spans to name because planning them is what failed), not a message per cause. They differ in
+ * what an operator should fix, never in what was lost: all of it is permanent the moment the
+ * cascade runs.
+ */
+const UNFOLDED_SPEND_MSG =
+  'workspace-delete could not fold all of the board’s remaining spend; ' +
+  'that attribution is permanently absent'
+
+/** One span as a compact `[from, to)` pair, so a log field holds spans and not prose. */
+const spanPair = (span: SpendFoldSpan): [number, number] => [span.from, span.to]
 
 export interface WorkspaceServiceDependencies {
   workspaceRepository: WorkspaceRepository
@@ -105,6 +128,26 @@ export interface WorkspaceServiceDependencies {
    * runs through this port at the service layer before the cascade.
    */
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /**
+   * The durable cost-attribution rollup (`spend_days`). When wired, a board delete folds the
+   * board's UN-ROLLED days into it before the cascade takes `token_usage` away, which is the
+   * only moment that spend can still be attributed: the table is deliberately outside the
+   * cascade, but the sweep that fills it only reaches boards that still exist, so everything
+   * since the last completed rollup day would otherwise go with the ledger rows that produced
+   * it. Optional: absent (tests / a facade with no reports wiring) ⇒ the delete skips the fold.
+   */
+  spendRollupRepository?: Pick<
+    SpendRollupRepository,
+    'rollupWorkspaceSpendDays' | 'spendRollupWatermark'
+  >
+  /**
+   * How long `token_usage` is retained (`TOKEN_USAGE_RETENTION_DAYS`), which bounds how far back
+   * that final fold walks: past the ledger's own retention there is nothing left to fold. 0 or
+   * absent means the ledger is never pruned, and the fold falls back to its backfill floor. It
+   * is the SAME number the retention sweep derives its catch-up horizon from, so a board's last
+   * fold covers exactly the days a sweep would have.
+   */
+  tokenUsageRetentionMs?: number
   /** Optional structural logger for best-effort diagnostics (e.g. a swallowed artifact purge). */
   logger?: Logger
   /**
@@ -136,6 +179,11 @@ export class WorkspaceService {
   private readonly riskPolicyRepository?: RiskPolicyRepository
   private readonly workspaceAccessCache?: GroupCacheHandle<WorkspaceAccessCacheValue>
   private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  private readonly spendRollupRepository?: Pick<
+    SpendRollupRepository,
+    'rollupWorkspaceSpendDays' | 'spendRollupWatermark'
+  >
+  private readonly tokenUsageRetentionMs: number
   private readonly logger?: Logger
   private readonly getEnvironmentHandlerSeeder?: () => EnvironmentHandlerSeeder | undefined
   private readonly getSharedStackSeeder?: () => SharedStackSeeder | undefined
@@ -154,6 +202,8 @@ export class WorkspaceService {
     riskPolicyRepository,
     workspaceAccessCache,
     resolveBinaryArtifactStore,
+    spendRollupRepository,
+    tokenUsageRetentionMs,
     logger,
     getEnvironmentHandlerSeeder,
     getSharedStackSeeder,
@@ -171,6 +221,8 @@ export class WorkspaceService {
     this.workspaceMemberRepository = workspaceMemberRepository
     this.workspaceAccessCache = workspaceAccessCache
     this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
+    this.spendRollupRepository = spendRollupRepository
+    this.tokenUsageRetentionMs = tokenUsageRetentionMs ?? 0
     this.logger = logger
     this.getEnvironmentHandlerSeeder = getEnvironmentHandlerSeeder
     this.getSharedStackSeeder = getSharedStackSeeder
@@ -515,6 +567,14 @@ export class WorkspaceService {
     // in `listVisible`, no retention sweep will revisit those rows — reclaim is then out-of-band,
     // so the failure is LOGGED (not silent) rather than promising an auto-retry that can't happen.
     await this.purgeBinaryArtifacts(id)
+    // Freeze the board's remaining spend into the durable cost rollup while the rows it is
+    // folded from are still here. `spend_days` deliberately survives a board delete, but the
+    // sweep that fills it only reaches boards that still exist, so without this the board's
+    // spend since the last completed rollup day goes with the `token_usage` rows in the cascade
+    // below, permanently, and skewing the numbers most for the boards an operator deleted
+    // BECAUSE they were expensive. Runs before the cascade for the same reason the artifact
+    // purge does: afterwards there is nothing left to read.
+    await this.foldFinalSpend(id)
     // Re-home the SHARED services this board homes: a service another board still mounts must NOT
     // be destroyed just because its home board is deleted (both teams lose the shared subtree).
     // Resolve, per homed service, whether a surviving board mounts it and hand the cascade a
@@ -546,6 +606,135 @@ export class WorkspaceService {
         { workspaceId: id, err: error instanceof Error ? error.message : String(error) },
       )
     }
+  }
+
+  /**
+   * The last durable fold a board ever gets, run inside its delete. Walks from `now` back towards
+   * where the sweep would have resumed (its own watermark, corrected by the trailing lookback) in
+   * chunks, because unlike a sweep pass there is no next one: whatever this does not cover is
+   * gone with the cascade rather than deferred.
+   *
+   * BEST-EFFORT, and that posture is a judgement rather than a default. Refusing the delete on a
+   * failed fold would keep the board, its ledger and the un-folded days intact for a retry, which
+   * is the outcome that loses nothing; it would also render a reporting outage as a board the
+   * user cannot delete. The delete wins that trade, so the loss is NAMED instead, because it is
+   * unrecoverable the moment the cascade takes the ledger rows.
+   *
+   * Which is what makes the two DEGRADATIONS below part of that same trade rather than laxity.
+   * A chunk that throws does not end the walk, and the walk does not outlast
+   * {@link FINAL_SPEND_FOLD_BUDGET_MS}: an all-or-nothing walk hands one slow or sick chunk the
+   * power to drop every remaining one, and an unbounded walk hands a stale watermark the power to
+   * spend a Worker's whole invocation before the cascade runs at all, which turns "the board's
+   * spend was not preserved" into "the board cannot be deleted, identically, on every retry".
+   * Both degradations are the same shape: keep going, keep the recent days first
+   * ({@link finalSpendFoldPlan} orders for exactly this), and account for what was dropped.
+   */
+  private async foldFinalSpend(id: string): Promise<void> {
+    const rollup = this.spendRollupRepository
+    if (!rollup) return
+    // Normalised here rather than gated on: an unwired logger is a reason for the fold to run
+    // quietly, never a reason to skip preserving the spend.
+    const logger = this.logger ?? noopLogger
+    const startedAt = this.clock.now()
+    const plan = await runBestEffort(
+      logger,
+      'workspace-delete final spend fold plan',
+      async () =>
+        finalSpendFoldPlan(
+          await rollup.spendRollupWatermark(),
+          startedAt,
+          this.tokenUsageRetentionMs,
+        ),
+      { workspaceId: id },
+    )
+    if (!plan) {
+      // No resume point, so no walk at all: the board's whole un-rolled tail goes with the
+      // cascade. Its extent is genuinely unknown here (reading it is what failed), and saying so
+      // beats naming a span derived from a watermark nothing could read.
+      logger.warn(UNFOLDED_SPEND_MSG, {
+        workspaceId: id,
+        table: 'spend_days',
+        reason: 'watermark_unreadable',
+      })
+      return
+    }
+    if (plan.skipped) {
+      // Days past the ledger's own retention: already unfoldable before this delete, and
+      // the only notice they ever get, since nothing downstream can restate a gap.
+      logger.warn(
+        'workspace-delete could not fold spend the ledger no longer holds; ' +
+          'that attribution is permanently absent',
+        {
+          workspaceId: id,
+          table: 'spend_days',
+          skippedFrom: plan.skipped.from,
+          skippedTo: plan.skipped.to,
+        },
+      )
+    }
+    const walk = await this.walkFinalSpendFold(rollup, id, plan.spans, startedAt)
+    if (walk.failed.length + walk.unattempted.length > 0) {
+      logger.warn(UNFOLDED_SPEND_MSG, {
+        workspaceId: id,
+        table: 'spend_days',
+        // Two fields rather than one, because the two causes need opposite responses: chunks the
+        // store REFUSED point at the store, chunks the budget never REACHED point at a sweep left
+        // behind long enough for one board's catch-up to outgrow a request. One count over both
+        // would present a healthy-but-overdue deployment as a broken one.
+        //
+        // And spans rather than an extent over them: a chunk that failed in the middle of a walk
+        // that otherwise succeeded leaves a HOLE, which a single `[from, to)` pair would render
+        // as a clean truncation. Bounded by the plan, which the budget already keeps short.
+        failedSpans: walk.failed.map(spanPair),
+        unattemptedSpans: walk.unattempted.map(spanPair),
+        foldedSpans: plan.spans.length - walk.failed.length - walk.unattempted.length,
+        ...walk.cause,
+      })
+    }
+  }
+
+  /**
+   * Fold `spans` (newest first) one at a time, returning the ones that did not land, split by
+   * why: `failed` was attempted and refused, `unattempted` was never reached.
+   *
+   * Sequential, not parallel: the spans share a table and each is one rewrite transaction, so
+   * overlapping them buys nothing and contends on the same rows.
+   *
+   * The budget is checked BETWEEN chunks, which bounds how many aggregates the delete runs rather
+   * than how long any one of them takes. Preempting a chunk already in flight would need a
+   * cancellation signal the repository port does not carry, and that neither a D1 batch nor a
+   * Postgres statement would honour mid-query; the per-chunk span cap is what bounds one of them,
+   * and is why a single overrun is the residual here rather than the whole plan's worth.
+   */
+  private async walkFinalSpendFold(
+    // Taken as an argument rather than re-read off `this`: the caller has already established the
+    // rollup is wired, and an optional chain here would turn a wiring mistake into a silent walk
+    // that folds nothing and reports everything as folded.
+    rollup: NonNullable<WorkspaceServiceDependencies['spendRollupRepository']>,
+    id: string,
+    spans: readonly SpendFoldSpan[],
+    startedAt: number,
+  ): Promise<{ failed: SpendFoldSpan[]; unattempted: SpendFoldSpan[]; cause: LogFields }> {
+    const failed: SpendFoldSpan[] = []
+    let cause: LogFields = {}
+    for (const [index, span] of spans.entries()) {
+      if (this.clock.now() - startedAt >= FINAL_SPEND_FOLD_BUDGET_MS) {
+        return { failed, unattempted: spans.slice(index), cause }
+      }
+      try {
+        await rollup.rollupWorkspaceSpendDays(id, span.from, span.to)
+      } catch (error) {
+        // Deliberately not `runBestEffort`: the failure changes what this loop does (carry on to
+        // the older chunks and account for this one at the end), which is the case its own doc
+        // sends to a real `catch`. A warn per chunk would also report one store outage fourteen
+        // times while saying nothing about the walk as a whole.
+        failed.push(span)
+        // First cause only. Chunk failures in one walk are the same store failing repeatedly far
+        // more often than they are distinct faults, and the span list already says how many.
+        if (failed.length === 1) cause = describeError(error)
+      }
+    }
+    return { failed, unattempted: [], cause }
   }
 
   /**

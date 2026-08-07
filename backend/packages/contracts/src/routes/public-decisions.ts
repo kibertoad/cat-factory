@@ -52,7 +52,7 @@ const runStageItemParams = withObjectKeys(
   v.object({ runId: v.string(), stage: brainstormStageSchema, itemId: v.string() }),
 )
 
-/** List a run's currently-parked decisions (findings, fork options) — `read`. */
+/** List a run's decisions of every kind, plus the waits this surface cannot answer. Needs `read`. */
 export const listPublicRunDecisionsContract = withMinScope(
   'read',
   defineApiContract({

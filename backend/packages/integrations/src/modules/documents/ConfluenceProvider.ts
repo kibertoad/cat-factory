@@ -77,7 +77,7 @@ export class ConfluenceProvider implements DocumentSourceProvider {
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
-    _workspaceId: string,
+    _workspaceId: string | null,
   ): Promise<DocumentContent> {
     const base = credentials.baseUrl!.replace(/\/+$/, '')
     // Expand the body AND the version so the fetched content carries its version token.
@@ -102,7 +102,7 @@ export class ConfluenceProvider implements DocumentSourceProvider {
   async probeVersion(
     credentials: DocumentCredentials,
     externalId: string,
-    _workspaceId: string,
+    _workspaceId: string | null,
   ): Promise<string> {
     return versionToken(await this.getContent(credentials, externalId, 'version'))
   }

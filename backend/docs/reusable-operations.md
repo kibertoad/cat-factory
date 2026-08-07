@@ -139,10 +139,24 @@ in the other and one validator covers both.
   `DESCRIPTOR_FIELD_VALUE_MAX`), the option lists, and `path` safety
   (`isSafeRepoDirPath`: no `..`, no absolute path, no backslash) are all enforced where the value
   is frozen, because a form is not the only door.
-- **Kernel re-exports the vocabulary and the four helpers**
+- **A condition states `equals` or `includes`, and deliberately nothing else.** One condition, one
+  predicate, over one other field: that covers a picker and a toggle, which is what a per-case brief
+  branches on. There is no `exists` / `notEmpty`, so "include the data-governance standard whenever
+  the free-text `sensitiveData` answer is filled" is expressed by asking the question the branch
+  actually turns on (a `checkbox` or a `select` the free text then qualifies), which is a better
+  form anyway: a condition keyed on whether prose is non-empty fires on "n/a" and on a stray space.
+  Adding a third predicate is a live option, not a closed door, and the cost is that it is not local:
+  the vocabulary is published in `/api/v1/task-types` and rendered by four SDKs, and
+  `duplicatedDescriptorSectionCaptions` decides section reachability by proving two conditions can be
+  satisfied at once, so a new predicate has to state how it contradicts the existing two. That is
+  worth paying for a real operation and not for a speculative one, so it rides the first one that
+  needs it.
+- **The whole vocabulary and the four helpers**
   (`validateDescriptorFields` / `sanitizeDescriptorFields` / `isDescriptorFieldVisible` /
-  `renderDescriptorFieldValue`) alongside `CustomTaskType` and `TaskTypeFieldDescriptor`, so an
-  org package imports everything it needs from `@cat-factory/kernel` with no contracts dependency.
+  `renderDescriptorFieldValue`) are re-exported from every runtime FACADE, so a deployment types its
+  descriptors, and runs the platform's own validator over them in its tests, with the facade as its
+  only cat-factory dependency (below). Kernel re-exports them too, for a package that legitimately
+  sits at that layer; nothing here needs a `@cat-factory/contracts` dependency.
 
 ### Validation at creation, and the three deliberate pass-throughs
 
@@ -236,6 +250,33 @@ fragment source).
 - **`promptFragmentRegistry.registerTaskTypeDefaults()` is NOT the seam for an operation.** It
   attaches defaults to a BUILT-IN type, which has no descriptor to carry them. A registered type
   declares `defaultFragmentIds` on its own registration, where boot validation can see it.
+- **A code-registered fragment MAY name a living document**, resolved with credentials the
+  DEPLOYMENT configured rather than any tenant's connection. Set `DOC_SOURCE_<SOURCE>_<FIELD>` for
+  the source (`DOC_SOURCE_NOTION_API_TOKEN`, `DOC_SOURCE_CONFLUENCE_BASE_URL` / `_ACCOUNT_EMAIL` /
+  `_API_TOKEN`, …: the field names are each provider's own, the ones its connect form already
+  declares, in SCREAMING_SNAKE) and register the fragment with a `documentRef`. The body then
+  re-resolves per run,
+  version-probed and cached like every other document-backed fragment, and degrades to the
+  registered `body` with a WARNING naming the fragment when the source is unreachable.
+
+  Two rules bound it, and both are about the credential rather than the registration:
+
+  - **The document is fetched ONCE for the whole deployment**, under a single deployment-wide cache
+    group, so a hundred workspaces folding one standard cost one fetch and one invalidation. That is
+    the same rule the account tier's `docViaWorkspaceId` enforces, applied one tier up.
+  - **`github` cannot be configured this way.** Its credential is a WORKSPACE's App installation,
+    not a value a deployment holds, so serving one document to every workspace would mean spending
+    one tenant's installation on all of them. It is the one source whose `deploymentScoped` trait is
+    false, and boot refuses a registration naming it with a message that says so rather than
+    pointing at a variable that cannot exist.
+
+  **Boot refuses what this deployment cannot serve** (`fragment_document_ref_unsupported`): a source
+  with no configured credentials, or one that can never be deployment-scoped. Fully knowable from
+  the registration plus this process's own configuration, which is the bar every severity here is
+  set by, and the alternative is a reference the library UI badges as live while every run folds the
+  frozen body. In MOTHERSHIP mode the node is judged and served by the mothership, which is where
+  the credentials live; see [ADR 0045](./adr/0045-deployment-scoped-documents.md).
+
 - **Seeding STATES an unregistered type.** A task created on a process whose package lacks the
   registration is accepted and gets NONE of the operation's fragments, and a later build does not
   go back for it, because only the id SET freezes at creation. `BoardService` logs a warning
@@ -328,6 +369,43 @@ account/workspace-tier id, which merges per workspace at run time and is invisib
 message names both. The same checker covers an initiative preset's create form under the
 `initiative_preset_field_*` prefix, so both surfaces are held to one bar.
 
+### Fragment ids are late-bound, and a deployment may still demand strictness
+
+Fragment resolution is intentionally LATE-BOUND across the three tiers. Boot sees only the code
+pool (the shipped catalog plus this deployment's `registerAll`); an account- or workspace-tier row
+merges per WORKSPACE at run time, and the `src:<sourceId>:<slug>` ids of a repo-backed source only
+exist once that source has synced. So the platform cannot promise an id resolves, and refusing
+every id it cannot see would reject the tenant-tier reference deployments are told to use.
+
+The failure is nonetheless reported twice, because a warning that fires once at boot cannot say
+what a given RUN went without: `FragmentLibraryService` logs the dropped ids per run with the
+workspace and execution on the line, and counts them on `fragments.dropped_from_run` PER FRAGMENT.
+A run seeded with five ids against an empty pool is five times as short of its standards as one
+carrying a single typo, and the counter says so.
+
+**A deployment that knows the second cause cannot apply to it says so**, rather than the platform
+guessing which kind of deployment this is:
+
+```ts
+start({
+  escalateRegistrationWarning: (p) => p.code === 'task_type_unknown_fragment',
+})
+```
+
+An escalated problem joins the aggregated boot failure with the genuine errors (one report, every
+problem at once) and is not also logged. The predicate takes the whole `RegistrationProblem`, so a
+deployment can escalate one code, a family of them, or everything, and a warning added in a later
+release is covered by a predicate that never mentioned it.
+
+The severity stays platform judgement and the disposition becomes deployment policy. That split is
+why this is a predicate rather than a second `strictFragmentIds` array on the descriptor: splitting
+the declaration would make every operation restate, per id, a fact that is true of the whole
+deployment, and would have to be repeated for `conditionalFragmentIds` and for every future
+late-bound reference.
+
+Set the SAME predicate on `start()` and `startLocal()`. A laptop is the cheapest place to learn
+about a typo, and a boot that validates the same registrations must reach the same verdict.
+
 ## Registering an operation: the composition-root walkthrough
 
 Everything lives in the deployment's own package, registered from its composition root. An
@@ -335,6 +413,20 @@ operation carries code (its pipeline names its variants and kinds), so it is exa
 a custom agent kind.
 
 ```ts
+// ONE import, from the facade the deployment boots through. `@cat-factory/node-server` and
+// `@cat-factory/worker` export the same registry and type names; only the BOOT function differs
+// (`start` and `createWorker` respectively, in place of `startLocal` here).
+import {
+  defaultAgentKindRegistry,
+  defaultPipelineRegistry,
+  defaultTaskTypeRegistry,
+  promptFragmentRegistryWithBuiltins,
+  startLocal,
+  type CustomTaskType,
+  type PromptFragment,
+  type RegistrationProblem,
+} from '@cat-factory/local-server'
+
 const agentKindRegistry = defaultAgentKindRegistry()
 const pipelineRegistry = defaultPipelineRegistry()
 const taskTypeRegistry = defaultTaskTypeRegistry()
@@ -347,26 +439,49 @@ registerMyOrgOperations({
   taskTypeRegistry,
   promptFragmentRegistry,
 })
-start({
+startLocal({
   agentKindRegistry,
   pipelineRegistry,
   taskTypeRegistry,
-  promptFragmentRegistry /* …the rest */,
+  promptFragmentRegistry,
+  // Optional: this deployment's operations reference only fragments it registers itself, so an
+  // unresolvable id is always a typo here. See "Boot validation" above.
+  escalateRegistrationWarning: (p: RegistrationProblem) => p.code === 'task_type_unknown_fragment',
+  // …plus this deployment's ordinary boot options (port, database URL, and the rest).
 })
 ```
 
-> One thing a deployment outside this repo needs to know about that snippet: the whole vocabulary
-> it types against (`CustomTaskType`, `TaskTypeFieldDescriptor`, `PromptFragment`, the
-> descriptor-field rules, the `*_PIPELINE_ID` constants) is re-exported from
-> `@cat-factory/kernel`, so no `@cat-factory/contracts` dependency is needed.
-> `promptFragmentRegistryWithBuiltins()` comes from `@cat-factory/prompt-fragments`; a deployment
-> that wants ONLY its own standards news a bare `defaultPromptFragmentRegistry()` (kernel) instead.
->
-> Every app-owned registry is an option on BOTH `start()` and `startLocal()`, and a drift guard
-> asserts that against the entry points themselves rather than the container builder behind them
-> (`backend/runtimes/node/test/registry-seams.spec.ts`). `pipelineRegistry` used to be the
-> exception: it was a documented builder option that no boot path forwarded, so on the local facade
-> a registered pipeline was unreachable outright.
+### The facade is the whole supported surface, and that is a dependency rule
+
+**A deployment package's only cat-factory runtime dependency is the facade it boots through.** Each
+of `@cat-factory/node-server`, `@cat-factory/local-server` and `@cat-factory/worker` re-exports the
+constructor AND the types for every seam it lets you inject: the registries and their `default…()` /
+`…WithBuiltins()` builders, the authoring vocabulary (`CustomTaskType`, `TaskTypePresentation`,
+`TaskTypeFieldDescriptor`, `TaskTypeFieldOption`, `PromptFragment`, the shared `DescriptorField*`
+shapes), the descriptor-field helpers, the `*_PIPELINE_ID` constants, and `RegistrationProblem`.
+
+That is not ergonomics. Every `@cat-factory/*` package publishes at an EXACT version, so a consumer
+that depends on `@cat-factory/kernel` or `@cat-factory/prompt-fragments` directly, and floats the
+range onto a newer patch than its facade pins, resolves a SECOND physical copy. Registering by
+reference survives that for a registry it built from the copy the facade reads, and does not survive
+it otherwise: the symptom is agents that fold nothing, with no error anywhere. Reaching below the
+facade is how a deployment re-creates the exact failure the registry seam was introduced to remove.
+
+Three drift guards hold the surface: the app-owned registries are an option on `start()` /
+`startLocal()` (`backend/runtimes/node/test/registry-seams.spec.ts`, derived from
+`CoreDependencies` so a new registry fails to compile until it is classified), the same file asserts
+each of those options has a CONSTRUCTOR exported beside it, and the local + Worker facades assert
+they publish the same set. The two halves are separate on purpose, because they failed separately:
+`pipelineRegistry` was a documented builder option no boot path forwarded, and `gateRegistry` /
+`judgeRegistry` / `stepResolverRegistry` / `vcsRegistry` / `promptFragmentRegistry` were reachable
+options with no exported way to build a value to put in them.
+
+**An injected registry REPLACES the pool; it never merges.** So `promptFragmentRegistryWithBuiltins()`
+is what a deployment wants unless it means the opposite, and a bare `defaultPromptFragmentRegistry()`
+is a deployment whose agents fold its own standards and none of the platform's. Same for
+`gateRegistryWithBuiltins()` against `defaultGateRegistry()`, where the empty one silently drops
+`ci` / `conflicts` / `post-release-health` from every pipeline naming them. Both are legitimate,
+which is why both are exported and neither is inferred.
 
 Inside, order matters for boot validation rather than for behaviour: register the fragments and
 the variants, then the pipeline that selects them, then the task type that names the pipeline, so
@@ -379,11 +494,10 @@ the variants, then the pipeline that selects them, then the task type that names
    while every reader resolved the same physical copy of `@cat-factory/prompt-fragments`, and a
    `workspace:*` dependency publishes as an EXACT version, so a consumer floating the range onto a
    newer patch got two copies and every task of the operation folded nothing.
-   A fragment registered here may NOT carry a `documentRef`: a code registration lands on the
-   `builtin` tier, whose live resolution needs a connection workspace a deployment-wide
-   registration cannot name, so boot refuses it (`fragment_document_ref_unsupported`) rather than
-   rendering it as live and ignoring it. Register the body inline, or create the fragment at the
-   ACCOUNT tier with a fetch-via workspace.
+   A fragment registered here MAY carry a `documentRef`, provided this deployment configured
+   credentials for its source (`DOC_SOURCE_<SOURCE>_<FIELD>`); boot refuses one it could not
+   resolve rather than rendering it as live and folding the frozen body. See the standing-context
+   section above for the two rules that bound it.
 2. **Steering**: `registerVariant` per steered step.
 3. **The canned pipeline**: `pipelineRegistry.register({ builtin: true, version: 1, … })`.
 4. **The operation**: `taskTypeRegistry.register({ taskType, presentation, fields, defaultFragmentIds, defaultPipelineId })`.

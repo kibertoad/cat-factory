@@ -26,6 +26,7 @@ from .models import (
     DebugLlmCall,
     DebugRunOverview,
     GetDebugLlmCallView,
+    GetPublicRunOutcomeResponse,
     ListDebugAgentContextResponse,
     ListDebugLlmCallsOrder,
     ListDebugLlmCallsResponse,
@@ -851,9 +852,17 @@ class DecisionsResource:
 
     def list(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
         """List a run's parked decisions
-        Read what a run is currently asking a human: requirement-review findings (with the
-        stable item ids a reply addresses) and any implementation-fork choice. `parked` is
-        true while the run is blocked awaiting one of them.
+        Read what a run is currently asking a human. Each entry names its `kind`, and every
+        kind this surface can answer is listed: `requirements-review`, `clarity-review`,
+        `brainstorm`, `interview`, `input-gate`, `approval-gate`, `judge`, `fork`,
+        `agent-decision`, `pr-review`, `human-test`, `visual-confirmation`, `follow-ups`.
+        Each carries the stable ids (item, approval, decision, finding) that its answering
+        route addresses. `parked` reports only whether the run has STOPPED (`status` is
+        `blocked`); it is not a precondition for `decisions` being non-empty, since a
+        `follow-ups` entry is answerable while the run is still working, so poll this
+        regardless of `parked`. An empty `decisions` beside a non-empty `unanswerable` means
+        a wait no route here can settle (a person reviewing the pull request, a
+        deployment-registered gate), each named with its reason and step.
         `GET /api/v1/runs/{runId}/decisions` (operation `listPublicRunDecisions`).
         """
         raw = self._transport.request(
@@ -1524,8 +1533,8 @@ class DebugResource:
 
 
 class EvidenceResource:
-    """What a run proved: the engine's verification report and the artifacts it captured, bytes
-    included.
+    """What a run proved: the engine's verification report, the outcome summary behind it, and
+    the artifacts it captured, bytes included.
     """
 
     def __init__(self, transport: Transport) -> None:
@@ -1547,6 +1556,29 @@ class EvidenceResource:
             query=None,
             timeout=timeout,
         )
+
+    def get_outcome(self, run_id: str, timeout: float | None = None) -> GetPublicRunOutcomeResponse:
+        """Get a run's outcome summary
+        What the run changed and what backs that up, in product language, for a reader who
+        will not open the diff: the run’s disposition, the pull requests it opened,
+        requirement coverage joined to the service’s `spec/`, the tester’s verdict and
+        concerns, the views it captured, and the machine checks that ran. The same reduction
+        the app’s outcome card renders, over the same evidence the verification report is
+        built from, so the two cannot state different totals for one run. Nothing here is
+        asserted by a model: every count is derived from recorded verdicts. Prefer the
+        verification report when you need a reviewer’s full bundle; prefer this when you
+        need to say what shipped. Sections state `reported` or `absent` with a
+        machine-readable gap code, and `truncations` names any list the response had to
+        bound.
+        `GET /api/v1/runs/{runId}/outcome` (operation `getPublicRunOutcome`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/runs/{_quote(run_id)}/outcome",
+            query=None,
+            timeout=timeout,
+        )
+        return GetPublicRunOutcomeResponse.from_dict(raw)
 
     def get_report(self, run_id: str, timeout: float | None = None) -> PrVerificationReport:
         """Get a run's verification report

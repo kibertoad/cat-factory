@@ -32,6 +32,19 @@ export {
   DocumentContentResolverService,
   type DocumentContentResolverServiceDependencies,
 } from './modules/documents/DocumentContentResolverService.js'
+// The DEPLOYMENT-scoped twin: a document the deployment owns, read with credentials it configured
+// centrally rather than any tenant's connection. See `backend/docs/document-sources.md`.
+export {
+  DeploymentDocumentResolverService,
+  buildDeploymentDocumentResolver,
+  deploymentDocumentCredentialsFromEnv,
+  deploymentScopedDocumentProviders,
+  envKeyFor,
+  envPrefixFor,
+  resolveDeploymentDocumentResolver,
+  type DeploymentDocumentCredentialResult,
+  type DeploymentDocumentResolverServiceDependencies,
+} from './modules/documents/DeploymentDocumentResolverService.js'
 export {
   assertUploadReadable,
   DocumentImportService,

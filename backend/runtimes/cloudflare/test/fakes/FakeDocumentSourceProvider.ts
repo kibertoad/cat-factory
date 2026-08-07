@@ -75,7 +75,7 @@ export class FakeDocumentSourceProvider implements DocumentSourceProvider {
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
-    _workspaceId?: string,
+    _workspaceId?: string | null,
   ): Promise<DocumentContent> {
     this.calls.push({ credentials, externalId })
     const page = this.pages.get(externalId)
@@ -95,7 +95,7 @@ export class FakeDocumentSourceProvider implements DocumentSourceProvider {
   async probeVersion(
     credentials: DocumentCredentials,
     externalId: string,
-    workspaceId?: string,
+    workspaceId?: string | null,
   ): Promise<string> {
     const page =
       this.pages.get(externalId) ??

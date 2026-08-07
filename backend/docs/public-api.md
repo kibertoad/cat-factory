@@ -938,16 +938,17 @@ kinds**: a `subscription` row's `costEstimate` is illustrative (flat-rate plans 
 token); only `metered` rows are money. Workspace tier only, by design: a workspace key never learns
 a sibling workspace's spend.
 
-### Run evidence (report + artifacts)
+### Run evidence (report + outcome + artifacts)
 
 What a run PROVED, for a consumer whose job is to judge it rather than debug it: a trial harness
 deciding whether to accept a change, an evaluation pipeline scoring a fleet of runs.
 
-| Method / path                            | Scope  | Behaviour                                                       |
-| ---------------------------------------- | ------ | --------------------------------------------------------------- |
-| `GET /api/v1/runs/:runId/report`         | `read` | The engine's **verification report** for the run.               |
-| `GET /api/v1/runs/:runId/artifacts`      | `read` | The binary artifacts the run captured (metadata; unpaged).      |
-| `GET /api/v1/artifacts/:artifactId/blob` | `read` | One artifact's **bytes**, with its recorded image content type. |
+| Method / path                            | Scope  | Behaviour                                                               |
+| ---------------------------------------- | ------ | ----------------------------------------------------------------------- |
+| `GET /api/v1/runs/:runId/report`         | `read` | The engine's **verification report** for the run.                       |
+| `GET /api/v1/runs/:runId/outcome`        | `read` | The run's **outcome summary**: what it changed, and what backs that up. |
+| `GET /api/v1/runs/:runId/artifacts`      | `read` | The binary artifacts the run captured (metadata; unpaged).              |
+| `GET /api/v1/artifacts/:artifactId/blob` | `read` | One artifact's **bytes**, with its recorded image content type.         |
 
 A run is addressable here on the same terms as the [decision routes](#parked-decisions-apiv1runsruniddecisions)
 that share the `/api/v1/runs/:runId/*` prefix: the runs this key could already read through
@@ -984,6 +985,45 @@ the complete one: a caller is asking about the RUN, not about one of its pull re
 `scope` means what it always meant, the own-service PR, so a consumer written before 1.12 is
 unaffected.
 
+**The outcome summary is the report's sibling, not a projection of it.** Same evidence, different
+reader: the report is a reviewer's bundle (every failing check by name, every captured log tail, the
+merge assessment), and the outcome is the product-language answer for someone reporting what shipped:
+`disposition`, the requester's own `ask`, every pull request the run opened, requirement coverage,
+the tester's verdict and concerns, the views it captured, and the machine checks that recorded a
+verdict. It is the reduction the app's outcome card renders, served verbatim for the same reason the
+report is: one deployment answering a question two ways is how the app and an integration come to
+disagree about what a run did.
+
+Both are composed by the same code over one read of the run's evidence, so the coverage counts
+(`met` / `notMet` / `notCovered` / `regressions` / `total`) and the regression rule are the same
+numbers on both endpoints and on the pull request. What differs is the SHAPE, deliberately: the
+report is bounded to what FITS IN A PULL-REQUEST BODY, a budget of a few dozen rows, so a tally
+taken off its capped tables would be quietly wrong. The outcome's own caps are a ceiling on a
+pathological producer rather than a routine truncation (500 requirement rows, 200 tester areas or
+concerns, 2000 characters of any one free-text field), so an ordinary run is complete.
+
+Both name what they left out in `truncations`, in one vocabulary
+(`"requirements.entries: showing 500 of 640"`), and **neither endpoint's counts are ever affected**:
+every tally is computed over the whole join before any cap, so a bounded response reports a shorter
+table and never a smaller spec. `requirements.entries` is ordered by SEVERITY, so a cap drops the
+least severe rows and the note says so: a reader assuming the spec's own order would otherwise
+conclude the missing requirements were never ruled on. Free text is scrubbed before it is clamped,
+so a cut can never leave half a credential in the payload.
+
+Every outcome section is `{ status: "reported" } | { status: "absent", gap }` where
+`gap` is a machine-readable CODE (`no_tester_step`, `tester_not_reported`, `no_verdicts`,
+`no_requirements`, `run_unavailable`) rather than prose, since the platform does not localize:
+`requirements.spec` says whether coverage was counted against the service's `spec/` (`joined`) or
+only against the ids the tester reported (`not_read`, a narrower denominator), and
+`unmatchedVerdicts` counts rulings the spec could not place, on both endpoints. A spec that
+declares no requirements is `no_requirements` only when the tester ruled on nothing either;
+with verdicts standing against it the section is `reported` with `total: 0` and every verdict
+unmatched, because a spec that moved under the run is not a run nobody tested.
+
+The `spec/` both endpoints join against is read from the branch the RUN pushed to, falling back to
+the repo default: the spec increment a task wrote has not merged while its pull request is open, so
+the default branch is missing exactly the requirements the tester just ruled on.
+
 The **artifact** rows are `{ artifactId, kind, view, contentType, byteSize, hash, createdAt }`.
 `kind` is `screenshot` (machine-captured during the run) or `reference` (the image a human uploaded
 for it to be judged against); `view` pairs the two. The list is deliberately unpaged: the capture
@@ -1006,7 +1046,8 @@ never an empty list, which would say something false about the run.
 
 **What the report costs.** It is composed per request, and for a run whose tester reported it also
 reads the service's `spec/` tree off the run's branch over the VCS API, the only `/api/v1` read
-that reaches outside the deployment. The result is memoised per run inside one process, so a
+that reaches outside the deployment. The outcome read shares that read (and its memo) and costs
+strictly less besides: no linked issues, no provisioning history, no pull-request resolution. The result is memoised per run inside one process, so a
 scaled Node deployment or a cold Worker isolate can repeat it. That is the price of serving the
 pull request's bundle verbatim rather than a second projection that could disagree with it. An
 integration sweeping a fleet should poll per run on settlement rather than on a tight loop; there
@@ -1015,6 +1056,7 @@ is no separate rate limit on this endpoint beyond the key itself.
 ```sh
 # The report a trial harness ingests, and the evidence behind it.
 curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/report" | jq '.ci, .validation, .observability'
+curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/outcome" | jq '.disposition, .requirements, .checks'
 curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/artifacts" | jq '.artifacts[] | {artifactId, view, byteSize}'
 curl -s -H "$AUTH" "$BASE/api/v1/artifacts/$ART/blob" -o login.png
 ```

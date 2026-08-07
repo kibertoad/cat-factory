@@ -96,25 +96,27 @@ agent plan around a tool that was never there and discover the gap mid-run. Each
 its own member of a closed vocabulary, because each needs a DIFFERENT fix, and the prompt renders
 them through an exhaustive `Record`, so adding one fails the typecheck rather than rendering blank:
 
-| Reason                  | What happened                                                                                                                    | The fix                                               |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `harness_unsupported`   | This CLI speaks no MCP (Pi), the definition's `harnesses` excludes it, or it is an ambient Codex run with no per-run config home | The run's harness, or the `harnesses` list            |
-| `transport_unsupported` | The CLI speaks MCP but its client cannot reach this transport (Codex is stdio-only)                                              | A second declaration for the other transport          |
-| `missing_secret`        | A `required` credential did not resolve                                                                                          | Set the variable, or store the workspace value        |
-| `reserved_secret`       | The credential's LOOKUP key names a platform variable                                                                            | The DECLARATION (setting the variable must not help)  |
-| `oauth_not_connected`   | The server authenticates with OAuth and this workspace holds no grant (or the deployment has no `ENCRYPTION_KEY` to keep one in) | Press Connect on the board, and sign in at the vendor |
-| `oauth_token_failed`    | A grant IS on file and produced no access token: revoked/expired refresh, an authorization server that refused, discovery failed | Reconnect, or wait out the vendor's outage            |
-| `over_budget`           | Nothing is wrong with the server; the kind declares more than a dispatch carries                                                 | Trim the kind's declarations                          |
+| Reason                  | What happened                                                                                                                    | The fix                                                                                                                  |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `harness_unsupported`   | This CLI speaks no MCP (Pi), the definition's `harnesses` excludes it, or it is an ambient Codex run with no per-run config home | The run's harness, the `harnesses` list, or (ambient Codex) a leased credential instead of the developer's own CLI login |
+| `transport_unsupported` | The CLI speaks MCP but its client cannot reach this transport (Codex is stdio-only)                                              | A second declaration for the other transport                                                                             |
+| `missing_secret`        | A `required` credential did not resolve                                                                                          | Set the variable, or store the workspace value                                                                           |
+| `reserved_secret`       | The credential's LOOKUP key names a platform variable                                                                            | The DECLARATION (setting the variable must not help)                                                                     |
+| `oauth_not_connected`   | The server authenticates with OAuth and this workspace holds no grant (or the deployment has no `ENCRYPTION_KEY` to keep one in) | Press Connect on the board and sign in at the vendor; set `ENCRYPTION_KEY` first if the deployment has no grant store    |
+| `oauth_token_failed`    | A grant IS on file and produced no access token: revoked/expired refresh, an authorization server that refused, discovery failed | Reconnect, or wait out the vendor's outage                                                                               |
+| `over_budget`           | Nothing is wrong with the server; the kind declares more than a dispatch carries                                                 | Trim the kind's declarations                                                                                             |
 
 ### What the RUN records, and where a person sees it
 
 A dispatch's decision lands on the step itself (`step.toolServers`), as two lists: the servers it
 WIRED (id, label, transport, and the narrowed `allowedTools` when the definition set one) and the
 ones it DROPPED, each with the reason from the table above. The step detail renders them as chips,
-so a run that quietly went without its issue tracker says so where a person is already looking; the
-SPA maps each reason through an exhaustive `Record` over
-`@cat-factory/contracts`'s `toolServerUnavailableReasonSchema`, and a member it does not recognise
-renders as unknown NAMING the raw code rather than disappearing.
+so a run that quietly went without its issue tracker says so where a person is already looking. The
+SPA maps each reason through TWO exhaustive `Record`s over `@cat-factory/contracts`'s
+`toolServerUnavailableReasonSchema`, one for the reason line and one for the REMEDY beneath it
+(the same pairing as the table above: what happened, and what to change). A member it does not
+recognise renders as unknown NAMING the raw code, with no remedy, because a build that knows only
+that the code was recorded cannot pick a surface to send anyone to.
 
 Four properties of that record are load-bearing:
 
@@ -128,12 +130,15 @@ Four properties of that record are load-bearing:
   `recordDispatchAttribution` stamps `agentKind` on it from the same parameter that feeds
   `step.dispatches`. Without it the lists would be read under the step's kind and credit one
   agent's capabilities to another. The step detail says whose they are whenever the two differ.
-- **Absent and both-empty are different states.** Absent means no container dispatch recorded here
-  (an inline step, or a run predating the field); `{ wired: [], unavailable: [] }` means a dispatch
-  ran and its kind declared no tool servers at all. The step detail hides itself on the empty
-  record, since that is every step on a deployment that registers no tool servers and it is a fact
-  about the DECLARATION rather than about the run; the distinction survives on the wire and the
-  debug API answers it.
+- **Absent and both-empty are different states.** Absent means the step's CURRENT attempt holds no
+  resolution: an inline step, a run predating the field, or a step re-armed for a re-run whose next
+  dispatch has not answered yet (`resetStepForRerun` clears the record, because it describes one
+  resolution against one harness, one secret resolver and one set of grants, and a re-run resolves
+  afresh). `{ wired: [], unavailable: [] }` means a dispatch ran and its kind declared no tool
+  servers at all. So absent never says the step did not RUN: `attempts` and `dispatches` outlive the
+  reset and are what answer that. The step detail hides itself on the empty record, since that is
+  every step on a deployment that registers no tool servers and it is a fact about the DECLARATION
+  rather than about the run; the distinction survives on the wire and the debug API answers it.
 - **It carries no credential**, by construction rather than by field-skipping: the projection is
   built from the prompt-facing half of the resolution and `mcpServers` (where every resolved value
   lives) has no projection into it. The step is persisted and rendered in a browser.

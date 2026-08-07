@@ -443,6 +443,11 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
           // MOTHERSHIP's registrations; this node's build can only hold a second copy of them.
           // `startLocal` warns at boot if this node registered fragments anyway.
           promptFragmentSource: mothership.promptFragments,
+          // …and the LIVING DOCUMENTS those standards may name. The fourth of the same family, and
+          // the one whose reason is a credential rather than a registration: the document-source
+          // credentials are configured in the MOTHERSHIP's environment and never reach a laptop, so
+          // this node reads the resolved BODY rather than authenticating to the vendor itself.
+          deploymentDocumentResolver: mothership.deploymentDocuments,
         }
       : {}),
     // Share the SAME registries the pool resolver above was built with (so a custom runner

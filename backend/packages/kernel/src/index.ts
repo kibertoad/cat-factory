@@ -192,6 +192,8 @@ export {
   DOCUMENT_PIPELINE_ID,
   DOCUMENT_QUICK_PIPELINE_ID,
   REVIEW_PIPELINE_ID,
+  SPIKE_PIPELINE_ID,
+  RALPH_PIPELINE_ID,
   defaultPipelineIdForTaskType,
 } from './domain/seed.js'
 
@@ -782,6 +784,18 @@ export {
   WORKSPACE_CASCADE_SPECIAL_TABLES,
   type WorkspaceScopedTable,
 } from './domain/workspace-cascade.js'
+
+export {
+  FINAL_SPEND_FOLD_BUDGET_MS,
+  SPEND_DAY_ROLLUP_BACKFILL_MS,
+  SPEND_DAY_ROLLUP_LOOKBACK_MS,
+  SPEND_DAY_ROLLUP_MAX_SPAN_MS,
+  finalSpendFoldPlan,
+  spendRollupWindow,
+  type FinalSpendFoldPlan,
+  type SpendFoldSpan,
+  type SpendRollupWindow,
+} from './domain/spend-rollup-window.js'
 
 export {
   WORKSPACE_ROLE_PERMISSIONS,

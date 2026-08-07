@@ -23,9 +23,24 @@ export type {
   // The wire shape of a deployment-registered task type (the `TaskTypeRegistry`'s currency),
   // re-exported here so an org package registering one imports its whole vocabulary from kernel:
   // the descriptor, its field shape, and the shared form-value bag its answers land in.
+  //
+  // WHOLE means every member a registration literal names, the nested ones included. A list that
+  // stops at the top-level shape is the failure this comment now guards: `TaskTypePresentation`
+  // and `TaskTypeFieldOption` were absent while the doc promised the vocabulary, so a deployment
+  // factoring its `presentation` out into a helper had to take a `@cat-factory/contracts`
+  // dependency to name that helper's return type, which is exactly the direct dependency the
+  // re-export exists to remove.
   CustomTaskType,
+  TaskTypePresentation,
   TaskTypeFieldDescriptor,
   TaskTypeFieldType,
+  TaskTypeFieldOption,
+  // The SHARED descriptor vocabulary those narrow: an operation's fields and an initiative
+  // preset's create form are the same shape, so a deployment authoring either names them here.
+  DescriptorField,
+  DescriptorFieldType,
+  DescriptorFieldOption,
+  DescriptorFieldShowWhen,
   DescriptorFieldValue,
   DescriptorFieldValues,
   DocKind,

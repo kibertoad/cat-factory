@@ -1,6 +1,7 @@
 import { defineApiContract } from '@toad-contracts/valibot'
 import { prVerificationReportSchema } from '../pr-report.js'
 import { publicRunArtifactListSchema } from '../public-evidence.js'
+import { runOutcomeSchema } from '../run-outcome.js'
 import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -36,6 +37,30 @@ export const getPublicRunReportContract = withMinScope(
     requestPathParamsSchema: runIdParams,
     pathResolver: ({ runId }) => `/api/v1/runs/${runId}/report`,
     responsesByStatusCode: { 200: prVerificationReportSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * The run's OUTCOME summary: what it changed and what backs that up, for a reader who will not
+ * open the diff.
+ *
+ * The sibling of the report above rather than a projection of it, and the difference is the
+ * AUDIENCE, not the facts: the report is a reviewer's evidence bundle (every failing check by
+ * name, every captured log tail, the merge assessment), this is the product-language answer the
+ * app's outcome card renders, and the counts underneath both are computed by the same shared
+ * rules. A consumer deciding whether a change is acceptable wants the report; one reporting to a
+ * person what shipped wants this.
+ *
+ * Deliberately not derived from the report on the wire: the report is BOUNDED to what fits in a
+ * pull-request body, and a tally taken off its capped tables would be quietly wrong.
+ */
+export const getPublicRunOutcomeContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/outcome`,
+    responsesByStatusCode: { 200: runOutcomeSchema, ...errorResponses },
   }),
 )
 
