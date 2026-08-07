@@ -258,14 +258,14 @@ patterns: [`backend/docs/logging.md`](./backend/docs/logging.md).
   every error envelope), `containerJobLog` (the workflow↔container seam; the same ids ride the job body so
   the harness binds them beside `jobId`), and the durable drivers. A request line logs the PATHNAME only,
   because a query string carries the WS `?ticket=` and OAuth `?code=`.
-- **`LOG_LEVEL`** is applied FIRST in each boot path and an unrecognised value falls back to `info`. The
-  threshold is checked in the adapter, not on the pino instance, because pino children snapshot their
-  parent's level at creation.
+- **`LOG_LEVEL`** is applied FIRST in each boot path, an unrecognised value falling back to `info`; the
+  threshold is checked in the adapter, not on the pino instance, which snapshots its parent's level.
 - **Assert the evidence in tests** with kernel's `createRecordingLogger()`.
 - **A SECOND destination is a kernel `LogSink` installed with `setLogSink`** (today the opt-in
   OTLP log export), never a second logger. It gets the `child`-bound fields folded in and sits
-  behind the same level gate; `record` may not throw or block and `flush` may not reject, and
-  DRAINING is the facade's job (Node timer + shutdown flush ⇄ Worker per-invocation `waitUntil`).
+  behind the same level gate; `record` may not throw or block and `flush` may not reject, and the
+  facade DRAINS wherever the buffer's HOLDER can vanish: Node timer + shutdown flush ⇄ Worker
+  per-invocation `waitUntil` ⇄ each durable suspension of a workflow wake (its isolate ends there).
 
 ## Operational EVENTS are counted, not just logged
 

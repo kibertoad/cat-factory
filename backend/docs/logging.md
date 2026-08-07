@@ -332,6 +332,19 @@ shutdown (after every other stop, so the shutdown's own lines get out), the Work
 end of each invocation, because its buffer is per isolate and an isolate is discarded without
 notice. A sink that started its own timer would be making a promise workerd cannot keep.
 
+The Worker's WORKFLOW entry points need a second drain point for the same reason, and getting
+this wrong is silent in the worst place. A `WorkflowEntrypoint` is instantiated by workerd in an
+isolate no `fetch`/`scheduled`/`queue` invocation has run in, so it establishes the settings
+itself; and a wake gives that isolate BACK in the middle, at every `step.sleep` and
+`step.waitForEvent`. A drain placed only at the end of `run()` would therefore export a durable
+driver's last wake and lose every wake before it, which for a run that polls for hours is the
+whole run: the deployed engine's most diagnostic path exporting nothing. So a wake is BRACKETED
+rather than trailed (`runtimes/cloudflare/src/infrastructure/workflows/logExport.ts`): settings
+on entry, a drain in front of each suspension, and a drain in a `finally` so a wake that ends by
+throwing still exports the lines saying why. Those drains are AWAITED, not handed to
+`waitUntil`, because the workflow's next act is to give the isolate up: "after this returns" is
+not a moment that reliably arrives.
+
 The shutdown flush is **bounded** (5s). A full buffer drains as sequential POSTs that each carry
 the transport's own timeout, so an unbounded final flush can outlast the SIGTERM grace period a
 supervisor allows and be SIGKILLed, losing the shutdown lines it exists to deliver along with
