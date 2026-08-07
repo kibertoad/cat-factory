@@ -39,7 +39,8 @@ admin-gated `TaskSourceController`: a hunt neither reads nor edits a connection,
 "Which board holds the bugs?" is a common place to discover the tracker holding them isn't
 connected to this workspace yet, so the hunt's tracker selector is the same two-tier menu
 `<ContextIssuePicker>` renders (both off the shared `buildSourceChoices` /`reconcileSource` in
-`frontend/app/app/utils/taskSources.ts`): the trackers the workspace offers, then the ones it
+`frontend/app/app/utils/sourcePicker.ts`, which `<ContextDocumentPicker>` renders over DOCUMENT
+sources too): the trackers the workspace offers, then the ones it
 could add. An add entry routes to **that tracker's own connect screen** (`ui.openTaskConnect`),
 never to the Integrations hub: the hub is a directory the user then has to search, and the
 tracker they just named is the one thing we already know.
@@ -208,5 +209,5 @@ work away and leave them to redo the pick; they can press Run instead.
 | Inline rating model          | `orchestration/src/modules/bugHunt/BugHuntAssessorService.ts`             |
 | HTTP                         | `server/src/modules/bugHunt/BugHuntController.ts`                         |
 | SPA                          | `frontend/app/app/components/tasks/BugHuntModal.vue`, `stores/bugHunt.ts` |
-| Shared tracker selection     | `frontend/app/app/utils/taskSources.ts`                                   |
+| Shared tracker selection     | `frontend/app/app/utils/sourcePicker.ts`                                  |
 | Cross-runtime assertions     | `internal/conformance/src/suites/bug-hunt.ts`                             |
