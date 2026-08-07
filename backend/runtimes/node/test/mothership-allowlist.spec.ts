@@ -403,11 +403,15 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // the workspace-delete purge (listByWorkspace/deleteByWorkspace, driven server-side by
   // `WorkspaceService.delete`). The blob BYTES never cross the machine API — they live in the
   // per-account backend.
+  // `documentScope`/`agedScope` are private query-scope predicates (the document reclaim's filter
+  // and the age sweep's), not port methods.
   binaryArtifactMetadataStore: {
     listOlderThan: 'sweeper',
     deleteOlderThan: 'sweeper',
     listByWorkspace: 'sweeper',
     deleteByWorkspace: 'sweeper',
+    documentScope: 'helper',
+    agedScope: 'helper',
   },
   // `get`/`remove` are now allow-listed (the preset-library management surface); `list`/`getDefault`/
   // `upsert` were already remotely callable — so the whole model-preset repo is remote.

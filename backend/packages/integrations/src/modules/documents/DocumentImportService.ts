@@ -9,6 +9,8 @@ import type {
 } from '@cat-factory/kernel'
 import type {
   SourceDocument,
+  DocumentContent,
+  DocumentCredentials,
   DocumentRenderStatus,
   DocumentSearchResult,
   DocumentSourceKind,
@@ -64,6 +66,16 @@ export interface DocumentImportServiceDependencies {
   /** Where the best-effort render pass reports what it could not retain. */
   logger?: Logger
 }
+
+/**
+ * What resolving the workspace's image storage produced: the store, a settled "this account keeps
+ * no images", or a settings read that failed. See
+ * {@link DocumentImportService.resolveArtifactStore} for why the last two are not one value.
+ */
+type ResolvedArtifactStorage =
+  | { kind: 'store'; store: BinaryArtifactStore }
+  | { kind: 'none' }
+  | { kind: 'unreadable' }
 
 /** A document body supplied directly by a caller rather than fetched from a connected source. */
 export interface UploadedDocument {
@@ -269,7 +281,11 @@ export class DocumentImportService {
     // renamed a layer on another page is the cost this branch exists to avoid.
     const renderStatus = unchangedForReaders
       ? (existing?.renderStatus ?? null)
-      : await this.refreshRenders(workspaceId, provider, source, content.externalId)
+      : // The credentials this import already opened, rather than a second `requireConnection`:
+        // the render pass runs against the very revision `fetchDocument` just read, so re-opening
+        // the sealed bag buys nothing and adds a decrypt plus a window in which the connection can
+        // vanish between the two reads.
+        await this.refreshRenders(workspaceId, provider, source, connection.credentials, content)
     // The write that remains, when `unchangedForReaders` still holds, exists ONLY to record the
     // moved token: a page whose version bumped without changing a byte (a Figma file version moves
     // on any edit in the file, including frames this document does not cover) would otherwise keep
@@ -306,10 +322,15 @@ export class DocumentImportService {
   /**
    * Re-retain the document's rendered images, returning what became of them.
    *
-   * The order is prune-then-store, deliberately: a document's pictures are never a mix of two
+   * The order is prune-then-fetch, deliberately: a document's pictures are never a mix of two
    * revisions, and the cost is a window where a failed download leaves it with none, which the
-   * returned status states. Everything here is BEST-EFFORT — an image is an enrichment, and an
-   * import that already holds the body must not fail because a CDN did.
+   * returned status states. The reverse ordering is the trap, because it fails INVISIBLY — the
+   * body of the new revision lands beside last month's frames, and a row saying `failed` beside a
+   * full set of pictures reads to everyone as a transient blip rather than as a document
+   * illustrating something that no longer exists.
+   *
+   * Everything here is BEST-EFFORT — an image is an enrichment, and an import that already holds
+   * the body must not fail because a CDN did.
    *
    * The status is derived from what was RETAINED rather than from what was downloaded, so a store
    * that rejects half the bytes reads as `partial` exactly like a source that rendered half the
@@ -320,23 +341,41 @@ export class DocumentImportService {
     workspaceId: string,
     provider: DocumentSourceProvider,
     source: DocumentSourceKind,
-    externalId: string,
+    credentials: DocumentCredentials,
+    content: DocumentContent,
   ): Promise<DocumentRenderStatus | null> {
     // A source with nothing to rasterise: not a failure and not an empty set, but a question that
     // does not apply. NULL is the only value that says so.
     if (!provider.fetchRenders) return null
-    const store = await this.resolveArtifactStore(workspaceId)
+    const externalId = content.externalId
+    const storage = await this.resolveArtifactStore(workspaceId)
     // Asked BEFORE the download, so an unconfigured deployment spends no bandwidth on bytes it
-    // could not keep.
-    if (!store) return 'storage_unavailable'
+    // could not keep. An account that retains no images and a settings read that FAILED are
+    // deliberately different answers: the first is a deployment fact a person fixes by configuring
+    // storage, the second is an outage this import should be retried past.
+    if (storage.kind === 'unreadable') return 'failed'
+    if (storage.kind === 'none') return 'storage_unavailable'
+    const store = storage.store
 
     const document: DocumentArtifactRef = { source, externalId }
     try {
-      const connection = await this.deps.connectionService.requireConnection(workspaceId, source)
-      const result = await provider.fetchRenders(connection.credentials, externalId, workspaceId)
+      // The FIRST thing this does, so every later failure — a rate-limited source, a CDN outage,
+      // a store that will not take the bytes — can only ever leave the document with no pictures,
+      // never with the previous revision's beside the new body. A prune that itself throws lands
+      // in the same `catch` and records `failed`, which is honest for the one case where the old
+      // set may genuinely survive: nobody can then claim the set is current.
       await store.pruneByDocument(workspaceId, document)
+      const result = await provider.fetchRenders(
+        credentials,
+        externalId,
+        workspaceId,
+        content.renderPlan,
+      )
       let stored = 0
-      let dropped = result.failed
+      // Frames the provider's own cap excluded were never going to be retained, so they count
+      // against completeness exactly like a failed download: six pictures of a twenty-frame design
+      // is a partly illustrated document, not a fully illustrated six-frame one.
+      let dropped = result.failed + result.capped
       for (const render of result.renders) {
         try {
           await store.store({
@@ -367,13 +406,15 @@ export class DocumentImportService {
           })
         }
       }
-      if (result.causes.length) {
+      if (result.causes.length || result.capped > 0) {
         this.log.warn('document renders were not fully retrieved', {
           workspaceId,
           source,
           externalId,
           retrieved: result.renders.length,
           failed: result.failed,
+          // Named apart from `failed` on the line too: a retry fixes one and never the other.
+          capped: result.capped,
           causes: result.causes.join(', '),
         })
       }
@@ -391,23 +432,31 @@ export class DocumentImportService {
   }
 
   /**
-   * The workspace's artifact store, or null when the account retains no images.
+   * The workspace's artifact store, or WHY there isn't one.
    *
-   * A resolver that THROWS is answered as "no storage" rather than propagated: the caller is a
-   * best-effort enrichment on a path that already holds the document body, and an account-settings
-   * read that fails is indistinguishable, to everyone downstream, from one that says `off`.
+   * Three outcomes rather than a nullable store, because the two empty ones are opposite facts
+   * that the same `null` would have stated identically. `none` is a settled deployment answer
+   * ("this account retains no images"), which the row records as `storage_unavailable` and a
+   * person fixes by configuring storage. `unreadable` is an OUTAGE in the account-settings read,
+   * and telling an operator their storage is unconfigured when it is configured sends them to
+   * change a setting that is already right; worse, the status is then carried forward untouched
+   * by every token-only re-import, so the misattribution outlives the outage that caused it.
+   *
+   * The failure is still swallowed rather than propagated: the caller is a best-effort enrichment
+   * on a path that already holds the document body.
    */
-  private async resolveArtifactStore(workspaceId: string): Promise<BinaryArtifactStore | null> {
+  private async resolveArtifactStore(workspaceId: string): Promise<ResolvedArtifactStorage> {
     const resolve = this.deps.resolveBinaryArtifactStore
-    if (!resolve) return null
+    if (!resolve) return { kind: 'none' }
     try {
-      return await resolve(workspaceId)
+      const store = await resolve(workspaceId)
+      return store ? { kind: 'store', store } : { kind: 'none' }
     } catch (error) {
       this.log.warn('could not resolve artifact storage for document renders', {
         workspaceId,
         ...describeError(error),
       })
-      return null
+      return { kind: 'unreadable' }
     }
   }
 

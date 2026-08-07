@@ -6,6 +6,7 @@ import type {
   DocumentArtifactRef,
   DocumentContent,
   DocumentRecord,
+  DocumentRenderPlan,
   DocumentRenderResult,
   DocumentRepository,
   DocumentSourceProvider,
@@ -24,6 +25,8 @@ import type { DocumentConnectionService } from './DocumentConnectionService.js'
 // put megabytes on the critical path of a step dispatch that had no reason to spend them.
 
 const DESIGN: DocumentArtifactRef = { source: 'figma', externalId: 'file1:1:2' }
+/** The frames the body fetch already learned, carried to the render pass so it re-reads nothing. */
+const PLAN: DocumentRenderPlan = { targets: [{ id: '1:2', view: 'Checkout' }], capped: 0 }
 
 function memoryStore(over: { failOn?: string } = {}) {
   const rows: BinaryArtifactRecord[] = []
@@ -79,7 +82,12 @@ interface Harness {
 
 function makeService(
   harness: Harness,
-  wiring: { storage?: BinaryArtifactStore | null; rendersSupported?: boolean } = {},
+  wiring: {
+    storage?: BinaryArtifactStore | null
+    rendersSupported?: boolean
+    /** The account-settings read is DOWN, as opposed to answering "this account keeps none". */
+    storageUnreadable?: boolean
+  } = {},
 ) {
   const stored = new Map<string, DocumentRecord>()
   const documentRepository = {
@@ -101,6 +109,7 @@ function makeService(
       url: 'https://figma.com/design/file1',
       body: harness.body.value,
       version: harness.version.value,
+      renderPlan: PLAN,
     }),
     ...(wiring.rendersSupported === false ? {} : { fetchRenders }),
   }
@@ -118,19 +127,25 @@ function makeService(
     workspaceRepository: { get: async () => ({ id: 'ws_1' }) } as unknown as WorkspaceRepository,
     clock,
     idGenerator: { next: (p) => `${p}_1` },
-    ...(wiring.storage === undefined
-      ? {}
-      : { resolveBinaryArtifactStore: async () => wiring.storage ?? null }),
+    ...(wiring.storageUnreadable
+      ? {
+          resolveBinaryArtifactStore: (): Promise<BinaryArtifactStore | null> =>
+            Promise.reject(new Error('account settings read timed out')),
+        }
+      : wiring.storage === undefined
+        ? {}
+        : { resolveBinaryArtifactStore: async () => wiring.storage ?? null }),
   })
   return { service, stored: () => stored.get(DESIGN.externalId) ?? null, fetchRenders }
 }
 
 const png = (n: number) => new Uint8Array([0x89, n])
 
-function rendered(views: string[], failed = 0): DocumentRenderResult {
+function rendered(views: string[], failed = 0, capped = 0): DocumentRenderResult {
   return {
     renders: views.map((view, i) => ({ view, contentType: 'image/png', bytes: png(i) })),
     failed,
+    capped,
     causes: failed ? ['HTTP 429'] : [],
   }
 }
@@ -250,6 +265,84 @@ describe('DocumentImportService renders', () => {
 
     expect(stored()?.renderStatus).toBe('partial')
     expect(rows().map((r) => r.view)).toEqual(['Checkout'])
+  })
+
+  it('drops the previous revision’s frames even when the new render pass THROWS', async () => {
+    // Prune-then-fetch, not fetch-then-prune. The reverse order fails invisibly: the new body
+    // lands beside last month's pictures, and `failed` next to a full set of frames reads as a
+    // transient blip rather than as a document illustrating a screen that no longer exists.
+    const { store, rows } = memoryStore()
+    const harness: Harness = {
+      body: { value: '## Checkout' },
+      version: { value: 'v1' },
+      renders: { value: rendered(['Checkout', 'Confirm']) },
+    }
+    const { service, stored } = makeService(harness, { storage: store })
+    await service.import('ws_1', 'figma', 'ref')
+    expect(rows()).toHaveLength(2)
+
+    harness.body.value = '## Checkout v2'
+    harness.version.value = 'v2'
+    harness.renders.value = new Error('figma responded 429')
+    await service.import('ws_1', 'figma', 'ref')
+
+    expect(stored()?.body).toBe('## Checkout v2')
+    expect(stored()?.renderStatus).toBe('failed')
+    // `failed` beside an empty set, which is what the port promises and the only pairing that
+    // cannot be read as "this design still looks like this".
+    expect(rows()).toEqual([])
+  })
+
+  it('reports a storage read that FAILED as `failed`, not as “this account keeps no images”', async () => {
+    // `storage_unavailable` commits to a deployment fact ("configure image storage"), so serving
+    // it for an outage sends an operator to change a setting that is already correct — and the
+    // status is then carried forward untouched by every token-only re-import, outliving the blip.
+    const harness: Harness = {
+      body: { value: '## Checkout' },
+      version: { value: 'v1' },
+      renders: { value: rendered(['Checkout']) },
+    }
+    const { service, stored, fetchRenders } = makeService(harness, { storageUnreadable: true })
+
+    await service.import('ws_1', 'figma', 'ref')
+
+    expect(stored()?.body).toBe('## Checkout')
+    expect(stored()?.renderStatus).toBe('failed')
+    // Still no download: there is nowhere to put the bytes either way.
+    expect(fetchRenders).not.toHaveBeenCalled()
+  })
+
+  it('counts frames the provider CAPPED as unillustrated, so a bounded pass is `partial`', async () => {
+    // Six pictures of a twenty-frame design is a partly illustrated document. `stored` claims
+    // "every image the source offered was retrieved and retained", which would have the reader
+    // conclude the design has six screens.
+    const { store } = memoryStore()
+    const harness: Harness = {
+      body: { value: '## Checkout' },
+      version: { value: 'v1' },
+      renders: { value: rendered(['A', 'B'], 0, 14) },
+    }
+    const { service, stored } = makeService(harness, { storage: store })
+
+    await service.import('ws_1', 'figma', 'ref')
+
+    expect(stored()?.renderStatus).toBe('partial')
+  })
+
+  it('hands the render pass the plan the body fetch already resolved', async () => {
+    // Otherwise the provider re-issues the very structural read that produced the body, against a
+    // rate-limited API, to relearn frame ids and names it had in hand a moment earlier.
+    const { store } = memoryStore()
+    const harness: Harness = {
+      body: { value: '## Checkout' },
+      version: { value: 'v1' },
+      renders: { value: rendered(['Checkout']) },
+    }
+    const { service, fetchRenders } = makeService(harness, { storage: store })
+
+    await service.import('ws_1', 'figma', 'ref')
+
+    expect(fetchRenders).toHaveBeenCalledWith(expect.anything(), DESIGN.externalId, 'ws_1', PLAN)
   })
 
   it('leaves the status NULL for a source with nothing to rasterise', async () => {

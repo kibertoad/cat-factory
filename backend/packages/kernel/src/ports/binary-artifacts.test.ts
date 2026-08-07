@@ -47,20 +47,32 @@ class FakeMetadataStore implements BinaryArtifactMetadataStore {
       ),
     )
   }
-  async deleteByDocument(workspaceId: string, document: DocumentArtifactRef): Promise<number> {
-    const doomed = await this.listByDocument(workspaceId, document)
-    for (const r of doomed) this.rows.delete(r.id)
-    return doomed.length
+  deleteByIds(workspaceId: string, ids: readonly string[]): Promise<number> {
+    let n = 0
+    for (const id of ids) {
+      const row = this.rows.get(id)
+      if (row?.workspaceId !== workspaceId) continue
+      this.rows.delete(id)
+      n += 1
+    }
+    return Promise.resolve(n)
   }
   delete(_workspaceId: string, id: string): Promise<void> {
     this.rows.delete(id)
     return Promise.resolve()
   }
+  // Both halves carry the port's document-keyed exemption (the window is `Infinity` here, since
+  // these tests are about the reclaim rather than the cutoff), so a fixture that mixed run debris
+  // with a document's renders could not read as if the sweep took both.
   listOlderThan(workspaceId: string): Promise<BinaryArtifactRecord[]> {
-    return this.listByWorkspace(workspaceId)
+    return Promise.resolve(
+      [...this.rows.values()].filter((r) => r.workspaceId === workspaceId && !r.document),
+    )
   }
-  deleteOlderThan(workspaceId: string): Promise<number> {
-    return this.deleteByWorkspace(workspaceId)
+  async deleteOlderThan(workspaceId: string): Promise<number> {
+    const doomed = await this.listOlderThan(workspaceId)
+    for (const r of doomed) this.rows.delete(r.id)
+    return doomed.length
   }
   listByWorkspace(workspaceId: string): Promise<BinaryArtifactRecord[]> {
     return Promise.resolve([...this.rows.values()].filter((r) => r.workspaceId === workspaceId))

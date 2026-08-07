@@ -186,6 +186,11 @@ export const workspaceSettingsSchema = v.object({
    * How many days captured UI screenshots + uploaded reference design images (the
    * binary artifacts backing the visual-confirmation gate) are retained before the
    * cleanup sweep deletes them — bytes and metadata. Default 14. Bounded 1–3650.
+   *
+   * Does NOT bound a design document's imported renders. Those are a projection of a
+   * live `documents` row rather than run debris: they are replaced by the next import
+   * that changes the body and reclaimed with the workspace, and an unedited design is
+   * never re-imported, so a clock would delete pictures nothing would fetch again.
    */
   artifactRetentionDays: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(3650)),
   /**

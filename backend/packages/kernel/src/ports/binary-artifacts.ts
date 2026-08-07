@@ -133,6 +133,14 @@ export interface BinaryArtifactStore {
    * Retention sweep: delete every artifact in the workspace created before `olderThan`
    * (epoch ms) — BOTH the metadata row AND its bytes — and return how many were removed.
    * Drives the configurable per-workspace retention cleanup (default 14 days).
+   *
+   * EXEMPTS artifacts carrying a {@link DocumentArtifactRef}. Age is the right lifetime for run
+   * debris, which is produced once and never referenced again, and the wrong one for a document's
+   * renders, which are a PROJECTION of a live row: they are replaced wholesale by the next import
+   * that changes the body ({@link pruneByDocument}) and by nothing else. Sweeping them on a clock
+   * would leave `documents.render_status` saying `stored` over an empty set, and nothing would
+   * re-download them, because an unedited design is never re-imported. Their reclaim is the
+   * document's own, not the calendar's.
    */
   pruneOlderThan(workspaceId: string, olderThan: number): Promise<number>
   /**
@@ -165,12 +173,32 @@ export interface BinaryArtifactMetadataStore {
     workspaceId: string,
     document: DocumentArtifactRef,
   ): Promise<BinaryArtifactRecord[]>
-  /** Delete every metadata row rendered from one document; returns the count. */
-  deleteByDocument(workspaceId: string, document: DocumentArtifactRef): Promise<number>
+  /**
+   * Delete exactly the named metadata rows in ONE chunked statement; returns how many went.
+   *
+   * Every id-scoped reclaim goes through this rather than a predicate, because a predicate
+   * re-evaluates at DELETE time against rows the caller never listed and therefore never
+   * reclaimed the bytes of. The document reclaim is where that bites: two imports of one document
+   * race routinely (a manual re-import beside a dispatch-time refresh), and a `WHERE
+   * document_source = …` delete would drop the row the other import had just inserted, orphaning
+   * its blob with nothing left pointing at the key. Ids name the rows whose bytes are already
+   * gone, so the statement can only ever remove those.
+   *
+   * Empty input is a no-op. Ids naming no row are silently skipped, so a reclaim stays idempotent.
+   */
+  deleteByIds(workspaceId: string, ids: readonly string[]): Promise<number>
   delete(workspaceId: string, id: string): Promise<void>
-  /** Records in the workspace created before `olderThan` (epoch ms) — for the retention sweep. */
+  /**
+   * Records in the workspace created before `olderThan` (epoch ms) — for the retention sweep.
+   * EXCLUDES document-keyed renders, whose lifetime is their document's; see
+   * {@link BinaryArtifactStore.pruneOlderThan} for why age is the wrong clock for those.
+   */
   listOlderThan(workspaceId: string, olderThan: number): Promise<BinaryArtifactRecord[]>
-  /** Delete metadata rows in the workspace created before `olderThan`; returns the count. */
+  /**
+   * Delete metadata rows in the workspace created before `olderThan`; returns the count. Carries
+   * the SAME document-keyed exemption as {@link listOlderThan}: the two predicates are one rule,
+   * and a delete wider than its list would reclaim rows whose bytes nothing had removed.
+   */
   deleteOlderThan(workspaceId: string, olderThan: number): Promise<number>
   /** Every record in the workspace — for the workspace-delete purge. */
   listByWorkspace(workspaceId: string): Promise<BinaryArtifactRecord[]>
@@ -290,15 +318,16 @@ export function createBinaryArtifactStore(deps: {
       'binary-artifact reclaim: some blob deletes failed; their metadata rows are retained (bytes not yet reclaimed)',
       { workspaceId: records[0]?.workspaceId, failed: failed.size, total: records.length },
     )
-    // Otherwise delete only the rows whose bytes are confirmed gone, one at a time, leaving the
-    // failed pairs (row + blob) intact for a later reclaim.
-    let removed = 0
-    for (const record of records) {
-      if (failed.has(record.id)) continue
-      await metadata.delete(record.workspaceId, record.id)
-      removed += 1
-    }
-    return removed
+    // Otherwise delete only the rows whose bytes are confirmed gone, leaving the failed pairs
+    // (row + blob) intact for a later reclaim. One chunked id-scoped statement rather than a
+    // delete per record: the survivor set is a list already in hand, and a point delete per row
+    // is the N+1 this port's batch method exists to prevent.
+    const survivors = records.filter((record) => !failed.has(record.id))
+    if (!survivors.length) return 0
+    return metadata.deleteByIds(
+      survivors[0]!.workspaceId,
+      survivors.map((record) => record.id),
+    )
   }
   return {
     async store(input) {
@@ -354,7 +383,17 @@ export function createBinaryArtifactStore(deps: {
     },
     async pruneByDocument(workspaceId, document) {
       const previous = await metadata.listByDocument(workspaceId, document)
-      return reclaim(previous, () => metadata.deleteByDocument(workspaceId, document))
+      if (!previous.length) return 0
+      // The bulk delete is scoped to the ids just listed, NOT to the document predicate. A
+      // re-import stores the replacement renders moments after this returns, and a second import
+      // racing the first would have its fresh rows swept by a predicate delete that never
+      // reclaimed their bytes. See `deleteByIds`.
+      return reclaim(previous, () =>
+        metadata.deleteByIds(
+          workspaceId,
+          previous.map((record) => record.id),
+        ),
+      )
     },
     async delete(workspaceId, id) {
       const record = await metadata.get(workspaceId, id)

@@ -24,8 +24,22 @@ change.
 
 A new `documents.render_status` records what became of them (`stored` / `partial` / `none` /
 `failed` / `storage_unavailable`, or null where the question does not apply), because every way of
-ending up with no images is otherwise the same absence. A deployment with no image storage
-configured imports the design textually and says so rather than downloading bytes it cannot keep.
+ending up with no images is otherwise the same absence. It is derived from what was RETAINED, and
+counts the frames a provider's own cap excluded as unillustrated, so a six-picture pass over a
+twenty-frame file reads as `partial` rather than as a complete design with six screens. A
+deployment with no image storage configured imports the design textually and says so rather than
+downloading bytes it cannot keep; a settings read that FAILS is `failed`, not
+`storage_unavailable`, since telling an operator to configure storage they already have sends them
+to fix the wrong thing.
+
+A document's renders are exempt from the age-based artifact retention sweep. Age is the right
+lifetime for run debris and the wrong one for a projection of a live row: renders are replaced by
+the next import that changes the body and by nothing else, and an unedited design is never
+re-imported, so a clock-based sweep would leave the row claiming `stored` over an empty set with
+nothing to re-download them.
 
 Internal break: `binary_artifacts` rows and `documents` rows written before this change carry no
 document keying and no render status. Both self-heal on the next import; nothing needs a backfill.
+`BinaryArtifactMetadataStore.deleteByDocument` is replaced by `deleteByIds`: every id-scoped
+reclaim now names the rows whose bytes it has already removed, so a concurrent import's fresh row
+cannot be deleted out from under its blob.

@@ -119,6 +119,38 @@ describe('FigmaProvider.fetchRenders', () => {
       Array.from({ length: MAX_RENDERS }, (_, i) => `Frame ${i}`),
     )
     expect(result.failed).toBe(0)
+    // The frames the cap left out are COUNTED, kept apart from `failed`: a retry fixes a failure
+    // and never a cap. Reported as zero, six pictures of a twenty-frame file would land on the row
+    // as "every image the source offered was retrieved and retained".
+    expect(result.capped).toBe(20 - MAX_RENDERS)
+  })
+
+  it('renders the plan it was handed, without re-reading the file it came from', async () => {
+    // The import fetches the body and the renders back to back off one revision, so the structural
+    // read that named these frames has already happened. Repeating it spends a second call against
+    // the rate-limited API to relearn ids and names the caller is holding.
+    const fetched: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        fetched.push(url)
+        if (url.includes('/images/')) {
+          return jsonResponse({ images: { '1:7': `${RENDER_HOST}/signed/seven.png` } })
+        }
+        return pngResponse(7)
+      }),
+    )
+
+    const result = await new FigmaProvider().fetchRenders(TOKEN, 'file1', 'ws_1', {
+      targets: [{ id: '1:7', view: 'Settings' }],
+      capped: 4,
+    })
+
+    expect(result.renders.map((r) => r.view)).toEqual(['Settings'])
+    // The plan's own cap rides through: it counts frames of THIS file that no picture covers,
+    // whoever discovered them.
+    expect(result.capped).toBe(4)
+    expect(fetched.some((u) => u.includes('?depth=') || u.includes('/nodes'))).toBe(false)
   })
 
   it('counts a frame Figma rendered nothing for, and one whose download fails, WITH their causes', async () => {
@@ -189,7 +221,7 @@ describe('FigmaProvider.fetchRenders', () => {
 
     const result = await new FigmaProvider().fetchRenders(TOKEN, 'file1', 'ws_1')
 
-    expect(result).toEqual({ renders: [], failed: 0, causes: [] })
+    expect(result).toEqual({ renders: [], failed: 0, capped: 0, causes: [] })
     // No `/images` call: an empty ids list is a request the endpoint answers with an error, which
     // would read as a failed render pass rather than as a design with nothing in it.
     expect(fetched.some((u) => u.includes('/images/'))).toBe(false)

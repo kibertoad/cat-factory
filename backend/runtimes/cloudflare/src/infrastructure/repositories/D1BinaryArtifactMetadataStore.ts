@@ -5,6 +5,7 @@ import type {
   DocumentOrigin,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 
 interface ArtifactRow {
   workspace_id: string
@@ -139,15 +140,20 @@ export class D1BinaryArtifactMetadataStore implements BinaryArtifactMetadataStor
     return (results ?? []).map(rowToRecord)
   }
 
-  async deleteByDocument(workspaceId: string, document: DocumentArtifactRef): Promise<number> {
-    const { meta } = await this.db
-      .prepare(
-        `DELETE FROM binary_artifacts
-         WHERE workspace_id = ? AND document_source = ? AND document_external_id = ?`,
-      )
-      .bind(workspaceId, document.source, document.externalId)
-      .run()
-    return meta.changes ?? 0
+  async deleteByIds(workspaceId: string, ids: readonly string[]): Promise<number> {
+    let removed = 0
+    for (const chunk of chunkForIn(ids)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { meta } = await this.db
+        .prepare(
+          `DELETE FROM binary_artifacts
+           WHERE workspace_id = ? AND id IN (${placeholders})`,
+        )
+        .bind(workspaceId, ...chunk)
+        .run()
+      removed += meta.changes ?? 0
+    }
+    return removed
   }
 
   async delete(workspaceId: string, id: string): Promise<void> {
@@ -157,9 +163,14 @@ export class D1BinaryArtifactMetadataStore implements BinaryArtifactMetadataStor
       .run()
   }
 
+  // The age sweep's two halves carry the SAME `document_source IS NULL` exemption: a document's
+  // renders expire with their document, never on a clock (see the port).
   async listOlderThan(workspaceId: string, olderThan: number): Promise<BinaryArtifactRecord[]> {
     const { results } = await this.db
-      .prepare('SELECT * FROM binary_artifacts WHERE workspace_id = ? AND created_at < ?')
+      .prepare(
+        `SELECT * FROM binary_artifacts
+         WHERE workspace_id = ? AND created_at < ? AND document_source IS NULL`,
+      )
       .bind(workspaceId, olderThan)
       .all<ArtifactRow>()
     return (results ?? []).map(rowToRecord)
@@ -167,7 +178,10 @@ export class D1BinaryArtifactMetadataStore implements BinaryArtifactMetadataStor
 
   async deleteOlderThan(workspaceId: string, olderThan: number): Promise<number> {
     const { meta } = await this.db
-      .prepare('DELETE FROM binary_artifacts WHERE workspace_id = ? AND created_at < ?')
+      .prepare(
+        `DELETE FROM binary_artifacts
+         WHERE workspace_id = ? AND created_at < ? AND document_source IS NULL`,
+      )
       .bind(workspaceId, olderThan)
       .run()
     return meta.changes ?? 0

@@ -1198,12 +1198,22 @@ export class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadat
     return rows.map(rowToBinaryArtifact)
   }
 
-  async deleteByDocument(workspaceId: string, document: DocumentArtifactRef): Promise<number> {
-    const deleted = await this.db
-      .delete(binaryArtifacts)
-      .where(this.documentScope(workspaceId, document))
-      .returning({ id: binaryArtifacts.id })
-    return deleted.length
+  async deleteByIds(workspaceId: string, ids: readonly string[]): Promise<number> {
+    let removed = 0
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < ids.length; i += 500) {
+      const deleted = await this.db
+        .delete(binaryArtifacts)
+        .where(
+          and(
+            eq(binaryArtifacts.workspace_id, workspaceId),
+            inArray(binaryArtifacts.id, ids.slice(i, i + 500) as string[]),
+          ),
+        )
+        .returning({ id: binaryArtifacts.id })
+      removed += deleted.length
+    }
+    return removed
   }
 
   private documentScope(workspaceId: string, document: DocumentArtifactRef) {
@@ -1224,26 +1234,29 @@ export class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadat
     const rows = await this.db
       .select()
       .from(binaryArtifacts)
-      .where(
-        and(
-          eq(binaryArtifacts.workspace_id, workspaceId),
-          lt(binaryArtifacts.created_at, olderThan),
-        ),
-      )
+      .where(this.agedScope(workspaceId, olderThan))
     return rows.map(rowToBinaryArtifact)
   }
 
   async deleteOlderThan(workspaceId: string, olderThan: number): Promise<number> {
     const deleted = await this.db
       .delete(binaryArtifacts)
-      .where(
-        and(
-          eq(binaryArtifacts.workspace_id, workspaceId),
-          lt(binaryArtifacts.created_at, olderThan),
-        ),
-      )
+      .where(this.agedScope(workspaceId, olderThan))
       .returning({ id: binaryArtifacts.id })
     return deleted.length
+  }
+
+  /**
+   * The age sweep's scope, shared by its list and its delete so the two cannot drift: run debris
+   * past the window, EXCLUDING a document's renders, which expire with their document rather than
+   * on a clock (see the port).
+   */
+  private agedScope(workspaceId: string, olderThan: number) {
+    return and(
+      eq(binaryArtifacts.workspace_id, workspaceId),
+      lt(binaryArtifacts.created_at, olderThan),
+      isNull(binaryArtifacts.document_source),
+    )
   }
 
   async listByWorkspace(workspaceId: string): Promise<BinaryArtifactRecord[]> {

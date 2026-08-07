@@ -1,4 +1,8 @@
-import type { DocumentSourceDescriptor, DocumentSourceOAuthSpec } from '@cat-factory/kernel'
+import type {
+  DocumentRenderPlan,
+  DocumentSourceDescriptor,
+  DocumentSourceOAuthSpec,
+} from '@cat-factory/kernel'
 import {
   capped,
   dimensionMeta,
@@ -651,28 +655,48 @@ export function figmaTopLevelFrames(document: FigmaNode | undefined): FigmaNode[
   return frames
 }
 
-/** One frame a render pass will ask Figma to rasterise: the id to request, and what to call it. */
-export interface FigmaRenderTarget {
-  id: string
-  /** The frame's own name, which becomes the artifact's `view` (its pairing key). */
-  name: string
-}
-
 /**
- * The frames a render pass covers, capped at {@link MAX_RENDERS} in document order.
+ * The frames a render pass covers, capped at {@link MAX_RENDERS} in document order, with the
+ * frames the cap left out COUNTED rather than dropped.
  *
- * A frame with no name still renders: its picture is worth having, and the id is the only honest
- * label left. Naming it `(unnamed)` instead would collide every unnamed frame onto one `view`,
- * which is the pairing key, so two different screens would look like two captures of one.
+ * The count is what keeps a bounded pass from reading as a complete one: six pictures of a
+ * twenty-frame file and six pictures of a six-frame file are the same list, and only one of them
+ * means "this is the whole design".
+ *
+ * A `view` must identify ONE screen, because it is the key a captured screenshot pairs with, so
+ * two frames may never resolve to the same one. Two ways they otherwise would:
+ *
+ * - A frame with no name. It still renders (its picture is worth having) under its id, which is
+ *   the only honest label left; `(unnamed)` would collide every nameless frame onto one view.
+ * - A name repeated across pages, which real files do constantly ("Header", "Empty state"). EVERY
+ *   occurrence is then qualified by its id, including the first: letting the first keep the bare
+ *   name would hand it to whichever frame the file happens to list first, so re-ordering a page
+ *   would silently move a stored view from one screen to another.
  */
-export function figmaRenderTargets(frames: readonly FigmaNode[]): FigmaRenderTarget[] {
-  const out: FigmaRenderTarget[] = []
+export function figmaRenderTargets(frames: readonly FigmaNode[]): DocumentRenderPlan {
+  const selected: { id: string; name: string }[] = []
+  let dropped = 0
   for (const frame of frames) {
     if (!frame.id) continue
-    out.push({ id: frame.id, name: frame.name?.trim() || frame.id })
-    if (out.length >= MAX_RENDERS) break
+    if (selected.length >= MAX_RENDERS) {
+      dropped += 1
+      continue
+    }
+    selected.push({ id: frame.id, name: frame.name?.trim() || frame.id })
   }
-  return out
+  // Counted over the SELECTED frames, not the whole file: a duplicate the cap already excluded
+  // would otherwise qualify a name that is unique among the frames actually rendered.
+  const occurrences = new Map<string, number>()
+  for (const frame of selected) {
+    occurrences.set(frame.name, (occurrences.get(frame.name) ?? 0) + 1)
+  }
+  return {
+    targets: selected.map((frame) => ({
+      id: frame.id,
+      view: (occurrences.get(frame.name) ?? 0) > 1 ? `${frame.name} (${frame.id})` : frame.name,
+    })),
+    capped: dropped,
+  }
 }
 
 /**

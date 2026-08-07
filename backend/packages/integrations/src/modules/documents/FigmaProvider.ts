@@ -5,6 +5,7 @@ import {
   type DesignRender,
   type DocumentContent,
   type DocumentCredentials,
+  type DocumentRenderPlan,
   type DocumentRenderResult,
   type DocumentSourceProvider,
   type NormalizedConnection,
@@ -124,6 +125,12 @@ interface FetchedNodes {
   fileName: string
   version: string
   notes: string[]
+  /**
+   * The frames a render pass over this revision would rasterise, resolved from the SAME structural
+   * response the trees came from. Carried out to {@link DocumentContent.renderPlan} so the render
+   * pass need not repeat the read.
+   */
+  renderPlan: DocumentRenderPlan
 }
 
 /**
@@ -233,7 +240,7 @@ export class FigmaProvider implements DocumentSourceProvider {
       throw new FigmaApiError(400, `Figma ref is missing a file key: ${externalId}`)
     }
 
-    const { roots, maps, fileName, version, notes } = await this.fetchNodes(
+    const { roots, maps, fileName, version, notes, renderPlan } = await this.fetchNodes(
       credentials,
       fileKey,
       nodeId,
@@ -265,6 +272,10 @@ export class FigmaProvider implements DocumentSourceProvider {
       url: context.url,
       body: renderDesignContext(context),
       version,
+      // The frames this same read already named. `fetchRenders` would otherwise re-issue the very
+      // request that produced them, against the rate-limited API, to relearn ids and names it had
+      // in hand a moment ago.
+      renderPlan,
     }
   }
 
@@ -276,18 +287,26 @@ export class FigmaProvider implements DocumentSourceProvider {
    * those ids into short-lived signed URLs, and the URLs are downloaded from the asset host with no
    * credential attached. A frame whose own download fails is counted rather than thrown, so one
    * oversize artboard costs its own picture and not the other five.
+   *
+   * The first hop is SKIPPED when the caller hands over the plan its own `fetchDocument` produced,
+   * which is the normal path: an import fetches the body and the renders back to back off one
+   * revision, and the structural read is the same request twice against a rate-limited API.
    */
   async fetchRenders(
     credentials: DocumentCredentials,
     externalId: string,
     _workspaceId: string | null,
+    plan?: DocumentRenderPlan,
   ): Promise<DocumentRenderResult> {
     const { fileKey, nodeId } = figmaLogic.splitFigmaExternalId(externalId)
     if (!fileKey) {
       throw new FigmaApiError(400, `Figma ref is missing a file key: ${externalId}`)
     }
-    const targets = await this.resolveRenderTargets(credentials, fileKey, nodeId)
-    if (!targets.length) return { renders: [], failed: 0, causes: [] }
+    const resolved = plan ?? (await this.resolveRenderTargets(credentials, fileKey, nodeId))
+    const targets = resolved.targets
+    // The cap rides every return: frames excluded before the first request are just as absent
+    // from the stored set as ones whose download failed, and only this count says so.
+    if (!targets.length) return { renders: [], failed: 0, capped: resolved.capped, causes: [] }
 
     const urls = await this.fetchRenderUrls(
       credentials,
@@ -312,7 +331,7 @@ export class FigmaProvider implements DocumentSourceProvider {
       const settled = await Promise.all(
         chunk.map(async (target) => {
           try {
-            return await this.downloadRender(urls.get(target.id)!, target.name)
+            return await this.downloadRender(urls.get(target.id)!, target.view)
           } catch (err) {
             // silent-catch-ok: REPORTED to the caller as `failed` + this cause, which is the honest
             // form of it. A single frame's picture may not fail the import that carries the text.
@@ -327,20 +346,23 @@ export class FigmaProvider implements DocumentSourceProvider {
         } else renders.push(result)
       }
     }
-    return { renders, failed, causes: [...causes].sort() }
+    return { renders, failed, capped: resolved.capped, causes: [...causes].sort() }
   }
 
   /**
-   * The frames to rasterise, with their names. A node link renders the frame it names; a whole-file
-   * link renders the first {@link figmaLogic.MAX_RENDERS} top-level frames in document order — the
-   * same frames, in the same order, the text import covers, so the pictures and the prose describe
-   * the same screens.
+   * The frames to rasterise, with their names, for a caller that supplied no plan.
+   *
+   * A node link renders the frame it names; a whole-file link renders the first
+   * {@link figmaLogic.MAX_RENDERS} top-level frames in document order — the same frames, in the
+   * same order, the text import covers, so the pictures and the prose describe the same screens.
+   * This is the FALLBACK: it repeats the structural read `fetchDocument` performs, which is why
+   * the import hands its own plan over instead.
    */
   private async resolveRenderTargets(
     credentials: DocumentCredentials,
     fileKey: string,
     nodeId: string | undefined,
-  ): Promise<figmaLogic.FigmaRenderTarget[]> {
+  ): Promise<DocumentRenderPlan> {
     if (nodeId) {
       // `depth=1` is the node ALONE: this read wants its name, not its subtree.
       const res = await this.get<NodesResponse>(
@@ -349,7 +371,7 @@ export class FigmaProvider implements DocumentSourceProvider {
           `?ids=${encodeURIComponent(nodeId)}&depth=1`,
       )
       const node = res.nodes?.[nodeId]?.document
-      return node ? figmaLogic.figmaRenderTargets([node]) : []
+      return node ? figmaLogic.figmaRenderTargets([node]) : { targets: [], capped: 0 }
     }
     const res = await this.get<FileResponse>(
       credentials,
@@ -448,6 +470,9 @@ export class FigmaProvider implements DocumentSourceProvider {
       fileName: res.name ?? fileKey,
       version: fileVersion(res),
       notes: [],
+      // A node link renders the frame it names, and nothing is capped: one frame was asked for and
+      // one is covered.
+      renderPlan: figmaLogic.figmaRenderTargets([entry.document]),
     }
   }
 
@@ -483,6 +508,10 @@ export class FigmaProvider implements DocumentSourceProvider {
       fileName: res.name ?? fileKey,
       version: fileVersion(res),
       notes: [],
+      // Resolved against the WHOLE outline rather than the text pass's own `selected` slice: the
+      // two caps are different numbers, and `capped` has to count frames this file has that no
+      // picture will cover, not frames the text budget happened to keep.
+      renderPlan: figmaLogic.figmaRenderTargets(outline),
     }
     if (!outline.length) return base
 

@@ -375,6 +375,32 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
       bytes reads as `partial` exactly like a source that rendered half the frames: claiming
       `stored` over an artifact that never landed is the one answer that sends a reader to the
       wrong place. The SPA states the three that name a fix and stays silent on the other two.
+      **A CAP is retention too**, so `DocumentRenderResult.capped` counts the frames a provider
+      declined to rasterise and pushes the row to `partial`; reported as nothing, six pictures of a
+      twenty-frame file land as `stored` and the design reads as having six screens. It is kept
+      apart from `failed` because a retry fixes one and never the other.
+      **`storage_unavailable` is a DEPLOYMENT fact, so an account-settings read that FAILED is
+      `failed` instead**: naming an unconfigured capability sends an operator to change a setting
+      that is already right, and the status then rides forward untouched through every token-only
+      re-import, outliving the outage.
+      **The order is prune-then-FETCH**, not prune-then-store: the reverse leaves the new body
+      beside the previous revision's pictures, and a `failed` row over a full set of frames reads
+      to everyone as a transient blip rather than as a document illustrating a screen that no
+      longer exists. A `view` must also name ONE screen (it is the pairing key), so a frame name
+      repeated across pages qualifies EVERY occurrence with its id, including the first: leaving
+      the first bare hands that view to whichever frame the file lists first, and re-ordering a
+      page would silently re-point a stored view at a different screen.
+      **The renders are exempt from the age-based artifact retention sweep**
+      (`listOlderThan`/`deleteOlderThan` skip a row carrying a document ref, D1 ⇄ Drizzle with a
+      conformance assertion). Age fits run debris, produced once and never referenced again; a
+      document's renders are a projection of a live row, replaced by the next body-changing import
+      and by nothing else. Swept on a clock they would vanish while the row still said `stored`,
+      with nothing to re-download them, since an unedited design is never re-imported.
+      **The structural read is done ONCE.** `fetchDocument` already learns the frame ids and names
+      a render pass needs, so it carries them out as `DocumentContent.renderPlan` and `fetchRenders`
+      takes the plan rather than re-issuing the same request against the rate-limited API. The plan
+      is a HINT: a provider handed none discovers the frames itself, which is what keeps the two
+      port methods independent.
       Two smaller traps. The signed asset URL arrives inside a response BODY, which is the shape an
       SSRF comes in, so the download is host-pinned to Figma's own asset hosts and carries NO
       credential (the signature is the auth, and a bucket host has no business holding the

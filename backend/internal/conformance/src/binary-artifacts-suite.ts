@@ -249,6 +249,49 @@ export function defineBinaryArtifactsSuite(
       expect(await store.getBlob(ws, rec.id)).toBeNull()
     })
 
+    it('pruneOlderThan EXEMPTS a document’s renders, however old they are', async () => {
+      // Age is the right lifetime for run debris and the wrong one for a document's renders. Those
+      // are a projection of a live row: they are replaced by the next import that changes the body
+      // and by nothing else, and an unedited design is never re-imported. Swept on a clock, the
+      // document row would go on saying `stored` over an empty set with nothing to re-download
+      // them — a silent loss, since no read fails and no status changes.
+      const store = makeStore()
+      const { ws, e1, blk } = ids()
+      const design = { source: 'figma' as const, externalId: 'file1:1-2' }
+      const debris = await store.store({
+        meta: {
+          workspaceId: ws,
+          executionId: e1,
+          blockId: blk,
+          kind: 'screenshot',
+          view: 'v',
+          contentType: 'image/png',
+        },
+        blob: png(21),
+      })
+      const render = await store.store({
+        meta: {
+          workspaceId: ws,
+          executionId: null,
+          blockId: null,
+          kind: 'reference',
+          view: 'Checkout',
+          contentType: 'image/png',
+          document: design,
+        },
+        blob: png(22),
+      })
+
+      // A cutoff past BOTH rows: only the run's screenshot is old enough to be anybody's debris.
+      expect(await store.pruneOlderThan(ws, Date.now() + 60_000)).toBe(1)
+      expect(await store.getMetadata(ws, debris.id)).toBeNull()
+      expect(await store.getMetadata(ws, render.id)).not.toBeNull()
+      expect(await store.getBlob(ws, render.id)).not.toBeNull()
+      // The document's own reclaim still takes it, which is the ONE thing that should.
+      expect(await store.pruneByDocument(ws, design)).toBe(1)
+      expect(await store.getBlob(ws, render.id)).toBeNull()
+    })
+
     it('deleteByWorkspace reclaims every artifact (rows + bytes) and scopes by workspace', async () => {
       // Drives the workspace-delete purge: on a board delete the retention sweep never sees the
       // (now-gone) workspace again, so every artifact — regardless of age, run or block — must be

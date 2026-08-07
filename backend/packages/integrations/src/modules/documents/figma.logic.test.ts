@@ -459,23 +459,59 @@ describe('figmaTopLevelFrames', () => {
 
 describe('figmaRenderTargets', () => {
   it('caps at MAX_RENDERS in document order and skips a frame with no id', () => {
-    const targets = figmaRenderTargets([
+    const plan = figmaRenderTargets([
       ...Array.from({ length: MAX_RENDERS + 3 }, (_, i) => ({ id: `1:${i}`, name: `Frame ${i}` })),
       { name: 'no id' },
     ])
-    expect(targets).toHaveLength(MAX_RENDERS)
-    expect(targets[0]).toEqual({ id: '1:0', name: 'Frame 0' })
+    expect(plan.targets).toHaveLength(MAX_RENDERS)
+    expect(plan.targets[0]).toEqual({ id: '1:0', view: 'Frame 0' })
     // Rasterising is bounded well below the frames the TEXT import covers, because the two spend
     // different budgets: a frame's prose costs the context corpus a few KB, its PNG costs the
     // account's blob storage a megabyte.
     expect(MAX_RENDERS).toBeLessThan(MAX_FILE_FRAMES)
   })
 
+  it('COUNTS the frames the cap excluded, so a bounded pass cannot read as a complete one', () => {
+    // Without this the caller records `stored` — "every image the source offered was retrieved and
+    // retained" — over a design whose remaining frames no picture covers. A frame with no id is
+    // not capped: it was never renderable, so counting it would ask for a fix that does not exist.
+    const plan = figmaRenderTargets([
+      ...Array.from({ length: MAX_RENDERS + 3 }, (_, i) => ({ id: `1:${i}`, name: `Frame ${i}` })),
+      { name: 'no id' },
+    ])
+    expect(plan.capped).toBe(3)
+    expect(figmaRenderTargets([{ id: '1:1', name: 'Only' }]).capped).toBe(0)
+  })
+
   it('falls back to the id for an unnamed frame rather than collapsing them onto one view', () => {
     // `view` is the pairing key a captured screenshot is matched against, so two unnamed frames
     // sharing a placeholder would read as two captures of one screen.
-    const targets = figmaRenderTargets([{ id: '1:1', name: '   ' }, { id: '1:2' }])
-    expect(targets.map((t) => t.name)).toEqual(['1:1', '1:2'])
+    const plan = figmaRenderTargets([{ id: '1:1', name: '   ' }, { id: '1:2' }])
+    expect(plan.targets.map((t) => t.view)).toEqual(['1:1', '1:2'])
+  })
+
+  it('qualifies EVERY occurrence of a repeated frame name, never just the later ones', () => {
+    // Real files reuse names across pages constantly ("Header", "Empty state"). Leaving the first
+    // one bare would hand that view to whichever frame the file lists first, so re-ordering a page
+    // would silently re-point a stored view at a different screen.
+    const plan = figmaRenderTargets([
+      { id: '1:1', name: 'Header' },
+      { id: '2:1', name: 'Header' },
+      { id: '3:1', name: 'Checkout' },
+    ])
+    expect(plan.targets.map((t) => t.view)).toEqual(['Header (1:1)', 'Header (2:1)', 'Checkout'])
+  })
+
+  it('disambiguates against the frames actually rendered, not the ones the cap dropped', () => {
+    // The duplicate lives past the cap, so among the frames a screenshot can pair with, `Header`
+    // names exactly one screen and needs no qualifier.
+    const plan = figmaRenderTargets([
+      { id: '1:1', name: 'Header' },
+      ...Array.from({ length: MAX_RENDERS - 1 }, (_, i) => ({ id: `2:${i}`, name: `Frame ${i}` })),
+      { id: '9:9', name: 'Header' },
+    ])
+    expect(plan.targets[0]).toEqual({ id: '1:1', view: 'Header' })
+    expect(plan.capped).toBe(1)
   })
 })
 
