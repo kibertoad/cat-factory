@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Block, WorkspaceSnapshot } from '~/types/domain'
+import type { Block, Notification, WorkspaceSnapshot } from '~/types/domain'
 import { useBoardStore } from '~/stores/board'
+import { useNotificationsStore } from '~/stores/notifications'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 // The workspace store's `hydrate` fans out to ~20 sibling stores via Nuxt auto-imports, which
 // aren't defined under plain vitest. Stub every one INERT (a proxy whose every method is a no-op)
-// EXCEPT the board store, which we keep real so the block list a refresh commits is observable.
+// EXCEPT the two stores whose live-write guards these tests drive: the board store (kept real via
+// the stub below) and the notifications store (imported by name in `workspace/hydrate.ts`, so it
+// is real already and must NOT be listed here).
 const INERT_STORES = [
   'useAccountsStore',
   'useAgentConfigStore',
@@ -22,7 +25,6 @@ const INERT_STORES = [
   'useInitiativesStore',
   'useRiskPoliciesStore',
   'useModelPresetsStore',
-  'useNotificationsStore',
   'usePipelinesStore',
   'useProviderConnectionsStore',
   'useRecurringPipelinesStore',
@@ -68,13 +70,34 @@ function block(id: string, over: Partial<Block> = {}): Block {
   }
 }
 
+/** Minimal open inbox card — only the fields the notifications store reads. */
+function notification(id: string, over: Partial<Notification> = {}): Notification {
+  return {
+    id,
+    type: 'pr_review_ready',
+    status: 'open',
+    blockId: 't1',
+    executionId: null,
+    title: id,
+    body: '',
+    createdAt: 1,
+    resolvedAt: null,
+    ...over,
+  }
+}
+
 /** Minimal snapshot — the arrays a bare hydrate iterates; everything else defaults. */
-function snapshot(id: string, blocks: Block[]): WorkspaceSnapshot {
+function snapshot(
+  id: string,
+  blocks: Block[],
+  notifications: Notification[] = [],
+): WorkspaceSnapshot {
   return {
     workspace: { id, name: id, accountId: null },
     blocks,
     pipelines: [],
     executions: [],
+    notifications,
   } as unknown as WorkspaceSnapshot
 }
 
@@ -148,6 +171,70 @@ describe('workspace store refresh ordering', () => {
 
     // The live terminal status survives — the stale refresh did NOT clobber it back.
     expect(board.getBlock('t1')?.status).toBe('done')
+  })
+
+  // The same interleaved-live-write axis on the delivery shape with NO second chance. A parked
+  // run raises its inbox card as a targeted `notification` event and never re-sends it, while the
+  // park ALSO fans out coarse `board` events whose debounced refresh is routinely in flight at
+  // that moment. A snapshot READ before the card existed used to replace the whole inbox and drop
+  // it, so the bell never appeared and nothing could bring it back — the `pr-review` e2e spec's
+  // 30s timeout on `notifications-bell`. The notifications store now stamps each live write and
+  // `refresh()` captures its baseline beside the board's.
+  it('a refresh started before a live notification does not drop the raised card', async () => {
+    const frame = block('f1')
+    let resolveRefresh!: (s: WorkspaceSnapshot) => void
+    const getWorkspace = vi
+      .fn()
+      // 1) switchTo — nothing in the inbox yet.
+      .mockResolvedValueOnce(snapshot('ws1', [frame]))
+      // 2) a refresh whose fetch is in flight while the run parks and raises its card.
+      .mockReturnValueOnce(new Promise<WorkspaceSnapshot>((r) => (resolveRefresh = r)))
+    vi.stubGlobal('useApi', () => ({ getWorkspace }))
+
+    const ws = useWorkspaceStore()
+    const notifications = useNotificationsStore()
+    await ws.switchTo('ws1')
+
+    // A refresh starts (captures the notifications baseline; its snapshot has an empty inbox).
+    const pass = ws.refresh()
+    // The run parks mid-fetch and pushes its card.
+    notifications.upsert(notification('n1'))
+    expect(notifications.count).toBe(1)
+    // The now-stale refresh resolves, still carrying the empty inbox it read.
+    resolveRefresh(snapshot('ws1', [frame]))
+    await pass
+
+    // The card survives: it is the only delivery there will ever be.
+    expect(notifications.count).toBe(1)
+  })
+
+  // The mirror image, and the reason the guard tracks REMOVALS too: a card resolved live (acted
+  // on in another tab, or cleared by the engine) must not be resurrected by a snapshot that was
+  // read while it was still open — a resurrected card offers an action the server has already
+  // taken.
+  it('a refresh started before a live resolve does not resurrect the card', async () => {
+    const frame = block('f1')
+    let resolveRefresh!: (s: WorkspaceSnapshot) => void
+    const getWorkspace = vi
+      .fn()
+      // 1) switchTo — the card is open.
+      .mockResolvedValueOnce(snapshot('ws1', [frame], [notification('n1')]))
+      // 2) a refresh whose fetch is in flight while the card is resolved elsewhere.
+      .mockReturnValueOnce(new Promise<WorkspaceSnapshot>((r) => (resolveRefresh = r)))
+    vi.stubGlobal('useApi', () => ({ getWorkspace }))
+
+    const ws = useWorkspaceStore()
+    const notifications = useNotificationsStore()
+    await ws.switchTo('ws1')
+    expect(notifications.count).toBe(1)
+
+    const pass = ws.refresh()
+    notifications.upsert(notification('n1', { status: 'acted', resolvedAt: 2 }))
+    expect(notifications.count).toBe(0)
+    resolveRefresh(snapshot('ws1', [frame], [notification('n1')]))
+    await pass
+
+    expect(notifications.count).toBe(0)
   })
 })
 

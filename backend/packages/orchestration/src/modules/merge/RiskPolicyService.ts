@@ -13,10 +13,11 @@ import {
   assertFound,
   ConflictError,
   requireWorkspace,
+  riskPolicyFromSeed,
+  riskPolicySeedRows,
   seedRiskPolicies,
   ValidationError,
 } from '@cat-factory/kernel'
-import type { RiskPolicySeed } from '@cat-factory/kernel'
 
 export interface RiskPolicyServiceDependencies {
   riskPolicyRepository: RiskPolicyRepository
@@ -32,13 +33,13 @@ export interface RiskPolicyServiceDependencies {
 }
 
 /**
- * CRUD for a workspace's merge threshold presets (the library a task picks its
- * auto-merge policy from). Maintains the invariant that a workspace always has at
- * least one preset, exactly one of which is the default: {@link list} lazily seeds
- * the built-in catalog ({@link seedRiskPolicies}) on first use, and the default cannot
- * be deleted. The single-default promotion is enforced in the repository. {@link reseed}
- * restores a built-in to the current catalog (adopting an update, repairing drift, or
- * materialising a NEW built-in that appeared after the workspace was created).
+ * CRUD for a workspace's merge threshold presets (the library a task picks its auto-merge policy
+ * from). Maintains the invariant that a workspace always has at least one preset, exactly one of
+ * which is the default: the built-in catalog ({@link seedRiskPolicies}) is written when the board
+ * is CREATED, `ensureSeeded` repairs a board that predates that, and the default cannot be
+ * deleted. The single-default promotion is enforced in the repository. {@link reseed} restores a
+ * built-in to the current catalog (adopting an update, repairing drift, or materialising a NEW
+ * built-in that appeared after the workspace was created).
  */
 export class RiskPolicyService {
   private readonly presets: RiskPolicyRepository
@@ -64,7 +65,7 @@ export class RiskPolicyService {
     await this.cache?.invalidateGroup(workspaceId)
   }
 
-  /** List a workspace's presets, seeding the built-in catalog if none exist yet. */
+  /** List a workspace's presets, repairing an empty library first (see `ensureSeeded`). */
   async list(workspaceId: string): Promise<RiskPolicy[]> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
     await this.ensureSeeded(workspaceId)
@@ -198,58 +199,36 @@ export class RiskPolicyService {
       ? existing.isDefault
       : seed.isDefault && (await this.presets.getDefault(workspaceId)) === null
     const preset: RiskPolicy = {
-      ...this.fromSeed(seed),
+      ...riskPolicyFromSeed(seed, existing?.createdAt ?? this.clock.now()),
       isDefault,
-      createdAt: existing?.createdAt ?? this.clock.now(),
     }
     await this.presets.upsert(workspaceId, preset)
     await this.invalidate(workspaceId)
     return preset
   }
 
-  /** Seed the built-in preset catalog for a workspace that has none yet. Idempotent. */
+  /**
+   * REPAIR a workspace whose preset library is empty, by writing the built-in catalog.
+   *
+   * Creating a board is what normally seeds the library ({@link WorkspaceService.create}), and
+   * that is where the invariant belongs: the engine resolves a task's governing preset without
+   * listing anything, so a library that only existed once somebody had READ it made the merge
+   * posture of an identical run depend on whether a board had been opened.
+   *
+   * This stays as the repair for the two states creation cannot reach backwards into: a board
+   * made before creation seeded presets, and one whose facade wired the preset repository only
+   * later. Both currently resolve `FALLBACK_RISK_POLICY`, which auto-merges nothing, so the
+   * repair can only move a workspace from refusing everything to its configured default.
+   * Idempotent, and a no-op on every board created since.
+   */
   private async ensureSeeded(workspaceId: string): Promise<void> {
     const current = await this.presets.list(workspaceId)
     if (current.length > 0) return
-    const now = this.clock.now()
-    // Stamp createdAt by catalog order so `list` (ordered by created_at) preserves it.
-    let offset = 0
-    for (const seed of seedRiskPolicies()) {
-      await this.presets.upsert(workspaceId, {
-        ...this.fromSeed(seed),
-        createdAt: now + offset++,
-      })
+    for (const preset of riskPolicySeedRows(this.clock.now())) {
+      await this.presets.upsert(workspaceId, preset)
     }
-    // A gate that resolved before first-use seeding cached the null default; drop it so the
+    // A gate that resolved before the repair cached the null default; drop it so the
     // freshly-seeded default (not the built-in fallback) is read on the very next evaluation.
     await this.invalidate(workspaceId)
-  }
-
-  /** A catalog seed as a persisted preset (its stable id + version, without `createdAt`). */
-  private fromSeed(seed: RiskPolicySeed): Omit<RiskPolicy, 'createdAt'> {
-    return {
-      id: seed.id,
-      name: seed.name,
-      maxComplexity: seed.maxComplexity,
-      maxRisk: seed.maxRisk,
-      maxImpact: seed.maxImpact,
-      ciMaxAttempts: seed.ciMaxAttempts,
-      maxRequirementIterations: seed.maxRequirementIterations,
-      maxRequirementConcernAllowed: seed.maxRequirementConcernAllowed,
-      maxTesterQualityIterations: seed.maxTesterQualityIterations,
-      releaseWatchWindowMinutes: seed.releaseWatchWindowMinutes,
-      releaseMaxAttempts: seed.releaseMaxAttempts,
-      humanReviewGraceMinutes: seed.humanReviewGraceMinutes,
-      judgeMinScore: seed.judgeMinScore,
-      judgeMaxBounces: seed.judgeMaxBounces,
-      autoMergeEnabled: seed.autoMergeEnabled,
-      forkDecision: seed.forkDecision,
-      classRulesByRole: seed.classRulesByRole,
-      dryRunRoles: seed.dryRunRoles,
-      submissionClassesByRole: seed.submissionClassesByRole,
-      classRules: seed.classRules,
-      isDefault: seed.isDefault,
-      version: seed.version,
-    }
   }
 }

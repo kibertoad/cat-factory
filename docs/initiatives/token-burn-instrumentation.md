@@ -226,8 +226,8 @@ conformance suite):
 - **Two new columns, both telemetry DBs, one change** (a telemetry column can't land on one
   runtime: see "Keep the runtimes symmetric"): D1 `telemetry-migrations/00NN_*.sql` ⇄ Drizzle
   `schema.ts` + a `drizzle/` migration; both repos' row mappers, INSERT column lists, and the
-  rollup SQL. 3-day retention means no dual-write is needed: stale rows churn out within the
-  window.
+  rollup SQL. The telemetry retention window means no dual-write is needed: stale rows churn out
+  within it.
 
 ## Per-slice checklist
 

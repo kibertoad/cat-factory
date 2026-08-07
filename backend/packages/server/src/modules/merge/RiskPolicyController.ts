@@ -21,8 +21,8 @@ function requireRiskPolicies<E extends AppEnv>(c: Context<E>): RiskPoliciesModul
 
 /**
  * CRUD for a workspace's merge threshold presets (the library a task picks its
- * auto-merge policy from). The default preset is seeded lazily on first list and
- * cannot be deleted/unset. Mounted under `/workspaces/:workspaceId`.
+ * auto-merge policy from). The library is seeded when the board is created, and the
+ * default preset cannot be deleted/unset. Mounted under `/workspaces/:workspaceId`.
  */
 export function riskPolicyController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()

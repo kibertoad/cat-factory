@@ -297,7 +297,7 @@ describe('public-API admission', () => {
     })
 
     it('promises the answer path for an approval gate, the commonest park of all', () => {
-      // The pilot slice of docs/initiatives/public-api-additions.md, and the one an operator meets
+      // The first honesty fix of the decision surface (ADR 0043), and the one an operator meets
       // first: any pipeline can carry a gated step. While it was unanswerable this refusal told
       // them a `decide` key bought nothing but a cancel.
       const message = parkingRefusalMessage(
@@ -324,7 +324,7 @@ describe('public-API admission', () => {
     })
 
     it('never claims an answer path for a surface outside the answerable set', () => {
-      // The drift guard. Landing a slice of docs/initiatives/public-api-additions.md means adding
+      // The drift guard. Landing a new public answer path (ADR 0043) means adding
       // a member to PUBLICLY_ANSWERABLE_PARK_SURFACES; until then no message may advertise one.
       // Covers the human-wait gates too, so a future slice that makes one answerable has to move it
       // into the answerable set rather than leaving the message silently wrong.

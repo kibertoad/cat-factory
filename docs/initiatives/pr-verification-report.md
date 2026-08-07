@@ -376,7 +376,7 @@ Three things about it are deliberate:
 - **The read endpoint behind `reportUrl` composes from the same code**
   (`PrVerificationReportController.composeForRun`), so the live JSON and the PR body cannot state
   different facts about one run. It is also why the report shape is now part of the STABLE public
-  surface: see [`public-api-additions.md`](./public-api-additions.md) (E1).
+  surface: see [ADR 0043](../../backend/docs/adr/0043-public-decision-surface.md).
 
 ### One evidence reduction, two documents (slice 15)
 
@@ -387,8 +387,8 @@ axes: this report unions every tester step's verdicts and counts coverage over t
 while the summary read only the last tester that reported and counted over the verdicts it happened
 to return. Same run, two numbers under the same words.
 
-Serving the summary at `GET /api/v1/runs/:runId/outcome` (see
-[`public-api-additions.md`](./public-api-additions.md) E1a) is what forced the fix. What binds anyone
+Serving the summary at `GET /api/v1/runs/:runId/outcome` (usage:
+[`public-api.md`](../../backend/docs/public-api.md)) is what forced the fix. What binds anyone
 touching this composer now:
 
 - **A rule BOTH documents state lives in `@cat-factory/contracts` `run-evidence.ts`**, never in this
@@ -404,6 +404,13 @@ touching this composer now:
 - **The parity is a TEST, not a convention**: `runOutcome.parity.test.ts` composes both from one
   instance and asserts equal counts, equal regressions and the same tester session, plus the literal
   values so a change that breaks both in the same direction still fails.
+- **`outcome = f(report)` was considered and REJECTED**, though it would have been the stronger
+  structural guarantee. This report is BOUNDED to a pull-request body and says so in `truncations`,
+  so a tally taken off its capped tables would be quietly wrong. The guarantee comes from shared
+  inputs and shared rules instead, which is what the parity test pins.
+- **The summary gets NO managed PR section of its own.** The pull request already carries this
+  report, which is the strictly richer document for that audience; a second section would compete
+  for the same body budget and give a reviewer two places to look.
 
 ### Evidence reachability (landed with slices 9 + 10)
 

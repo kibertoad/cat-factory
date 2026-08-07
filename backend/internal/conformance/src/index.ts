@@ -97,12 +97,14 @@ export {
   type ReportsSeedRun,
   type ReportsSeedUsage,
 } from './reports-suite.js'
+export { defineSpendRollupSuite, type SpendRollupSeed } from './spend-rollup-suite.js'
 export { defineUserRepoAccessSuite } from './user-repo-access-suite.js'
 export { defineEnvironmentHandlersSuite } from './environment-handlers-suite.js'
 export { defineEnvironmentTestSuite } from './environment-test-suite.js'
 export { definePasswordResetTokenSuite } from './password-reset-suite.js'
 export { defineMachineNodeSuite } from './machine-node-suite.js'
 export { defineAuditEventSuite } from './audit-event-suite.js'
+export { defineSessionGenerationSuite } from './session-generation-suite.js'
 export { defineAuthAttemptSuite } from './auth-attempt-suite.js'
 export { defineTokenUsageSuite } from './token-usage-suite.js'
 export { defineCommitProjectionSuite } from './commit-projection-suite.js'

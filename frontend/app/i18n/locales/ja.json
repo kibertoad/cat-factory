@@ -147,7 +147,12 @@
       "archived": "「{name}」をアーカイブしました",
       "restored": "「{name}」を復元しました",
       "archiveFailed": "サービスをアーカイブできませんでした",
-      "restoreFailed": "サービスを復元できませんでした"
+      "restoreFailed": "サービスを復元できませんでした",
+      "moveRefused": {
+        "relaxes_role_sandbox": "このタスクの実行は現在の場所ではあなたのロールに対してサンドボックス化されていますが、移動先で適用されるマージポリシーではそうなりません。移動はワークスペース管理者に依頼してください。",
+        "relaxes_role_submission_allowlist": "移動先のマージポリシーでは、ここでは許可されていない種類の変更もマージできてしまいます。移動はワークスペース管理者に依頼してください。",
+        "relaxes_role_class_rule": "移動先のマージポリシーは、ここではあなたのレビューが必要な変更を自動マージします。移動はワークスペース管理者に依頼してください。"
+      }
     },
     "repoTypes": {
       "service": "サービス",
@@ -1263,6 +1268,7 @@
         "within_thresholds": "すべてのスコアが {preset} のしきい値内のため、PR は自動的にマージされました。",
         "exceeded_thresholds": "{axes} が {preset} のしきい値を超えたため、PR は人によるマージを待っています。",
         "auto_merge_disabled": "{preset} プリセットはすべての PR を人に回すため、この PR はレビュー待ちです。",
+        "no_policy_configured": "この実行を管理するマージポリシーがなかったため、PR が自動でマージされることはありません。このデプロイにはマージプリセットのライブラリが設定されておらず、運用者しか修正できません。",
         "no_rationale": "マージ担当は PR を採点しましたが根拠を示さなかったため、自動マージするには判定を信頼できませんでした。PR は人によるマージを待っています。",
         "no_assessment": "マージ担当が解析可能な評価を返さなかったため、PR は人によるマージを待っています。",
         "merge_failed": "スコアは {preset} のしきい値内でしたが、自動マージを完了できなかった（例: ブランチ保護や競合）ため、PR は人によるマージを待っています。",
@@ -1428,6 +1434,15 @@
           "oauthTokenFailed": "は利用できませんでした: 接続からアクセストークンが発行されなくなりました。",
           "overBudget": "は利用できませんでした: このエージェントは 1 回の実行が運べる数を超えるツールサーバーを宣言しています。",
           "unknown": "は利用できませんでした（{reason}）。"
+        },
+        "remedy": {
+          "harnessUnsupported": "MCP を話すエージェント CLI でステップを実行するか、サーバーのハーネス一覧を広げてください。",
+          "transportUnsupported": "このサーバー用に stdio サーバーを宣言するか、HTTP サーバーに接続できるエージェント CLI でステップを実行してください。",
+          "missingSecret": "インフラストラクチャ ウィンドウのケイパビリティ認証情報で、要求されている認証情報を設定してください。",
+          "reservedSecret": "別のキーを要求するよう宣言を変更してください。その変数を設定しても解決しません。",
+          "oauthNotConnected": "インフラストラクチャ ウィンドウからこのボードを接続してください。",
+          "oauthTokenFailed": "インフラストラクチャ ウィンドウから接続し直すか、提供元の障害が収まるのを待ってください。",
+          "overBudget": "1 回の実行ですべて運べるよう、このエージェントの宣言を減らしてください。"
         }
       },
       "adherence": {
@@ -1777,6 +1792,11 @@
     "retry": "再試行",
     "error": "レポートを読み込めませんでした。",
     "period": "{from} 〜 {to}",
+    "rollup": {
+      "none": "永続的なコスト集計はまだ何も生成していません。この期間が空なのは費用がなかったからではなく、データがないためです。",
+      "stale": "永続的なコスト集計は {date} までしか届いていません。それ以降は費用が少なかったのではなく、欠けているデータです。",
+      "current": "永続的なコスト集計より。{date} まで完全です。ここでのリポジトリ・チケット・実行への割り当ては、費用が発生した時点で記録されたものです。"
+    },
     "unattributed": "未割り当て",
     "window": {
       "oneDay": "過去24時間",
@@ -1819,6 +1839,7 @@
       "byAgentKind": "エージェント種別の費用",
       "byRepo": "リポジトリ別の費用",
       "byTicket": "チケット別の費用",
+      "byRun": "実行別の費用",
       "heading": "費用",
       "empty": "この期間に記録された利用はありません。",
       "calls": "{count} 件の呼び出し | {count} 件の呼び出し",
@@ -2014,7 +2035,9 @@
       },
       "members": {
         "title": "メンバー",
-        "empty": "まだメンバーがいません。"
+        "empty": "まだメンバーがいません。",
+        "revokeSessions": "すべての端末からサインアウト",
+        "sessionsRevoked": "すべての端末からサインアウトしました"
       },
       "invite": {
         "title": "メンバーを招待",
@@ -2053,7 +2076,8 @@
         "sendInvite": "招待を送信できませんでした",
         "revokeInvite": "招待を取り消せませんでした",
         "connectEmail": "メール送信者を接続できませんでした",
-        "disconnectEmail": "メール送信者を切断できませんでした"
+        "disconnectEmail": "メール送信者を切断できませんでした",
+        "revokeSessions": "メンバーをサインアウトできませんでした"
       },
       "emailNoun": "メール送信"
     },
@@ -2463,6 +2487,39 @@
     },
     "accountFoundational": {
       "intro": "この組織がすでに運用している共通機能 - ファイルストレージ、通知、監査 - とその API コントラクト。すべてのボードがこれらを継承し、アーキテクトには作り直しを提案せず利用するよう指示されます。 このデプロイがコードで登録したサービスもここに継承され、ID で上書きするか、下で除外できます。"
+    },
+    "auditLog": {
+      "title": "監査ログ",
+      "description": "このアカウントで誰が何をいつ変更したかの記録です。追記のみで、編集も削除もできません。",
+      "empty": "このアカウントにはまだ記録がありません。",
+      "loadMore": "以前の記録を読み込む",
+      "refresh": "更新",
+      "retiredAction": "このバージョンでは認識されない操作を実行しました（{action}）",
+      "actors": {
+        "system": "システム",
+        "apiKey": "API キー {id}"
+      },
+      "values": {
+        "none": "なし"
+      },
+      "actions": {
+        "accountMemberAdded": "{target} を {roles} としてアカウントに追加しました",
+        "accountMemberRolesChanged": "{target} のロールを {previousRoles} から {roles} に変更しました",
+        "accountBudgetChanged": "月間支出上限を {limit} に設定しました",
+        "accountSettingsChanged": "既定のクラウドプロバイダーを {defaultCloudProvider} に設定しました",
+        "accountInvitationCreated": "{email} を {roles} として招待しました",
+        "accountInvitationRevoked": "{email} への招待を取り消しました",
+        "accountInvitationAccepted": "{email} への招待を {roles} として承諾しました",
+        "accountMemberSessionsRevoked": "{target} をすべての端末からサインアウトさせました",
+        "workspaceMemberAdded": "{target} を {role} としてボードに追加しました",
+        "workspaceMemberRoleChanged": "{target} のボードロールを {previousRole} から {role} に変更しました",
+        "workspaceMemberRemoved": "{target} をボードから削除しました（{role} でした）",
+        "workspaceAccessModeChanged": "ボードのアクセス範囲を {accessMode} に設定しました"
+      },
+      "errors": {
+        "load": "監査ログを読み込めませんでした。",
+        "loadMore": "以前の記録を読み込めませんでした"
+      }
     }
   },
   "settings": {
@@ -4216,6 +4273,25 @@
       "noneImported": "まだドキュメントがインポートされていません。",
       "imported": "\"{title}\" をインポートしました",
       "importFailed": "インポートに失敗しました"
+    },
+    "freshness": {
+      "updated": "{when} に更新",
+      "refresh": "変更を確認",
+      "change": {
+        "unchanged": "ソースと一致しています",
+        "reimported": "新しい版を取り込みました",
+        "revision_only": "ソースは更新されましたが、この写しは変わっていません"
+      },
+      "checkedAt": "{when} に確認",
+      "revision": "リビジョン {version}",
+      "notApplicable": "このデプロイにはそのソースのリーダーがないため、照合できるものがありません。",
+      "gap": {
+        "not_connected": "未確認: このワークスペースはソースに接続されていません。",
+        "credentials_unreadable": "未確認: このデプロイはソースの認証情報を読み取れません。",
+        "unversioned": "未確認: ソースは照合できるリビジョンを公開していません。",
+        "source_unreachable": "未確認: ソースに接続できませんでした。"
+      },
+      "refreshFailed": "変更を確認できませんでした"
     },
     "connect": {
       "title": "ソースを接続",

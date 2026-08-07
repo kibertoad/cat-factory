@@ -9,6 +9,8 @@ import type {
 } from '~/types/domain'
 import { useAccountsStore } from '~/stores/accounts'
 import { useBoardStore } from '~/stores/board'
+import { useNotificationsStore } from '~/stores/notifications'
+import type { LiveWriteBaselines } from '~/stores/workspace/hydrate'
 import { applySnapshotToStores, resetPerBoardCaches } from '~/stores/workspace/hydrate'
 import { createWorkspaceCommands } from '~/stores/workspace/commands'
 import { createInfraSetupState } from '~/stores/workspace/infraSetup'
@@ -81,12 +83,12 @@ export const useWorkspaceStore = defineStore(
     )
 
     /**
-     * Push a snapshot into the data stores. `boardSince` (captured BEFORE this snapshot's fetch)
-     * lets the board store preserve any block live-`upsert`ed while the fetch was in flight, so a
-     * slower refresh can't clobber a newer live status (see `useBoardStore().hydrate`). Omitted by
-     * fresh loads (init/switch/create), where there is no in-flight-upsert race to guard.
+     * Push a snapshot into the data stores. `baselines` (captured BEFORE this snapshot's fetch)
+     * lets the replace-style stores preserve anything written live while the fetch was in flight,
+     * so a slower refresh can't clobber newer live state (see {@link LiveWriteBaselines}). Omitted
+     * by fresh loads (init/switch/create), where there is no in-flight race to guard.
      */
-    function hydrate(snapshot: WorkspaceSnapshot, boardSince?: number) {
+    function hydrate(snapshot: WorkspaceSnapshot, baselines?: LiveWriteBaselines) {
       // A change of active board (or the first load) drops the per-block caches that are NOT
       // part of the snapshot; a same-board refresh keeps them (see `resetPerBoardCaches`).
       if (workspaceId.value !== snapshot.workspace.id) resetPerBoardCaches()
@@ -107,7 +109,7 @@ export const useWorkspaceStore = defineStore(
         workspaces.value.unshift(snapshot.workspace)
       }
       // Fan the rest of the snapshot out into the per-feature data stores.
-      applySnapshotToStores(snapshot, boardSince)
+      applySnapshotToStores(snapshot, baselines)
     }
 
     /** Resolve accounts + boards, then open the right board for the active account. */
@@ -209,17 +211,20 @@ export const useWorkspaceStore = defineStore(
       const targetId = workspaceId.value
       if (!targetId) return
       const seq = ++refreshSeq
-      // Capture the board's live-upsert baseline BEFORE the fetch: any block upserted by a live
-      // event while this (potentially slow) snapshot is in flight is newer than the snapshot, so
-      // `hydrate` must NOT clobber it back. The `refreshSeq` guard below only orders refreshes
-      // against each OTHER — this guards a refresh against an interleaved live upsert (e.g. a
-      // run's terminal status landing mid-fetch), the coherence hazard under CI latency.
-      const boardSince = useBoardStore().hydrateBaseline()
+      // Capture the live-write baselines BEFORE the fetch: anything a live event writes while
+      // this (potentially slow) snapshot is in flight is newer than the snapshot, so `hydrate`
+      // must NOT clobber it back. The `refreshSeq` guard below only orders refreshes against each
+      // OTHER — this guards a refresh against an interleaved live write (a run's terminal status
+      // landing mid-fetch, or the inbox card it raises), the coherence hazard under CI latency.
+      const baselines: LiveWriteBaselines = {
+        board: useBoardStore().hydrateBaseline(),
+        notifications: useNotificationsStore().hydrateBaseline(),
+      }
       const snapshot = await api.getWorkspace(targetId)
       // A newer refresh was issued (or the active board switched) while this fetch was in flight —
       // discard this older/staler result so it can't clobber the newer hydrate.
       if (seq !== refreshSeq || workspaceId.value !== targetId) return
-      hydrate(snapshot, boardSince)
+      hydrate(snapshot, baselines)
     }
 
     /** The active workspace id, or throw if the app isn't bootstrapped yet. */

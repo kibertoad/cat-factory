@@ -64,6 +64,7 @@ const REASON_KEYS: Record<MergeDecision['reason'], string> = {
   within_thresholds: 'panels.mergerResult.reason.within_thresholds',
   exceeded_thresholds: 'panels.mergerResult.reason.exceeded_thresholds',
   auto_merge_disabled: 'panels.mergerResult.reason.auto_merge_disabled',
+  no_policy_configured: 'panels.mergerResult.reason.no_policy_configured',
   no_rationale: 'panels.mergerResult.reason.no_rationale',
   no_assessment: 'panels.mergerResult.reason.no_assessment',
   merge_failed: 'panels.mergerResult.reason.merge_failed',

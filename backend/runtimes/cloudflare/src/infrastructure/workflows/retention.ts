@@ -2,6 +2,7 @@ import type {
   AgentContextSnapshotRepository,
   AgentSearchQueryRepository,
   AgentToolCallRepository,
+  AuditEventRepository,
   Clock,
   CommitProjectionRepository,
   LlmCallMetricRepository,
@@ -14,11 +15,16 @@ import type {
   PipelineScheduleRepository,
   ProvisioningLogRepository,
   RateLimitRepository,
+  SpendRollupRepository,
   SubscriptionQuotaCycleRepository,
   TokenUsageRepository,
   Logger,
 } from '@cat-factory/kernel'
-import { RUN_DAY_ROLLUP_LOOKBACK_MS, createRetentionPass } from '@cat-factory/orchestration'
+import {
+  RUN_DAY_ROLLUP_LOOKBACK_MS,
+  createRetentionPass,
+  materializeSpendRollup,
+} from '@cat-factory/orchestration'
 
 /** Recurring-pipeline run history is kept ~1 week (the inspector's window). */
 const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
@@ -64,6 +70,8 @@ interface RetentionPolicy {
   gateOutcomesMs: number
   /** Daily run rollup (`platform_run_days`) behind the `30d` / `90d` dashboard windows. */
   runDaysMs: number
+  /** The account audit log (`audit_events`), in its own AUDIT_DB. The longest window here. */
+  auditEventsMs: number
 }
 
 export interface RetentionDeps {
@@ -104,6 +112,19 @@ export interface RetentionDeps {
    * pass self-heals) and prunes it to `runDaysMs`.
    */
   platformMetricsRepository: PlatformMetricsRepository
+  /**
+   * The account audit log, pruned to `auditEventsMs`. REQUIRED rather than optional, matching the
+   * roster and throttle above and for the same reason: both facades wire the store
+   * unconditionally, and an optional field would let a call-site regression silently drop the one
+   * prune on the one table that is otherwise unbounded for years.
+   */
+  auditEventRepository: AuditEventRepository
+  /**
+   * The durable cost-attribution rollup. This pass only WRITES it: `spend_days` has no prune,
+   * here or on Node, and no `deleteOlderThan` on its port to call. A TCO table that expires is
+   * just a slower ledger.
+   */
+  spendRollupRepository: SpendRollupRepository
   clock: Clock
   policy: RetentionPolicy
   /** Names the table behind each isolated prune failure. Absent ⇒ the failures are silent. */
@@ -128,8 +149,11 @@ export interface RetentionResult {
   notifications: number
   gateOutcomes: number
   runDays: number
+  auditEvents: number
   /** Daily buckets (re)written by this pass's rollup: a WRITE, not rows reclaimed. */
   runDaysRolledUp: number
+  /** Durable cost-attribution buckets (re)written by this pass: a WRITE, never a prune. */
+  spendDaysRolledUp: number
   /**
    * The tables whose prune threw this pass. EMPTY on a clean pass. Reported separately from
    * the counts because a failed prune and an empty table both reclaim 0 rows, and only one of
@@ -166,6 +190,8 @@ export async function sweepRetention({
   notificationRepository,
   gateOutcomeRepository,
   platformMetricsRepository,
+  auditEventRepository,
+  spendRollupRepository,
   clock,
   policy,
   logger,
@@ -173,6 +199,20 @@ export async function sweepRetention({
   const now = clock.now()
   const pass = createRetentionPass(logger)
   return {
+    // FIRST, and before the ledger prune below: the durable rollup folds `token_usage`, so a
+    // pass that pruned first would drop spend that had never been rolled up. It resumes from
+    // its own watermark rather than a fixed lookback, because a day missed here is missing
+    // from the only durable record of it, permanently, and this facade sweeps once a day, so
+    // a couple of skipped crons is a real gap. Its catch-up horizon is derived from the SAME
+    // `tokenUsageMs` the prune two lines down uses, so the walk never steps over a day the
+    // ledger still holds. See `spendRollupWindow`.
+    spendDaysRolledUp: await materializeSpendRollup(
+      pass,
+      spendRollupRepository,
+      now,
+      policy.tokenUsageMs,
+      logger,
+    ),
     tokenUsage: await pass.prune('token_usage', policy.tokenUsageMs, now, (c) =>
       tokenUsageRepository.deleteOlderThan(c),
     ),
@@ -250,6 +290,11 @@ export async function sweepRetention({
     ),
     runDays: await pass.prune('platform_run_days', policy.runDaysMs, now, (c) =>
       platformMetricsRepository.deleteRunDaysOlderThan(c),
+    ),
+    // The audit log, in its own database. Last because it is the only pass whose window is
+    // measured in years: the others reclaim on most ticks, this one usually reclaims nothing.
+    auditEvents: await pass.prune('audit_events', policy.auditEventsMs, now, (c) =>
+      auditEventRepository.deleteOlderThan(c),
     ),
     failedTables: pass.failed,
   }

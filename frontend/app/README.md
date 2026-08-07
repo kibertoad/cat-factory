@@ -618,7 +618,17 @@ event left to restore it.
 - **Never gate readiness on a snapshot a later resync can undo.** The on-connect resync flips
   `connected` only after it settles (which is why e2e gates on `data-connected`).
 - **A REPLACE-style `hydrate` must never silently drop live-only state.** Either fold that state
-  into the snapshot or reconcile rather than replace.
+  into the snapshot or reconcile rather than replace. The `refreshSeq` guard above orders
+  refreshes against each OTHER and does nothing when ONE slow fetch straddles a live event, so
+  every such store also takes a WATERMARK: `refresh()` captures each one's `hydrateBaseline()`
+  before the fetch (`LiveWriteBaselines`) and its `hydrate` keeps whatever was written after it.
+  `board` and `notifications` are the two today; `execution` gets the same protection from the
+  server `rev` it carries. Whether the store can re-derive the dropped state is what decides how
+  bad the bug is: a block's status arrives again on the run's next transition, while a
+  notification is pushed ONCE, so dropping the card leaves a parked run nothing can surface (the
+  `pr-review` spec's flaky 30s wait on `notifications-bell`). A watermark that tracks only
+  INSERTS is half a guard: a card resolved live must also stay gone, or a snapshot read while it
+  was open resurrects an action the server has already taken.
 - **An action's OPTIMISTIC ECHO is a clobber too, and it bypasses both guards above.** A store
   that awaits a mutation and then assigns the returned sub-state onto the cached run
   (`step.forkDecision`, `step.prReview`, `step.judge`, `step.followUps`) is writing straight past

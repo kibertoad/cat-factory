@@ -10,6 +10,7 @@ import type { Env } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'
 import { logger } from '../observability/logger'
+import { withWorkflowLogExport } from './logExport'
 import { buildWorkflowRuntime } from './runtime'
 
 /** Params passed to an EnvConfigRepairWorkflow instance (its id is the repair job id). */
@@ -37,11 +38,16 @@ export class EnvConfigRepairWorkflow extends WorkflowEntrypoint<
   Env,
   EnvConfigRepairWorkflowParams
 > {
-  override async run(
+  override run(
     event: WorkflowEvent<EnvConfigRepairWorkflowParams>,
     step: WorkflowStep,
   ): Promise<void> {
-    const { workspaceId, jobId } = event.payload
+    // See BootstrapWorkflow: `run` is the wake's logging bracket, `drive` is the body.
+    return withWorkflowLogExport(this.env, step, (step) => this.drive(event.payload, step))
+  }
+
+  private async drive(params: EnvConfigRepairWorkflowParams, step: WorkflowStep): Promise<void> {
+    const { workspaceId, jobId } = params
     // One DI-graph assembly per wake (pure wiring over env bindings, no I/O) shared by
     // every poll in this invocation; a hibernation wake replays `run()` and rebuilds. Built
     // via `buildWorkflowRuntime` so a transient throw here can't kill the instance terminally

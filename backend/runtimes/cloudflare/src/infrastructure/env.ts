@@ -748,6 +748,13 @@ export interface Env {
   GATE_OUTCOME_RETENTION_DAYS?: string
   /** Daily run rollup (`platform_run_days`) retention, in days. Default 400; 0 disables. */
   PLATFORM_RUN_DAY_RETENTION_DAYS?: string
+  /**
+   * Days of account AUDIT LOG (`audit_events`, in AUDIT_DB) history to keep. The longest window
+   * of the lot by design — the log answers a compliance question long after anyone stopped
+   * watching. Default 730 (~2 years); 0 disables pruning entirely, for a deployment that exports
+   * the log elsewhere and wants nothing dropped locally.
+   */
+  AUDIT_EVENT_RETENTION_DAYS?: string
 }
 
 /**

@@ -86,6 +86,12 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
       email: null,
       aud: TOKEN_AUDIENCE.session,
       exp: Date.now() + 60_000,
+      // The session generation the bearer is valid under. `0` is what a freshly created `users`
+      // row carries, and the mothership's `verifySession` compares the claim against that row —
+      // a token carrying no claim at all is refused, which is what makes a revoked bearer stop
+      // working. The forged-session case below deliberately omits it: that one must fail on the
+      // signature, and it would be a weaker test if the missing claim could be what refused it.
+      gen: 0,
     })
   }
 

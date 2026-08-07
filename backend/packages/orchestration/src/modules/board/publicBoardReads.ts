@@ -1,4 +1,4 @@
-import type { AddTaskInput, BlockEditActor } from '@cat-factory/contracts'
+import type { AddTaskInput, BlockEditAuthority } from '@cat-factory/contracts'
 import type { Block, BlockRepository, BlockStatus } from '@cat-factory/kernel'
 import { NotFoundError, ValidationError } from '@cat-factory/kernel'
 import { serviceOf } from './board.logic.js'
@@ -23,7 +23,7 @@ export interface PublicBoardReadsDeps {
     workspaceId: string,
     containerId: string,
     input: AddTaskInput,
-    editor: BlockEditActor,
+    editor: BlockEditAuthority,
     createdBy: string | null,
   ): Promise<Block>
 }
@@ -74,7 +74,7 @@ export class PublicBoardReads {
     workspaceId: string,
     serviceId: string,
     input: AddTaskInput,
-    editor: BlockEditActor,
+    editor: BlockEditAuthority,
   ): Promise<Block> {
     await this.assertTaskContainer(workspaceId, serviceId)
     return this.deps.addTask(workspaceId, serviceId, input, editor, null)

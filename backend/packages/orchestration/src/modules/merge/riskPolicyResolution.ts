@@ -1,11 +1,11 @@
 import type { GroupCacheHandle, RiskPolicy, RiskPolicyCacheValue } from '@cat-factory/kernel'
 import type { RiskPolicyRepository } from '@cat-factory/kernel'
-import { DEFAULT_RISK_POLICY } from '@cat-factory/kernel'
+import { FALLBACK_RISK_POLICY } from '@cat-factory/kernel'
 import type { ResolvedRunRiskPolicy } from '../execution/policy-types.js'
 
 // ---------------------------------------------------------------------------
 // WHICH merge-threshold preset governs a task: its own pick, else the workspace default, else the
-// built-in `DEFAULT_RISK_POLICY`.
+// built-in `FALLBACK_RISK_POLICY`, which does NOT auto-merge (see the constant).
 //
 // One implementation, because two readers depend on the answer being the SAME one: the engine
 // resolves it to make the merge decision, and the board's preset-SELECTION guard resolves it to
@@ -19,14 +19,29 @@ import type { ResolvedRunRiskPolicy } from '../execution/policy-types.js'
 // write and is an authorization decision, which is the last place to want a stale-by-a-TTL answer.
 // ---------------------------------------------------------------------------
 
-/** Reads one preset row, possibly through a cache slice. */
+/**
+ * WHICH row a resolution wants: the id the task pinned, or the workspace's default.
+ *
+ * A discriminated target rather than the cache key string it used to be. The key spelling is one
+ * reader's encoding, and picking the id back out of it (`key.slice('picked:'.length)`) is the
+ * shape that reads as correct until someone renames a prefix; a second reader that answers off a
+ * preloaded library needs the id, not the key.
+ */
+export type RiskPolicyTarget = { kind: 'picked'; id: string } | { kind: 'default' }
+
+/** Reads one preset row, possibly through a cache slice or a preloaded library. */
 export type RiskPolicyRead = (
-  key: string,
+  target: RiskPolicyTarget,
   load: () => Promise<RiskPolicy | null>,
 ) => Promise<RiskPolicy | null>
 
 /** Read straight from the repository, for the paths with no cache slice wired to read through. */
-export const directRiskPolicyRead: RiskPolicyRead = (_key, load) => load()
+export const directRiskPolicyRead: RiskPolicyRead = (_target, load) => load()
+
+/** The cache key one target resolves under; the ONE place that spelling lives. */
+function cacheKeyOf(target: RiskPolicyTarget): string {
+  return target.kind === 'picked' ? `picked:${target.id}` : 'default'
+}
 
 /**
  * Read through the `AppCaches.riskPolicy` slice, grouped by workspace (one preset write drops the
@@ -39,16 +54,41 @@ export function cachedRiskPolicyRead(
   workspaceId: string,
 ): RiskPolicyRead {
   if (!cache) return directRiskPolicyRead
-  return async (key, load) =>
-    (await cache.get(key, workspaceId, async () => ({ policy: await load() }))).policy
+  return async (target, load) =>
+    (await cache.get(cacheKeyOf(target), workspaceId, async () => ({ policy: await load() })))
+      .policy
+}
+
+/**
+ * Answer every resolution in one workspace out of its library, already read in full.
+ *
+ * For the caller that resolves MANY ids in the same workspace at once (the board's preset guard,
+ * judging every block in a moved subtree), where the per-id shape is the banned N+1: one point
+ * read per pin plus the workspace default re-read once per pin. A preset library is a handful of
+ * rows a workspace admin maintains by hand, so reading it whole is one query whatever the subtree
+ * holds, and the workspace default stops being a repeated round trip.
+ *
+ * `load` is never called: the library IS the answer, and a miss (a pinned id that no longer exists,
+ * a workspace with no default seeded) is a real null that falls through to the same place an
+ * uncached read's null would, which is {@link FALLBACK_RISK_POLICY}.
+ */
+export function preloadedRiskPolicyRead(library: readonly RiskPolicy[]): RiskPolicyRead {
+  const byId = new Map(library.map((preset) => [preset.id, preset]))
+  const workspaceDefault = library.find((preset) => preset.isDefault) ?? null
+  return (target) =>
+    Promise.resolve(target.kind === 'picked' ? (byId.get(target.id) ?? null) : workspaceDefault)
 }
 
 /**
  * Resolve the preset governing `riskPolicyId` in a workspace.
  *
  * An ABSENT repository is not a hole to guard: with no preset library there is nothing for a task
- * to point at, so every task in the deployment is governed by {@link DEFAULT_RISK_POLICY}, whose
- * role layer is empty and therefore holds nobody to anything.
+ * to point at, so every task in the deployment is governed by {@link FALLBACK_RISK_POLICY}, whose
+ * role layer is empty and therefore holds nobody to anything, and which auto-merges nothing, so
+ * the deployment that configured no policy lands no PR without a human.
+ *
+ * A wired repository answers from a library the board was seeded with at CREATION, so reaching
+ * the fallback is a deployment-level fact rather than a question of who had read what first.
  */
 export async function resolveRiskPolicy(input: {
   repository: RiskPolicyRepository | undefined
@@ -57,13 +97,16 @@ export async function resolveRiskPolicy(input: {
   read?: RiskPolicyRead
 }): Promise<ResolvedRunRiskPolicy> {
   const { repository, workspaceId, riskPolicyId } = input
-  if (!repository) return DEFAULT_RISK_POLICY
+  if (!repository) return FALLBACK_RISK_POLICY
   const read = input.read ?? directRiskPolicyRead
   if (riskPolicyId) {
-    const picked = await read(`picked:${riskPolicyId}`, () =>
+    const picked = await read({ kind: 'picked', id: riskPolicyId }, () =>
       repository.get(workspaceId, riskPolicyId),
     )
     if (picked) return picked
   }
-  return (await read('default', () => repository.getDefault(workspaceId))) ?? DEFAULT_RISK_POLICY
+  return (
+    (await read({ kind: 'default' }, () => repository.getDefault(workspaceId))) ??
+    FALLBACK_RISK_POLICY
+  )
 }

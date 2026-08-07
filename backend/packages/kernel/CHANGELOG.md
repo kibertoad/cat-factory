@@ -1,5 +1,288 @@
 # @cat-factory/kernel
 
+## 0.260.0
+
+### Minor Changes
+
+- 9d6bce0: Seed a terminal `disposer` step into the built-in `pl_bug_triage` pipeline, so a scheduled triage
+  run reclaims the ephemeral environment it stood up instead of leaving it to the TTL sweep. Version
+  bumped to 5, which offers the reseed to already-seeded workspaces.
+
+## 0.259.0
+
+### Minor Changes
+
+- 24f76f1: Make the audit log readable, and make revoking a session actually end it
+
+  **Breaking for existing sessions: everyone signs in again once after this deploys.** A session
+  token now carries a `gen` claim, and one that carries none is refused rather than admitted. That is
+  the deliberate choice: treating an absent claim as "current" would be a permanent bypass of the
+  whole revocation mechanism, and it is the hole an attacker would aim at. The cost is a single
+  re-login; the alternative is a dual-read path that never goes away. Internal wire shape, pre-1.0,
+  per the repo's compatibility policy.
+
+  Two enterprise loose ends, and they are the same story from both ends.
+
+  The audit log has been WRITE-ONLY in the product since it landed. Privileged actions were recorded
+  faithfully and there was no way to read them back: no route, no viewer, and no retention, so the
+  one table designed to be kept for years was also the one growing without a bound. It now serves a
+  keyset-paginated page to account admins and renders in an admin panel, as translated sentences
+  composed from the row's machine-readable fields rather than from stored prose — which is what lets
+  a row written today read correctly for somebody in another language years later, and what makes an
+  action this build no longer declares render as "unrecognised" instead of splicing `undefined` into
+  an operator's screen. Names are resolved at render time in one batched read per page, and a name
+  that no longer resolves stays null so the id shows: the person being gone is exactly the thing the
+  row is kept to record. A failed READ is rendered differently from an empty log at every layer,
+  because an audit viewer that reports an outage as "nothing happened" tells an admin the reverse of
+  the truth. Retention arrives with its own knob (`AUDIT_EVENT_RETENTION_DAYS`, default 730 days),
+  which is the governance half of keeping the log in its own store: it cannot be shortened as a side
+  effect of tuning a telemetry window, and the prune takes a cutoff and nothing else, so it can never
+  be used to remove the record of one inconvenient thing.
+
+  The other end is enterprise SSO, whose whole offboarding promise is "we disabled them in the
+  identity provider and they lost access". A stateless signed session could not deliver that: group
+  membership was already re-read on every sign-in, so a removed person could not get a NEW session,
+  but the one they were already holding stayed valid until it expired. Each user row now carries a
+  session generation that every token is stamped with, so ending every session a person holds is one
+  write with nothing to enumerate. An SSO sign-in the directory refuses now cuts their live sessions
+  as well as withholding a new one; an admin can do the same for a member who has left or lost a
+  laptop (recorded in the audit log, naturally); and anyone can sign themselves out everywhere.
+
+  An SSO refusal only ends existing sessions when the DIRECTORY is what refused. A refusal caused by
+  a claim that never arrived (a dropped `groups` scope, a renamed claim name, a provider that stopped
+  marking an address verified) still blocks the login, but withholds the revocation: those refusals
+  are indistinguishable from "removed from every group", and they fire for everybody at once, so
+  treating them as offboardings would turn one configuration regression into a deployment-wide forced
+  sign-out.
+
+  Two decisions worth knowing. A role change deliberately does NOT revoke: the RBAC gate re-reads
+  roles on the next request and the token carries none, so coupling them would sign a person out of
+  every board because their role on one was adjusted. And the check is a NEW read on a path that
+  previously touched no store at all — served through the app cache with invalidation on every bump,
+  which means the Worker (whose isolates share no invalidation bus, so the entry passes through
+  there) pays a real per-request read. That is accepted rather than discovered: a cache with a TTL
+  would go on admitting a bearer a peer isolate had already revoked, and "they lost access, within
+  the minute" is not the claim an offboarding story can make.
+
+  Still open, and stated so nobody assumes otherwise: run start/stop/retry are not yet audited. That
+  half needs the mothership to derive the row from what it observes rather than accept it from a
+  node's say-so, since a node cannot be allowed to write events that name their own actor — the
+  design question is written up in `docs/initiatives/audit-log-and-session-revocation.md`.
+
+### Patch Changes
+
+- 964cfa6: Decide a merge-preset guard where the row lands, against the role granted there
+
+  Review of the cross-home reparent guard found the same mistake it was closing, one layer up: the
+  guard resolved against the ACTING board. On a board that mounts a service homed elsewhere, that is
+  neither where the row lands nor where the role that governs it was granted, and `blockRepository.get`
+  is scoped by physical `workspace_id`, so a run can only ever resolve a block under its HOME. The
+  acting board therefore answers the question only when it happens to be the home.
+
+  Both halves now resolve at the home. The LIBRARY: `addTask` judges against the workspace the row is
+  about to land in and `updateBlock` against the one it lives in. Judged at the acting board, a task
+  in a mounted foreign service had both sides of the swap collapse onto the acting workspace's default,
+  so the guard could not refuse anything: clearing a strict pin on such a task was the same escape the
+  drag was.
+
+  The ROLE: the editor now travels as a `BlockEditAuthority`, resolved per workspace, and each side of
+  a comparison is read against the tier that side's workspace granted. `refuseRiskPolicySelection`
+  takes two sides, each carrying its own actor; a same-workspace swap (the picker, a `riskPolicyId`
+  patch) passes the same actor to both. One pre-resolved actor was wrong in both directions at once:
+  an admin of a third board skipped the check on two homes where they are a plain member, and a
+  member of it was refused on roles they hold nowhere the decision applies. A workspace the editor cannot
+  see resolves to the unattributed editor, deliberately: with no tier there they can admit no run
+  under its policies, and reading absence as "unrestricted" would refuse a move into a service they
+  are not a member of, naming a sandbox nobody would have escaped.
+
+  Three more findings from the same review:
+
+  - The moved subtree was filtered to `level === 'task'`, exempting the `initiative` blocks that start
+    their own planning chains and resolve a preset of their own. It reads the declared
+    `BLOCK_LEVEL_RUNS_PIPELINES` now, a total `Record<BlockLevel, boolean>`, so a level that becomes
+    runnable fails the typecheck until it is classified rather than being silently exempt.
+  - The guard resolved each pinned preset with a point read per pick, re-reading each workspace's
+    default alongside every one of them: the N+1 this repo bans. It reads each side's library once and
+    resolves in memory through the same `resolveRiskPolicy` the engine uses, so a hundred-task module
+    costs two queries. `RiskPolicyRead` takes a typed target rather than a cache-key string, which is
+    what lets a preloaded reader answer without parsing a key prefix back apart.
+  - A refused drag reached the user as untranslated English: the claim that the SPA's existing mapping
+    covered it was wrong, since the only mapping was the picker's client-side one, worded for someone
+    holding a control this person never touched. The reason now maps to `board.toast.moveRefused.*`,
+    translated in all ten locales, with the backend's prose kept as the last resort.
+
+  Compatibility: `refuseRiskPolicySelection`'s input shape and the `BlockEditActor` parameter on the
+  board writes both changed. Internal only, so no migration path: neither is on the public API
+  surface, and no persisted shape moved.
+
+- Updated dependencies [24f76f1]
+- Updated dependencies [964cfa6]
+  - @cat-factory/contracts@0.261.0
+
+## 0.258.0
+
+### Minor Changes
+
+- 4be3510: Refuse to auto-merge when no merge policy resolves at all
+
+  A run whose task pinned no preset, in a workspace whose preset library had not been seeded (or a
+  deployment with no preset repository wired), used to fall back to `DEFAULT_RISK_POLICY`, which is
+  `Balanced` with auto-merge ON. So a deployment that had configured no merge policy still landed
+  pull requests on a merger model's own scores.
+
+  That unresolved case now resolves the new `FALLBACK_RISK_POLICY`, which auto-merges nothing. The
+  shipped `Balanced` preset is unchanged: still `autoMergeEnabled: true`, still the seeded default,
+  still no per-class floors. The refusal carries its own merge-decision reason,
+  `no_policy_configured`, kept apart from `auto_merge_disabled` because the remedies differ in kind:
+  one names a preset somebody chose and is fixed by editing it, the other says the deployment has
+  stated no merge policy at all.
+
+  A board's built-in preset library is now written when the board is CREATED rather than by the
+  first `list()`. The engine resolves a task's governing preset without listing anything, so seeding
+  on a read left a board nobody had opened with no library at all: a run started over the public API
+  resolved the fallback and refused, while the identical run after one board load merged.
+  `RiskPolicyService` still repairs an empty library on read, for boards that predate this.
+
+  The `merge_review` inbox card is now worded from the decision's own reason rather than from a pair
+  of booleans beside it, so every rung of the merge ladder describes what actually refused. Only
+  `exceeded_thresholds` still blames the ceilings; the other reasons no longer report a PR as scored
+  "outside the task's auto-merge thresholds" when no threshold took part in the decision.
+
+### Patch Changes
+
+- ae44914: Let a person ask a document source whether the copy on the board is still the current one
+
+  Runs re-confirm every linked document against its source at dispatch, so an agent no longer builds
+  from whatever import happened to store. The person deciding whether to START a run still could not
+  see any of it: the board showed a title and an excerpt frozen at import time, so "is the frame I
+  just edited the one the agents will read" was unanswerable without opening Figma and comparing by
+  eye. The imported-documents list and a task's context panel now carry the `syncedAt` stamp and a
+  member-tier action that runs the same probe → compare → re-import ladder on demand, answering with
+  the refreshed row and what the check concluded.
+
+  The manual path drops the cached verdict before it asks, and that is the reason it is a separate
+  entry point rather than a second caller of the batch one. The 60-second cache exists so a
+  pipeline's worth of step dispatches costs one round trip per document and so a source that is down
+  is remembered as down instead of being re-probed by every dispatch; both are exactly wrong for a
+  click, whose commonest cause is that the last answer reported an outage. Served from the cache, the
+  button would report the very failure the person is retrying past and no amount of clicking would
+  clear it.
+
+  What a click may leave BEHIND in that cache is asymmetric, and the asymmetry is the whole safety
+  property. A success is stored, so the dispatches that follow a manual refresh inherit it. A failure
+  is not: the entry has just been dropped, so re-filling it with whatever one click found would let a
+  person retrying past a flaky source install an `unreachable` verdict every dispatch reads for the
+  rest of the TTL window, degrading the run path with a failure no dispatch ever observed and
+  renewing it with each further click. For the same reason a click never increments
+  `document.freshness_gap`: that counter measures runs handed a copy the source has moved past, and
+  one person clicking through an outage could otherwise move a deployment-wide rate as far as they
+  have patience for.
+
+  A moved REVISION is no longer reported as a changed document. `DocumentFreshness.confirmed` carries
+  a three-member `change` where it carried a `reimported` boolean, because a whole-file source
+  routinely moves its token without changing anything a reader sees: a Figma file's version bumps on
+  any edit anywhere in it, including frames a given document does not cover. That case now says so
+  (`revision_only`), and the write that records the moved token no longer moves `syncedAt`, which
+  means "when the body was last written" and would otherwise put a fresh timestamp on bytes nobody
+  changed. INTERNAL BREAK: the boolean is gone rather than kept beside the enum.
+
+  `syncedAt` and the verdict stay two facts. The stamp is when the body was last WRITTEN, and a
+  refresh that finds nothing changed writes nothing, so folding the check into the stamp would either
+  claim a write that never happened or leave a confirmation sitting on a row the source has since
+  moved past. An absent verdict therefore means "nobody has asked", never "unknown": listing
+  documents deliberately probes nothing, because confirming costs a round trip per page and a
+  board-wide sweep is a rate limit waiting to happen. Both facts are rendered WITH their time, since
+  each is a claim about a moment in the history of a page someone else is still editing and a moment
+  stated without its time is read as "now". A verdict is also scoped to the BOARD it was asked on: the
+  same file can be imported into two of them, and a verdict keyed by source and id alone would render
+  one board's confirmation against another board's row that nobody had checked.
+
+  Two shapes worth noting for a reviewer. The freshness vocabulary moved from kernel to
+  `@cat-factory/contracts`, since this is the point at which a human reads the same conclusion the
+  agent does and the backend does not localize prose; kernel keeps the agent-facing renderer and
+  re-exports the types, so nothing importing them changes. And the refresh route takes the narrow
+  `DocumentSourceKind` rather than a stored row's wider origin, so an `upload` is refused at the
+  schema: a 200 carrying "not applicable" would leave a caller unable to tell "this document has no
+  source" from "the check ran and found nothing to compare", which is the distinction the whole
+  vocabulary exists to keep.
+
+- Updated dependencies [ae44914]
+- Updated dependencies [4be3510]
+  - @cat-factory/contracts@0.260.0
+
+## 0.257.0
+
+### Minor Changes
+
+- 11dae5b: Durable cost attribution: a spend rollup with no retention behind the TCO axes
+
+  The Reports view could already slice spend by repository and by tracker ticket, but it could not
+  answer either question durably, and nothing said so. Every attribution past the workspace was
+  assembled at READ time from three mutable sources: `token_usage`, pruned at ~13 months;
+  `agent_runs`, the row a call reaches the board through, prunable too; and the LIVE
+  `services.repo_github_id` / `tasks.linked_block_id` links, which an operator re-points whenever a
+  service moves repository or an issue is re-imported. So "what did this repository cost us last
+  quarter" gave one answer this month and a different, silently smaller one next year, and the ledger's
+  own durable rollup stopped at `(billing, vendor, provider, model)` for the current billing period.
+
+  The retention sweep now materialises `spend_days`: one row per `(workspace, UTC day, run, agent kind,
+provider:model, billing, vendor)`, carrying the board shape FROZEN at rollup time: the run, its block
+  and title, its service and name, its repository id and `owner/name`, its task type, its ticket ref,
+  plus the account and board names. A read of it joins nothing, so nothing downstream can be re-pointed
+  or pruned out from under a report. `run` joins `repo` and `ticket` as a spend dimension on both
+  sources, so the finest TCO question ("what did that pipeline execution cost") is a grouped query too.
+
+  **It is never pruned, and that is the feature.** A TCO table has to outlive the ledger it was folded
+  from; one with a window is just a slower ledger. There is no `deleteOlderThan` on
+  `SpendRollupRepository` at all, so the absence is structural rather than an omission a future sweep
+  could quietly fill, and the table is excluded from the workspace-delete cascade for the reason
+  `audit_events` is: money already spent is an account-level fact that deleting a board does not undo.
+  Keeping it out of that list is only half of keeping it, though, because the sweep rewrites a trailing
+  window by deleting it and re-folding `token_usage`, which IS cascaded: for a deleted board the re-fold
+  reads nothing, so an unbounded window DELETE would have reclaimed its most recent days on the sweep's
+  own schedule with no further operator action. The rewrite is therefore scoped to workspaces that still
+  exist, which is the general rule that a rewrite may only delete what it can reproduce. What makes the
+  whole thing affordable is the grain. A run writes hundreds of ledger rows and a handful of these, so
+  the table grows with run volume, never call volume. The arithmetic is written down in
+  `backend/docs/storage-and-retention.md` §1c rather than left to be re-derived.
+
+  Reports routes by window: `24h`/`7d` still scan the ledger (millisecond-exact, and a sweep cadence
+  would show there as a missing tail), `30d`/`90d` read the rollup. Mixing sources inside one window was
+  rejected: every breakdown partitions the same rows and the totals fold from one of them, so a hybrid
+  would leave the tiles and the cards describing different data. The freshness cost is stated rather
+  than hidden: the projection carries `source` and `rolledUpThrough`, and the panel renders "no rollup
+  yet" / "the rollup is behind" / "complete through <date>", because an un-materialised rollup and an
+  account that spent nothing produce the same empty breakdown.
+
+  Worth a reviewer's attention: the fold has to REPRODUCE the ledger read's two fan-out guards (the
+  pre-aggregated service label over colliding frame block ids, and the deterministic lowest-ref pick for
+  a block linked from two tickets) rather than merely resemble them, or an account's spend would change
+  the moment a reader switched from `7d` to `30d`; the conformance suite asserts every dimension of the
+  rollup equals the ledger's answer on the same fixture, and then deletes the ledger, the runs and the
+  tickets and asserts the rollup is unchanged, and it does the same after deleting the boards themselves,
+  which is the only way to see that the account scope rides the row's own frozen `account_id` rather than
+  a `workspaces` join.
+
+  Unlike the daily run rollup, the pass resumes from its own watermark instead of a fixed lookback,
+  because a day missed here is missing from the only durable record of it. Each pass is span-capped, and
+  the first pass backfills 90 days so the longest window is not under-reported for a quarter while
+  looking complete. That backfill bound is deliberately NOT reused as the catch-up horizon: it answers
+  how much history a deployment adopts on its first pass, whereas a resumed pass has no such choice and
+  the ledger still holds every day since the watermark, so the horizon follows
+  `TOKEN_USAGE_RETENTION_DAYS` instead. Past the ledger's own retention there is nothing left to fold, and
+  the pass logs the span it gave up on, because a high-water mark structurally cannot represent a hole.
+  `rolledUpThrough` is the last COMPLETE day rather than the newest one written, since a sweep firing at
+  noon folds a day that keeps accruing after it returns; the panel measures its lag against the same day
+  boundary, so the verdict does not swing with the hour the report was opened. Ordering in the sweep is a
+  correctness property, not style: the rollup reads `token_usage`, so it runs before the prune that
+  bounds it, and it now shares that prune's window so the catch-up walk cannot step over days the next
+  statement is about to delete.
+
+### Patch Changes
+
+- Updated dependencies [11dae5b]
+  - @cat-factory/contracts@0.259.0
+
 ## 0.256.0
 
 ### Minor Changes

@@ -10,6 +10,8 @@ import {
   linkDocumentForKindSchema,
   linkDocumentSchema,
   planDocumentSchema,
+  refreshDocumentSchema,
+  refreshedDocumentViewSchema,
   resolveDocumentRefSchema,
   resolvedDocumentRefSchema,
   searchDocumentsSchema,
@@ -95,6 +97,20 @@ export const resolveDocumentRefContract = defineApiContract({
   pathResolver: ({ source }) => `/document-sources/${source}/resolve-ref`,
   requestBodySchema: resolveDocumentRefSchema,
   responsesByStatusCode: { 200: resolvedDocumentRefSchema, ...errorResponses },
+})
+
+// Re-confirm one stored document against its source NOW, and pull the new body if the page moved:
+// the human dual of the refresh every dispatch runs. POST rather than GET because it writes (a
+// moved page is re-imported) and because an `externalId` carries slashes.
+//
+// Deliberately per-document rather than a workspace-wide sweep: confirming costs a round trip to
+// the source per page, so a "refresh everything" button on a board with fifty imported pages is a
+// rate limit waiting to happen. The same reason listing documents does not probe.
+export const refreshDocumentContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/documents/refresh',
+  requestBodySchema: refreshDocumentSchema,
+  responsesByStatusCode: { 200: refreshedDocumentViewSchema, ...errorResponses },
 })
 
 export const searchDocumentsContract = defineApiContract({

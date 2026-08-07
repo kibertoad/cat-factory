@@ -4,6 +4,7 @@ import type { Block } from '~/types/domain'
 import { connectableSources } from '~/utils/sourcePicker'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import DocumentOriginLink from '~/components/documents/DocumentOriginLink.vue'
+import DocumentSyncState from '~/components/documents/DocumentSyncState.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 // Documents (from any source) attached to a task OR an initiative as agent
@@ -140,19 +141,29 @@ async function attach(item: PendingContext) {
     />
 
     <div v-if="linked.length" class="space-y-1">
-      <DocumentOriginLink
+      <!--
+        The sync state sits BESIDE the origin link, never inside it: the refresh action is a
+        button, and a button nested in an anchor both breaks the markup and navigates away on the
+        click it was meant to handle.
+      -->
+      <div
         v-for="doc in linked"
         :key="`${doc.source}:${doc.externalId}`"
-        :url="doc.url"
-        class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300"
-        hover-class="hover:bg-slate-800/60"
+        class="rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5"
       >
-        <UIcon
-          :name="documents.descriptorForOrigin(doc.source)?.icon ?? 'i-lucide-file-text'"
-          class="h-3.5 w-3.5 shrink-0 text-indigo-400"
-        />
-        <span class="truncate">{{ doc.title }}</span>
-      </DocumentOriginLink>
+        <DocumentOriginLink
+          :url="doc.url"
+          class="flex items-center gap-1.5 text-xs text-slate-300"
+          hover-class="hover:text-white"
+        >
+          <UIcon
+            :name="documents.descriptorForOrigin(doc.source)?.icon ?? 'i-lucide-file-text'"
+            class="h-3.5 w-3.5 shrink-0 text-indigo-400"
+          />
+          <span class="truncate">{{ doc.title }}</span>
+        </DocumentOriginLink>
+        <DocumentSyncState :doc="doc" class="mt-1" />
+      </div>
     </div>
     <p v-else class="text-[11px] text-slate-500">
       {{ emptyHint }}

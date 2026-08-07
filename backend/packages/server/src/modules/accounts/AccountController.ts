@@ -26,6 +26,7 @@ import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { apiKeyToWire } from '../providers/ApiKeyController.js'
 import { requireCapability, requireUser } from '../../http/guards.js'
+import { registerAuditLogRoutes } from './auditLogRoutes.js'
 
 /**
  * The signed-in user, narrowed to what the tenancy layer needs, or a 401 — every route here
@@ -113,6 +114,11 @@ export function accountController(): Hono<AppEnv> {
       .accountService.setMemberRoles(accountId, user.id, userId, c.req.valid('json').roles)
     return c.json(member, 200)
   })
+
+  // The audit log's read surface + the admin-forced session revocation that writes to it. Their
+  // own registrar (`auditLogRoutes.ts`) so this function stays inside the per-function budget;
+  // the paths still live under the account prefix.
+  registerAuditLogRoutes(app)
 
   // ---- Invitations (email-based org onboarding) ---------------------------
   // Available only when the invitation repository is wired (opt-in feature).

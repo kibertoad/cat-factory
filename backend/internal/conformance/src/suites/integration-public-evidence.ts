@@ -21,7 +21,7 @@ import { memoryBinaryArtifactStore } from './shared.js'
 // the real SQL of both stores. A facade that shipped the controller but forgot a wiring answers
 // 404/503 here instead of shipping a surface a trial harness silently cannot use.
 //
-// See backend/docs/public-api.md and docs/initiatives/public-api-additions.md.
+// See backend/docs/public-api.md and backend/docs/adr/0043-public-decision-surface.md.
 
 /** Mint a public-API key through the SESSION surface and return its bearer header. */
 async function mintKey(

@@ -321,8 +321,19 @@ With that scoping, the pipeline properties are:
   member-tier board write, which made re-pointing the task the way around a sandbox nobody had to
   edit. `refuseRiskPolicySelection` closes it with the narrow-only rule one level up: a selection
   may not drop a restriction the SELECTOR's own role was under (the sandbox, the submission
-  allowlist, or a class the role layer narrowed), at either door that can carry the field (creating
-  a task and patching one). The arms run in the engine's own precedence order, so the reason it
+  allowlist, or a class the role layer narrowed), at every door that can re-decide it: creating a
+  task, patching one, and moving one. That last is not a `riskPolicyId` write at all: the field
+  resolves against the workspace that HOMES the task, so a cross-home reparent (dragging it into a
+  service homed elsewhere, both mounted on the board) migrates the rows to a library where the
+  source's preset is dangling and the destination's default governs instead. Same rule, with the
+  workspace varying rather than the id, applied to every RUNNABLE block the move carries
+  (`BLOCK_LEVEL_RUNS_PIPELINES`: tasks and initiatives, which start their own chains).
+  Every workspace in that decision is a HOME, never the acting board, and so is every ROLE: a
+  board mounts services homed elsewhere, the row is written at the home, and a run on it is
+  admitted through that board under the tier the editor holds there, so the editor arrives as a
+  `BlockEditAuthority` the guard asks per workspace. Judged against the acting board instead, an
+  admin of a third board skips the check on two homes where they are a plain member.
+  The arms run in the engine's own precedence order, so the reason it
   gives names the restriction the run itself would have been refused on. It compares only the ROLE
   layer, so choosing between presets that treat every initiator alike stays a plain member
   affordance.
@@ -344,6 +355,24 @@ also means the shipped default posture is worth stating plainly:
 > merges without a human, subject to your CI and your branch protection. If that is not acceptable
 > for a repo, pin the `Manual review only` preset or add class floors. This is a one-line
 > configuration, not a code change.
+
+A second constant sits behind that one, and it is deliberately NOT the same policy.
+`FALLBACK_RISK_POLICY` governs a run when NO preset resolves at all. It auto-merges nothing, so a
+deployment that has configured no merge policy lands no pull request on a model's own scores.
+`Balanced` is a row an operator could have read and changed; the fallback is the absence of any
+such row, and absence of evidence is not evidence that auto-merging is wanted. The decision it
+records names itself rather than borrowing `Manual review only`: its own reason
+(`no_policy_configured`, which the SPA maps to its own copy) beside its own `presetName`. The two
+refuse on the same rung of the merge ladder and need opposite remedies, so a reader sent to edit
+the preset that held their PR back must not go looking for one they never had.
+
+WHEN the fallback governs is a deployment-level fact, not a timing accident. A board's preset
+library is written when the board is CREATED, so the only run it governs is one in a deployment
+whose container wires no `riskPolicyRepository`. Seeding on the first `list()` instead would make
+the answer depend on whether anybody had loaded the board first, and the public API starts runs on
+boards no browser has ever opened: the same task merged or waited for a human depending on an
+unrelated read, and the refusal named a posture nobody had chosen. `RiskPolicyService` still
+repairs an empty library on read, which now only reaches a board created before that was true.
 
 ## Layer 5: agent text is untrusted on every rendered surface (mechanism)
 

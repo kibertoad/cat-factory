@@ -21,9 +21,10 @@ import { authorize, authorizeOrThrow, refuse } from './publicApiAuth.js'
 // All three were reachable only from a browser session, which made a consumer whose job is to
 // JUDGE a run (a trial harness deciding whether to accept a change, an evaluation pipeline
 // scoring a fleet) dependent on scraping the fenced JSON block out of a pull-request body, and
-// left the captured screenshots unreachable entirely (the caveat `docs/initiatives/
-// public-api-additions.md` records against its visual-confirmation slice: "a caller approving a
-// visual-confirmation gate off this projection is approving screenshots it has not seen").
+// left the captured screenshots unreachable entirely (the caveat
+// `backend/docs/adr/0043-public-decision-surface.md` records against the visual-confirmation gate:
+// "a caller approving a visual-confirmation gate off this projection is approving screenshots it
+// has not seen").
 //
 // Six rules shape this controller:
 //
