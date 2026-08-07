@@ -9,6 +9,9 @@ describe('failureKindFromHarnessCause', () => {
   it('maps the watchdog timeouts to `timeout`', () => {
     expect(failureKindFromHarnessCause('inactivity-timeout')).toBe('timeout')
     expect(failureKindFromHarnessCause('max-duration')).toBe('timeout')
+    // The tool-silence watchdog is a timeout too, however chatty the run was: what ran out is a
+    // window, and the consumer's remedy (retry / raise the bound) is the same one.
+    expect(failureKindFromHarnessCause('no-tool-progress')).toBe('timeout')
   })
 
   it('maps every other harness cause to `agent`', () => {

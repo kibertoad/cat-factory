@@ -37,6 +37,7 @@ import {
   resolveWorkspaceCapabilities,
   testEnvHasZeroConfigDefault,
   WebCryptoPasswordHasher,
+  WebCryptoSecretCipher,
   type PersistenceRegistry,
   type ServerContainer,
   type ToolSecretChain,
@@ -982,11 +983,8 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     userSecrets,
     // The per-user "repos my PAT can reach" projection (board redaction + picker expansion).
     userRepoAccess: new D1UserRepoAccessRepository({ db }),
-    // The sealed-secret inventory the key-drift sweep + drop remediation use (ADR 0026 D6.2/D6.3);
-    // gated on ENCRYPTION_KEY (no key ⇒ nothing is sealed to scan).
-    ...(env.ENCRYPTION_KEY?.trim()
-      ? { sealedSecretInventory: new D1SealedSecretInventory({ db }) }
-      : {}),
+    // The two ENCRYPTION_KEY-gated sealed-secret seams (inventory + cipher factory).
+    ...selectWorkerSealedSecretDeps(env, db),
     // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
     openRouterCatalog,
     gateways: {
@@ -1045,5 +1043,30 @@ function workerCapabilityCredentialFields(input: {
     // The probe resolves through the SAME chain a dispatch does, or it reports on a tenant's value
     // that is not this board's.
     ...toolSecretContainerFields(input.toolSecretChain),
+  }
+}
+
+/**
+ * The deployment's two sealed-secret seams, both gated on `ENCRYPTION_KEY` and for the same
+ * reason: with no key nothing is sealed, so there is neither an inventory to scan nor a cipher to
+ * answer with. Named together because they are one concern read from one variable: the drift
+ * sweep enumerates what is sealed, and the delegation endpoints open it for a mothership-mode node.
+ * The Node facade wires the symmetric pair.
+ */
+function selectWorkerSealedSecretDeps(
+  env: Env,
+  db: D1Database,
+): Pick<ServerContainer, 'sealedSecretInventory' | 'secretCipherFor'> {
+  const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
+  if (!masterKeyBase64) return {}
+  return {
+    // ADR 0026 D6.2/D6.3: what the boot drift sweep attempts to decrypt, and what an operator's
+    // drop remediation targets.
+    sealedSecretInventory: new D1SealedSecretInventory({ db }),
+    // What `/internal/secrets/{unseal,seal}` opens and seals an ORG credential through on a
+    // mothership-mode node's behalf. Gated on the key alone, unlike the Node twin's extra `db`
+    // check: a Worker takes a non-optional `D1Database`, so it is authoritative for the rows it
+    // would be asked about and can never itself be the mothership-mode node this endpoint serves.
+    secretCipherFor: (info: string) => new WebCryptoSecretCipher({ masterKeyBase64, info }),
   }
 }

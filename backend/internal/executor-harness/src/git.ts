@@ -1081,25 +1081,33 @@ export async function pushBranch(
  * .gitignore and/or license picked on the new-repo page), so a fast-forward is
  * impossible. The Worker pre-flights that the target is empty or holds only that
  * boilerplate, so overwriting it is safe and intended.
+ *
+ * `signal` is the job watchdog's, and threading it is load-bearing rather than tidy: without
+ * it the six commands below are bounded only by their own per-command timeouts, so an abort
+ * raised during the push phase cannot interrupt them and the job keeps working for up to
+ * ~6 × `GIT_TIMEOUT_MS` past its max-duration kill. Every other git helper here threads it.
  */
 export async function reinitAndPush(opts: {
   dir: string
   target: BootstrapTargetSpec
   ghToken: string
   message: string
+  signal?: AbortSignal
 }): Promise<void> {
-  await rm(join(opts.dir, '.git'), { recursive: true, force: true })
-  await git(['init'], { cwd: opts.dir })
+  const { dir, signal } = opts
+  await rm(join(dir, '.git'), { recursive: true, force: true })
+  await git(['init'], { cwd: dir, signal })
   // Start the history on the target's default branch (init may default to master).
-  await git(['checkout', '-b', opts.target.defaultBranch], { cwd: opts.dir })
-  await git(['config', 'user.name', GIT_AUTHOR], { cwd: opts.dir })
-  await git(['config', 'user.email', GIT_EMAIL], { cwd: opts.dir })
-  await git(['add', '-A'], { cwd: opts.dir })
-  await git(['commit', '-m', opts.message], { cwd: opts.dir })
+  await git(['checkout', '-b', opts.target.defaultBranch], { cwd: dir, signal })
+  await git(['config', 'user.name', GIT_AUTHOR], { cwd: dir, signal })
+  await git(['config', 'user.email', GIT_EMAIL], { cwd: dir, signal })
+  await git(['add', '-A'], { cwd: dir, signal })
+  await git(['commit', '-m', opts.message], { cwd: dir, signal })
   const url = authenticatedCloneUrl(opts.target.cloneUrl)
-  await git(['remote', 'add', 'origin', url], { cwd: opts.dir })
+  await git(['remote', 'add', 'origin', url], { cwd: dir, signal })
   await git(['push', '--force', '-u', 'origin', opts.target.defaultBranch], {
-    cwd: opts.dir,
+    cwd: dir,
+    signal,
     env: await authEnv(opts.ghToken),
   })
 }

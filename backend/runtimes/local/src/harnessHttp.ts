@@ -120,6 +120,21 @@ async function safeJson(res: Response): Promise<unknown> {
 }
 
 /**
+ * Which eviction branch the poll fell to, i.e. what the post-mortem is entitled to conclude
+ * about the backend it is about to read:
+ *   - `unreachable`: the backend did not answer and `isDead` confirmed it is gone. Whatever it
+ *     was serving when it died was THIS job, so its exit state and output are this job's last
+ *     words.
+ *   - `job_unknown`: the backend answered 404. It is ALIVE and has simply forgotten the job (its
+ *     harness restarted, or reaped it). Anything read off it now describes whatever it is
+ *     serving, which on a SHARED backend is a different run.
+ *
+ * The distinction only matters where a backend outlives a single run (the local warm pool), but
+ * it is the poll that establishes it, so it is the poll that has to say which one happened.
+ */
+export type EvictionCause = 'unreachable' | 'job_unknown'
+
+/**
  * GET a harness job view by id. A 404 (job unknown/reaped, or the harness was recreated)
  * maps to an eviction view; a connection error consults `isDead` — true ⇒ eviction (the
  * backend is gone), false ⇒ rethrow the transient error so the caller retries. Any other
@@ -130,7 +145,8 @@ async function safeJson(res: Response): Promise<unknown> {
  * only on an eviction branch, and its text rides the view's `detail` through to the run's
  * recorded failure. A container that dies MID-RUN is otherwise reclaimed (`release()` removes
  * it) with its stdout — the only record of WHY the harness process exited — destroyed, leaving
- * a bare "container evicted or crashed" and nothing to diagnose from.
+ * a bare "container evicted or crashed" and nothing to diagnose from. It is handed the
+ * {@link EvictionCause} so it can refuse to attribute a live backend's output to this run.
  */
 export async function pollHarnessJob(opts: {
   fetchImpl: typeof fetch
@@ -140,7 +156,7 @@ export async function pollHarnessJob(opts: {
   timeoutMs: number
   label: string
   isDead: () => boolean | Promise<boolean>
-  postMortem?: () => Promise<string | undefined>
+  postMortem?: (cause: EvictionCause) => Promise<string | undefined>
 }): Promise<RunnerJobView> {
   let res: Response
   try {
@@ -153,10 +169,10 @@ export async function pollHarnessJob(opts: {
       },
     )
   } catch (err) {
-    if (await opts.isDead()) return evictionView(await postMortemOf(opts))
+    if (await opts.isDead()) return evictionView(await postMortemOf(opts, 'unreachable'))
     throw err
   }
-  if (res.status === 404) return evictionView(await postMortemOf(opts))
+  if (res.status === 404) return evictionView(await postMortemOf(opts, 'job_unknown'))
   if (!res.ok) {
     throw new Error(`${opts.label} job poll failed (HTTP ${res.status}): ${await safeText(res)}`)
   }
@@ -174,11 +190,12 @@ function evictionView(detail: string | undefined): RunnerJobView {
 }
 
 /** Run the caller's post-mortem, if any. Best-effort: a diagnostic never fails the poll. */
-async function postMortemOf(opts: {
-  postMortem?: () => Promise<string | undefined>
-}): Promise<string | undefined> {
+async function postMortemOf(
+  opts: { postMortem?: (cause: EvictionCause) => Promise<string | undefined> },
+  cause: EvictionCause,
+): Promise<string | undefined> {
   if (!opts.postMortem) return undefined
-  return opts.postMortem().catch(() => undefined)
+  return opts.postMortem(cause).catch(() => undefined)
 }
 
 /** The inline completion a finished `inline` job records (mirrors the harness `InlineResult`). */

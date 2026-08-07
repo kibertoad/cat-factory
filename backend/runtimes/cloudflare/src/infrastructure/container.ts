@@ -453,6 +453,7 @@ export function selectIncidentEnrichmentDeps(
     new WorkspaceIncidentEnrichmentProvider({
       incidentEnrichmentConnectionRepository,
       secretCipher: incidentEnrichmentSecretCipher,
+      logger,
     }),
   )
   return {

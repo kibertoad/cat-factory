@@ -1,5 +1,105 @@
 # @cat-factory/mcp-server
 
+## 0.21.0
+
+### Minor Changes
+
+- 01bb6d2: Keep the cause of a failed dispatch and a dead durable driver, instead of discarding it at the
+  moment it becomes the only thing anyone wants.
+
+  Three sites had the same shape: the record of a failure was written by the thing that only exists
+  once the failure did not happen.
+
+  A run's `diagnostics.lastDispatch` was stamped from the job HANDLE, which `startJob` returns only
+  after a container has accepted the job. So the two failure classes the block exists to explain, a
+  container that never started and a preflight rejection like "GitHub not connected", were exactly
+  the ones that recorded nothing. The block is now opened before the dispatch from what is already
+  known and refined afterwards by what only the accepted dispatch resolved, and it carries the
+  dispatch's own failure verdict, which the step also holds but loses to the next retry. Inline
+  steps stamp one too, naming their backend `inline`: dispatching nowhere is why they stamped
+  nothing, and the result was a mixed pipeline reporting whatever container step ran last as where
+  the run was when it died.
+
+  The Cloudflare stale-run sweeper answered "the instance was lost, re-create it" for both of its
+  swallowed error paths, so a Workflows API outage read as every stale run losing its instance at
+  once and re-drove the fleet with no log line to say why. The lookup now returns a probe over four
+  states, and the fourth is the point: an instance it could not classify produces no action at all.
+  Every action the sweep has is destructive against a run that is actually fine, so one unclassified
+  tick costs a run some recovery latency where a guess costs it its container. Two states were also
+  reaching the finalize branch by fall-through, Workflows' own `unknown` status and an instance
+  finishing its work before pausing, and a terminal instance's own error, destructured by nobody,
+  now reaches the stop reason that until now said only that some driver ended without finalizing
+  something. An unconfigured workflow binding says so once per isolate rather than reporting the
+  kind as healthy forever.
+
+  The local pooled container poll now passes `postMortem`, the same argument the per-run poll always
+  did, so a pool member that dies mid-run leaves its exit state and log tail behind rather than the
+  bare eviction sentinel.
+
+  Additive on the public API (`info.version` 1.29.0): `diagnostics.lastDispatch` grows an optional
+  `failure` object and `executionBackend` one further value. What does change for a consumer is the
+  population, since a pure-inline run used to answer no diagnostics at all and now answers a block.
+  A new `sweep.run_state_unknown` operational counter reports what the sweeper could not classify,
+  which is the one signal that separates a blind sweeper from a healthy one.
+
+### Patch Changes
+
+- Updated dependencies [01bb6d2]
+  - @cat-factory/sdk@0.23.0
+
+## 0.20.0
+
+### Minor Changes
+
+- eaab22a: Register several NAMED outbound webhooks per workspace, instead of one that each integration overwrites
+
+  `/api/v1/notification-webhook` was one endpoint per workspace, which made a second integration's
+  enrolment a destructive act: registering it replaced whatever was already there, and the only symptom
+  was that the previous receiver went quiet. `GET /api/v1/notification-webhooks` plus
+  `GET|PUT|DELETE /api/v1/notification-webhooks/:webhookId` are the additive fix. The singular routes
+  keep working unchanged and now address the reserved id `default`, which appears in the collection
+  like any other entry, so the two surfaces are two views of one store rather than two stores.
+
+  The endpoint id is CALLER-CHOSEN and `PUT` is idempotent by it. That is what the motivating consumer
+  needs (a credential-holding front-end, the Cloudflare OS gatekeeper of
+  `docs/initiatives/cloudflare-os-gatekeeper.md`): a Worker booting cold writes its own well-known id
+  and is enrolled, whether or not it has ever run, with no id table of its own and no
+  create-or-discover round trip it might be racing a second instance on. A server-minted id would have
+  pushed exactly that state back onto the caller.
+
+  Each endpoint carries its own sealed signing secret and its own three filters, and every rule the
+  singular routes enforce holds identically: the `admin` floor, keep-on-omit in every field, the
+  write-only secret, the SSRF guard at the write boundary and per redirect hop. Deliveries FAN OUT to
+  every subscribed endpoint, concurrently but BOUNDED at six in flight, isolated per endpoint, and
+  sharing ONE wall-clock budget. All three are deliberate: the caller awaits the fan-out on a run's
+  terminal path, so serial delivery would make enrolling a second integration a latency cost on every
+  run; six is the Workers ceiling on simultaneous connections, past which a `fetch` queues invisibly
+  while the delivery's clock runs, so an unbounded fan-out reports failures it never attempted; and a
+  shared failure path would let one permanently broken receiver mask every sibling's health. An
+  endpoint the budget never reached is reported as not attempted rather than as a delivery failure.
+  `deliveryId` is unchanged and carries no endpoint segment, because each receiver only ever sees its
+  own copy.
+
+  Watch for two things in review. `notification_webhooks` is re-keyed to `(workspace_id, id)` on both
+  stores, and neither generator produces a migration that survives existing rows: the D1 side is the
+  usual SQLite rebuild, and drizzle-kit's in-place `ALTER` adds `name` as `NOT NULL` with no default,
+  so both are hand-healed (add nullable, backfill to `default` / `Default`, then constrain). And the
+  per-workspace cap of 10 is a 409 `webhook_limit_reached` that bounds only what CREATES an endpoint,
+  since disabling and deleting are the actions an operator at the cap needs. The cap is enforced in
+  the STORE, because counting in the service and writing a statement later admits two racing
+  enrolments, which is the access pattern this exists for: D1 gets it from one conditional upsert,
+  Postgres from a transaction-scoped advisory lock per workspace.
+
+  Additive on the public surface throughout: four new operations, and two new response fields (`id`,
+  `name`) on a projection consumers already tolerate unknown members of. OpenAPI `info.version` goes to
+  1.25.0 and all four SDK clients, the MCP facade and the gatekeeper bindings pick the operations up
+  from the same generation pass.
+
+### Patch Changes
+
+- Updated dependencies [eaab22a]
+  - @cat-factory/sdk@0.22.0
+
 ## 0.19.0
 
 ### Minor Changes

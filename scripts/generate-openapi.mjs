@@ -176,13 +176,29 @@ const API_PREFIX = '/api/v1'
 // one of them announced itself on the VERSION line, which auto-merged clean to a number main had
 // already used every time. Re-read this line here, not there, after every merge.
 //
-// 1.29.0: `POST /api/v1/keys` accepts an opaque `externalIdentity`, the identity a provisioner is
-// minting a key FOR, echoed on the key resource, on `GET /api/v1/me`, and on both run projections
-// (`publicRun`, `publicJob`) as the identity the run was started for. Additive on every axis: one
-// optional request field, one nullable response field on four projections, and `null` is what
-// every run and key that predates it correctly reports. Re-read this line after any merge rather
-// than trusting that the VERSION auto-merged clean.
-const API_VERSION = '1.29.0'
+// 1.29.0, not 1.28.0: a run's `diagnostics.lastDispatch` gains a `failure` object, and is now
+// stamped for INLINE steps as well as container ones. Additive on the wire: the new object is
+// present only on a dispatch that never reached a running job, `executionBackend` gains one
+// further value (`inline`) in a field already documented as free-form, and every existing field
+// is byte-for-byte unchanged. What DOES change for a consumer is the population: a pure-inline run
+// used to answer `diagnostics: null` on the debug overview and now answers a block, so a client
+// treating "no diagnostics" as "no agent work happened" reads differently. That is the point of
+// the change, and it is stated here rather than left for a reader to discover.
+//
+// SEVENTH number for this one, displaced by the same five as the `observed` paragraph above plus
+// its own `toolServers` CLI record and the webhook collection. Two long-lived branches losing this
+// race independently is the case for reading the note at the top of the block rather than treating
+// it as history.
+//
+// 1.30.0, not 1.29.0: `POST /api/v1/keys` accepts an opaque `externalIdentity`, the identity a
+// provisioner is minting a key FOR, echoed on the key resource, on `GET /api/v1/me`, and on the
+// run projections as the identity the run was started for. Additive on every axis: one optional
+// request field, one nullable response field, and `null` is what every run and key that predates
+// it correctly reports. This branch first claimed 1.29.0, which main then published for the
+// dispatch-`failure` diagnostics above while the branch was in flight: the SECOND number this one
+// has held, and it surfaced here rather than on the VERSION line, which auto-merged clean to the
+// number main had just used. Re-read this line after any merge rather than trusting that.
+const API_VERSION = '1.30.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

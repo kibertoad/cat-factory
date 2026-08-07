@@ -8,8 +8,6 @@ import { log } from './logger.js'
 import {
   type ContextFileInfo,
   type PiRunOutcome,
-  type PiRunStats,
-  type RunDiagnostics,
   CONTEXT_DIR,
   materializeContextFiles,
   materializeSkillResources,
@@ -21,6 +19,7 @@ import {
   writePiModelsConfig,
   writeWebToolsConfig,
 } from './pi.js'
+import type { PiRunStats, RunDiagnostics } from './pi-reduction.js'
 import {
   type ProgressGuardLimits,
   mergeGuardLimits,
@@ -328,6 +327,10 @@ export async function runAgentInWorkspace(
       // The run's tool-call trajectory, the same hook the Pi path feeds — so a subscription run
       // and a proxied one produce the same evidence rather than one of them producing none.
       onSpan: opts.onSpan,
+      // The tool-silence window (stuck-run audit F13), opened by whichever CLI actually runs.
+      // Wired for BOTH subscription harnesses: each reports tool activity on its own stream, so
+      // each can beat the window it opens.
+      beginToolWindow: opts.beginToolWindow,
       // Per-slice review capture, so a parallel review's finished slices are persisted as they
       // land rather than only in the terminal output. Only the subscription runners fan work out
       // across subagents, so this is the only path that can produce it.
@@ -384,7 +387,7 @@ export async function runAgentInWorkspace(
     model: spec.model,
     proxyBaseUrl: phasedProxyBaseUrl(proxyBaseUrl, opts.currentPhase?.(), spec.proxyPhasePath),
   })
-  const { signal, onActivity, onProgress, onSpan } = opts
+  const { signal, onActivity, onProgress, onSpan, beginToolWindow } = opts
   const piOutcome = await runPi({
     cwd: spec.dir,
     model: spec.model,
@@ -394,6 +397,7 @@ export async function runAgentInWorkspace(
     onActivity,
     onProgress,
     onSpan,
+    beginToolWindow,
     expectsEdits: spec.expectsEdits ?? true,
     // Start from the env/built-in defaults and apply only the per-knob overrides the
     // backend set for this kind (loosen-only), so an unspecified knob keeps its default.

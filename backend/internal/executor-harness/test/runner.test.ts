@@ -47,6 +47,7 @@ describe('loadRunnerLimits', () => {
       maxDurationMs: 60 * 60_000,
       inactivityMs: 10 * 60_000,
       coldStartMs: 2 * 60_000,
+      toolSilenceMs: 30 * 60_000,
     })
   })
 
@@ -55,16 +56,42 @@ describe('loadRunnerLimits', () => {
       maxDurationMs: 1000,
       inactivityMs: 10 * 60_000,
       coldStartMs: 2 * 60_000,
+      // Derived from the (now tiny) cap, then clamped up to the inactivity window — see below.
+      toolSilenceMs: 10 * 60_000,
     })
   })
 
   it('allows disabling the cold-start window with 0', () => {
     expect(loadRunnerLimits({ JOB_COLD_START_MS: '0' }).coldStartMs).toBe(0)
   })
+
+  it('derives the tool-silence window from the configured cap rather than a constant', () => {
+    // A deployment that shortens its jobs must get a shorter window too: a fixed 30 minutes
+    // would sit past the whole budget of a 20-minute job, i.e. be silently disabled.
+    const limits = loadRunnerLimits({ JOB_MAX_DURATION_MS: String(20 * 60_000) })
+    expect(limits.toolSilenceMs).toBe(limits.maxDurationMs / 2)
+  })
+
+  it('floors the default tool-silence window at the inactivity window', () => {
+    // A sizing floor, not the thing that keeps the two watchdogs apart: they anchor on
+    // different events, so no relation between the two LENGTHS can order them (and an explicit
+    // `JOB_TOOL_SILENCE_MS` is not floored at all). What actually keeps this watchdog off a
+    // hang is the expiry test in `ToolSilenceWatchdog`, covered in `tool-silence.test.ts` and
+    // end-to-end by the gone-quiet case in `JobRegistry` below.
+    const limits = loadRunnerLimits({
+      JOB_MAX_DURATION_MS: String(60_000),
+      JOB_INACTIVITY_MS: String(50_000),
+    })
+    expect(limits.toolSilenceMs).toBeGreaterThanOrEqual(limits.inactivityMs)
+  })
+
+  it('allows disabling the tool-silence window with 0', () => {
+    expect(loadRunnerLimits({ JOB_TOOL_SILENCE_MS: '0' }).toolSilenceMs).toBe(0)
+  })
 })
 
 describe('JobRegistry', () => {
-  const limits = { maxDurationMs: 60_000, inactivityMs: 60_000, coldStartMs: 0 }
+  const limits = { maxDurationMs: 60_000, inactivityMs: 60_000, coldStartMs: 0, toolSilenceMs: 0 }
 
   it('runs a job to completion and exposes its result', async () => {
     const result: TestResult = { prUrl: 'http://pr/1', branch: 'b', summary: 'done' }
@@ -270,7 +297,7 @@ describe('JobRegistry', () => {
   })
 
   it('aborts a hung job via the inactivity watchdog with a phase + last-tool breadcrumb', async () => {
-    const tiny = { maxDurationMs: 60_000, inactivityMs: 20, coldStartMs: 0 }
+    const tiny = { maxDurationMs: 60_000, inactivityMs: 20, coldStartMs: 0, toolSilenceMs: 0 }
     const registry = new JobRegistry(tiny, (_job, opts: RunOptions) => {
       // Enter the 'agent' phase and run one tool, then go silent — so the kill can report
       // WHERE it hung and which tool last ran, exactly as a wedged Pi process would.
@@ -296,7 +323,7 @@ describe('JobRegistry', () => {
   })
 
   it('reports "no tool had completed yet" when a hang happens before any tool', async () => {
-    const tiny = { maxDurationMs: 60_000, inactivityMs: 20, coldStartMs: 0 }
+    const tiny = { maxDurationMs: 60_000, inactivityMs: 20, coldStartMs: 0, toolSilenceMs: 0 }
     const registry = new JobRegistry(tiny, (_job, opts: RunOptions) => {
       return new Promise<TestResult>((_resolve, reject) => {
         opts.signal?.addEventListener('abort', () => reject(new Error('killed')), { once: true })
@@ -308,7 +335,7 @@ describe('JobRegistry', () => {
   })
 
   it('enforces the max-duration cap even when the job keeps producing output', async () => {
-    const tiny = { maxDurationMs: 30, inactivityMs: 60_000, coldStartMs: 0 }
+    const tiny = { maxDurationMs: 30, inactivityMs: 60_000, coldStartMs: 0, toolSilenceMs: 0 }
     const registry = new JobRegistry(tiny, (_job, opts: RunOptions) => {
       const beat = setInterval(() => opts.onActivity?.(), 5)
       return new Promise<TestResult>((_resolve, reject) => {
@@ -333,7 +360,7 @@ describe('JobRegistry', () => {
   it('flags a cold start (no output within the window) WITHOUT killing the job (D4)', async () => {
     // A short cold-start window, a long inactivity window: the job goes silent from the
     // start, so the cold-start diagnostic fires but the run stays alive.
-    const cold = { maxDurationMs: 60_000, inactivityMs: 60_000, coldStartMs: 15 }
+    const cold = { maxDurationMs: 60_000, inactivityMs: 60_000, coldStartMs: 15, toolSilenceMs: 0 }
     const registry = new JobRegistry(cold, (_job, opts: RunOptions) => {
       opts.onPhase?.('agent')
       return new Promise<TestResult>((_resolve, reject) => {
@@ -349,7 +376,7 @@ describe('JobRegistry', () => {
   })
 
   it('does not flag a cold start when output arrives promptly (D4)', async () => {
-    const cold = { maxDurationMs: 60_000, inactivityMs: 60_000, coldStartMs: 30 }
+    const cold = { maxDurationMs: 60_000, inactivityMs: 60_000, coldStartMs: 30, toolSilenceMs: 0 }
     const registry = new JobRegistry<TestJob, TestResult>(cold, async (_job, opts: RunOptions) => {
       opts.onActivity?.() // first token arrives immediately
       await tick(60)
@@ -364,6 +391,176 @@ describe('JobRegistry', () => {
 // An agent CLI that gives up on a failing upstream request exits NON-ZERO with an empty stderr,
 // which is indistinguishable from a crash by exit status alone. What separates them is how long
 // the run had been quiet — evidence the registry holds and used to drop.
+describe('JobRegistry tool-silence watchdog', () => {
+  // Split from the `JobRegistry` block for the per-function line budget; these all drive the
+  // same registry, through the `beginToolWindow` seam an agent stream uses.
+  // Stuck-run audit F13. The gap these cover: a model that keeps TALKING resets the inactivity
+  // watchdog on every chunk while completing nothing, so before this window the only remaining
+  // bound was the full wall-clock cap (and the engine's ~70-minute poll budget behind it).
+  //
+  // They drive the window through `beginToolWindow`, which is the seam a real agent stream uses.
+  // An earlier cut armed it from the `agent` PHASE instead, and the difference is the whole bug
+  // class: the phase label is a telemetry breadcrumb several call sites mark for work that
+  // completes no tool calls at all, so the window spent most of its time armed over things that
+  // could only ever let it expire (see the three cases below).
+  it('aborts a chatty run that completes no tool call, with its own failure cause', async () => {
+    const tiny = { maxDurationMs: 60_000, inactivityMs: 60_000, coldStartMs: 0, toolSilenceMs: 20 }
+    const registry = new JobRegistry(tiny, (_job, opts: RunOptions) => {
+      opts.onPhase?.('agent')
+      opts.beginToolWindow?.()
+      // Output flows the whole time — this is what makes the inactivity watchdog blind to it.
+      const beat = setInterval(() => opts.onActivity?.(), 5)
+      return new Promise<TestResult>((_resolve, reject) => {
+        opts.signal?.addEventListener(
+          'abort',
+          () => {
+            clearInterval(beat)
+            reject(new Error('killed'))
+          },
+          { once: true },
+        )
+      })
+    })
+    registry.start('exec-1', job())
+    await tick(70)
+    const view = registry.get('exec-1')
+    expect(view?.state).toBe('failed')
+    // Stated as what was observed (output, but nothing completed), not as a hang: the run was
+    // demonstrably alive, which is precisely why the other two watchdogs never fired.
+    expect(view?.error).toMatch(/completed no tool call/)
+    expect(view?.failureCause).toBe('no-tool-progress')
+    expect(view?.detail).toMatch(/Phase timings/)
+  })
+
+  it('keeps a run alive while tool calls keep completing', async () => {
+    const tiny = { maxDurationMs: 60_000, inactivityMs: 60_000, coldStartMs: 0, toolSilenceMs: 40 }
+    const registry = new JobRegistry(tiny, (_job, opts: RunOptions) => {
+      opts.onPhase?.('agent')
+      const window = opts.beginToolWindow?.()
+      const work = setInterval(() => window?.toolCompleted(), 10)
+      return new Promise<TestResult>((resolve) => {
+        setTimeout(() => {
+          clearInterval(work)
+          window?.close()
+          resolve({ summary: 's' })
+        }, 90)
+      })
+    })
+    registry.start('exec-1', job())
+    await tick(130)
+    // Ran well past the window; every completed tool call restarted it.
+    expect(registry.get('exec-1')?.state).toBe('done')
+  })
+
+  it('measures tool progress a stream reports without emitting spans', async () => {
+    // The codex stream carries no structured tool bodies, so it produces no `ToolSpan` at all
+    // while still doing real tool work. Keying the window on the trajectory would have
+    // force-failed every codex pass that outran the window; it is keyed on the window handle,
+    // which that runner beats from its own tool/command/exec events.
+    const tiny = { maxDurationMs: 60_000, inactivityMs: 60_000, coldStartMs: 0, toolSilenceMs: 40 }
+    const registry = new JobRegistry(tiny, (_job, opts: RunOptions) => {
+      opts.onPhase?.('agent')
+      const window = opts.beginToolWindow?.()
+      const work = setInterval(() => {
+        opts.onActivity?.()
+        window?.toolCompleted()
+      }, 10)
+      return new Promise<TestResult>((resolve) => {
+        setTimeout(() => {
+          clearInterval(work)
+          window?.close()
+          resolve({ summary: 's' })
+        }, 90)
+      })
+    })
+    registry.start('exec-1', job())
+    await tick(130)
+    expect(registry.get('exec-1')?.state).toBe('done')
+  })
+
+  it('never arms the window for work that opened none', async () => {
+    // Two shapes at once, and both used to be killed by a phase-armed window: an inline
+    // completion (marks the `agent` phase, has no tool loop at all) and a validation loop's
+    // check commands (which restore the `agent` label between repair passes and then run shell
+    // commands under it). Neither opens a window, so neither can be ended by one.
+    const tiny = { maxDurationMs: 60_000, inactivityMs: 60_000, coldStartMs: 0, toolSilenceMs: 20 }
+    const registry = new JobRegistry(tiny, (_job, opts: RunOptions) => {
+      opts.onPhase?.('agent')
+      const beat = setInterval(() => opts.onActivity?.(), 5)
+      return new Promise<TestResult>((resolve) => {
+        setTimeout(() => {
+          clearInterval(beat)
+          resolve({ summary: 's' })
+        }, 70)
+      })
+    })
+    registry.start('exec-1', job())
+    await tick(110)
+    expect(registry.get('exec-1')?.state).toBe('done')
+  })
+
+  it('closes the window with the stream, so the work after it is unbounded by this watchdog', async () => {
+    // A repair loop runs its agent pass, then re-runs the service's check commands. The pass
+    // closes its window on exit, so the (activity-silent, separately-timed-out) command run
+    // that follows is outside this watchdog by construction rather than by a phase label.
+    const tiny = { maxDurationMs: 60_000, inactivityMs: 60_000, coldStartMs: 0, toolSilenceMs: 20 }
+    const registry = new JobRegistry(tiny, async (_job, opts: RunOptions): Promise<TestResult> => {
+      const window = opts.beginToolWindow?.()
+      window?.toolCompleted()
+      window?.close()
+      // Stands in for the check commands: output flows, no tool call ever completes.
+      const beat = setInterval(() => opts.onActivity?.(), 5)
+      await tick(70)
+      clearInterval(beat)
+      return { summary: 's' }
+    })
+    registry.start('exec-1', job())
+    await tick(110)
+    expect(registry.get('exec-1')?.state).toBe('done')
+  })
+
+  it('leaves a gone-quiet run to the inactivity watchdog even with a shorter window', async () => {
+    // The two timers anchor on different events (last tool call vs last byte of output), so no
+    // arithmetic between their LENGTHS orders them — an operator can set this window below the
+    // inactivity one, and equal windows already put this one first. A window that elapses in
+    // total silence is the hang case, and saying "kept talking, completed nothing" about it
+    // would send an operator looking at the model instead of at the hang.
+    const tiny = { maxDurationMs: 60_000, inactivityMs: 60, coldStartMs: 0, toolSilenceMs: 20 }
+    const registry = new JobRegistry(tiny, (_job, opts: RunOptions) => {
+      opts.onPhase?.('agent')
+      const window = opts.beginToolWindow?.()
+      window?.toolCompleted()
+      // …and then silence: no further output, no further tool calls.
+      return new Promise<TestResult>((_resolve, reject) => {
+        opts.signal?.addEventListener('abort', () => reject(new Error('killed')), { once: true })
+      })
+    })
+    registry.start('exec-1', job())
+    await tick(120)
+    const view = registry.get('exec-1')
+    expect(view?.state).toBe('failed')
+    expect(view?.failureCause).toBe('inactivity-timeout')
+  })
+
+  it('is disabled by a zero window', async () => {
+    const off = { maxDurationMs: 60_000, inactivityMs: 60_000, coldStartMs: 0, toolSilenceMs: 0 }
+    const registry = new JobRegistry(off, (_job, opts: RunOptions) => {
+      opts.onPhase?.('agent')
+      opts.beginToolWindow?.()
+      const beat = setInterval(() => opts.onActivity?.(), 5)
+      return new Promise<TestResult>((resolve) => {
+        setTimeout(() => {
+          clearInterval(beat)
+          resolve({ summary: 's' })
+        }, 70)
+      })
+    })
+    registry.start('exec-1', job())
+    await tick(110)
+    expect(registry.get('exec-1')?.state).toBe('done')
+  })
+})
+
 describe('JobRegistry silent-failure evidence', () => {
   // Only `Date` is faked: the watchdogs' real setTimeout still runs (the tests above depend on
   // it), while the clock can jump far enough for the silence window to be crossed.
@@ -376,7 +573,12 @@ describe('JobRegistry silent-failure evidence', () => {
 
   it('names how long a run had been silent when it dies on a bare non-zero exit', async () => {
     const start = fakeClockAt('2026-07-29T00:00:00Z')
-    const limits = { maxDurationMs: 3_600_000, inactivityMs: 600_000, coldStartMs: 0 }
+    const limits = {
+      maxDurationMs: 3_600_000,
+      inactivityMs: 600_000,
+      coldStartMs: 0,
+      toolSilenceMs: 0,
+    }
     let fail: (err: Error) => void = () => {}
     const registry = new JobRegistry<TestJob, TestResult>(limits, (_job, opts: RunOptions) => {
       opts.onPhase?.('agent')
@@ -405,7 +607,12 @@ describe('JobRegistry silent-failure evidence', () => {
   it('distinguishes a run that never produced any output, and folds in the cold-start diagnostic', async () => {
     const start = fakeClockAt('2026-07-29T00:00:00Z')
     // A cold-start window short enough for its real timer to fire during the test.
-    const limits = { maxDurationMs: 3_600_000, inactivityMs: 600_000, coldStartMs: 15 }
+    const limits = {
+      maxDurationMs: 3_600_000,
+      inactivityMs: 600_000,
+      coldStartMs: 15,
+      toolSilenceMs: 0,
+    }
     let fail: (err: Error) => void = () => {}
     const registry = new JobRegistry<TestJob, TestResult>(limits, (_job, opts: RunOptions) => {
       opts.onPhase?.('agent')
@@ -430,7 +637,12 @@ describe('JobRegistry silent-failure evidence', () => {
 
   it('stays quiet about silence on a fast failure that was never going to have spoken', async () => {
     fakeClockAt('2026-07-29T00:00:00Z')
-    const limits = { maxDurationMs: 3_600_000, inactivityMs: 600_000, coldStartMs: 0 }
+    const limits = {
+      maxDurationMs: 3_600_000,
+      inactivityMs: 600_000,
+      coldStartMs: 0,
+      toolSilenceMs: 0,
+    }
     const registry = new JobRegistry<TestJob, TestResult>(limits, async () => {
       throw new HarnessFailure('git', 'fatal: could not read from remote repository')
     })
@@ -443,7 +655,7 @@ describe('JobRegistry silent-failure evidence', () => {
   })
 
   it('leaves the silence clause off an inactivity kill, whose message already states the window', async () => {
-    const tiny = { maxDurationMs: 60_000, inactivityMs: 20, coldStartMs: 0 }
+    const tiny = { maxDurationMs: 60_000, inactivityMs: 20, coldStartMs: 0, toolSilenceMs: 0 }
     const registry = new JobRegistry<TestJob, TestResult>(tiny, (_job, opts: RunOptions) => {
       opts.onPhase?.('agent')
       return new Promise<TestResult>((_resolve, reject) => {
@@ -461,7 +673,7 @@ describe('JobRegistry silent-failure evidence', () => {
 })
 
 describe('JobRegistry.abortAll', () => {
-  const limits = { maxDurationMs: 60_000, inactivityMs: 60_000, coldStartMs: 0 }
+  const limits = { maxDurationMs: 60_000, inactivityMs: 60_000, coldStartMs: 0, toolSilenceMs: 0 }
 
   it('aborts every running job (graceful shutdown) and skips settled ones', async () => {
     const registry = new JobRegistry<TestJob, TestResult>(limits, (j, opts: RunOptions) => {

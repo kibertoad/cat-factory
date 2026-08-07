@@ -380,6 +380,23 @@ const SWEEP_HARD_STALL_MS = 60 * 60 * 1000
  * per-process `orphanedSince` map.
  */
 const runSweepOrphanedSince = new Map<string, number>()
+/**
+ * Run kinds already reported as unsweepable in this isolate. The condition is a DEPLOYMENT
+ * fault (a workflow binding this build's runs need, not declared in `wrangler.toml`) and it
+ * holds for every stale run of that kind on every tick, so warning per run per tick would
+ * bury the one line that matters under its own repetitions.
+ */
+const warnedUnsweepableKinds = new Set<string>()
+
+/** Warn once per isolate that a run kind has no workflow binding, so the sweeper is blind to it. */
+function warnUnsweepableKind(kind: string): void {
+  if (warnedUnsweepableKinds.has(kind)) return
+  warnedUnsweepableKinds.add(kind)
+  logger.warn('no workflow binding for run kind; its stale runs cannot be swept', {
+    cron: 'stale-run',
+    kind,
+  })
+}
 /** A `running` Kaizen grading older than this is re-driven (its sweep crashed mid-flight). */
 const KAIZEN_STALE_MS = 10 * 60 * 1000
 /** Max Kaizen gradings to run per scheduled pass (each is an LLM call; keep the batch small). */
@@ -551,10 +568,15 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
  */
 function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): void {
   if (env.EXECUTION_WORKFLOW || env.BOOTSTRAP_WORKFLOW || env.ENV_CONFIG_REPAIR_WORKFLOW) {
-    const execLookup = env.EXECUTION_WORKFLOW ? new WorkflowsLookup(env.EXECUTION_WORKFLOW) : null
-    const bootLookup = env.BOOTSTRAP_WORKFLOW ? new WorkflowsLookup(env.BOOTSTRAP_WORKFLOW) : null
+    const sweepLogger = logger.child({ cron: 'stale-run' })
+    const execLookup = env.EXECUTION_WORKFLOW
+      ? new WorkflowsLookup(env.EXECUTION_WORKFLOW, sweepLogger)
+      : null
+    const bootLookup = env.BOOTSTRAP_WORKFLOW
+      ? new WorkflowsLookup(env.BOOTSTRAP_WORKFLOW, sweepLogger)
+      : null
     const repairLookup = env.ENV_CONFIG_REPAIR_WORKFLOW
-      ? new WorkflowsLookup(env.ENV_CONFIG_REPAIR_WORKFLOW)
+      ? new WorkflowsLookup(env.ENV_CONFIG_REPAIR_WORKFLOW, sweepLogger)
       : null
     const execRunner = env.EXECUTION_WORKFLOW
       ? new WorkflowsWorkRunner({ workflow: env.EXECUTION_WORKFLOW, queue: env.EXECUTION_QUEUE })
@@ -576,8 +598,14 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
               : ref.kind === 'env-config-repair'
                 ? repairLookup
                 : execLookup
-          // No binding for this kind → can't classify, so treat as alive (skip).
-          return lookup ? lookup.instanceState(ref.id) : Promise.resolve('alive' as const)
+          // No binding for this kind → nothing can classify this run, now or on any later
+          // tick. `alive` said that in a way indistinguishable from a healthy run, so the
+          // kind was silently exempt from sweeping forever; `unknown` says it and counts it.
+          if (!lookup) {
+            warnUnsweepableKind(ref.kind)
+            return Promise.resolve({ state: 'unknown' as const })
+          }
+          return lookup.instanceState(ref.id)
         },
         redrive: async (ref) => {
           if (ref.kind === 'bootstrap') await bootRunner?.startRun(ref.workspaceId, ref.id)
@@ -588,10 +616,14 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
         // The durable instance is terminal and can't be recreated → finalize the
         // run as stopped so it stops showing `running` forever (also reclaims any
         // leftover container). Reuses the same stop path the user-facing button hits.
-        finalizeOrphan: async (ref) => {
+        finalizeOrphan: async (ref, cause) => {
           const container = buildContainer(env)
-          const reason =
-            'The run was stopped automatically: its durable driver ended without finalizing it.'
+          // The dead instance's own error, when Workflows kept one. Every run this branch
+          // settles otherwise carries the identical sentence, which is the least useful thing
+          // a stopped run can say about why it stopped.
+          const reason = cause
+            ? `The run was stopped automatically: its durable driver ended without finalizing it. It reported: ${cause}`
+            : 'The run was stopped automatically: its durable driver ended without finalizing it.'
           if (ref.kind === 'bootstrap') {
             if (container.bootstrap) {
               await container.bootstrap.service.stop(ref.workspaceId, ref.id, {
@@ -634,9 +666,17 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
       })
         // Surface what the sweep did — the key signal for "are runs getting stuck?"
         // Only log when it actually acted.
-        .then(({ redriven, finalized, stalled }) => {
-          if (redriven > 0 || finalized > 0 || stalled > 0) {
-            logger.warn('swept stuck runs', { cron: 'stale-run', redriven, finalized, stalled })
+        .then(({ redriven, finalized, stalled, unknown }) => {
+          if (redriven > 0 || finalized > 0 || stalled > 0 || unknown > 0) {
+            logger.warn('swept stuck runs', {
+              cron: 'stale-run',
+              redriven,
+              finalized,
+              stalled,
+              // Reported even when nothing else happened: a pass that classified nothing is
+              // the one shape of sweep failure that produces no other evidence at all.
+              unknown,
+            })
           }
         }),
     )
@@ -650,7 +690,10 @@ function redriveStuckAgentRuns(env: Env, tick: SweepTick, clock: SystemClock): v
  */
 function redriveStuckEnvTests(env: Env, tick: SweepTick, clock: SystemClock): void {
   if (env.ENV_TEST_WORKFLOW) {
-    const envTestLookup = new WorkflowsLookup(env.ENV_TEST_WORKFLOW)
+    const envTestLookup = new WorkflowsLookup(
+      env.ENV_TEST_WORKFLOW,
+      logger.child({ cron: 'env-test-sweeper' }),
+    )
     const envTestRunner = new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
     tick.run(
       { name: 'env-test-sweeper', failureMessage: 'env-test sweep failed' },
@@ -658,22 +701,25 @@ function redriveStuckEnvTests(env: Env, tick: SweepTick, clock: SystemClock): vo
         repository: new D1EnvironmentTestRunRepository({ db: env.DB }),
         instanceState: (runId) => envTestLookup.instanceState(runId),
         redrive: (workspaceId, runId) => envTestRunner.startRun(workspaceId, runId),
-        finalizeOrphan: async (workspaceId, runId) => {
+        finalizeOrphan: async (workspaceId, runId, cause) => {
           const container = buildContainer(env)
+          const base =
+            'The environment test was stopped automatically: its durable driver ended without finalizing it.'
           await container.environments?.environmentTest?.expire(
             workspaceId,
             runId,
-            'The environment test was stopped automatically: its durable driver ended without finalizing it.',
+            cause ? `${base} It reported: ${cause}` : base,
           )
         },
         clock,
         leaseMs: SWEEP_LEASE_MS,
-      }).then(({ redriven, finalized }) => {
-        if (redriven > 0 || finalized > 0) {
+      }).then(({ redriven, finalized, unknown }) => {
+        if (redriven > 0 || finalized > 0 || unknown > 0) {
           logger.warn('swept stuck env-test runs', {
             cron: 'env-test-sweeper',
             redriven,
             finalized,
+            unknown,
           })
         }
       }),

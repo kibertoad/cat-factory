@@ -9,17 +9,18 @@ import {
   type TrackedToolCall,
   recordClaudeToolResults,
 } from './tool-trajectory.js'
-import type { Logger } from './logger.js'
+import { log, type Logger } from './logger.js'
+import { NO_TOOL_WINDOW, type ToolProgressWindow } from './tool-silence.js'
 import {
   createCallMetricPublisher,
   publishCallMetric,
   type CallMetricPublisher,
   type HarnessCallMetric,
   type PiRunOutcome,
-  type PiRunStats,
   type TodoProgress,
   type ToolSpan,
 } from './pi.js'
+import type { PiRunStats } from './pi-reduction.js'
 import {
   claudeAllowedToolPatterns,
   codexMcpConfigToml,
@@ -31,6 +32,7 @@ import {
   type SkillSpec,
 } from './agent-capabilities.js'
 import { ProgressGuard, type ProgressGuardLimits } from './progress-guard.js'
+import { BoundedTail, JsonlLineReader } from './jsonl-stream.js'
 import { killChildProcess, spawnDetached } from './process.js'
 import { describeProcessExit } from './process-exit.js'
 import { redact, registerKnownSecrets, secretsToRedact } from './redact.js'
@@ -139,6 +141,18 @@ export interface SubscriptionRunOptions {
    */
   onSpan?: (span: ToolSpan) => void
   /**
+   * Opens this stream's tool-silence window (see `RunOptions.beginToolWindow`), closed when the
+   * CLI exits. Both subscription CLIs report tool activity — claude-code on the `tool_result`
+   * turn that answers each call, codex on its tool/command/exec events — so a window either
+   * opens is one the run can beat. It is deliberately NOT tied to {@link onSpan}: the trajectory
+   * is an observability opt-in, and the codex stream produces none at all while still doing tool
+   * work, which a span-keyed window would have read as a run making no progress.
+   *
+   * A caller with no tool loop (the inline one-shot completion) passes nothing; see the note at
+   * `handleInline`.
+   */
+  beginToolWindow?: () => ToolProgressWindow
+  /**
    * Called with the FULL set of per-slice reviews each time one lands, so the backend can persist
    * a parallel review's completed work as it happens instead of only from the terminal result.
    * A whole value rather than a delta: the set only grows and losing a finished slice's report to
@@ -227,9 +241,10 @@ function streamCli(
     child.stdin.on('error', () => {})
     child.stdin.end(prompt)
 
-    let stderr = ''
+    // 8 KB is well over the 700 B tail anyone quotes below, and the CLI's stderr is diagnostic
+    // noise rather than a product, so a bounded tail is all this ever needed to be.
+    const stderr = new BoundedTail(8_000)
     let aborted = false
-    let lineBuffer = ''
 
     const killChild = (): void => killChildProcess(child)
 
@@ -253,16 +268,9 @@ function streamCli(
       }
     }
 
-    const consumeStdout = (text: string): void => {
-      lineBuffer += text
-      let nl = lineBuffer.indexOf('\n')
-      while (nl !== -1) {
-        const line = lineBuffer.slice(0, nl).trim()
-        lineBuffer = lineBuffer.slice(nl + 1)
-        nl = lineBuffer.indexOf('\n')
-        processLine(line)
-      }
-    }
+    // Bounded framing, shared with `runPi`: an unterminated record must not be able to grow
+    // until parsing it stalls the loop the watchdogs and poll handlers run on (audit F6).
+    const reader = new JsonlLineReader(processLine)
 
     const onAbort = (): void => {
       aborted = true
@@ -272,12 +280,11 @@ function streamCli(
 
     child.stdout.on('data', (chunk: Buffer) => {
       opts.onActivity?.()
-      consumeStdout(chunk.toString())
+      reader.push(chunk.toString())
     })
     child.stderr.on('data', (chunk: Buffer) => {
       opts.onActivity?.()
-      stderr += chunk.toString()
-      if (stderr.length > 8_000) stderr = stderr.slice(-8_000)
+      stderr.push(chunk.toString())
     })
 
     child.on('error', (err) => {
@@ -286,8 +293,19 @@ function streamCli(
     })
     child.on('close', (code, signal) => {
       opts.signal?.removeEventListener('abort', onAbort)
-      const stderrTail = redact(stderr, secrets).slice(-700)
-      if (lineBuffer.trim()) processLine(lineBuffer.trim(), true)
+      const stderrTail = redact(stderr.toString(), secrets).slice(-700)
+      reader.flush()
+      // Surface an oversized record the reader refused to buffer ONCE (a count, not per line),
+      // for the same reason `runPi` does: a dropped record costs this run its progress, its
+      // trajectory and its per-call telemetry for that turn, and a silent loss reads exactly
+      // like a CLI that never emitted it. Falls back to the module logger so the report cannot
+      // depend on a caller having wired a per-job one.
+      if (reader.droppedLines > 0) {
+        ;(opts.log ?? log).warn('agent CLI: skipped oversized JSONL records', {
+          command,
+          oversizedLines: reader.droppedLines,
+        })
+      }
       if (aborted) {
         // Carry the tail on the rejection so a caller that REPLACES this generic message with a
         // more specific cause (the no-progress guard's diagnostic) can still append it — the
@@ -659,6 +677,25 @@ function createClaudeToolTrajectory(
   }
 }
 
+/**
+ * Open this run's tool-silence window, or the inert one when the caller wired no watchdog. One
+ * definition so both runners resolve "is there a watchdog?" identically, and so neither carries
+ * the optional-call noise at the point where it should simply have a window.
+ */
+function openToolWindow(opts: SubscriptionRunOptions): ToolProgressWindow {
+  return opts.beginToolWindow ? opts.beginToolWindow() : NO_TOOL_WINDOW
+}
+
+/**
+ * Whether a claude-code `user` turn carries a `tool_result` block, i.e. whether a tool call just
+ * COMPLETED — the progress the tool-silence watchdog measures. Tested explicitly rather than
+ * taken from "the model sent a user turn", which a plain follow-up prompt also is: a watchdog
+ * reset handed out for work that did nothing is the same as no watchdog.
+ */
+function carriesToolResult(content: unknown[]): boolean {
+  return content.some((block) => isObject(block) && block.type === 'tool_result')
+}
+
 export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRunOutcome> {
   const stats: PiRunStats = { toolCalls: 0, assistantChars: 0 }
   let summary = ''
@@ -739,6 +776,9 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   const progressGuard = createClaudeProgressGuard(opts)
   const { rememberTool, feedGuard, guardAbort } = progressGuard
   const trajectory = createClaudeToolTrajectory(opts, secrets)
+  // This stream's tool-silence window; opened just before the CLI starts and closed in the
+  // `finally` below, so it can only ever be armed while the CLI it watches is running.
+  let toolWindow: ToolProgressWindow = NO_TOOL_WINDOW
 
   const onEvent = (event: Record<string, unknown>, meta?: { final?: boolean }): void => {
     const type = event.type
@@ -776,6 +816,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       // tool_result blocks the harness fed back to the model — part of the next prompt.
       const content = (event.message as Record<string, unknown>).content
       if (Array.isArray(content)) {
+        if (carriesToolResult(content)) toolWindow.toolCompleted()
         sliceTracker.onUser(content)
         planTracker.onUser(content)
         emitProgress()
@@ -824,6 +865,9 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     ? AbortSignal.any([opts.signal, guardAbort.signal])
     : guardAbort.signal
 
+  // Opened around the CLI itself, not around this function: everything above is per-run setup
+  // (the config home, the skills, the MCP config) which completes no tool calls by nature.
+  toolWindow = openToolWindow(opts)
   try {
     const { stderrTail } = await streamCli(
       {
@@ -895,6 +939,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
     }
     throw withAgentReport(err, terminalReport, secrets)
   } finally {
+    toolWindow.close()
     await subagents?.stop()
     await home.dispose()
   }
@@ -1098,6 +1143,30 @@ function claudeUsage(raw: unknown): { inputTokens: number; outputTokens: number 
 // ---------------------------------------------------------------------------
 
 /**
+ * The assistant text a codex event carries, or `''`. Two shapes because the CLI changed its
+ * stream between versions and the harness serves both: the flat `agent_message*` events and the
+ * newer `item.completed` envelope around a message item.
+ */
+function codexAssistantText(event: Record<string, unknown>, type: string): string {
+  const isMessage =
+    type.includes('agent_message') || (type === 'item.completed' && isCodexMessageItem(event))
+  return (isMessage ? extractText(event) : '') ?? ''
+}
+
+/**
+ * Whether a codex event reports tool activity — a substring test because the CLI names these
+ * events differently across versions (`exec_command_end`, `item.*` around a command execution,
+ * `tool_*`) and the harness cares only that SOMETHING ran.
+ *
+ * This is also the tool-silence watchdog's only signal on this stream. Codex exposes no
+ * structured tool bodies, so `runCodex` produces no `ToolSpan` at all, and a window keyed on the
+ * trajectory would have force-failed every codex pass that outran it while the run was working.
+ */
+function isCodexToolActivity(type: string): boolean {
+  return type.includes('tool') || type.includes('command') || type.includes('exec')
+}
+
+/**
  * Run the Codex CLI headlessly against `opts.cwd`, authenticated with the leased
  * ChatGPT `auth.json` bundle written to an isolated CODEX_HOME, talking direct to
  * the ChatGPT backend. Streams `codex exec --json`, mapping plan/todo updates onto
@@ -1158,6 +1227,9 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
   // context into the prompt itself (Claude Code instead rides --append-system-prompt,
   // falling back to this same fold when the prompt overflows argv).
   const prompt = foldSystemPrompt(opts.systemPrompt, opts.userPrompt)
+  // This stream's tool-silence window (see the claude runner for the shape); opened just before
+  // the CLI starts and closed in the `finally` below.
+  let toolWindow: ToolProgressWindow = NO_TOOL_WINDOW
 
   // Codex's `exec --json` is far thinner than Claude Code's stream: it surfaces only
   // flat assistant text and (on `token_count` events) the per-turn `last_token_usage`
@@ -1171,19 +1243,15 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
 
   const onEvent = (event: Record<string, unknown>): void => {
     const type = typeof event.type === 'string' ? event.type : ''
-    if (
-      type.includes('agent_message') ||
-      (type === 'item.completed' && isCodexMessageItem(event))
-    ) {
-      const text = extractText(event)
-      if (text) {
-        stats.assistantChars += text.length
-        summary = text
-        pendingText = text
-      }
+    const text = codexAssistantText(event, type)
+    if (text) {
+      stats.assistantChars += text.length
+      summary = text
+      pendingText = text
     }
-    if (type.includes('tool') || type.includes('command') || type.includes('exec')) {
+    if (isCodexToolActivity(type)) {
       stats.toolCalls += 1
+      toolWindow.toolCompleted()
     }
     const progress = codexPlanProgress(event)
     if (progress && opts.onProgress) opts.onProgress(progress)
@@ -1214,6 +1282,7 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
     }
   }
 
+  toolWindow = openToolWindow(opts)
   try {
     const { stderrTail } = await streamCli(
       {
@@ -1281,6 +1350,7 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
     // stream, not on stderr — so a bad exit carries the last thing the agent said.
     throw withAgentReport(err, summary, secrets)
   } finally {
+    toolWindow.close()
     if (codexHome) {
       // Lift the CLI session transcripts (`sessions/`) out for short-lived retention BEFORE the
       // home is deleted — the credential (`auth.json`) lives at the home root, never in

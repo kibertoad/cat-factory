@@ -6267,6 +6267,24 @@
                                 "executionBackend": {
                                   "type": "string"
                                 },
+                                "failure": {
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "kind": {
+                                      "type": "string"
+                                    },
+                                    "reason": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "at"
+                                  ],
+                                  "type": "object"
+                                },
                                 "model": {
                                   "anyOf": [
                                     {

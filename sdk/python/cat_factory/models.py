@@ -1154,6 +1154,8 @@ class DebugRunOverviewDiagnosticsLastDispatch:
     #: May be absent entirely.
     execution_backend: str | None = None
     #: May be absent entirely.
+    failure: DebugRunOverviewDiagnosticsLastDispatchFailure | None = None
+    #: May be absent entirely.
     model: str | None = None
     #: May be absent entirely.
     repo: DebugRunOverviewDiagnosticsLastDispatchRepo | None = None
@@ -1166,12 +1168,13 @@ class DebugRunOverviewDiagnosticsLastDispatch:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugRunOverviewDiagnosticsLastDispatch":
         """Decode a `DebugRunOverviewDiagnosticsLastDispatch` from its JSON object."""
-        known = {"agentKind", "at", "stepIndex", "executionBackend", "model", "repo"}
+        known = {"agentKind", "at", "stepIndex", "executionBackend", "failure", "model", "repo"}
         return cls(
             agent_kind=data.get("agentKind"),
             at=data.get("at"),
             step_index=data.get("stepIndex"),
             execution_backend=data.get("executionBackend"),
+            failure=None if data.get("failure") is None else DebugRunOverviewDiagnosticsLastDispatchFailure.from_dict(data.get("failure")),
             model=data.get("model"),
             repo=None if data.get("repo") is None else DebugRunOverviewDiagnosticsLastDispatchRepo.from_dict(data.get("repo")),
             extra={k: v for k, v in data.items() if k not in known},
@@ -1185,10 +1188,47 @@ class DebugRunOverviewDiagnosticsLastDispatch:
         out["stepIndex"] = self.step_index
         if self.execution_backend is not None:
             out["executionBackend"] = self.execution_backend
+        if self.failure is not None:
+            out["failure"] = _encode(self.failure)
         if self.model is not None:
             out["model"] = self.model
         if self.repo is not None:
             out["repo"] = _encode(self.repo)
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class DebugRunOverviewDiagnosticsLastDispatchFailure:
+    """`DebugRunOverviewDiagnosticsLastDispatchFailure`, as carried on the wire."""
+
+    at: float
+    kind: str
+    #: May be absent entirely.
+    reason: str | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "DebugRunOverviewDiagnosticsLastDispatchFailure":
+        """Decode a `DebugRunOverviewDiagnosticsLastDispatchFailure` from its JSON object."""
+        known = {"at", "kind", "reason"}
+        return cls(
+            at=data.get("at"),
+            kind=data.get("kind"),
+            reason=data.get("reason"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["at"] = self.at
+        out["kind"] = self.kind
+        if self.reason is not None:
+            out["reason"] = self.reason
         return out
 
 

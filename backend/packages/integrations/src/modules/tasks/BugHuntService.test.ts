@@ -219,3 +219,23 @@ describe('BugHuntService.hunt ranking degradation', () => {
     expect((await hunt.hunt('ws_1', 'jira', { board: 'PROJ' })).analysisStatus).toBe('ranked')
   })
 })
+
+describe('BugHuntService board scope routing', () => {
+  // Every leg here is a plain string, so a source routed to the wrong one fails as "no matching
+  // issues" rather than as the mis-routing it is. That is exactly what happened when `gitlab`
+  // joined the built-ins ahead of a leg of its own, so the routing is pinned per source.
+  it.each([
+    ['jira', 'PROJ', { jiraProjectKey: 'PROJ' }],
+    ['linear', 'team_1', { linearTeamId: 'team_1' }],
+    ['github', 'acme/web', { githubRepo: 'acme/web' }],
+    ['gitlab', 'group/sub/web', { gitlabProject: 'group/sub/web' }],
+    // A deployment-registered source takes the opaque leg only ITS provider interprets.
+    ['acme:servicenow', 'QUEUE-1', { boardId: 'QUEUE-1' }],
+  ] as const)('routes a %s board onto the leg its provider reads', async (source, board, leg) => {
+    const { hunt, queries } = service({ board: [candidate('X-1')] })
+
+    await hunt.hunt('ws_1', source, { board })
+
+    expect(queries[0]!.board).toEqual(leg)
+  })
+})

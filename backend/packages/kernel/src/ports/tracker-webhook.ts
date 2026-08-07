@@ -148,3 +148,4 @@ export function trackerWebhookSecret(credentials: TaskCredentials | undefined): 
  * we ship it", and {@link isTaskSourceKind} answers only "is this a well-formed id".
  */
 export { BUILTIN_TASK_SOURCE_KINDS, isTaskSourceKind } from '@cat-factory/contracts'
+export type { BuiltinTaskSourceKind } from '@cat-factory/contracts'

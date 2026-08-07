@@ -406,11 +406,21 @@ type DebugRunOverviewDiagnosticsLastDispatch struct {
 	At        float64 `json:"at"`
 	// ExecutionBackend may be absent entirely.
 	ExecutionBackend *string `json:"executionBackend,omitempty"`
+	// Failure may be absent entirely.
+	Failure *DebugRunOverviewDiagnosticsLastDispatchFailure `json:"failure,omitempty"`
 	// Model may be absent entirely.
 	Model *string `json:"model,omitempty"`
 	// Repo may be absent entirely.
 	Repo      *DebugRunOverviewDiagnosticsLastDispatchRepo `json:"repo,omitempty"`
 	StepIndex float64                                      `json:"stepIndex"`
+}
+
+// DebugRunOverviewDiagnosticsLastDispatchFailure is the `DebugRunOverviewDiagnosticsLastDispatchFailure` wire model.
+type DebugRunOverviewDiagnosticsLastDispatchFailure struct {
+	At   float64 `json:"at"`
+	Kind string  `json:"kind"`
+	// Reason may be absent entirely.
+	Reason *string `json:"reason,omitempty"`
 }
 
 // DebugRunOverviewDiagnosticsLastDispatchRepo is the `DebugRunOverviewDiagnosticsLastDispatchRepo` wire model.

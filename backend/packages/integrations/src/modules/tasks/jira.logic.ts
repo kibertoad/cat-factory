@@ -6,6 +6,7 @@ import type {
   TaskSourceDescriptor,
   TrackerBoard,
 } from '@cat-factory/kernel'
+import { MAX_CANDIDATE_DESCRIPTION_CHARS } from './tasks.logic.js'
 
 // Jira-specific pure logic, kept out of the worker so it is unit-testable
 // without a live site: parsing an issue key out of user input and converting an
@@ -90,9 +91,6 @@ export function buildJiraIntakeJql(query: IssueIntakeQuery): string {
  */
 export const JIRA_CANDIDATE_FIELDS =
   'summary,description,status,issuetype,priority,labels,created,comment'
-
-/** Cap on a candidate's rendered body; the ranking judges actionability, not the full trace. */
-const MAX_CANDIDATE_DESCRIPTION_CHARS = 1_200
 
 interface JiraCandidateResponse {
   issues?: {

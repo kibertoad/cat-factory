@@ -20,6 +20,10 @@
  *
  *  - `inactivity-timeout` — the inactivity watchdog fired (no agent output for the window).
  *  - `max-duration`       — the overall wall-clock cap fired.
+ *  - `no-tool-progress`   — the tool-silence watchdog fired: the agent kept TALKING but completed
+ *                           no tool call for the window. Distinct from `inactivity-timeout` on
+ *                           purpose, because the two need different fixes: one says the container
+ *                           went quiet, this one says the model rabbit-holed while streaming.
  *  - `agent`              — the agent ran but produced an unusable/failed result, or threw.
  *  - `git`                — a git operation failed (clone/push/merge/PR).
  *  - `api`                — an upstream API call failed (e.g. the GitHub/GitLab PR/MR REST call).
@@ -28,15 +32,25 @@
  *  - `no-usable-output`   — the agent finished but returned no usable report / structured output.
  *  - `no-changes`         — a coding agent finished without producing any change to push.
  */
-export type FailureCause =
-  | 'inactivity-timeout'
-  | 'max-duration'
-  | 'agent'
-  | 'git'
-  | 'api'
-  | 'llm-upstream'
-  | 'no-usable-output'
-  | 'no-changes'
+export const FAILURE_CAUSES = [
+  'inactivity-timeout',
+  'max-duration',
+  'no-tool-progress',
+  'agent',
+  'git',
+  'api',
+  'llm-upstream',
+  'no-usable-output',
+  'no-changes',
+] as const
+
+/**
+ * See {@link FAILURE_CAUSES}. Derived from the array rather than declared beside it so the two
+ * cannot disagree, and so the list is ENUMERABLE at runtime — which is what lets
+ * `failure-cause.conformity.test.ts` check this image's vocabulary against the kernel union that
+ * has to classify it (the two are kept in step by hand; the image can carry no workspace dep).
+ */
+export type FailureCause = (typeof FAILURE_CAUSES)[number]
 
 /**
  * A thrown failure that carries a structured {@link FailureCause}, so a `git` / `api`
@@ -76,4 +90,17 @@ export function inactivityAbortMessage(inactivityMs: number): string {
  */
 export function maxDurationAbortMessage(maxDurationMs: number): string {
   return `Aborted: exceeded max duration of ${Math.round(maxDurationMs / 1000)}s`
+}
+
+/**
+ * The tool-silence-watchdog abort message. Human-readable only, like its two siblings — the
+ * backend reads the structured `no-tool-progress` {@link FailureCause}. Says what it observed
+ * (output, but no completed tool call) rather than "hung": the run was demonstrably alive, which
+ * is exactly why the inactivity watchdog never fired.
+ */
+export function toolSilenceAbortMessage(toolSilenceMs: number): string {
+  return (
+    `Aborted: the agent produced output but completed no tool call for ` +
+    `${Math.round(toolSilenceMs / 1000)}s`
+  )
 }

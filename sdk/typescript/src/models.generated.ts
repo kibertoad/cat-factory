@@ -304,9 +304,16 @@ export interface DebugRunOverviewDiagnosticsLastDispatch {
   agentKind: string
   at: number
   executionBackend?: string
+  failure?: DebugRunOverviewDiagnosticsLastDispatchFailure
   model?: string | null
   repo?: DebugRunOverviewDiagnosticsLastDispatchRepo
   stepIndex: number
+}
+
+export interface DebugRunOverviewDiagnosticsLastDispatchFailure {
+  at: number
+  kind: string
+  reason?: string
 }
 
 export interface DebugRunOverviewDiagnosticsLastDispatchRepo {

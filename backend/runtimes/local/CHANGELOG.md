@@ -1,5 +1,125 @@
 # @cat-factory/local-server
 
+## 0.120.0
+
+### Minor Changes
+
+- 01bb6d2: Keep the cause of a failed dispatch and a dead durable driver, instead of discarding it at the
+  moment it becomes the only thing anyone wants.
+
+  Three sites had the same shape: the record of a failure was written by the thing that only exists
+  once the failure did not happen.
+
+  A run's `diagnostics.lastDispatch` was stamped from the job HANDLE, which `startJob` returns only
+  after a container has accepted the job. So the two failure classes the block exists to explain, a
+  container that never started and a preflight rejection like "GitHub not connected", were exactly
+  the ones that recorded nothing. The block is now opened before the dispatch from what is already
+  known and refined afterwards by what only the accepted dispatch resolved, and it carries the
+  dispatch's own failure verdict, which the step also holds but loses to the next retry. Inline
+  steps stamp one too, naming their backend `inline`: dispatching nowhere is why they stamped
+  nothing, and the result was a mixed pipeline reporting whatever container step ran last as where
+  the run was when it died.
+
+  The Cloudflare stale-run sweeper answered "the instance was lost, re-create it" for both of its
+  swallowed error paths, so a Workflows API outage read as every stale run losing its instance at
+  once and re-drove the fleet with no log line to say why. The lookup now returns a probe over four
+  states, and the fourth is the point: an instance it could not classify produces no action at all.
+  Every action the sweep has is destructive against a run that is actually fine, so one unclassified
+  tick costs a run some recovery latency where a guess costs it its container. Two states were also
+  reaching the finalize branch by fall-through, Workflows' own `unknown` status and an instance
+  finishing its work before pausing, and a terminal instance's own error, destructured by nobody,
+  now reaches the stop reason that until now said only that some driver ended without finalizing
+  something. An unconfigured workflow binding says so once per isolate rather than reporting the
+  kind as healthy forever.
+
+  The local pooled container poll now passes `postMortem`, the same argument the per-run poll always
+  did, so a pool member that dies mid-run leaves its exit state and log tail behind rather than the
+  bare eviction sentinel.
+
+  Additive on the public API (`info.version` 1.29.0): `diagnostics.lastDispatch` grows an optional
+  `failure` object and `executionBackend` one further value. What does change for a consumer is the
+  population, since a pure-inline run used to answer no diagnostics at all and now answers a block.
+  A new `sweep.run_state_unknown` operational counter reports what the sweeper could not classify,
+  which is the one signal that separates a blind sweeper from a healthy one.
+
+- 2b74bd0: Let a mothership open the org credentials a mothership-mode node holds no key for
+
+  Mothership mode splits the encryption keys on purpose: a laptop seals its own agent and model
+  credentials under a local key, and the mothership's `ENCRYPTION_KEY` never travels. That split is
+  what made every sealed-blob repository safe to serve over the persistence RPC, and it is also what
+  left those blobs unreadable on the node. A row a hosted teammate wrote is sealed under the
+  mothership's key, so a mothership-mode node could save an infrastructure connection and never
+  provision with it, save a Datadog connection and never probe with it, and four earlier slices parked
+  a surface rather than ship it broken.
+
+  `POST /internal/secrets/unseal` and `POST /internal/secrets/seal` close that. The node names the
+  ROW, never the ciphertext: it posts a source from a closed table plus the row's identifiers, and the
+  mothership re-reads the authoritative row from its own store, binds the workspace to an account
+  exactly as the persistence RPC does, and decrypts under its own key. A compromised node token can
+  therefore only ask for a value it could already have read had it held the key, in an account it can
+  already reach, which is what keeps this from being a decryption oracle. The seal direction matters
+  just as much: a mothership-mode node provisions environments, and a row it sealed locally would be
+  unopenable by the mothership's own teardown with nothing saying so until a reclaim failed.
+
+  Consumers reach it through one kernel seam, `createOrgSecretCipher`. With no delegate wired (every
+  hosted deployment, and local mode over its own Postgres) it is a pass-through to the facade's own
+  cipher, so nothing changes there.
+
+  With provisioning writes now safe to persist, `environmentRegistryRepository.insert`/`update` join
+  the persistence allow-list, and so does `softDelete`, the tombstone half every re-provision and
+  every reclaim runs. A mothership-mode node therefore provisions, polls and tears down environments
+  for real, and the ephemeral-environment self-test runs end to end. Provisioning and teardown take
+  the delegate together rather than separately: teardown opens the very provision fields provisioning
+  sealed, so a node holding one and not the other could stand infrastructure up and never reclaim it.
+
+  A mothership-mode node may not itself answer the delegation endpoints. They are wired only where a
+  facade holds its own main database, because a node's `ENCRYPTION_KEY` is the local key that seals
+  its own agent credentials, and sealing an org row under it is the split this change removes.
+
+  Behaviour change worth knowing about on an existing mothership-mode node: rows it previously sealed
+  under its LOCAL key are no longer opened locally. Pre-1.0 internals break rather than grow a
+  compatibility path, so re-save an affected environment or observability connection; the key-drift
+  sweep reports them.
+
+  Deliberately still off, and stated in the tracker: the document/task source connections (their
+  repositories decrypt inside, so there is no sealed field for a row-addressed unseal to name), the
+  mothership-side Slack residual, and the sealed-blob consumers a mothership-mode node does not
+  currently drive. Each is a table entry plus service threading on the same pattern, not a new
+  mechanism.
+
+### Patch Changes
+
+- Updated dependencies [01bb6d2]
+- Updated dependencies [f0154ce]
+- Updated dependencies [eac67c5]
+- Updated dependencies [2b74bd0]
+  - @cat-factory/contracts@0.269.0
+  - @cat-factory/kernel@0.267.0
+  - @cat-factory/orchestration@0.235.0
+  - @cat-factory/server@0.247.0
+  - @cat-factory/integrations@0.145.0
+  - @cat-factory/gitlab@0.18.0
+  - @cat-factory/executor-harness@1.98.0
+  - @cat-factory/node-server@0.189.0
+  - @cat-factory/agents@0.117.7
+  - @cat-factory/prompt-fragments@1.0.17
+
+## 0.119.2
+
+### Patch Changes
+
+- Updated dependencies [eaab22a]
+  - @cat-factory/contracts@0.268.0
+  - @cat-factory/kernel@0.266.0
+  - @cat-factory/integrations@0.144.0
+  - @cat-factory/server@0.246.0
+  - @cat-factory/node-server@0.188.0
+  - @cat-factory/agents@0.117.6
+  - @cat-factory/gitlab@0.17.3
+  - @cat-factory/orchestration@0.234.1
+  - @cat-factory/prompt-fragments@1.0.16
+  - @cat-factory/executor-harness@1.96.0
+
 ## 0.119.1
 
 ### Patch Changes

@@ -1,4 +1,5 @@
-import type { HarnessCallMetric, PiRunStats } from './pi.js'
+import type { HarnessCallMetric } from './pi.js'
+import type { PiRunStats } from './pi-reduction.js'
 import type { HarnessKind } from './pi-workspace.js'
 import type { FailureCause } from './failure.js'
 import type { EffortReport } from './effort.js'
