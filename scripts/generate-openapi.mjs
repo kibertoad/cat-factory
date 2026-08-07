@@ -120,11 +120,11 @@ const API_PREFIX = '/api/v1'
 // `extras` bag, which keeps serving them until the window in `public-api.md` closes, so no
 // consumer has to move on this version. 1.20.0 is main's published number as of this branch's last
 // merge; re-read this line after any merge rather than trusting that the VERSION auto-merged clean.
-// 1.23.0: every operation gains `x-min-scope`, the key-scope floor its route enforces (read off
-// each contract's `minScope`; see `withMinScope` in the contracts routes). Additive metadata: no
-// path, shape or vocabulary moves, and a consumer that ignores the extension sees the surface it
-// always saw. It is the floor only: a run-starting operation can still escalate to `decide` at
-// request time when the named pipeline can park.
+// 1.24.0: `PATCH /api/v1/tasks/:taskId` accepts `fields`, the task's per-type bag, merged over
+// what the task already carries. Additive (a new optional request field; a caller that never sends
+// one is unaffected), and it is what makes the pre-dispatch input gate's findings FIXABLE
+// headlessly: four of its seven codes name a field of that bag, and until now the surface named a
+// remedy it did not offer.
 //
 // 1.22.0 belongs to `GET /api/v1/runs/:runId/outcome` and the verification report's new optional
 // `requirements.unmatchedVerdicts`. Two diffs claiming one number is a lie a consumer pinning
@@ -159,7 +159,23 @@ const API_PREFIX = '/api/v1'
 // only because each version step writes its own paragraph here. That is the whole reason the
 // paragraphs exist, and it is why the note at the top of the block says to re-read this line after
 // every merge rather than trust a clean one.
-const API_VERSION = '1.26.0'
+//
+// 1.27.0: the verification report gains a `context` section and the run outcome summary a
+// `sources` one, both saying which linked pages a run's agents read and at which revision.
+// Additive on both surfaces (a new section object beside the existing ones, on two endpoints and
+// inside the PR body's fenced block), and inert for a consumer that ignores it: every section it
+// already reads is byte-for-byte unchanged. `PR_VERIFICATION_REPORT_VERSION` steps to 9 and
+// `RUN_OUTCOME_VERSION` to 2 with it.
+//
+// 1.28.0, not 1.26.0: the outbound webhook becomes a COLLECTION,
+// `GET /api/v1/notification-webhooks` plus `GET|PUT|DELETE /api/v1/notification-webhooks/:webhookId`,
+// beside the singular routes, which keep working and now address the `default` entry. Additive on
+// every axis: four new operations, and two new fields (`id`, `name`) on a response projection a
+// consumer already tolerates unknown members of. FOURTH number this one has held: it claimed
+// 1.25.0, then 1.26.0, then 1.27.0, each published by main while the branch was in flight, and not
+// one of them announced itself on the VERSION line, which auto-merged clean to a number main had
+// already used every time. Re-read this line here, not there, after every merge.
+const API_VERSION = '1.28.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -215,6 +231,7 @@ const COMPONENT_SCHEMAS = {
   // wrapper, the projection inside it (also the write's response) and the write body.
   NotificationWebhook: 'notificationWebhookSchema',
   PublicNotificationWebhook: 'publicNotificationWebhookSchema',
+  PublicNotificationWebhookList: 'publicNotificationWebhookListSchema',
   PutNotificationWebhook: 'putNotificationWebhookSchema',
   PublicUsageRow: 'publicUsageRowSchema',
   PublicUsageBudget: 'publicUsageBudgetSchema',
@@ -285,6 +302,19 @@ const COMPONENT_SCHEMAS = {
   PrReportTests: 'prReportTestsSchema',
   PrReportTestOutcome: 'prReportTestOutcomeSchema',
   PrReportTestConcern: 'prReportTestConcernSchema',
+  PrReportContext: 'prReportContextSchema',
+  PrReportContextDocument: 'prReportContextDocumentSchema',
+  /**
+   * The freshness verdict, hoisted for the reason this whole map exists: it is a VARIANT, so left
+   * inline it ships as `…ContextDocumentFreshnessVariant0/1/2` in four languages, and reordering
+   * the union's members would silently RENUMBER a type a consumer had written code against.
+   */
+  DocumentFreshness: 'documentFreshnessSchema',
+  // Its sibling `documentOriginSchema` is deliberately NOT hoisted beside it: a bare picklist has
+  // no object body, and the SDK emitter renders a hoisted one as an empty `interface`. It stays
+  // an inline enum named after the first path that reaches it, which is what every other
+  // vocabulary on this surface does (`PublicTaskSourceDocumentSource`, `PrReportCiStatus`).
+  // `sdk/typescript/test/contract-conformance.test.ts` is what refuses the empty interface.
   PrReportRequirements: 'prReportRequirementsSchema',
   PrReportEnvironments: 'prReportEnvironmentsSchema',
   PrReportMerge: 'prReportMergeSchema',
@@ -430,6 +460,30 @@ const OPERATION_DOCS = {
     tag: 'Webhook',
     summary: 'Remove the outbound webhook',
     description: 'Deregister the endpoint; deliveries stop. Idempotent.',
+  },
+  listPublicNotificationWebhooks: {
+    tag: 'Webhook',
+    summary: "List the workspace's outbound webhooks",
+    description:
+      'Every endpoint this workspace delivers to, ordered by id. The endpoint the unnamed routes address appears here under the id `default`. Not paginated: the number of endpoints a workspace may register is capped, so the whole set fits in one response. No signing secret is returned for any of them.',
+  },
+  getPublicNamedNotificationWebhook: {
+    tag: 'Webhook',
+    summary: 'Read one named outbound webhook',
+    description:
+      'The endpoint registered under this id, or `{ "webhook": null }` when there is none — the same shape the unnamed read answers, so an integration\'s startup self-check does not branch on a status code. The signing secret is never returned.',
+  },
+  putPublicNamedNotificationWebhook: {
+    tag: 'Webhook',
+    summary: 'Register or update one named outbound webhook',
+    description:
+      'Register an endpoint under an id YOU choose (1-63 characters of lowercase letters, digits, `-` or `_`), or update the one already there. Idempotent by id, so an integration can enroll its own receiver on every cold start without tracking whether it has enrolled before, and without displacing anything else the workspace registered. Every field follows the same keep-on-omit rule as the unnamed route, `url` being required only when there is nothing under this id to keep, and a supplied `secret` rotating this endpoint\'s own signing secret. Refused with `reason: "invalid_webhook_id"` for an id that is not a slug, and `reason: "webhook_limit_reached"` (409) when registering a NEW id would exceed the per-workspace cap; editing an existing one is admitted either way.',
+  },
+  deletePublicNamedNotificationWebhook: {
+    tag: 'Webhook',
+    summary: 'Remove one named outbound webhook',
+    description:
+      "Deregister this endpoint; its deliveries stop and the workspace's other endpoints are untouched. Idempotent.",
   },
   getPublicUsage: {
     tag: 'Usage',

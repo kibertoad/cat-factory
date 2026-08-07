@@ -1,4 +1,9 @@
-import type { NotificationWebhook, PublicNotificationWebhook } from '@cat-factory/contracts'
+import {
+  MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE,
+  type NotificationWebhook,
+  type PublicNotificationWebhook,
+  type PublicNotificationWebhookList,
+} from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 
@@ -16,6 +21,7 @@ import type { ConformanceHarness } from '../harness.js'
 // See backend/docs/adr/0043-public-decision-surface.md.
 
 const ENDPOINT = '/api/v1/notification-webhook'
+const COLLECTION = '/api/v1/notification-webhooks'
 
 /** Mint a public-API key of the given scope and return its bearer header. */
 async function mintKey(
@@ -193,6 +199,148 @@ export function definePublicWebhookConformance(harness: ConformanceHarness): voi
         mineAuth,
       )
       expect(mineRead.body.webhook?.url).toBe('https://hooks.example.com/mine')
+    })
+
+    it('registers several named endpoints without any of them displacing another', async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createOrgWorkspace({ seed: true })
+      const auth = await mintKey(app, workspace.id, 'admin')
+
+      const empty = await app.call<PublicNotificationWebhookList>(
+        'GET',
+        COLLECTION,
+        undefined,
+        auth,
+      )
+      expect(empty.status).toBe(200)
+      expect(empty.body.webhooks).toEqual([])
+
+      // The singular route is the `default` entry, so it must SHOW UP in the collection. If the two
+      // surfaces read different rows, an operator's list would be missing the endpoint that is
+      // actually receiving their deliveries.
+      await app.call('PUT', ENDPOINT, { url: 'https://hooks.example.com/legacy' }, auth)
+      const gatekeeper = await app.call<NotificationWebhook>(
+        'PUT',
+        `${COLLECTION}/gatekeeper`,
+        {
+          url: 'https://gatekeeper.example.com/hook',
+          name: 'Cloudflare OS',
+          runEvents: ['run.completed'],
+          secret: 'a-signing-secret-of-length',
+        },
+        auth,
+      )
+      expect(gatekeeper.status).toBe(200)
+      expect(gatekeeper.body).toMatchObject({
+        id: 'gatekeeper',
+        name: 'Cloudflare OS',
+        url: 'https://gatekeeper.example.com/hook',
+        runEvents: ['run.completed'],
+        hasSecret: true,
+      })
+      // Write-only on this surface too — a per-endpoint secret is no less exfiltratable.
+      expect(JSON.stringify(gatekeeper.body)).not.toContain('a-signing-secret-of-length')
+
+      const listed = await app.call<PublicNotificationWebhookList>(
+        'GET',
+        COLLECTION,
+        undefined,
+        auth,
+      )
+      expect(listed.body.webhooks.map((entry) => entry.id)).toEqual(['default', 'gatekeeper'])
+      expect(listed.body.webhooks.map((entry) => entry.url)).toEqual([
+        'https://hooks.example.com/legacy',
+        'https://gatekeeper.example.com/hook',
+      ])
+      // A registration with no explicit name is labelled by its id, never left blank.
+      expect(listed.body.webhooks[0]).toMatchObject({ id: 'default', name: 'default' })
+
+      // The named read answers the same `{ webhook }` wrapper as the singular one.
+      const named = await app.call<PublicNotificationWebhook>(
+        'GET',
+        `${COLLECTION}/gatekeeper`,
+        undefined,
+        auth,
+      )
+      expect(named.body.webhook).toEqual(gatekeeper.body)
+      const absent = await app.call<PublicNotificationWebhook>(
+        'GET',
+        `${COLLECTION}/never-registered`,
+        undefined,
+        auth,
+      )
+      expect(absent.status).toBe(200)
+      expect(absent.body.webhook).toBeNull()
+
+      // Deleting one leaves its siblings registered. This is the whole point of the collection:
+      // before it, a second integration enrolling silently unregistered the first.
+      expect((await app.call('DELETE', `${COLLECTION}/gatekeeper`, undefined, auth)).status).toBe(
+        204,
+      )
+      const afterDelete = await app.call<PublicNotificationWebhookList>(
+        'GET',
+        COLLECTION,
+        undefined,
+        auth,
+      )
+      expect(afterDelete.body.webhooks.map((entry) => entry.id)).toEqual(['default'])
+      const singularSurvived = await app.call<PublicNotificationWebhook>(
+        'GET',
+        ENDPOINT,
+        undefined,
+        auth,
+      )
+      expect(singularSurvived.body.webhook?.url).toBe('https://hooks.example.com/legacy')
+    })
+
+    it('refuses a malformed id, a key below `admin`, and a registration past the cap', async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createOrgWorkspace({ seed: true })
+      const auth = await mintKey(app, workspace.id, 'admin')
+      const decideAuth = await mintKey(app, workspace.id, 'decide')
+
+      // The collection carries the SAME `admin` floor as the singular routes. A facade that mounted
+      // it without the gate would hand a `decide` key the ability to redirect a workspace's push.
+      expect((await app.call('GET', COLLECTION, undefined, decideAuth)).status).toBe(403)
+      expect(
+        (await app.call('PUT', `${COLLECTION}/x`, { url: 'https://a.example.com/h' }, decideAuth))
+          .status,
+      ).toBe(403)
+      expect((await app.call('DELETE', `${COLLECTION}/x`, undefined, decideAuth)).status).toBe(403)
+
+      const badId = await app.call<{ error: { details?: { reason?: string } } }>(
+        'PUT',
+        `${COLLECTION}/Not%20A%20Slug`,
+        { url: 'https://hooks.example.com/x' },
+        auth,
+      )
+      expect(badId.status).toBe(422)
+      expect(badId.body.error.details?.reason).toBe('invalid_webhook_id')
+
+      for (let i = 0; i < MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE; i++) {
+        const created = await app.call(
+          'PUT',
+          `${COLLECTION}/hook-${i}`,
+          { url: `https://hooks.example.com/${i}` },
+          auth,
+        )
+        expect(created.status).toBe(200)
+      }
+      const overCap = await app.call<{ error: { details?: { reason?: string; limit?: number } } }>(
+        'PUT',
+        `${COLLECTION}/one-too-many`,
+        { url: 'https://hooks.example.com/extra' },
+        auth,
+      )
+      expect(overCap.status).toBe(409)
+      expect(overCap.body.error.details).toMatchObject({
+        reason: 'webhook_limit_reached',
+        limit: MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE,
+      })
+      // Being at the cap must not lock an operator out of the edit that resolves it.
+      expect((await app.call('PUT', `${COLLECTION}/hook-0`, { enabled: false }, auth)).status).toBe(
+        200,
+      )
     })
   })
 }

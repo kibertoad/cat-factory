@@ -19,6 +19,7 @@ function outcome(partial: Partial<RunOutcome> = {}): RunOutcome {
     requirements: { status: 'absent', gap: 'no_tester_step' },
     tests: { status: 'absent', gap: 'no_tester_step' },
     visuals: { status: 'absent', gap: 'no_visual_step', detail: null },
+    sources: { status: 'absent', gap: 'none_linked' },
     checks: [],
     truncations: [],
     ...partial,

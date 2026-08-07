@@ -85,6 +85,11 @@ export function definePublicEvidenceConformance(harness: ConformanceHarness): vo
       expect(report.ci.status).toBe('absent')
       expect(report.ci.note).toBeTruthy()
       expect(report.tests.status).toBe('absent')
+      // Same rule for what the run built FROM: this task linked no page, and the section says so
+      // rather than being omitted, so a consumer can tell "nothing was attached" from a report
+      // written before the section existed.
+      expect(report.context.status).toBe('absent')
+      expect(report.context.note).toBeTruthy()
     })
 
     it("composes a run's OUTCOME summary from the same evidence as its report", async () => {

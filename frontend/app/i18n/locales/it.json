@@ -5487,7 +5487,8 @@
         "ticket_already_linked": "Questo ticket ha già un'attività",
         "document_already_linked": "Documento già allegato",
         "dry_run_not_mergeable": "Una prova non può essere unita",
-        "submission_not_allowed": "Unione non consentita per questa esecuzione"
+        "submission_not_allowed": "Unione non consentita per questa esecuzione",
+        "webhook_limit_reached": "Limite di webhook raggiunto"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -5525,7 +5526,8 @@
         "ticket_already_linked": "Un ticket può sostenere una sola attività, quindi ricollegarlo toglierebbe all'attività esistente il contesto con cui è stata creata. Apri invece quell'attività, oppure scollega prima il ticket.",
         "document_already_linked": "Quel documento è allegato a un'altra attività. Scollegalo prima da lì oppure allega una copia separata.",
         "dry_run_not_mergeable": "Questa pull request proviene da una prova, quindi non può essere unita da qui. Riavvia l’attività come esecuzione reale per produrre una pull request che questo spazio di lavoro unirà.",
-        "submission_not_allowed": "La politica di unione di questa attività non consente al ruolo che ha avviato l'esecuzione di unire questo tipo di modifica. Un collega il cui ruolo lo consente può farlo, oppure un amministratore può ampliare la politica nel preset di unione."
+        "submission_not_allowed": "La politica di unione di questa attività non consente al ruolo che ha avviato l'esecuzione di unire questo tipo di modifica. Un collega il cui ruolo lo consente può farlo, oppure un amministratore può ampliare la politica nel preset di unione.",
+        "webhook_limit_reached": "Questo spazio di lavoro ha già registrato il numero massimo di webhook in uscita. Rimuovine uno che non ti serve più, poi registra di nuovo questo."
       },
       "action": {
         "connectGitHub": "Collega GitHub",
@@ -6125,6 +6127,15 @@
     "ask": {
       "title": "Che cosa era stato chiesto",
       "none": "Questa attività non ha una descrizione, quindi non c'è nulla con cui confrontare l'esito."
+    },
+    "sources": {
+      "title": "Costruito a partire da",
+      "unchecked": "Non verificato con la sorgente.",
+      "noSource": "Nessuna pagina di origine con cui confrontare.",
+      "moved": "Questa pagina è cambiata mentre l'esecuzione era in corso, quindi i passi precedenti hanno letto una revisione più vecchia.",
+      "gap": {
+        "none_linked": "Nessuna pagina è arrivata agli agenti di questa esecuzione, che hanno lavorato solo sulla descrizione dell'attività."
+      }
     },
     "gap": {
       "run_unavailable": "L'esecuzione di questa attività non è stata caricata, quindi le prove che ha registrato non possono essere mostrate qui. Non è la stessa cosa di un'esecuzione che non ha registrato nulla."

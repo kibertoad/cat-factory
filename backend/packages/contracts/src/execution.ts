@@ -16,6 +16,7 @@ import { agentEffortReportSchema } from './agent-effort.js'
 import { foundationalServiceSelectionSchema } from './foundational-services.js'
 import { binaryOutputReportSchema } from './binary-outputs.js'
 import { stepToolServersSchema } from './tool-servers.js'
+import { stepContextDocumentSchema } from './documents.js'
 // The polling-GATE and the human-verdict-gate step-state clusters each live in their own
 // module (the `forkDecision.ts` / `judge.ts` shape); `PipelineStep` composes them back in below.
 import { gateStepStateSchema } from './gate.js'
@@ -1013,6 +1014,24 @@ export const pipelineStepSchema = v.object({
    * names the DISPATCHED kind.
    */
   toolServers: v.optional(stepToolServersSchema),
+  /**
+   * The linked context documents this dispatch put in front of the agent, each with the
+   * freshness verdict the dispatch reached about it — so "which revision of the design did this
+   * run build against" stays answerable once the run is over. The third member of the
+   * pinned-at-dispatch family beside {@link skillVersions} and {@link toolServers}, and recorded
+   * for the same reason: a later reader cannot re-derive it, because re-probing the source
+   * answers about the revision it is at NOW.
+   *
+   * Rewritten by each resolution that records a dispatch (the same gate `selectedFragmentIds`
+   * passes through), so it always describes the tree the step's last dispatch actually read.
+   *
+   * Absent means no linked document reached this step: a task with no attachments and no
+   * document URL in its description (the overwhelming default), a step whose context was
+   * resolved outside the dispatch builder (the inline requirements review assembles its own),
+   * or a run predating the field. All of them are "nothing was read", so absent and an empty
+   * list would state the same fact and the empty array is not written.
+   */
+  contextDocuments: v.optional(v.array(stepContextDocumentSchema)),
   /**
    * The workspace agent-prompt revision this step was PINNED to at dispatch — the sibling of
    * {@link skillVersions}, and pinned for the same reason: what a step ran under must be

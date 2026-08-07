@@ -62,12 +62,12 @@ existed.
 
 Scopes are an ordered, **inclusive** ladder; each rung can do everything below it:
 
-| Scope    | Adds                                                                                                                                                                                                                            |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, a run's [evidence](#run-evidence-report--artifacts), the whole [`/debug` surface](./debug-api.md).                      |
-| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                                                                                                     |
-| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                           |
-| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**), manage the [outbound webhook](#outbound-webhook-push), and [provision keys](#key-provisioning-apiv1keys). |
+| Scope    | Adds                                                                                                                                                                                                                             |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, a run's [evidence](#run-evidence-report--artifacts), the whole [`/debug` surface](./debug-api.md).                       |
+| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                                                                                                      |
+| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                            |
+| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**), manage the [outbound webhook](#outbound-webhooks-push), and [provision keys](#key-provisioning-apiv1keys). |
 
 Two things to know before minting `decide` or `admin`:
 
@@ -772,7 +772,7 @@ there is **no heartbeat**, so a quiet run produces a quiet stream. Event names:
 | `timeout`  | The stream hit its **5-minute** cap; data `{}`. Nothing is wrong; reconnect to keep watching.                                                                |
 
 A revoked key cuts a live stream within ~5 seconds. Streams are per-run reads bounded by their own
-poll; for push at scale, register the [outbound webhook](#outbound-webhook-push) instead.
+poll; for push at scale, register the [outbound webhook](#outbound-webhooks-push) instead.
 
 ### Pipelines & task types (discovery)
 
@@ -1039,11 +1039,22 @@ that never opened a pull request at all (a headless job, or a run that failed be
 those get `run.repo: null` rather than an invented one.
 
 Every section carries `status: "reported" | "absent"` plus a `note`, so _"this pipeline had no
-tester step"_ and _"the tester found nothing"_ never read the same. What it covers: the CI gate's
-verdict and failing checks, the platform's own run of the service's lint/test/build commands with
-the failing output, the red-then-green reproduction proof for a bugfix, the tester's structured
-report, requirement coverage, the throwaway-environment lifecycle, judge verdicts, and the merge
-decision. `truncations` names anything a per-list cap left out.
+tester step"_ and _"the tester found nothing"_ never read the same. What it covers: what the run
+built FROM, the CI gate's verdict and failing checks, the platform's own run of the service's
+lint/test/build commands with the failing output, the red-then-green reproduction proof for a
+bugfix, the tester's structured report, requirement coverage, the throwaway-environment lifecycle,
+judge verdicts, and the merge decision. `truncations` names anything a per-list cap left out.
+
+`context` is the one that answers what the run was working from: each linked document its agents
+read, with the revision the dispatch confirmed it at. `freshness` is the same three-way verdict the
+board surfaces (`confirmed` naming a `version`, `not-applicable` for a body with no source,
+`unconfirmed` naming which of four gaps applies), and an ABSENT `freshness` means the deployment
+runs no freshness check at all, which is not the same fact as a check that ran and could not
+conclude. `movedDuringRun` is computed from the run's own records: the source moved WHILE the run
+was in flight, so its earlier steps built against something its later ones did not read. Nothing
+here is re-probed at read time, by design: the source has moved on since, so a fresh probe would
+answer about a revision no agent on this run ever saw. Added in 1.27.0 (report `version` 9), so a
+consumer written earlier simply does not see the key.
 
 `observability` carries the links back: `runUrl` (the app's panel, for a person), `trajectoryUrl`
 (the run's tool calls in order, on the debug surface) and `reportUrl` (this endpoint). Each is
@@ -1063,10 +1074,19 @@ unaffected.
 reader: the report is a reviewer's bundle (every failing check by name, every captured log tail, the
 merge assessment), and the outcome is the product-language answer for someone reporting what shipped:
 `disposition`, the requester's own `ask`, every pull request the run opened, requirement coverage,
-the tester's verdict and concerns, the views it captured, and the machine checks that recorded a
-verdict. It is the reduction the app's outcome card renders, served verbatim for the same reason the
-report is: one deployment answering a question two ways is how the app and an integration come to
-disagree about what a run did.
+the tester's verdict and concerns, the views it captured, the linked pages its agents built from,
+and the machine checks that recorded a verdict. It is the reduction the app's outcome card renders,
+served verbatim for the same reason the report is: one deployment answering a question two ways is
+how the app and an integration come to disagree about what a run did.
+
+`sources` is the outcome's half of the report's `context`, reduced from the same per-dispatch
+records by the same code, so the card, this endpoint and the pull request cannot disagree about
+which revision a run built from. One row per linked page, carrying the LAST verdict the run
+recorded about it (that is the state the run ended on) plus `movedDuringRun`, which says the source
+changed while the run was in flight and is therefore the one thing that last verdict cannot say.
+`url` is null for an `upload`, which has no source page to open, and a null `freshness` means the
+deployment runs no freshness check at all rather than a check that ran and could not conclude. Its
+`gap` when absent is `none_linked` or `run_unavailable`. Added in 1.27.0 (outcome `version` 2).
 
 Both are composed by the same code over one read of the run's evidence, so the coverage counts
 (`met` / `notMet` / `notCovered` / `regressions` / `total`) and the regression rule are the same
@@ -1074,7 +1094,8 @@ numbers on both endpoints and on the pull request. What differs is the SHAPE, de
 report is bounded to what FITS IN A PULL-REQUEST BODY, a budget of a few dozen rows, so a tally
 taken off its capped tables would be quietly wrong. The outcome's own caps are a ceiling on a
 pathological producer rather than a routine truncation (500 requirement rows, 200 tester areas or
-concerns, 2000 characters of any one free-text field), so an ordinary run is complete.
+concerns, 200 linked-source rows, 2000 characters of any one free-text field), so an ordinary run
+is complete.
 
 Both name what they left out in `truncations`, in one vocabulary
 (`"requirements.entries: showing 500 of 640"`), and **neither endpoint's counts are ever affected**:
@@ -1086,7 +1107,8 @@ so a cut can never leave half a credential in the payload.
 
 Every outcome section is `{ status: "reported" } | { status: "absent", gap }` where
 `gap` is a machine-readable CODE (`no_tester_step`, `tester_not_reported`, `no_verdicts`,
-`no_requirements`, `run_unavailable`) rather than prose, since the platform does not localize:
+`no_requirements`, `none_linked`, `run_unavailable`) rather than prose, since the platform does not
+localize:
 `requirements.spec` says whether coverage was counted against the service's `spec/` (`joined`) or
 only against the ids the tester reported (`not_read`, a narrower denominator), and
 `unmatchedVerdicts` counts rulings the spec could not place, on both endpoints. A spec that
@@ -1172,15 +1194,16 @@ keys, `read` scope. Fully documented in [`debug-api.md`](./debug-api.md).
 
 ### Outbound webhook management
 
-`GET|PUT|DELETE /api/v1/notification-webhook`, `admin` scope: register the endpoint this workspace
-pushes to, read what is registered, or unregister. Documented with the delivery contract it
-configures, in [Outbound webhook](#outbound-webhook-push) below.
+`GET|PUT|DELETE /api/v1/notification-webhook` and the
+`GET /api/v1/notification-webhooks` collection beside it, `admin` scope: register the endpoints this
+workspace pushes to, read what is registered, or unregister. Documented with the delivery contract
+they configure, in [Outbound webhooks](#outbound-webhooks-push) below.
 
-## Outbound webhook (push)
+## Outbound webhooks (push)
 
 Polling has no answer for the two cases that matter most: a parked run waits **indefinitely**, and a
-fully-successful run raises no notification at all. A workspace can register **one** outbound HTTPS
-endpoint and subscribe it to any of three delivery families:
+fully-successful run raises no notification at all. A workspace can register outbound HTTPS
+endpoints and subscribe each to any of three delivery families:
 
 - **Notification cards**: the same cards as `GET /api/v1/notifications`, pushed as they are raised
   and again as they are resolved.
@@ -1209,11 +1232,15 @@ curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: appl
   "$BASE/api/v1/notification-webhook"
 ```
 
-| Route                                 | Scope   | Notes                                                          |
-| ------------------------------------- | ------- | -------------------------------------------------------------- |
-| `GET /api/v1/notification-webhook`    | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when none is set. |
-| `PUT /api/v1/notification-webhook`    | `admin` | Register, edit or rotate. Returns the stored config.           |
-| `DELETE /api/v1/notification-webhook` | `admin` | Unregister. Idempotent, `204`.                                 |
+| Route                                             | Scope   | Notes                                                                  |
+| ------------------------------------------------- | ------- | ---------------------------------------------------------------------- |
+| `GET /api/v1/notification-webhook`                | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when none is set.         |
+| `PUT /api/v1/notification-webhook`                | `admin` | Register, edit or rotate. Returns the stored config.                   |
+| `DELETE /api/v1/notification-webhook`             | `admin` | Unregister. Idempotent, `204`.                                         |
+| `GET /api/v1/notification-webhooks`               | `admin` | `{ "webhooks": [ … ] }`, every endpoint, ordered by id. Not paginated. |
+| `GET /api/v1/notification-webhooks/:webhookId`    | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when that id has none.    |
+| `PUT /api/v1/notification-webhooks/:webhookId`    | `admin` | Register, edit or rotate ONE named endpoint.                           |
+| `DELETE /api/v1/notification-webhooks/:webhookId` | `admin` | Unregister one. Idempotent, `204`; siblings untouched.                 |
 
 `GET` returns the config with `hasSecret: true|false`; the secret itself is **write-only**, sealed
 at rest, never readable back. An `admin` key can rotate the signing secret but never learn the
@@ -1261,6 +1288,52 @@ are followed at most 5 times, each hop re-validated; a cross-origin hop drops th
 headers). For local development, a deployment can relax this with
 `NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS` / `NOTIFICATION_WEBHOOK_ALLOW_HTTP_URLS`
 ([environment variables](../../docs/environment-variables.md)).
+
+### Several endpoints, one per integration
+
+The routes above address **one** endpoint, the one whose id is `default`. A workspace can register
+up to **10**, each with its own URL, its own signing secret and its own three filters, addressed
+under `/api/v1/notification-webhooks/:webhookId`. That is what lets a second integration enroll
+without displacing the first: before the collection existed, registering a receiver overwrote
+whatever was already there, and the only symptom was that the previous one went quiet.
+
+**You choose the id**, and the route is idempotent by it, so a receiver enrolls itself on every cold
+start without tracking whether it has enrolled before and without a create-or-discover round trip it
+might be racing a second instance on. An id is 1-63 characters of lowercase letters, digits, `-` or
+`_`, starting with a letter or digit; anything else is refused with
+`details.reason: "invalid_webhook_id"`.
+
+```sh
+curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: application/json' \
+  -d '{
+    "url": "https://gatekeeper.example.com/cat-factory",
+    "name": "Cloudflare OS gatekeeper",
+    "secret": "<16-200 chars, THIS endpoint’s own signing secret>",
+    "runEvents": ["run.completed", "run.failed"]
+  }' \
+  "$BASE/api/v1/notification-webhooks/gatekeeper"
+```
+
+Everything else is identical to the singular routes: same `admin` floor, same keep-on-omit rule,
+same write-only secret, same SSRF guard, same `webhook_url_required` refusal. The two extras are
+`id` (which the projection now carries, and which the `default` entry reports like any other) and
+`name`, an operator-facing label that defaults to the id.
+
+A delivery **fans out**: every enabled endpoint subscribed to the family gets its own copy, signed
+with its own secret, delivered concurrently (up to six at a time) so a second receiver costs a run's
+settlement no extra latency. One receiver failing costs only its own delivery. `deliveryId` is
+unchanged and carries no endpoint segment: each receiver sees only its own copy, so the key it
+dedupes on is the same one it always was.
+
+The whole fan-out shares ONE retry budget rather than giving each endpoint its own, because the
+budget exists to bound what a run's settlement waits for. Delivery stays best-effort, as it always
+was: if enough subscribed receivers are slow enough to spend that budget between them, the endpoints
+behind them are logged as not attempted rather than delivered late. A receiver that needs a
+guarantee should treat the push as a prompt and reconcile over the polling endpoints.
+
+Registering an 11th endpoint is refused with `409` and
+`details.reason: "webhook_limit_reached"` (`details.limit` carries the cap). Editing or removing an
+existing endpoint is admitted regardless, since those are the actions that resolve it.
 
 ### Delivery contract
 

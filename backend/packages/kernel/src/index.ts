@@ -610,6 +610,8 @@ export {
   type DocumentFreshness,
   type DocumentFreshnessChange,
   type DocumentFreshnessGap,
+  type StepContextDocument,
+  describeFreshnessGap,
   freshnessHeaderLines,
 } from './domain/document-freshness.js'
 
