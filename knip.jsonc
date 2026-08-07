@@ -179,6 +179,13 @@
     "deploy/backend": { "entry": ["src/**/*.ts"] },
     "deploy/node": { "entry": ["src/**/*.ts"] },
     "deploy/local": { "entry": ["src/**/*.ts"] },
+    // `src/index.ts` is the Worker entry; the specs are the second entry, and the fake origin is
+    // read as a SCRIPT STRING by vitest.config.ts rather than imported, so knip cannot see the
+    // edge and would report it as an unused file.
+    "deploy/gatekeeper": {
+      "entry": ["src/index.ts", "test/**/*.ts"],
+      "ignore": ["test/fake-cat-factory.mjs"],
+    },
     "deploy/frontend": {
       // Backs `nuxt typecheck` in the deploy consumer.
       "ignoreDependencies": ["vue-tsc"],
