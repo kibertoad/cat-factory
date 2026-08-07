@@ -297,15 +297,19 @@ const showOriginalDescription = ref(false)
 </script>
 
 <template>
-  <!-- On lg+ the panel is a rail in the board pane's end corner, and it sits BELOW the
-       BoardToolbar rather than beside it (`top-16`, clearing the toolbar's `top-3` pill). The
-       toolbar is centred and grows with its contents, so at some width its end reaches this
-       corner — and the panel, painting later at the same `z-20`, then covers the toolbar's last
-       controls and EATS THEIR CLICKS: the click lands on the panel and no handler runs, which
-       reads as a dead button rather than as two overlapping boxes. Adding the swimlane view
-       control was the width that finally did it, to the notifications bell. Sitting the panel
-       under the chrome fixes the whole class rather than buying room for one more control, and
-       needs no left/right arithmetic to stay correct under RTL. -->
+  <!-- On lg+ the panel is a rail in the board pane's end corner, and it CLEARS the board's top
+       overlay region rather than sitting beside it (`top-16`, below the region's toolbar pill).
+       That region has one owner, `BoardTopOverlays`, and this rail is deliberately not a member:
+       it is an end-anchored side panel, not centred chrome. Clearing the region is how a
+       non-member stays out of the owner's way.
+       Overlapping is not a cosmetic problem. The toolbar is centred and grows with its contents,
+       so at some width its end reaches this corner, and whichever of the two is on top covers the
+       other's controls and EATS THEIR CLICKS: the click lands on the box above and no handler
+       runs, which reads as a dead button rather than as two overlapping boxes. Adding the
+       swimlane view control was the width that finally did it, to the notifications bell (then
+       with the panel on top; the region now paints above at `z-40`, which only swaps which side
+       loses). Sitting the panel below fixes it whichever way the stacking goes, and needs no
+       left/right arithmetic to stay correct under RTL. -->
   <div
     v-if="block && statusMeta && typeMeta"
     data-testid="inspector-panel"
