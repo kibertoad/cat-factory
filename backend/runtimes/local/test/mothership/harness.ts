@@ -16,8 +16,6 @@ import {
   makeOnboardingProbe,
   makeToolServerDispatchProbe,
   makeReadyReviewWithOpenItem,
-  seedMergePresets,
-  type CreateWorkspaceOptions,
 } from '@cat-factory/conformance'
 import {
   type CoreRepositories,
@@ -448,8 +446,9 @@ export function makeMothershipConformanceApp(
     return account
   }
 
-  const createWorkspace = async (o: CreateWorkspaceOptions = {}) =>
-    seedMergePresets(call, o, await seedWorkspace(await freshAccount('WS'), o))
+  async function createWorkspace(options: { name?: string; seed?: boolean } = {}) {
+    return seedWorkspace(await freshAccount('WS'), options)
+  }
 
   async function createOrgWorkspace(options: { name?: string } = {}): Promise<WorkspaceSnapshot> {
     const name = options.name ?? 'Org board'

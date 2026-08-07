@@ -1832,7 +1832,7 @@
         "within_thresholds": "Ogni punteggio rientra nelle soglie {preset}, quindi la PR e' stata unita automaticamente.",
         "exceeded_thresholds": "{axes} ha superato le soglie {preset}, quindi la PR e' in attesa che un umano la unisca.",
         "auto_merge_disabled": "Il preset {preset} invia ogni PR a un umano, quindi questa e' in attesa di revisione.",
-        "no_policy_configured": "Questo deployment non ha alcuna policy di merge configurata, quindi nessuna PR viene unita da sola. Aggiungi un preset di merge per cambiarlo.",
+        "no_policy_configured": "Nessuna policy di merge ha governato questa esecuzione, quindi nessuna PR viene unita da sola. Questo deployment non ha una libreria di preset di merge configurata, cosa che solo un operatore può correggere.",
         "no_rationale": "Il merger ha valutato la PR ma non ha fornito alcuna motivazione, quindi il verdetto non poteva essere ritenuto affidabile per l'unione automatica; la PR e' in attesa che un umano la unisca.",
         "no_assessment": "Il merger non ha restituito una valutazione analizzabile, quindi la PR e' in attesa che un umano la unisca.",
         "merge_failed": "I punteggi rientravano nelle soglie {preset}, ma l'unione automatica non e' riuscita a completarsi (ad esempio protezione del branch o un conflitto), quindi la PR e' in attesa che un umano la unisca.",

@@ -111,6 +111,8 @@ export {
   DEFAULT_MERGE_CLASS_RULES,
   RISK_POLICY_SEEDS,
   seedRiskPolicies,
+  riskPolicyFromSeed,
+  riskPolicySeedRows,
   type RiskPolicySeed,
   DEFAULT_CI_MAX_ATTEMPTS,
   DEFAULT_MAX_REQUIREMENT_ITERATIONS,

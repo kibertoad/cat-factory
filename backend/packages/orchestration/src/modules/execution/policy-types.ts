@@ -19,8 +19,8 @@ import type {
 export interface ResolvedRunRiskPolicy {
   /**
    * The resolved preset's id, absent when the built-in `FALLBACK_RISK_POLICY` was used (no
-   * repository / no default seeded yet) — that fallback is a constant, not a row, and it is the
-   * one policy that auto-merges nothing. Recorded on the merge track record so a decision can be
+   * repository wired): that fallback is a constant, not a row, and it is the one policy that
+   * auto-merges nothing. Recorded on the merge track record so a decision can be
    * read back in its policy context.
    */
   id?: string

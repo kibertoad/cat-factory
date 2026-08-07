@@ -300,9 +300,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // (`resolveRiskPolicy` → the merger/requirements gate), reading the workspace default when
     // the task pins none. Workspace-scoped read on the run path.
     getDefault: { scope: { kind: 'workspace', arg: 0 } },
-    // `RiskPolicyService.list` lazily seeds the built-in default for a workspace that has
-    // none (a write triggered by the board-load read). Member-level (the preset CRUD is not
-    // admin-gated), workspace-scoped — the same policy as the block/pipeline mutations above.
+    // Board CREATION writes the built-in preset library, and `RiskPolicyService` repairs a board
+    // that predates that. Member-level (the preset CRUD is not admin-gated), workspace-scoped:
+    // the same policy as the block/pipeline mutations above.
     upsert: { scope: { kind: 'workspace', arg: 0 } },
     // The preset-library editor reads one preset and deletes it. Both take the workspaceId as
     // arg0 and are member-level (the preset CRUD is not admin-gated), completing the merge-preset
@@ -366,7 +366,8 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // gate) reads the workspace's default model preset for the dispatched agent kind.
     getDefault: { scope: { kind: 'workspace', arg: 0 } },
     // `ModelPresetService.list` lazily seeds the built-in defaults for a workspace that has none
-    // (a write the board-load read triggers), exactly like `riskPolicyRepository.upsert` above.
+    // (a write the board-load read triggers), the same member-level workspace-scoped write as
+    // `riskPolicyRepository.upsert` above.
     upsert: { scope: { kind: 'workspace', arg: 0 } },
     // The model-preset library editor's read-one + delete, the mirror of the merge-preset
     // management pair above. Member-level, workspace-scoped.

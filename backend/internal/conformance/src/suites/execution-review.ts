@@ -521,9 +521,9 @@ function registerMergerDecisionTests(harness: ConformanceHarness): void {
     })
     const { workspace } = await app.createWorkspace()
     const wsId = workspace.id
-    // `createWorkspace` seeded the preset library, so `Balanced` governs and the credibility
-    // backstop is what holds the PR back. On an unseeded workspace the fallback would refuse it
-    // one rung higher up the ladder (`auto_merge_disabled`) and this would pass for that reason.
+    // Creating the board seeded its preset library, so `Balanced` governs and the credibility
+    // backstop is what holds the PR back. With no library at all the fallback would refuse it one
+    // rung higher up the ladder (`no_policy_configured`) and this would pass for that reason.
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Build + merger',
       agentKinds: ['coder', 'merger'],
@@ -572,9 +572,9 @@ function registerMergerDecisionTests(harness: ConformanceHarness): void {
     })
     const { workspace } = await app.createWorkspace()
     const wsId = workspace.id
-    // `createWorkspace` seeded the preset library, so the run resolves the `Balanced` DEFAULT
-    // rather than the unconfigured-deployment fallback, which auto-merges nothing. That fallback
-    // has its own case below.
+    // Nothing has listed this board's presets, and nothing needs to: creating it seeded the
+    // library, so the run resolves the `Balanced` DEFAULT rather than the built-in fallback,
+    // which auto-merges nothing. The case below is the one that pins that.
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Build + merger + trailing gate',
       agentKinds: ['coder', 'merger', 'ci'],
@@ -622,8 +622,8 @@ function registerMergerDecisionTests(harness: ConformanceHarness): void {
     })
     const { workspace } = await app.createWorkspace()
     const wsId = workspace.id
-    // `mp_manual_review` is a real row the task can pin (the resolver reads it back via the
-    // repository, which does not self-seed); read it back to prove the seed landed.
+    // `mp_manual_review` is a real row the task can pin (creating the board wrote the catalog,
+    // and the resolver reads it back through the repository); read it back to prove that landed.
     const presets = await app.call<RiskPolicy[]>('GET', `/workspaces/${wsId}/risk-policies`)
     expect(presets.body.some((p) => p.id === 'mp_manual_review')).toBe(true)
     // Pin the human-review-only preset on the task.
@@ -660,19 +660,21 @@ function registerMergerDecisionTests(harness: ConformanceHarness): void {
     expect(decision.thresholds?.autoMergeEnabled).toBe(false)
   })
 
-  it('auto-merges nothing when the workspace has no merge policy at all, and says so by name', async () => {
-    // The UNRESOLVED posture (`FALLBACK_RISK_POLICY`). `mergePresets: false` is the whole
-    // arrangement: nothing seeds the library, so no row is seeded and nothing — task pin or
-    // workspace default — resolves. The previous fallback was `Balanced` itself, which meant a
-    // deployment that had configured no merge policy still landed pull requests on a model's own
-    // scores; it now refuses instead.
+  it('governs a run on a board nobody has read with the SEEDED default, not the built-in fallback', async () => {
+    // Which policy governs a run may not depend on whether anyone opened the board first.
     //
-    // Driven end-to-end rather than as a resolver unit test because the resolver is injected a
-    // preset directly: only the full path (no seed → repository returns null → fallback →
-    // `MergeResolver`) can show that the absence reaches the decision at all.
+    // The engine resolves a task's preset straight from the repository, so while the library was
+    // written by the first `list()`, a board reached only over the public API (which starts runs
+    // on boards no browser has ever loaded) had none: `getDefault` answered null and the run fell
+    // through to `FALLBACK_RISK_POLICY`, which auto-merges nothing. The same task therefore
+    // merged or waited for a human depending on an unrelated read, and the refusal named a
+    // deployment posture nobody had chosen. Creating the board now writes the library.
+    //
+    // Nothing here reads the presets before the run. That omission IS the assertion: the
+    // maximally-mergeable assessment reaches `done` under the seeded `Balanced`, where a board
+    // waiting to be read would leave it `pr_ready` as `no_policy_configured`.
     const app = harness.makeApp({
       confidence: 1,
-      // Maximally mergeable: 0/0/0 with a real rationale would auto-merge under `Balanced`.
       mergeAssessment: {
         complexity: 0,
         risk: 0,
@@ -680,7 +682,7 @@ function registerMergerDecisionTests(harness: ConformanceHarness): void {
         rationale: 'Trivial, well-tested change.',
       },
     })
-    const { workspace } = await app.createWorkspace({ mergePresets: false })
+    const { workspace } = await app.createWorkspace()
     const wsId = workspace.id
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Build + merger',
@@ -694,24 +696,19 @@ function registerMergerDecisionTests(harness: ConformanceHarness): void {
     expect(start.status).toBe(201)
     const ticked = await app.drive(wsId)
     const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
-    const task = snap.blocks.find((b) => b.id === 'task_login')!
-    expect(task.status).toBe('pr_ready')
-    expect(task.status).not.toBe('done')
+    expect(snap.blocks.find((b) => b.id === 'task_login')!.status).toBe('done')
     const exec = ticked.find((e) => e.blockId === 'task_login')!
     const decision = exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
       outcome?: string
       reason?: string
       thresholds?: { presetName?: string; autoMergeEnabled?: boolean }
     }
-    expect(decision.outcome).toBe('awaiting_review')
-    expect(decision.thresholds?.autoMergeEnabled).toBe(false)
-    // The refusal must NOT read as a preset the workspace could go and edit: `Manual review only`
-    // is a row somebody chose, this is the absence of any choice, and the two need opposite
-    // remedies (edit that preset / configure a policy at all). Both halves say so — the reason
-    // the SPA maps to copy, and the name the banner interpolates.
-    expect(decision.reason).toBe('no_policy_configured')
-    expect(decision.reason).not.toBe('auto_merge_disabled')
-    expect(decision.thresholds?.presetName).toBe('No merge policy configured')
+    expect(decision.outcome).toBe('auto_merged')
+    // Named, not merely truthy: `FALLBACK_RISK_POLICY` also carries a name, and the whole point
+    // of the case is WHICH policy answered.
+    expect(decision.thresholds?.presetName).toBe('Balanced')
+    expect(decision.thresholds?.autoMergeEnabled).toBe(true)
+    expect(decision.reason).not.toBe('no_policy_configured')
   })
 
   it('routes to human review when a task pinned to a strict preset gets an over-threshold assessment', async () => {

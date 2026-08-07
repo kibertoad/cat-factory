@@ -9,11 +9,7 @@ import type {
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
-import {
-  driveWorkspace,
-  seedMergePresets,
-  type CreateWorkspaceOptions,
-} from '@cat-factory/conformance'
+import { driveWorkspace } from '@cat-factory/conformance'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { env } from 'cloudflare:test'
@@ -67,7 +63,7 @@ export interface TestApp {
     path: string,
     headers?: Record<string, string>,
   ): Promise<{ status: number; contentType: string | null; bytes: Uint8Array }>
-  createWorkspace(options?: CreateWorkspaceOptions): Promise<WorkspaceSnapshot>
+  createWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
   /** Create an unseeded workspace owned by a fresh ORG account (via the real services). */
   createOrgWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
   /**
@@ -169,8 +165,10 @@ export function makeApp(
     }
   }
 
-  const createWorkspace = async (o: CreateWorkspaceOptions = {}) =>
-    seedMergePresets(call, o, (await call<WorkspaceSnapshot>('POST', '/workspaces', o)).body)
+  async function createWorkspace(options: { name?: string; seed?: boolean } = {}) {
+    const res = await call<WorkspaceSnapshot>('POST', '/workspaces', options)
+    return res.body
+  }
 
   // Create an org account + owner and a workspace owned by it directly through the
   // container's services — dev-open has no signed-in user, so the HTTP account flow

@@ -24,14 +24,14 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
   describe('merge presets', () => {
     it('seeds the built-in catalog, enforces the single-default invariant, and guards the default', async () => {
       const { call, createWorkspace } = harness.makeApp()
-      // `mergePresets: false`, because LAZY SEEDING is this case's subject: the harness normally
-      // seeds on create (as a board load does), which would make the list below read back a
-      // catalog somebody else had already written.
-      const { workspace } = await createWorkspace({ mergePresets: false })
+      const { workspace } = await createWorkspace()
       const base = `/workspaces/${workspace.id}/risk-policies`
 
-      // First list lazily seeds the whole built-in catalog: Balanced (default, auto-merge on)
-      // and "Manual review only" (non-default, auto-merge OFF).
+      // CREATING the board wrote the whole built-in catalog: Balanced (default, auto-merge on)
+      // and "Manual review only" (non-default, auto-merge OFF). This first read is the first
+      // thing to have listed them, which is the point: the run path resolves a task's governing
+      // preset without listing anything, so a library that only appeared once somebody had read
+      // it would leave a board nobody had opened governed by the built-in fallback.
       const initial = await call<RiskPolicy[]>('GET', base)
       expect(initial.status).toBe(200)
       expect(initial.body).toHaveLength(2)

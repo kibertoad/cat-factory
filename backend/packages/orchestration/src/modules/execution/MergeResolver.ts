@@ -26,6 +26,11 @@ function pct(score: number): string {
   return `${Math.round(score * 100)}%`
 }
 
+/** How a card names the kind of change, when the diff was readable enough to classify it. */
+function changeClassPhrase(changeClass: ChangeClass): string {
+  return changeClass === 'unknown' ? 'this' : `a \`${changeClass}\``
+}
+
 /** The auto-merge ceilings the resolver compares a merger assessment against. */
 interface MergeThresholds {
   /** The resolved preset's id, absent when the built-in constant fallback was used. */
@@ -58,20 +63,92 @@ interface MergeThresholds {
 }
 
 /**
+ * The merge-decision reasons a review card can carry: every reason except the two that MERGED
+ * (which raise no card) and `merge_partial` (which `finalizeMerge` has already reported with its
+ * own enumerated card). Stated by EXCLUSION rather than as a list, so a reason added to the
+ * contract arrives in {@link REVIEW_CARD_LEAD} as a missing key and fails the build until
+ * somebody words it, instead of silently inheriting whichever arm happened to be last.
+ */
+type ReviewCardReason = Exclude<
+  MergeDecision['reason'],
+  'within_thresholds' | 'class_auto_merge' | 'merge_partial'
+>
+
+/**
  * What the review card this resolver raises needs to know beyond the assessment itself: how the
- * diff classified, the track-record row to link, and whether the run was SANDBOXED (which changes
- * what the card says held the PR back, not merely whether it says so).
+ * diff classified, the track-record row to link, and WHY review was needed.
+ *
+ * The reason is the decision's own, not a set of flags re-derived beside it. Each rung of the
+ * precedence ladder refuses for a cause with its own remedy, and a card that described a
+ * different one would send the reader to edit a setting that took no part in the outcome: the
+ * exact failure the ladder itself was written to stop. Carrying booleans instead meant the card
+ * only knew about the rungs somebody had remembered to add one for, and everything else fell
+ * through to a sentence blaming the thresholds.
  */
 interface ReviewCardContext {
   changeClass: ChangeClass
   recordId?: string
-  dryRun?: boolean
-  /**
-   * The initiator's role may not land this class of change. Like `dryRun` it changes what the
-   * card says held the PR back, and for the same reason: the scores were never consulted, so a
-   * card describing them would send the reader to edit a ceiling that had no part in it.
-   */
-  submissionBlocked?: boolean
+  reason: ReviewCardReason
+}
+
+/**
+ * The sentence each refusal leads with. Exhaustive over {@link ReviewCardReason} by type, so the
+ * next rung cannot ship wearing a neighbour's wording.
+ *
+ * Only `exceeded_thresholds` may blame the ceilings, because it is the only reason a ceiling
+ * decided. Every other arm says what actually refused and leaves the scores to the tail
+ * {@link reviewCardBody} appends, where they read as the information they are rather than as the
+ * thing to go and change.
+ */
+const REVIEW_CARD_LEAD: Record<ReviewCardReason, (ctx: ReviewCardContext) => string> = {
+  dry_run: () =>
+    `This was a dry run, so its PR was left open for a human regardless of the assessment.`,
+  submission_not_allowed: (ctx) =>
+    `This task's merge policy does not let the role that started this run land ` +
+    `${changeClassPhrase(ctx.changeClass)} change, so its PR was left open regardless of the ` +
+    `assessment.`,
+  auto_merge_disabled: () =>
+    `This task's merge policy routes every pull request to a human, so this one was left open ` +
+    `regardless of the assessment.`,
+  // The one refusal whose remedy is not a setting to edit: nothing was configured to edit. It
+  // says so plainly and names no ceiling, because the fallback's ceilings are pinned to 0 and
+  // took no part in this (they would read as the strictest policy in the product).
+  no_policy_configured: () =>
+    `No merge policy governed this run, so nothing merged on its own and this PR was left open ` +
+    `for a human. This deployment has no merge preset library wired, so none of the task's ` +
+    `auto-merge ceilings took part in the decision.`,
+  role_requires_review: (ctx) =>
+    `This task's merge policy asks a human to review ${changeClassPhrase(ctx.changeClass)} ` +
+    `change from the role that started this run, so its PR was left open regardless of the ` +
+    `assessment.`,
+  class_requires_review: (ctx) =>
+    `This task's merge policy asks a human to review ${changeClassPhrase(ctx.changeClass)} ` +
+    `change, so its PR was left open regardless of the assessment.`,
+  no_rationale: () =>
+    `The merger returned scores but did not explain them, so its verdict was not trusted to ` +
+    `merge this PR on its own.`,
+  no_assessment: () =>
+    `The merger could not produce a valid assessment for this PR. Review and merge manually.`,
+  exceeded_thresholds: () => `The merger scored this PR outside the task's auto-merge thresholds.`,
+  merge_failed: () =>
+    `The automatic merge for this PR did not go through, so it was left open for a human.`,
+}
+
+/**
+ * The review card's body: why review was needed, then the assessment as supporting information.
+ *
+ * The scores ride the SAME tail on every reason so they never have to double as the explanation.
+ * A rationale is appended only when the merger wrote one, which is exactly what `no_rationale`
+ * reports the absence of.
+ */
+function reviewCardBody(ctx: ReviewCardContext, assessment: MergeAssessment | null): string {
+  const lead = REVIEW_CARD_LEAD[ctx.reason](ctx)
+  if (!assessment) return lead
+  const scores =
+    `complexity ${pct(assessment.complexity)}, risk ${pct(assessment.risk)}, ` +
+    `impact ${pct(assessment.impact)}`
+  const rationale = assessment.rationale.trim()
+  return `${lead} Its scores were ${scores}.${rationale ? ` ${rationale}` : ''}`
 }
 
 /**
@@ -87,7 +164,7 @@ interface MergePrecedenceInput {
   autoMergeEnabled: boolean
   /**
    * A real preset resolved (block pin or workspace default). False means the run fell back to the
-   * built-in `FALLBACK_RISK_POLICY` — the ONLY policy with no id, which is why the id's absence is
+   * built-in `FALLBACK_RISK_POLICY`, the ONLY policy with no id, which is why the id's absence is
    * the signal rather than a guess. It never changes WHAT the ladder decides, only what the
    * refusal is called: the fallback already carries `autoMergeEnabled: false`.
    */
@@ -110,7 +187,7 @@ interface MergePrecedenceVerdict {
   /** The reason to record when the merge lands (unused when `merge` is false). */
   mergeReason: MergeDecision['reason']
   /** The reason to record when it does not (unused when `merge` is true). */
-  reviewReason: MergeDecision['reason']
+  reviewReason: ReviewCardReason
 }
 
 /**
@@ -156,7 +233,7 @@ function resolveMergePrecedence(input: MergePrecedenceInput): MergePrecedenceVer
 }
 
 /** Why review is needed, in the same order {@link resolveMergePrecedence} applies. */
-function reviewReasonFor(input: MergePrecedenceInput): MergeDecision['reason'] {
+function reviewReasonFor(input: MergePrecedenceInput): ReviewCardReason {
   if (input.dryRun) return 'dry_run'
   if (!input.submissionAllowed) return 'submission_not_allowed'
   // Same rung, two names. A deployment that stated no merge policy and a preset that states
@@ -347,11 +424,10 @@ export class MergeResolver {
     // raise sites below differ only in WHY they were reached, and a card that named a different
     // cause on the merge-failure path than on the refusal path would be reporting the resolver's
     // control flow rather than the run's policy.
-    const cardContext = (recordId?: string): ReviewCardContext => ({
+    const cardContext = (reason: ReviewCardReason, recordId?: string): ReviewCardContext => ({
       changeClass: classification.changeClass,
       ...(recordId ? { recordId } : {}),
-      dryRun,
-      submissionBlocked: !submissionAllowed,
+      reason,
     })
 
     const record = (decision: 'auto_merged' | 'pending_review') =>
@@ -386,7 +462,7 @@ export class MergeResolver {
           instance,
           block,
           assessment,
-          cardContext(pending?.id),
+          cardContext('merge_failed', pending?.id),
         )
         return { ...base, outcome: 'awaiting_review', reason: 'merge_failed', exceededAxes }
       }
@@ -398,7 +474,7 @@ export class MergeResolver {
       instance,
       block,
       assessment,
-      cardContext(pending?.id),
+      cardContext(reviewReason, pending?.id),
     )
     return { ...base, outcome: 'awaiting_review', reason: reviewReason, exceededAxes }
   }
@@ -406,9 +482,9 @@ export class MergeResolver {
   /**
    * The track-record context a review card carries so the human can tag in the same tap.
    *
-   * Takes only what it PROJECTS. `dryRun` rides the same {@link ReviewCardContext} the callers
-   * thread, but it changes the card's WORDING rather than its track-record link, so naming it
-   * here would advertise an input this function has no use for.
+   * Takes only what it PROJECTS. The `reason` rides the same {@link ReviewCardContext} the
+   * callers thread, but it decides the card's WORDING rather than its track-record link, so
+   * naming it here would advertise an input this function has no use for.
    */
   private readonly trackContext = (ctx: ReviewCardContext) => ({
     ...(ctx.changeClass !== 'unknown' ? { changeClass: ctx.changeClass } : {}),
@@ -451,29 +527,11 @@ export class MergeResolver {
     track: ReviewCardContext,
   ): Promise<void> {
     if (!this.deps.notificationService) return
-    // A sandboxed run's card must not describe the scores as the thing holding the PR back: they
-    // were never consulted, and a card blaming them sends the reader to edit a ceiling that had
-    // no part in the outcome. Report the assessment as the INFORMATION it is on a dry run, and
-    // say plainly why nothing merged.
-    const scores = assessment
-      ? `complexity ${pct(assessment.complexity)}, risk ${pct(assessment.risk)}, ` +
-        `impact ${pct(assessment.impact)}`
-      : null
-    const body = track.dryRun
-      ? `This was a dry run, so its PR was left open for a human regardless of the assessment.` +
-        (scores && assessment ? ` The merger scored it ${scores}. ${assessment.rationale}` : '')
-      : // Same rule as the sandbox: name the policy that actually held the PR back rather than
-        // the scores nobody consulted. It deliberately does NOT claim the change cannot land: the
-        // PR is real, and a teammate whose role may land this class can merge it from here.
-        track.submissionBlocked
-        ? `This task's merge policy does not let the role that started this run land ` +
-          `${track.changeClass === 'unknown' ? 'this' : `a \`${track.changeClass}\``} change, so ` +
-          `its PR was left open regardless of the assessment.` +
-          (scores && assessment ? ` The merger scored it ${scores}. ${assessment.rationale}` : '')
-        : assessment
-          ? `The merger scored this PR outside the task's auto-merge thresholds ` +
-            `(${scores}). ${assessment.rationale}`
-          : `The merger could not produce a valid assessment for this PR. Review and merge manually.`
+    // Worded from the DECISION's own reason: a card must name the thing that actually held the
+    // PR back, or it sends the reader to edit a setting that took no part in the outcome. The
+    // wording deliberately never claims the change cannot land: the PR is real, and a human who
+    // may land it can merge it from here.
+    const body = reviewCardBody(track, assessment)
     await this.deps.notificationService.raise(workspaceId, {
       type: 'merge_review',
       blockId: block.id,

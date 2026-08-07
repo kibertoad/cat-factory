@@ -1,4 +1,3 @@
-import type { CreateWorkspaceOptions } from './seedMergePresets.js'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type {
@@ -134,7 +133,7 @@ export interface ConformanceApp {
     headers?: Record<string, string>,
   ): Promise<{ status: number; contentType: string | null; bytes: Uint8Array }>
   /** Create (and optionally seed) a workspace, returning its snapshot. */
-  createWorkspace(options?: CreateWorkspaceOptions): Promise<WorkspaceSnapshot>
+  createWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
   /**
    * Whether this harness runs auth-ENABLED — i.e. it has a `config.auth.sessionSecret`, so a
    * signed session resolves to its user and the workspace-RBAC gate actually enforces. The

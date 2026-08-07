@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Block, ExecutionInstance, MergeAssessment } from '@cat-factory/kernel'
+import { FALLBACK_RISK_POLICY } from '@cat-factory/kernel'
 import { MergeResolver, type MergeResolverDeps } from './MergeResolver.js'
 
 // The engine's merge policy in one place: given a merger assessment + the task's resolved
@@ -108,37 +109,47 @@ describe('MergeResolver.resolveMergerStep', () => {
   it('names an UNCONFIGURED deployment apart from a preset that asks for review', async () => {
     // Same rung of the ladder, opposite remedies. The built-in fallback is the one policy with no
     // id (no workspace has a row for it), and reporting it as `auto_merge_disabled` would send the
-    // reader hunting for a preset to edit that their deployment never had.
-    const { resolver, finalizeMerge } = makeResolver({
-      preset: {
-        name: 'No merge policy configured',
-        maxComplexity: 0,
-        maxRisk: 0,
-        maxImpact: 0,
-        autoMergeEnabled: false,
-      },
-    })
+    // reader hunting for a preset to edit that their deployment never had. Driven off the real
+    // constant, so a fallback that ever regained an id or its auto-merge switch fails here.
+    const { resolver, finalizeMerge } = makeResolver({ preset: FALLBACK_RISK_POLICY })
     const decision = await resolver.resolveMergerStep('ws', INSTANCE, assessment())
     expect(decision).toMatchObject({
       outcome: 'awaiting_review',
       reason: 'no_policy_configured',
     })
-    expect(decision?.thresholds.presetName).toBe('No merge policy configured')
+    expect(decision?.thresholds.presetName).toBe(FALLBACK_RISK_POLICY.name)
     expect(finalizeMerge).not.toHaveBeenCalled()
+  })
+
+  it('does not blame the ceilings in the card it raises for an unconfigured deployment', async () => {
+    // The finding this case exists for: the fallback's ceilings are pinned to 0 and took no part
+    // in the decision, so a card reporting the PR as "outside the thresholds" both misattributes
+    // the refusal and contradicts the empty `exceededAxes` beside it.
+    const { resolver, raise } = makeResolver({ preset: FALLBACK_RISK_POLICY })
+    await resolver.resolveMergerStep('ws', INSTANCE, assessment())
+    const body = raise.mock.calls[0]?.[1]?.body as string
+    expect(body).toContain('No merge policy governed this run')
+    expect(body).not.toContain('outside the task')
+    // The scores still ride along as information, which is all they ever were here.
+    expect(body).toContain('complexity 10%')
+  })
+
+  it('names the policy rather than the ceilings when a preset asks for review', async () => {
+    // The neighbouring rung, for the same reason: `Manual review only` refuses on its master
+    // switch, so its ceilings decided nothing either.
+    const { resolver, raise } = makeResolver({
+      preset: { ...PRESET, name: 'Manual', autoMergeEnabled: false },
+    })
+    await resolver.resolveMergerStep('ws', INSTANCE, assessment())
+    const body = raise.mock.calls[0]?.[1]?.body as string
+    expect(body).toContain('routes every pull request to a human')
+    expect(body).not.toContain('outside the task')
   })
 
   it('keeps the unconfigured refusal below a dry run and a submission bar', async () => {
     // The fallback does not climb the ladder: it refuses on the master-switch rung, so a run that
-    // was ALSO sandboxed still reports `dry_run` — the reason a reader has to act on first.
-    const { resolver } = makeResolver({
-      preset: {
-        name: 'No merge policy configured',
-        maxComplexity: 0,
-        maxRisk: 0,
-        maxImpact: 0,
-        autoMergeEnabled: false,
-      },
-    })
+    // was ALSO sandboxed still reports `dry_run`, the reason a reader has to act on first.
+    const { resolver } = makeResolver({ preset: FALLBACK_RISK_POLICY })
     const decision = await resolver.resolveMergerStep(
       'ws',
       { ...INSTANCE, mode: 'dry_run' },

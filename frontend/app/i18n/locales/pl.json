@@ -1263,7 +1263,7 @@
         "within_thresholds": "Wszystkie oceny mieszczą się w progach {preset}, więc PR został scalony automatycznie.",
         "exceeded_thresholds": "{axes} przekroczył progi {preset}, więc PR czeka na scalenie przez człowieka.",
         "auto_merge_disabled": "Ustawienie {preset} kieruje każdy PR do człowieka, więc ten czeka na przegląd.",
-        "no_policy_configured": "To wdrożenie nie ma skonfigurowanej polityki scalania, więc żaden PR nie scala się samodzielnie. Dodaj ustawienie scalania, aby to zmienić.",
+        "no_policy_configured": "Tym uruchomieniem nie rządziła żadna polityka scalania, więc żaden PR nie scala się samodzielnie. To wdrożenie nie ma skonfigurowanej biblioteki ustawień scalania, co może naprawić tylko operator.",
         "no_rationale": "Scalający ocenił PR, ale nie podał uzasadnienia, więc werdyktowi nie można było zaufać na tyle, by scalić automatycznie; PR czeka na scalenie przez człowieka.",
         "no_assessment": "Scalający nie zwrócił możliwej do przetworzenia oceny, więc PR czeka na scalenie przez człowieka.",
         "merge_failed": "Oceny mieściły się w progach {preset}, ale automatyczne scalenie nie mogło się powieść (np. ochrona gałęzi lub konflikt), więc PR czeka na scalenie przez człowieka.",

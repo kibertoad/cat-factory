@@ -5,7 +5,7 @@ import type { ResolvedRunRiskPolicy } from '../execution/policy-types.js'
 
 // ---------------------------------------------------------------------------
 // WHICH merge-threshold preset governs a task: its own pick, else the workspace default, else the
-// built-in `FALLBACK_RISK_POLICY` — which does NOT auto-merge (see the constant).
+// built-in `FALLBACK_RISK_POLICY`, which does NOT auto-merge (see the constant).
 //
 // One implementation, because two readers depend on the answer being the SAME one: the engine
 // resolves it to make the merge decision, and the board's preset-SELECTION guard resolves it to
@@ -48,8 +48,11 @@ export function cachedRiskPolicyRead(
  *
  * An ABSENT repository is not a hole to guard: with no preset library there is nothing for a task
  * to point at, so every task in the deployment is governed by {@link FALLBACK_RISK_POLICY}, whose
- * role layer is empty and therefore holds nobody to anything — and which auto-merges nothing, so
+ * role layer is empty and therefore holds nobody to anything, and which auto-merges nothing, so
  * the deployment that configured no policy lands no PR without a human.
+ *
+ * A wired repository answers from a library the board was seeded with at CREATION, so reaching
+ * the fallback is a deployment-level fact rather than a question of who had read what first.
  */
 export async function resolveRiskPolicy(input: {
   repository: RiskPolicyRepository | undefined
