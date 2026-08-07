@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isSafeDocPath } from './primitives.js'
+import { BLOCK_LEVEL_RUNS_PIPELINES, blockLevelSchema, isSafeDocPath } from './primitives.js'
 
 // isSafeDocPath gates the in-repo path a `document` task's writer commits to verbatim, so a
 // regression that lets `..`, an absolute path, or a non-`.md` target through means an agent can
@@ -50,5 +50,25 @@ describe('isSafeDocPath', () => {
     const long = `${'a/'.repeat(200)}x.md`
     expect(long.length).toBeGreaterThan(300)
     expect(isSafeDocPath(long)).toBe(false)
+  })
+})
+
+// The preset-selection guard asks this Record which blocks in a moved subtree carry a merge
+// policy worth judging. A level missing from it is a hole, not a wrong answer: the move is
+// admitted with nothing to compare. Derive the expectation from the picklist the type comes
+// from, so a new level fails HERE rather than being silently exempt.
+describe('BLOCK_LEVEL_RUNS_PIPELINES', () => {
+  it('classifies every declared block level exactly once', () => {
+    expect(Object.keys(BLOCK_LEVEL_RUNS_PIPELINES).sort()).toEqual(
+      [...blockLevelSchema.options].sort(),
+    )
+  })
+
+  it('names the two levels a run can actually start on', () => {
+    // `task` is the everyday one; `initiative` is the one a `level === 'task'` test silently
+    // exempted, even though an initiative block starts its own planning chain and so resolves a
+    // preset of its own.
+    const runnable = blockLevelSchema.options.filter((level) => BLOCK_LEVEL_RUNS_PIPELINES[level])
+    expect([...runnable].sort()).toEqual(['initiative', 'task'])
   })
 })

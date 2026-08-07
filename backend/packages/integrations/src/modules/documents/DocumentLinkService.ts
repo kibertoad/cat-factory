@@ -9,7 +9,7 @@ import type {
   DocumentOrigin,
   PlanFrame,
 } from '@cat-factory/kernel'
-import type { BlockEditActor } from '@cat-factory/contracts'
+import type { BlockEditAuthority } from '@cat-factory/contracts'
 import { assertFound, ConflictError, ValidationError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
@@ -50,12 +50,12 @@ export class DocumentLinkService {
    *
    * `editor` is whose authority every block below is written under. The STRUCTURE comes from an
    * imported document, but the write is still made by whoever asked for the spawn, so the tier
-   * comes from the caller rather than being decided here (see {@link BlockEditActor}).
+   * comes from the caller rather than being decided here (see {@link BlockEditAuthority}).
    */
   async spawn(
     workspaceId: string,
     plan: DocumentBoardPlan,
-    editor: BlockEditActor,
+    editor: BlockEditAuthority,
     frameId?: string,
   ): Promise<SpawnResult> {
     const result: SpawnResult = { frames: 0, modules: 0, tasks: 0 }
@@ -100,7 +100,7 @@ export class DocumentLinkService {
     frameId: string,
     frame: PlanFrame,
     result: SpawnResult,
-    editor: BlockEditActor,
+    editor: BlockEditAuthority,
   ): Promise<void> {
     for (const task of frame.tasks) {
       await this.addTask(workspaceId, frameId, task, result, editor)
@@ -121,7 +121,7 @@ export class DocumentLinkService {
     containerId: string,
     task: { title: string; description?: string },
     result: SpawnResult,
-    editor: BlockEditActor,
+    editor: BlockEditAuthority,
   ): Promise<void> {
     const created = await this.deps.boardService.addTask(
       workspaceId,

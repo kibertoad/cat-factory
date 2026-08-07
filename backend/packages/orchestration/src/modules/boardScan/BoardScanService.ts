@@ -1,4 +1,4 @@
-import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import type { BlueprintService, BoardScanSpawnResult } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { BoardService } from '../board/BoardService.js'
@@ -47,12 +47,12 @@ export class BoardScanService {
       position: { x: 80, y: 80 },
     })
     // Unattributed: the engine reconciling a blueprint is not a person acting under a workspace
-    // tier, and none of these patches names a merge preset (see `BlockEditActor`).
+    // tier, and none of these patches names a merge preset (see `BlockEditAuthority`).
     await this.deps.boardService.updateBlock(
       workspaceId,
       frame.id,
       { title: service.name, description: describeNode(service.summary, service.references) },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
 
     const planModules = service.modules ?? []
@@ -71,7 +71,7 @@ export class BoardScanService {
           workspaceId,
           moduleBlock.id,
           { description: moduleDescription },
-          UNATTRIBUTED_BLOCK_EDITOR,
+          UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
         )
       }
     }
@@ -106,7 +106,7 @@ export class BoardScanService {
         workspaceId,
         frame.id,
         { description: frameDescription },
-        UNATTRIBUTED_BLOCK_EDITOR,
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       )
     }
 
@@ -145,7 +145,7 @@ export class BoardScanService {
           workspaceId,
           moduleBlock.id,
           { description: moduleDescription },
-          UNATTRIBUTED_BLOCK_EDITOR,
+          UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
         )
       }
     }

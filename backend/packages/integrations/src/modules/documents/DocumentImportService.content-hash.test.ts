@@ -158,10 +158,16 @@ describe('DocumentImportService source-version recording', () => {
     expect(h.upserts()).toBe(1)
 
     version.value = 'v2'
+    h.advance(2000)
     await h.service.import('ws_1', 'confluence', 'PAGE-1')
 
     expect(h.upserts()).toBe(2)
     expect(h.stored()?.sourceVersion).toBe('v2')
+    // …but that write records the TOKEN and nothing else, so `syncedAt` stays put. It means "when
+    // the body was last written", which is how every reader renders it: moving it would put a fresh
+    // timestamp on bytes nobody changed, and the person reading it would conclude their edit had
+    // landed. The two facts have to keep coming apart here, because this is the case where they do.
+    expect(h.stored()?.syncedAt).toBe(1000)
   })
 
   it('stores NULL, not an empty string, for a source that exposes no version', async () => {

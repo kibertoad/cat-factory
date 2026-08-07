@@ -190,6 +190,13 @@ export type OperationalCounter =
    * so the individual line repeats with no remedy anyone intends to apply and gets tuned out. Only
    * a rate says whether agents across the deployment are being handed stale designs more than they
    * were, and the `reason` split is what separates the three different fixes.
+   *
+   * STRICTLY PER-DISPATCH: the same ladder also runs when a PERSON clicks Refresh, and that pass
+   * deliberately does not increment. A click hands no body to any agent, so it cannot be an instance
+   * of what this measures, and the commonest reason to click is that the source was down a moment
+   * ago, so counting it would let one person retrying an outage move a deployment-wide rate as far
+   * as they have patience for, in the exact direction that reads as a worsening fleet. The manual
+   * pass is logged rather than counted (`LinkedDocumentRefreshService`, `trigger` field).
    */
   | 'document.freshness_gap'
 

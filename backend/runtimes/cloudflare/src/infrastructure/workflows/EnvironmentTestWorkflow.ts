@@ -10,6 +10,7 @@ import type { Env } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'
 import { logger } from '../observability/logger'
+import { withWorkflowLogExport } from './logExport'
 import { buildWorkflowRuntime } from './runtime'
 
 /** Params passed to an EnvironmentTestWorkflow instance (its id is the self-test run id). */
@@ -36,11 +37,16 @@ export class EnvironmentTestWorkflow extends WorkflowEntrypoint<
   Env,
   EnvironmentTestWorkflowParams
 > {
-  override async run(
+  override run(
     event: WorkflowEvent<EnvironmentTestWorkflowParams>,
     step: WorkflowStep,
   ): Promise<void> {
-    const { workspaceId, jobId } = event.payload
+    // See BootstrapWorkflow: `run` is the wake's logging bracket, `drive` is the body.
+    return withWorkflowLogExport(this.env, step, (step) => this.drive(event.payload, step))
+  }
+
+  private async drive(params: EnvironmentTestWorkflowParams, step: WorkflowStep): Promise<void> {
+    const { workspaceId, jobId } = params
     const { container, execConfig } = await buildWorkflowRuntime(
       () => ({ container: buildContainer(this.env), execConfig: loadConfig(this.env).execution }),
       step,

@@ -1,5 +1,5 @@
 import type {} from '@cat-factory/kernel'
-import type { AppCaches, Logger, OperationalMetrics } from '@cat-factory/kernel'
+import type { AppCaches, AuditLogReader, Logger, OperationalMetrics } from '@cat-factory/kernel'
 import { ModuleRegistry } from './container/module-registry.js'
 import {
   createSlackModule,
@@ -32,7 +32,7 @@ import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 
 import type { WebhookVerifier } from '@cat-factory/kernel'
 import type {} from '@cat-factory/kernel'
-import type { DocumentContentResolver, LinkedDocumentRefresher } from '@cat-factory/kernel'
+import type { DocumentContentResolver } from '@cat-factory/kernel'
 
 import type {} from '@cat-factory/kernel'
 import type {} from '@cat-factory/kernel'
@@ -77,6 +77,7 @@ import {
   DocumentImportService,
   DocumentPlannerService,
   DocumentLinkService,
+  LinkedDocumentRefreshService,
   TaskConnectionService,
   TaskImportService,
   TaskLinkService,
@@ -150,12 +151,18 @@ export interface DocumentsModule {
   /** Live read seam for document-backed prompt fragments (re-resolved at run time). */
   contentResolver: DocumentContentResolver
   /**
-   * Dispatch-time freshness for a run's LINKED documents: probe each one's source version through the
-   * app cache and re-import the ones that moved, so an agent builds against the current design rather
-   * than the copy import stored. The engine's counterpart to `contentResolver` — that one serves a
-   * fragment's own cached body, this one refreshes the shared projection every reader sees.
+   * Freshness for LINKED documents: probe a document's source version through the app cache and
+   * re-import it if it moved, so a reader gets the current design rather than the copy import
+   * stored. The engine's counterpart to `contentResolver` (that one serves a fragment's own cached
+   * body, this one refreshes the shared projection every reader sees).
+   *
+   * The CONCRETE service rather than the kernel `LinkedDocumentRefresher` port it satisfies,
+   * because it serves two callers with different needs: the engine takes the port (batch, per
+   * dispatch, cache-served) while the HTTP layer calls `refreshNow` for a person asking about one
+   * document. Widening the port with a method the engine never calls would make every
+   * implementation carry the manual half.
    */
-  linkedRefresher: LinkedDocumentRefresher
+  linkedRefresher: LinkedDocumentRefreshService
 }
 
 /** The task-source integration's services, present only when configured. */
@@ -408,6 +415,13 @@ export interface CoreSpine {
    * present (`CoreDependencies.operationalMetrics` is required).
    */
   operationalMetrics: OperationalMetrics
+  /**
+   * The account audit log's READ seam, for the admin viewer's controller (the WRITE seam is
+   * injected into the domain services that record through it and is deliberately not reachable
+   * here). Absent when the facade wired no audit store, which the viewer route reports as a 503
+   * naming the missing capability rather than as an empty log.
+   */
+  auditLogReader?: AuditLogReader
   /**
    * Counts in-app tutorial funnel events. On the SPINE rather than in the optional set, and
    * unconditional, for the same reason `operationalMetrics` is required: an un-wired counter
@@ -809,6 +823,9 @@ export function createCore(injected: CoreDependencies): Core {
     // per-invocation flush need the SAME collector the services count into, and reaching it
     // off the container is what guarantees it is the same one.
     operationalMetrics,
+    // The audit log's READ seam, straight off the injected bag: the viewer's controller resolves
+    // it here, while the WRITE seam goes only to the services that record through it.
+    auditLogReader: dependencies.auditLogReader,
     tutorialTelemetry,
     workspaceService,
     accountService,

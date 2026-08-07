@@ -4,7 +4,7 @@ import type {
   AddModuleInput,
   AddServiceFromRepoInput,
   AddTaskInput,
-  BlockEditActor,
+  BlockEditAuthority,
   ReparentInput,
   ResizeBlockInput,
   UpdateBlockInput,
@@ -51,6 +51,7 @@ import {
   requireWorkspace,
 } from '@cat-factory/kernel'
 import { createBoardLayoutWrites } from './layoutWrites.js'
+import { createBoardReparentWrite } from './reparentWrite.js'
 import { createMountProjection } from './mountProjection.js'
 import { pruneDanglingEdges, reclaimDoomedEntities } from './removal-cascade.js'
 import {
@@ -204,7 +205,7 @@ export interface BoardServiceDependencies {
    * (ADR 0037), so re-pointing a task is a policy decision, not a preference.
    *
    * Absent is not a hole to guard. With no preset library there is nothing for a task to point
-   * at: every task resolves the built-in `DEFAULT_RISK_POLICY`, whose role layer is empty and
+   * at: every task resolves the built-in `FALLBACK_RISK_POLICY`, whose role layer is empty and
    * therefore holds nobody to anything, so the guard is VACUOUS rather than skipped: the same
    * answer it gives on a workspace whose presets treat every initiator alike.
    */
@@ -256,6 +257,11 @@ export class BoardService {
    * the shared block row, and `resizeBlock` layers the child translation on top of that.
    */
   private readonly layout: ReturnType<typeof createBoardLayoutWrites>
+  /**
+   * The reparent write (see reparentWrite.ts): containment rules, the cross-home subtree
+   * migration, and the merge-preset guard on a move that changes which workspace homes the task.
+   */
+  private readonly reparentWrite: ReturnType<typeof createBoardReparentWrite>
   /**
    * The read half of that same frame-geometry split (see mountProjection.ts): resolve this board's
    * mount for a frame, and project it onto anything a mutation hands back.
@@ -355,6 +361,19 @@ export class BoardService {
       resolveBlock: (workspaceId, id) => this.resolveBlock(workspaceId, id),
       frameMount: (workspaceId, block) => this.frameMount(workspaceId, block),
       projectForWorkspace: (workspaceId, block) => this.projectForWorkspace(workspaceId, block),
+      emitBoardChanged: (originWorkspaceId, change) =>
+        this.emitBoardChanged(originWorkspaceId, change),
+    })
+    this.reparentWrite = createBoardReparentWrite({
+      blockRepository,
+      executionRepository,
+      serviceRepository,
+      workspaceMountRepository,
+      riskPolicySelection: this.riskPolicySelection,
+      requireWorkspace: (id) => this.requireWorkspace(id),
+      resolveBlock: (id, blockId) => this.resolveBlock(id, blockId),
+      serviceForContainer: (blocks, container) => this.serviceForContainer(blocks, container),
+      assertTaskTypeAllowed: (frame, taskType) => this.assertTaskTypeAllowed(frame, taskType),
       emitBoardChanged: (originWorkspaceId, change) =>
         this.emitBoardChanged(originWorkspaceId, change),
     })
@@ -743,27 +762,29 @@ export class BoardService {
    * `editor` is who is creating it, for the merge-preset selection guard: authoring a task
    * straight onto a permissive preset moves it off the workspace default that would otherwise
    * have governed it, so creation is the same decision as a later swap and takes the same check.
-   * Pass `UNATTRIBUTED_BLOCK_EDITOR` for a caller with no workspace tier (see its doc).
+   * Pass `UNATTRIBUTED_BLOCK_EDIT_AUTHORITY` for a caller with no workspace tier (see its doc).
    */
   async addTask(
     workspaceId: string,
     containerId: string,
     input: AddTaskInput,
-    editor: BlockEditActor,
+    editor: BlockEditAuthority,
     createdBy?: string | null,
   ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
-    // Before any side effect, and against the workspace default: a task does not exist yet, so
-    // the policy this creation is moving AWAY from is the one it would have resolved unpicked.
-    await this.riskPolicySelection.assertMaySelect({
-      workspaceId,
-      actor: editor,
-      currentId: null,
-      nextId: input.riskPolicyId,
-    })
     // The container may be a frame/module of a service mounted from another workspace; create
     // the task in that service's home workspace so it joins the one shared subtree.
     const { homeWorkspaceId, block: container } = await this.resolveBlock(workspaceId, containerId)
+    // Before any side effect, and against the HOME workspace's default: a task does not exist
+    // yet, so the policy this creation is moving AWAY from is the one it would have resolved
+    // unpicked, in the library the row is about to land in, which for a mounted foreign service
+    // is not the board this request was addressed to.
+    await this.riskPolicySelection.assertMaySelect({
+      homeWorkspaceId,
+      authority: editor,
+      currentId: null,
+      nextId: input.riskPolicyId,
+    })
     if (container.level === 'task') {
       throw new ValidationError('Tasks cannot contain other tasks')
     }
@@ -934,7 +955,7 @@ export class BoardService {
     workspaceId: string,
     serviceId: string,
     input: AddTaskInput,
-    editor: BlockEditActor,
+    editor: BlockEditAuthority,
   ): Promise<Block> {
     return this.publicReads.addServiceTask(workspaceId, serviceId, input, editor)
   }
@@ -1107,13 +1128,13 @@ export class BoardService {
 
   /**
    * Apply a patch to a block. `editor` is who is applying it, for the merge-preset selection
-   * guard (see {@link addTask}); pass `UNATTRIBUTED_BLOCK_EDITOR` for a caller with no tier.
+   * guard (see {@link addTask}); pass `UNATTRIBUTED_BLOCK_EDIT_AUTHORITY` for a caller with no tier.
    */
   async updateBlock(
     workspaceId: string,
     id: string,
     patch: UpdateBlockInput,
-    editor: BlockEditActor,
+    editor: BlockEditAuthority,
     originConnectionId?: string | null,
   ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
@@ -1124,8 +1145,8 @@ export class BoardService {
     // `riskPolicyId` is not a selection.
     if (patch.riskPolicyId !== undefined) {
       await this.riskPolicySelection.assertMaySelect({
-        workspaceId,
-        actor: editor,
+        homeWorkspaceId,
+        authority: editor,
         currentId: block.riskPolicyId,
         nextId: patch.riskPolicyId,
       })
@@ -1170,119 +1191,23 @@ export class BoardService {
     return this.projectForWorkspace(workspaceId, updated)
   }
 
-  /** Move a block into a new container at a new local position. */
-  async reparent(
+  /**
+   * Move a block into a new container at a new local position. Thin delegate to the collaborator
+   * that owns the containment rules and the cross-home subtree migration (see reparentWrite.ts).
+   *
+   * `editor` is who is moving it, for the merge-preset guard: a cross-home move carries the task
+   * to a workspace whose preset library re-decides which policy governs its runs, which is the
+   * same decision {@link updateBlock} judges when the id changes instead of the home. Pass
+   * `UNATTRIBUTED_BLOCK_EDIT_AUTHORITY` for a caller with no workspace tier (see its doc).
+   */
+  reparent(
     workspaceId: string,
     id: string,
     input: ReparentInput,
+    editor: BlockEditAuthority,
     originConnectionId?: string | null,
   ): Promise<Block> {
-    await this.requireWorkspace(workspaceId)
-    const { homeWorkspaceId: blockHome, block } = await this.resolveBlock(workspaceId, id)
-    if (id === input.parentId) throw new ValidationError('A block cannot contain itself')
-    const { homeWorkspaceId: parentHome, block: parent } = await this.resolveBlock(
-      workspaceId,
-      input.parentId,
-    )
-    if (!canReparent(block.level, parent)) {
-      throw new ValidationError(`A ${block.level} cannot be placed inside a ${parent.level}`)
-    }
-
-    // The destination's enclosing frame drives two things: the doc-repo task gate (same as
-    // addTask — drag-drop must not smuggle a feature/bug/recurring task into a doc frame) and
-    // the moved task's inherited `type`, which is behavioural for the frame repo roles. Load
-    // the parent's workspace blocks once here; the branches below reuse this list.
-    const destBlocks = await this.blockRepository.listByWorkspace(parentHome)
-    const destFrame = serviceOf(destBlocks, parent)
-    if (block.level === 'task') {
-      this.assertTaskTypeAllowed(destFrame, block.taskType)
-    }
-    // A task inherits its enclosing frame's type, so a move re-stamps it (no-op when unchanged
-    // or when the destination isn't a resolvable frame). Non-task blocks keep their own type.
-    const movedType: BlockType = block.level === 'task' && destFrame ? destFrame.type : block.type
-
-    // Same physical home (the common case, incl. two of the workspace's own services): move in
-    // place and re-stamp `service_id`, the physical scope key that decides which boards render
-    // the subtree and where its events fan out. No-op re-stamp when sharing isn't wired or the
-    // destination frame isn't a registered service.
-    if (blockHome === parentHome) {
-      await this.blockRepository.update(blockHome, id, {
-        parentId: input.parentId,
-        position: input.position,
-        ...(movedType !== block.type ? { type: movedType } : {}),
-      })
-      if (this.serviceRepository) {
-        const destService = await this.serviceForContainer(destBlocks, parent)
-        await this.blockRepository.setService(
-          blockHome,
-          [...descendantIds(destBlocks, id)],
-          destService ?? null,
-        )
-      }
-      // Origin = the block's HOME so the re-stamped subtree fans out to every mounting board. No
-      // payload: a reparent moves the whole SUBTREE between parents, and the moved block alone
-      // cannot state what its descendants' service stamps became.
-      await this.emitBoardChanged(blockHome, {
-        reason: 'block-reparented',
-        blockId: id,
-        originConnectionId,
-      })
-      return assertFound(await this.blockRepository.get(blockHome, id), 'Block', id)
-    }
-
-    // Cross-home: the block and its new parent belong to two services homed in different
-    // workspaces (both mounted on this board). Keep the invariant that a service's blocks live
-    // in its home workspace by MOVING the subtree's rows — and any executions on them — to the
-    // destination service's home, re-stamped with the destination service.
-    //
-    // Capture the SOURCE service's mounting boards BEFORE the move (afterwards the subtree no
-    // longer resolves to the source service), so every board that showed the block at its old
-    // home can refresh it away. The destination side is reached by the post-move emit below.
-    const sourceFanout = new Set<string>([blockHome])
-    if (this.workspaceMountRepository) {
-      for (const ws of await this.workspaceMountRepository.listWorkspaceIdsMountingBlock(
-        blockHome,
-        id,
-      )) {
-        sourceFanout.add(ws)
-      }
-    }
-    const srcBlocks = await this.blockRepository.listByWorkspace(blockHome)
-    const ids = [...descendantIds(srcBlocks, id)]
-    const subtree = ids
-      .map((bid) => srcBlocks.find((b) => b.id === bid))
-      .filter((b): b is Block => b !== undefined)
-    const destService = (await this.serviceForContainer(destBlocks, parent)) ?? null
-    for (const b of subtree) {
-      const moved =
-        b.id === id
-          ? { ...b, parentId: input.parentId, position: input.position, type: movedType }
-          : b
-      await this.blockRepository.insert(parentHome, moved, destService)
-      const exec = await this.executionRepository.getByBlock(blockHome, b.id)
-      if (exec) {
-        await this.executionRepository.deleteByBlock(blockHome, b.id)
-        await this.executionRepository.upsert(parentHome, exec)
-      }
-    }
-    await this.blockRepository.deleteMany(blockHome, ids)
-    // Drop dependency + epic edges in the source workspace that now dangle to the moved subtree.
-    await pruneDanglingEdges(this.blockRepository, blockHome, srcBlocks, new Set(ids))
-    // Destination side: origin = the new HOME so the moved subtree fans out to the destination
-    // service's mounts (and that board). Source side: the block is gone from its old service, so
-    // the block→service join can't resolve it anymore — notify the captured source boards
-    // directly (origin-only) so they refresh the subtree away.
-    await this.emitBoardChanged(parentHome, {
-      reason: 'block-reparented',
-      blockId: id,
-      originConnectionId,
-    })
-    for (const ws of sourceFanout) {
-      if (ws !== parentHome) {
-        await this.emitBoardChanged(ws, { reason: 'block-reparented', originConnectionId })
-      }
-    }
-    return assertFound(await this.blockRepository.get(parentHome, id), 'Block', id)
+    return this.reparentWrite.reparent(workspaceId, id, input, editor, originConnectionId)
   }
 
   /**

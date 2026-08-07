@@ -3,6 +3,7 @@ import {
   bigint,
   doublePrecision,
   index,
+  integer,
   pgTable,
   primaryKey,
   text,
@@ -57,6 +58,13 @@ export const users = pgTable(
     email: text('email'),
     avatar_url: text('avatar_url'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    // The generation every session token this user holds was minted under. Verification compares
+    // the token's claim against this value and refuses a mismatch, so bulk revocation ("sign out
+    // all devices", an SSO sign-in the directory now refuses) is ONE increment rather than a
+    // blocklist table that would have to enumerate, store and prune every outstanding token.
+    // Defaults to 0 so no existing row needs a backfill. Mirrors the D1 column
+    // (migrations/0084_user_session_generation.sql); keep in step.
+    session_generation: integer('session_generation').notNull().default(0),
   },
   (t) => [
     uniqueIndex('idx_users_email')

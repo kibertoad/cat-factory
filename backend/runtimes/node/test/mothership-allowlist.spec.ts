@@ -155,6 +155,11 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     getIdentity: 'pending',
     linkIdentity: 'onboarding',
     listIdentities: 'pending',
+    // The session-revocation WRITE. `sessionGeneration` (the read) is allow-listed so a node stops
+    // honouring a revoked bearer, but the bump is the revocation itself: a role-blind token that
+    // could reach it could sign out every user in its account scope, so it stays mothership-only
+    // exactly like the membership mutations above. Permanent, not a backlog state.
+    bumpSessionGeneration: 'admin',
   },
   // `listByAccount` is now allow-listed (the account members panel's pending-invite read,
   // member-level). The lifecycle WRITES `create`/`setStatus` are admin-gated (inviting/revoking
@@ -201,7 +206,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   //
   // `listByAccount` is the admin-tier viewer read, off the machine API exactly like
   // `accountSettingsRepository.getByAccount`. Mothership-internal by construction, not a backlog.
-  auditEventRepository: { append: 'admin', listByAccount: 'admin' },
+  //
+  // `deleteOlderThan` is the retention sweep, which the mothership runs against its own store; a
+  // node never drives it, and a node that could reach it could erase the trail that describes it.
+  auditEventRepository: { append: 'admin', listByAccount: 'admin', deleteOlderThan: 'sweeper' },
   // The auth-attempt ledger (SEC-4) is the password throttle's own state. A node that could
   // reach it over the RPC could read attempt patterns or flood a victim's bucket; nothing on
   // a satellite ever needs it. Mothership-internal by construction, like the roster above.
@@ -276,6 +284,18 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     spendByDimension: 'admin',
     activityByDimension: 'admin',
     spendTrend: 'admin',
+  },
+  // The durable cost-attribution rollup. Its two READS serve the same admin-gated Reports
+  // endpoint as the ledger-side ones above, so they stay mothership-internal for the same
+  // reason. Materialising it is the retention sweep's own write, which the mothership runs
+  // against its own Postgres; a node never drives it, and there is no prune to classify
+  // because the table has none. `scopeWhere` is a private query-scope helper.
+  spendRollupRepository: {
+    scopeWhere: 'helper',
+    spendByDimension: 'admin',
+    spendTrend: 'admin',
+    spendRollupWatermark: 'admin',
+    rollupSpendDays: 'sweeper',
   },
   // The spend LEDGER is the one member of the telemetry family that is NOT local-first: it is the
   // org's budget safeguard, and its three rollups are read remotely by the spend gate, so `record`

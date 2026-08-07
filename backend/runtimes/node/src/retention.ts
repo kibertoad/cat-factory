@@ -1,5 +1,6 @@
 import type {
   AgentContextSnapshotRepository,
+  AuditEventRepository,
   AgentSearchQueryRepository,
   AgentToolCallRepository,
   ResolveBinaryArtifactStore,
@@ -14,6 +15,7 @@ import type {
   PipelineScheduleRepository,
   PlatformMetricsRepository,
   ProvisioningLogRepository,
+  SpendRollupRepository,
   SubscriptionActivationRepository,
   SubscriptionQuotaCycleRepository,
   TokenUsageRepository,
@@ -24,6 +26,7 @@ import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import {
   RUN_DAY_ROLLUP_LOOKBACK_MS,
   createRetentionPass,
+  materializeSpendRollup,
   sweepBinaryArtifactRetention,
 } from '@cat-factory/orchestration'
 import type { Logger, RetentionConfig, SweepHealthTracker } from '@cat-factory/server'
@@ -94,6 +97,14 @@ export interface RetentionRepos {
     PlatformMetricsRepository,
     'rollupRunDays' | 'deleteRunDaysOlderThan'
   >
+  // The account audit log (its own `audit` Postgres schema), pruned to the longest window of the
+  // lot. Wired unconditionally, exactly as on the Worker: this is the one table here that would
+  // otherwise grow for years unbounded.
+  auditEventRepository: Pick<AuditEventRepository, 'deleteOlderThan'>
+  // The durable cost-attribution rollup. This pass only WRITES it: `spend_days` has no
+  // prune, here or on the Worker, and no `deleteOlderThan` on its port to call. A TCO table
+  // that expires is just a slower ledger.
+  spendRollupRepository: Pick<SpendRollupRepository, 'rollupSpendDays' | 'spendRollupWatermark'>
 }
 
 /** Rows reclaimed from each table, plus the tables the pass could not prune. */
@@ -114,8 +125,11 @@ export interface RetentionResult {
   notifications: number
   gateOutcomes: number
   runDays: number
+  auditEvents: number
   /** Daily buckets (re)written by this pass's rollup: a WRITE, not rows reclaimed. */
   runDaysRolledUp: number
+  /** Durable cost-attribution buckets (re)written by this pass: a WRITE, never a prune. */
+  spendDaysRolledUp: number
   /**
    * The tables whose prune threw this pass. EMPTY on a clean pass. Reported separately from
    * the counts because a failed prune and an empty table both reclaim 0 rows, and only one of
@@ -150,6 +164,19 @@ export async function sweepRetention(
 ): Promise<RetentionResult> {
   const pass = createRetentionPass(logger)
   return {
+    // FIRST, and before the ledger prune below: the durable rollup folds `token_usage`, so a
+    // pass that pruned first would drop spend that had never been rolled up. It resumes from
+    // its own watermark rather than a fixed lookback, because a day missed here is missing
+    // from the only durable record of it, permanently, and its catch-up horizon is derived
+    // from the SAME `tokenUsageMs` the prune two lines down uses, so the walk never steps over
+    // a day the ledger still holds. See `spendRollupWindow`.
+    spendDaysRolledUp: await materializeSpendRollup(
+      pass,
+      repos.spendRollupRepository,
+      now,
+      retention.tokenUsageMs,
+      logger,
+    ),
     tokenUsage: await pass.prune('token_usage', retention.tokenUsageMs, now, (c) =>
       repos.tokenUsageRepository.deleteOlderThan(c),
     ),
@@ -223,6 +250,11 @@ export async function sweepRetention(
     ),
     runDays: await pass.prune('platform_run_days', retention.runDaysMs, now, (c) =>
       repos.platformMetricsRepository.deleteRunDaysOlderThan(c),
+    ),
+    // The audit log, in its own schema. Last because it is the only pass whose window is measured
+    // in years: the others reclaim on most ticks, this one usually reclaims nothing.
+    auditEvents: await pass.prune('audit_events', retention.auditEventsMs, now, (c) =>
+      repos.auditEventRepository.deleteOlderThan(c),
     ),
     failedTables: pass.failed,
   }

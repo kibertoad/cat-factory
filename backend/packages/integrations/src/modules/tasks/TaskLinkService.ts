@@ -7,7 +7,7 @@ import type {
   TaskRecord,
   TaskSourceKind,
 } from '@cat-factory/kernel'
-import type { BlockEditActor } from '@cat-factory/contracts'
+import type { BlockEditAuthority } from '@cat-factory/contracts'
 import { assertFound, ConflictError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { BoardWritePort } from '@cat-factory/kernel'
@@ -187,7 +187,7 @@ export class TaskLinkService {
    * because only the caller knows: filing an issue from the SPA is a member acting on their own
    * board, while the tracker reconciliation sweep behind the same method holds no tier at all.
    * Deciding it here would pick one of those and be wrong about the other (see
-   * {@link BlockEditActor}).
+   * {@link BlockEditAuthority}).
    *
    * Takes an input OBJECT: `editor` was the seventh thing to identify (which board, which
    * container, which issue, on whose authority, filed by whom, shaped how), and past a handful a
@@ -199,7 +199,7 @@ export class TaskLinkService {
     containerId: string
     source: TaskSourceKind
     externalId: string
-    editor: BlockEditActor
+    editor: BlockEditAuthority
     createdBy?: string | null
     shape?: { taskType?: CreateTaskType; pipelineId?: string }
   }): Promise<TaskFromIssue> {
@@ -273,7 +273,7 @@ export class TaskLinkService {
     source: TaskSourceKind
     epicRef: string
     containerId: string
-    editor: BlockEditActor
+    editor: BlockEditAuthority
     createdBy?: string | null
     position?: Position
   }): Promise<SpawnedEpic> {

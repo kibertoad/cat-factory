@@ -80,4 +80,33 @@ export interface UserRepository {
   linkIdentity(identity: UserIdentityRecord): Promise<void>
   /** Every identity linked to a user. */
   listIdentities(userId: string): Promise<UserIdentityRecord[]>
+  /**
+   * The user's current SESSION GENERATION, or null when no such user exists.
+   *
+   * A session token carries the generation it was minted under, and a bearer whose claim no
+   * longer matches the row is refused. That is what makes bulk revocation one row write instead
+   * of a token blocklist: nothing has to enumerate the outstanding tokens to invalidate them.
+   *
+   * Null is a distinct answer from `0` and both are load-bearing. `0` is a user who has never
+   * revoked anything, whose tokens are all still good; null is a user the store cannot find,
+   * whose bearer must be refused rather than compared against a generation that does not exist.
+   * A reader that flattened the two would keep serving a deleted user's token forever.
+   */
+  sessionGeneration(userId: string): Promise<number | null>
+  /**
+   * Invalidate every session the user currently holds by advancing their generation, returning
+   * the new value.
+   *
+   * The increment is done IN THE STORE (`session_generation + 1`), never read-modify-written here:
+   * two admins offboarding the same person concurrently would otherwise both read `3` and both
+   * write `4`, which is harmless, and a bump racing a mint would not be — the mint would stamp a
+   * generation the revocation had already decided to leave behind. A returned value is the one
+   * the row now holds, so the caller invalidating a cached read cannot cache a number the store
+   * never had.
+   *
+   * Throws when the user does not exist: a revocation that silently matched no row is the one
+   * outcome an offboarding tool must not have, because it reports success for access it did not
+   * withdraw.
+   */
+  bumpSessionGeneration(userId: string): Promise<number>
 }

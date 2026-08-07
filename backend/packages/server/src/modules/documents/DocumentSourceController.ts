@@ -10,6 +10,7 @@ import {
   listDocumentSourcesContract,
   listDocumentsContract,
   planDocumentContract,
+  refreshDocumentContract,
   resolveDocumentRefContract,
   searchDocumentsContract,
   spawnDocumentContract,
@@ -23,7 +24,7 @@ import type { Context } from 'hono'
 import { ValidationError } from '@cat-factory/kernel'
 import type { DocumentsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
-import { blockEditActor, mountWorkspacePermission } from '../../http/workspaceAccess.js'
+import { blockEditAuthority, mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -142,6 +143,22 @@ export function documentSourceController(): Hono<AppEnv> {
     return c.json(document, 201)
   })
 
+  // Re-confirm one stored document against its source now, pulling the new body if the page moved.
+  // Member tier for the same reason import is: it spends the workspace's stored credential on a
+  // page the member can already attach, and the write it may perform is a refresh of a projection
+  // every run of theirs already reads.
+  //
+  // The `:source` here rides the BODY rather than the path, because this route is about a stored
+  // row (whose key is `(source, externalId)`) rather than about a provider surface.
+  buildHonoRoute(app, refreshDocumentContract, async (c) => {
+    const documents = requireDocuments(c)
+    const { source, externalId } = c.req.valid('json')
+    return c.json(
+      await documents.linkedRefresher.refreshNow(param(c, 'workspaceId'), source, externalId),
+      200,
+    )
+  })
+
   // Search a source's catalogue by free text (title/content), returning lean hits
   // the picker can import + link on selection.
   buildHonoRoute(app, searchDocumentsContract, async (c) => {
@@ -183,7 +200,12 @@ export function documentSourceController(): Hono<AppEnv> {
     const plan = await documents.plannerService.plan(record)
     // The plan comes from an imported document, but the board write is the member's: they asked
     // for the spawn on their own board, so it is judged under their tier (ADR 0037).
-    const result = await documents.linkService.spawn(workspaceId, plan, blockEditActor(c), frameId)
+    const result = await documents.linkService.spawn(
+      workspaceId,
+      plan,
+      blockEditAuthority(c),
+      frameId,
+    )
     return c.json({ plan, result }, 201)
   })
 

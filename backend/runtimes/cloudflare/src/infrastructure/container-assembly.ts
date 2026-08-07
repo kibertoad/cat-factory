@@ -100,6 +100,7 @@ import { D1SubscriptionActivationRepository } from './repositories/D1PersonalSub
 import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
 import { D1ValidationConfigRepository } from './repositories/D1ValidationConfigRepository'
 import { D1ReportsRepository } from './repositories/D1ReportsRepository'
+import { D1SpendRollupRepository } from './repositories/D1SpendRollupRepository'
 import { D1TokenUsageRepository } from './repositories/D1TokenUsageRepository'
 import { D1UserRepoAccessRepository } from './repositories/D1UserRepoAccessRepository'
 import { D1UserRepository } from './repositories/D1UserRepository'
@@ -380,6 +381,8 @@ Partial<CoreDependencies> & Pick<CoreDependencies, 'gateOutcomeRepository'> {
     // Cross-cutting usage analytics over `token_usage` + `agent_runs` (both MAIN db) for
     // the Reports view.
     reportsRepository: new D1ReportsRepository({ db }),
+    // The durable cost-attribution rollup the same view's long (TCO) windows read.
+    spendRollupRepository: new D1SpendRollupRepository({ db }),
     // Unified provisioning event log (separate D1 binding). Threads the recorder into
     // the env services and exposes the read service for the logs controller; undefined
     // when PROVISIONING_DB isn't bound.
@@ -560,6 +563,17 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
   // per-workspace to resolve: Bedrock is reached with the deployment's own AWS credentials.
   // `bedrockModelsCapability` also requires a registered registry that can serve the route.
   const bedrockModels = bedrockModelsCapability(env)
+  // ONE service behind both audit seams (the Node twin does the same, in the same position).
+  // Separate dependencies because the capabilities differ — a domain service records, the viewer's
+  // controller paginates — but the SAME instance, so what one appends is what the other serves.
+  const audit = new AuditService({
+    // The dedicated AUDIT_DB, not `db`: the log is retained for years and must not compete
+    // with live transactional state for the 10 GB per-database ceiling.
+    auditEventRepository: new D1AuditEventRepository({ db: requireAuditDb(env) }),
+    idGenerator,
+    clock,
+    logger,
+  })
 
   return {
     // The structured logger every domain service emits through. Must be wired on BOTH facades
@@ -573,14 +587,9 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // The third member of that obligation: where privileged actions are RECORDED for an account
     // admin. Same position, same reason — an un-wired audit log reads as "nobody changed
     // anything", which is the assurance it exists to give.
-    auditRecorder: new AuditService({
-      // The dedicated AUDIT_DB, not `db`: the log is retained for years and must not compete
-      // with live transactional state for the 10 GB per-database ceiling.
-      auditEventRepository: new D1AuditEventRepository({ db: requireAuditDb(env) }),
-      idGenerator,
-      clock,
-      logger,
-    }),
+    auditRecorder: audit,
+    // The READ half, for the account-admin viewer. Same instance, different capability.
+    auditLogReader: audit,
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,
