@@ -110,7 +110,9 @@ export function effectiveTierLimit(
   const values: number[] = []
   if (configured != null) values.push(configured)
   if (cap != null) values.push(cap)
-  return values.length > 0 ? Math.min(...values) : Number.POSITIVE_INFINITY
+  // `Math.min()` of nothing IS `Infinity`, which is exactly the inactive-tier answer, so the
+  // empty case needs no branch of its own.
+  return Math.min(...values)
 }
 
 /**

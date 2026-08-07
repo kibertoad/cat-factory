@@ -1,3 +1,4 @@
+import type { ToolServerUnavailableReason } from '@cat-factory/contracts'
 import type { HarnessKind } from '../ports/model-provider.js'
 
 // ---------------------------------------------------------------------------
@@ -343,15 +344,13 @@ export interface UnavailableToolServer {
    *   authorization server that would not answer, a rotated client secret. Apart from
    *   `oauth_not_connected` because "never connected" and "the connection stopped working" send an
    *   operator to different places, and only the second is ever transient.
+   *
+   * The member LIST itself lives in `@cat-factory/contracts`, not here, because the run surface
+   * has to state the same judgement to a human and the SPA cannot see kernel: a union restated on
+   * both sides drifts into a member that renders as a blank chip. Which member a dispatch picks is
+   * still decided here.
    */
-  reason:
-    | 'harness_unsupported'
-    | 'transport_unsupported'
-    | 'missing_secret'
-    | 'reserved_secret'
-    | 'oauth_not_connected'
-    | 'oauth_token_failed'
-    | 'over_budget'
+  reason: ToolServerUnavailableReason
 }
 
 /**

@@ -337,3 +337,69 @@ describe('mergeSpendAlertStates', () => {
     expect(spendAlertEscalated(now, now)).toBe(false)
   })
 })
+
+describe('forecastSpend: the remaining verdict edges', () => {
+  it('publishes an ok confidence once a young scope has observed long enough', () => {
+    // The insufficient-history rule is about the OBSERVED span, so a scope whose first row is
+    // recent enough to be tracked but old enough to measure is confidently forecast.
+    const now = PERIOD_START + 10 * DAY
+    const f = forecastSpend(
+      input({ now, costSpent: 20, windowCost: 20, windowFirstSeenAt: now - 2 * DAY }),
+    )
+    expect(f.confidence).toBe('ok')
+    expect(f.projectedTotal).not.toBeNull()
+  })
+
+  it('reports no exhaustion date for a scope burning exactly nothing', () => {
+    const now = PERIOD_START + 10 * DAY
+    const f = forecastSpend(
+      input({ now, costSpent: 10, windowCost: 0, windowFirstSeenAt: now - 5 * DAY }),
+    )
+    expect(f.burnRatePerDay).toBe(0)
+    expect(f.projectedExhaustionAt).toBeNull()
+    // A zero rate still projects: the total is simply what is already spent.
+    expect(f.projectedTotal).toBe(10)
+  })
+})
+
+describe('spendAlertState: the remaining verdict edges', () => {
+  it('withholds an overrun from a published forecast carrying no projection', () => {
+    // An `ok` confidence beside a null projection is a combination the type admits, and this
+    // guard is what stops the null being compared against the limit as a NaN.
+    expect(
+      spendAlertState(
+        {
+          burnRatePerDay: 5,
+          projectedTotal: null,
+          projectedExhaustionAt: null,
+          consumedFraction: 0.1,
+          confidence: 'ok',
+        },
+        PERIOD_START,
+        100,
+      ),
+    ).toEqual({ periodStart: PERIOD_START, threshold: null, projectedOverrun: false })
+  })
+})
+
+describe('mergeSpendAlertStates: the remaining fold edges', () => {
+  it('takes the first of two EQUAL thresholds rather than flapping between them', () => {
+    expect(
+      mergeSpendAlertStates(PERIOD_START, [
+        { threshold: 0.8, projectedOverrun: false },
+        { threshold: 0.8, projectedOverrun: false },
+      ]).threshold,
+    ).toBe(0.8)
+  })
+
+  it('adopts a tier threshold when none has been seen yet, whatever its value', () => {
+    // A first tier crossing a LOW threshold must still set it: an accumulator that is still
+    // null is the case the null-check exists for.
+    expect(
+      mergeSpendAlertStates(PERIOD_START, [
+        { threshold: null, projectedOverrun: false },
+        { threshold: 0.5, projectedOverrun: false },
+      ]).threshold,
+    ).toBe(0.5)
+  })
+})

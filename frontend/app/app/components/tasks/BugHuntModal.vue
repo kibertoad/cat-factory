@@ -8,15 +8,18 @@
 //
 // Two states this deliberately renders rather than hides: a board whose ranking was
 // unavailable or failed still shows its candidates (flagged as unassessed, since the scan is
-// useful on its own), and a scan that hit its cap says so — a silently shortened list reads
-// exactly like an exhaustive one.
+// useful on its own), and a scan that hit its cap says so, because a silently shortened list
+// reads exactly like an exhaustive one.
 //
 // The tracker selector doubles as the "add a tracker" affordance (the same two-tier menu
-// `<ContextIssuePicker>` renders, off the shared `buildSourceChoices`): a hunt is a common
-// place to find out the tracker holding the bugs isn't connected here yet, and the answer
-// has to be a route to that tracker's own connect screen rather than "go find the
+// `<ContextIssuePicker>` renders, off the shared `buildSourceChoices` + `sourceMenuItems`): a hunt
+// is a common place to find out the tracker holding the bugs isn't connected here yet, and the
+// answer has to be a route to that tracker's own connect screen rather than "go find the
 // Integrations hub". The connect modal opens OVER the hunt, so nothing typed here is lost.
-import type { DropdownMenuItem } from '@nuxt/ui'
+//
+// Where an adopted bug lands comes from `useContainerTargets`, shared with `<TaskImportModal>`:
+// both are opened from the same frame-header buttons with the same payload, so the frame either
+// answers "which service" for both or for neither.
 import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import type {
   BugHuntAnalysisStatus,
@@ -24,13 +27,19 @@ import type {
   BugHuntConfidence,
   TaskSourceKind,
 } from '~/types/domain'
-import { type SourceChoice, buildSourceChoices, reconcileSource } from '~/utils/taskSources'
+import {
+  type AddSourceLabels,
+  addChoicesOf,
+  buildSourceChoices,
+  menuIsPickable,
+  reconcileSource,
+  sourceMenuItems,
+} from '~/utils/sourcePicker'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const { t, d, n } = useI18n()
 const ui = useUiStore()
 const tasks = useTasksStore()
-const board = useBoardStore()
 const hunt = useBugHuntStore()
 const toast = useToast()
 
@@ -46,61 +55,44 @@ const source = ref<TaskSourceKind | undefined>(undefined)
 const boardId = ref('')
 const issueType = ref('')
 const labels = ref('')
-const containerId = ref<string | undefined>(undefined)
-
-// Containers an adopted bug can land in: every service frame and module on the board. Modules
-// are labelled with their parent frame so the choice is unambiguous (same as the import modal).
-const containerItems = computed(() =>
-  board.blocks
-    .filter((b) => b.level === 'frame' || b.level === 'module')
-    .map((b) => ({
-      label:
-        b.level === 'module'
-          ? `${board.getBlock(b.parentId ?? '')?.title ?? '?'} › ${b.title}`
-          : b.title,
-      value: b.id,
-    })),
-)
+// Where an adopted bug lands. Stated rather than asked when the frame the hunt was opened from is
+// the only legal target; re-resolved through the board, so a frame deleted mid-hunt widens back.
+const {
+  pinned: pinnedContainer,
+  items: containerItems,
+  containerId,
+  stated: containerStated,
+  reset: resetContainer,
+} = useContainerTargets(() => ui.bugHunt?.containerId)
 
 const descriptor = computed(() => (source.value ? tasks.descriptorFor(source.value) : undefined))
 
+/**
+ * Wording for an addable tracker, as an exhaustive map over the add actions a TRACKER menu can
+ * carry: `enable` is connected but toggled off for this workspace, so the user is never told to
+ * "connect" something they already connected.
+ */
+const ADD_LABEL: AddSourceLabels<'connect' | 'enable'> = {
+  connect: (label) => t('bugHunt.connectSource', { label }),
+  enable: (label) => t('bugHunt.enableSource', { label }),
+}
+
 // Two-tier tracker menu: pick one the workspace already offers, or add one it doesn't.
 const sourceChoices = computed(() => buildSourceChoices(tasks.sources, source.value))
-const sourceMenu = computed<DropdownMenuItem[][]>(() =>
-  sourceChoices.value.map((group) =>
-    group.map((choice) =>
-      choice.action === 'select'
-        ? {
-            label: choice.label,
-            icon: choice.icon,
-            trailingIcon: choice.active ? 'i-lucide-check' : undefined,
-            onSelect: () => {
-              source.value = choice.source
-            },
-          }
-        : {
-            label: addLabel(choice),
-            icon: 'i-lucide-plug',
-            onSelect: () => addSource(choice.source),
-          },
-    ),
-  ),
+const sourceMenu = computed(() =>
+  sourceMenuItems(sourceChoices.value, {
+    onSelect: (s) => {
+      source.value = s
+    },
+    onAdd: addSource,
+    addLabel: ADD_LABEL,
+  }),
 )
+/** One entry decides nothing, so the tracker is named as a label rather than as a dead control. */
+const sourcePickable = computed(() => menuIsPickable(sourceChoices.value))
 
-/** The trackers that can be added — the empty state's buttons, where none is offered yet. */
-const addableSources = computed(() =>
-  sourceChoices.value.flat().filter((c) => c.action !== 'select'),
-)
-
-/**
- * Wording for an addable tracker: `enable` is connected but toggled off for this workspace,
- * so the user is never told to "connect" something they already connected.
- */
-function addLabel(choice: SourceChoice): string {
-  return choice.action === 'enable'
-    ? t('bugHunt.enableSource', { label: choice.label })
-    : t('bugHunt.connectSource', { label: choice.label })
-}
+/** The trackers that can be added: the empty state's buttons, where none is offered yet. */
+const addableSources = computed(() => addChoicesOf(sourceChoices.value))
 
 /**
  * The tracker the user left to add, so it becomes the selection the moment it turns up
@@ -166,11 +158,11 @@ watch(open, (isOpen) => {
   labels.value = ''
   awaitingConnect.value = null
   source.value = ui.bugHunt?.source ?? tasks.offeredSources[0]?.source ?? undefined
-  containerId.value = ui.bugHunt?.containerId ?? containerItems.value[0]?.value
+  resetContainer()
   if (source.value) hunt.loadBoards(source.value)
 })
 
-// Switching tracker invalidates both the board list and any ranking already on screen — the
+// Switching tracker invalidates both the board list and any ranking already on screen: the
 // candidates belong to the previous tracker's board and would otherwise sit there looking current.
 watch(source, (next) => {
   boardId.value = ''
@@ -267,7 +259,7 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
             :icon="choice.icon"
             @click="addSource(choice.source)"
           >
-            {{ addLabel(choice) }}
+            {{ ADD_LABEL[choice.action](choice.label) }}
           </UButton>
         </div>
       </div>
@@ -284,8 +276,11 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
           <UFormField :label="t('bugHunt.tracker')">
             <!-- The selector is also the way to ADD a tracker: each entry in the second group
                  opens that tracker's own connect screen over this modal, so the hunt (and
-                 anything typed into it) is still here when the user comes back. -->
+                 anything typed into it) is still here when the user comes back. With a single
+                 entry there is nothing to decide, so the tracker is named as plain text instead:
+                 a chevron that opens a one-item menu promises a choice that isn't there. -->
             <UDropdownMenu
+              v-if="sourcePickable"
               :items="sourceMenu"
               :content="{ side: 'bottom', align: 'start' }"
               class="w-full"
@@ -300,6 +295,10 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
                 <span class="truncate">{{ descriptor?.label ?? t('bugHunt.pickTracker') }}</span>
               </UButton>
             </UDropdownMenu>
+            <p v-else class="flex items-center gap-1.5 py-1 text-sm text-slate-300">
+              <UIcon v-if="descriptor?.icon" :name="descriptor.icon" class="h-4 w-4 shrink-0" />
+              <span class="truncate">{{ descriptor?.label ?? t('bugHunt.pickTracker') }}</span>
+            </p>
           </UFormField>
 
           <UFormField :label="t('bugHunt.board')">
@@ -335,7 +334,17 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
           </UFormField>
         </div>
 
-        <UFormField :label="t('bugHunt.adoptInto')">
+        <!-- Where an adopted bug lands. Stated when the frame this hunt was opened from is the
+             only legal target; a choice (scoped to that frame) when it has modules, or over the
+             whole board when the hunt was opened standalone. -->
+        <p v-if="containerStated" class="text-xs text-slate-400">
+          <i18n-t keypath="bugHunt.adoptingInto" tag="span" scope="global">
+            <template #container>
+              <span class="font-medium text-slate-200">{{ pinnedContainer!.title }}</span>
+            </template>
+          </i18n-t>
+        </p>
+        <UFormField v-else :label="t('bugHunt.adoptInto')">
           <USelect v-model="containerId" :items="containerItems" class="w-full" />
         </UFormField>
 

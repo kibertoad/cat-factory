@@ -4,6 +4,7 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
@@ -23,6 +24,7 @@ import org.jspecify.annotations.Nullable;
  * @param startedAt Always present; {@code null} when the server has no value for it.
  * @param state the {@code state} field.
  * @param subtasks Always present; {@code null} when the server has no value for it.
+ * @param toolServers May be absent entirely.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record DebugRunStep(
@@ -58,7 +60,10 @@ public record DebugRunStep(
     @JsonProperty("state") String state,
 
     /** Always present; {@code null} when the server has no value for it. */
-    @JsonProperty("subtasks") @Nullable RunSubtaskCounts subtasks
+    @JsonProperty("subtasks") @Nullable RunSubtaskCounts subtasks,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("toolServers") @Nullable DebugStepToolServers toolServers
 ) {
 
     /** A new builder for {@link DebugRunStep}. */
@@ -87,6 +92,7 @@ public record DebugRunStep(
         private @Nullable Double startedAt;
         private @Nullable String state;
         private @Nullable RunSubtaskCounts subtasks;
+        private @Nullable DebugStepToolServers toolServers;
 
         /** Set {@code agentKind}. */
         public Builder agentKind(@Nullable String agentKind) {
@@ -172,9 +178,15 @@ public record DebugRunStep(
             return this;
         }
 
+        /** Set {@code toolServers}. */
+        public Builder toolServers(@Nullable DebugStepToolServers toolServers) {
+            this.toolServers = toolServers;
+            return this;
+        }
+
         /** Build the {@link DebugRunStep}. */
         public DebugRunStep build() {
-            return new DebugRunStep(agentKind, evictionRecoveries, finishedAt, firstEvictionDetail, hasStructuredResult, index, lastActivityAt, model, outputChars, progress, skipped, startedAt, state, subtasks);
+            return new DebugRunStep(agentKind, evictionRecoveries, finishedAt, firstEvictionDetail, hasStructuredResult, index, lastActivityAt, model, outputChars, progress, skipped, startedAt, state, subtasks, toolServers);
         }
     }
 }

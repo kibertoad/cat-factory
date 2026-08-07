@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Block } from '~/types/domain'
+import { connectableSources } from '~/utils/sourcePicker'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import DocumentOriginLink from '~/components/documents/DocumentOriginLink.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
@@ -52,21 +53,22 @@ const chosenKeys = computed(() =>
 )
 
 const connected = computed(() => documents.available && documents.anyConnected)
-// Sources the user could connect right now to unlock the picker, when none is
-// connected yet (GitHub docs are implicitly connected via the App, so never here).
-//
-// Empty for anyone without `integrations.manage`, because connecting stores a workspace
-// credential and stays admin-tier while ATTACHING moved to the member tier. Offering the
-// action to a member was a dead end: the connect modal opened, took a token, and 403'd.
-// Attaching is unaffected, which is the point of the split.
+// Sources the user could connect right now to unlock the picker, when none is connected yet (GitHub
+// docs are implicitly connected via the App, so never here). Through the shared
+// `connectableSources`, which owns both terms: an integration the deployment has not configured has
+// nothing to connect to, and connecting stores a workspace credential, which stays admin-tier while
+// ATTACHING moved to the member tier. Offering the action to a member was a dead end (the connect
+// modal opened, took a token, and 403'd); attaching is unaffected, which is the point of the split.
 const { canManageIntegrations } = useWorkspaceAccess()
-const connectableSources = computed(() =>
-  documents.available && canManageIntegrations.value
-    ? documents.sources.filter((s) => !documents.isConnected(s.source))
-    : [],
+const connectable = computed(() =>
+  connectableSources(documents.sources, {
+    isConnected: documents.isConnected,
+    canConnect: canManageIntegrations.value,
+    available: documents.available,
+  }),
 )
 const connectMenu = computed<DropdownMenuItem[][]>(() => [
-  connectableSources.value.map((s) => ({
+  connectable.value.map((s) => ({
     label: s.label,
     icon: s.icon,
     onSelect: () => ui.openDocumentConnect(s.source),
@@ -111,7 +113,7 @@ async function attach(item: PendingContext) {
         {{ showPicker ? t('common.done') : t('documents.taskDocs.attach') }}
       </UButton>
       <UDropdownMenu
-        v-else-if="connectableSources.length > 1"
+        v-else-if="connectable.length > 1"
         :items="connectMenu"
         :content="{ side: 'bottom', align: 'end' }"
       >
@@ -120,14 +122,14 @@ async function attach(item: PendingContext) {
         </UButton>
       </UDropdownMenu>
       <UButton
-        v-else-if="connectableSources.length === 1"
+        v-else-if="connectable.length === 1"
         color="neutral"
         variant="soft"
         size="xs"
         icon="i-lucide-plug"
-        @click="ui.openDocumentConnect(connectableSources[0]!.source)"
+        @click="ui.openDocumentConnect(connectable[0]!.source)"
       >
-        {{ t('documents.taskDocs.connectSourceNamed', { source: connectableSources[0]!.label }) }}
+        {{ t('documents.taskDocs.connectSourceNamed', { source: connectable[0]!.label }) }}
       </UButton>
     </template>
 

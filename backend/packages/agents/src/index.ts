@@ -17,11 +17,13 @@ export {
   resolveInlineModelRef,
 } from './agents/runtime/routing.js'
 export {
+  type AgentUserPromptOptions,
   appendedDirectivesFor,
   baseSystemPromptFor,
   systemPromptFor,
   userPromptFor,
 } from './agents/catalog.js'
+export { summaryOr } from './agents/kinds/built-in-results.js'
 export { TASK_ESTIMATOR_AGENT_KIND } from './agents/prompts/roles.js'
 // App-owned agent-kind registry (mirrors the backend-registries pilot): the composition
 // root news ONE `AgentKindRegistry` (pre-loaded with the built-ins by
@@ -227,11 +229,7 @@ export { BUILTIN_GATABLE_KINDS, isGatableKind } from './agents/kinds/gatable.js'
 // The ONE definition of "does this dispatch hand the agent a real checkout?", shared by the
 // composite executor's ROUTING and the engine's preOp context preparation so the two can never
 // disagree about whether an agent can read files or run git.
-export {
-  CONTAINER_AGENT_KINDS,
-  dispatchDeliversCheckout,
-  runsInContainer,
-} from './agents/kinds/container-surface.js'
+export { dispatchDeliversCheckout, runsInContainer } from './agents/kinds/container-surface.js'
 export { companionSystemPrompt } from './agents/prompts/companion.js'
 // The document-authoring agent kinds (doc-researcher / doc-outliner / doc-writer /
 // doc-finalizer), registered as a SIDE EFFECT of importing this module so they are
@@ -323,6 +321,17 @@ export {
   registerInitiativeAgents,
 } from './agents/kinds/initiative.js'
 export { BLUEPRINTS_AGENT_KIND, SPEC_WRITER_AGENT_KIND } from './agents/kinds/spec-blueprints.js'
+// The BUILT-IN CONTAINER kinds, as ordinary registry entries (the last slice of the agent-kind
+// strangler): their ids live beside their definitions, exactly as the blueprints/spec-writer and
+// inline-reviewer ids do, and orchestration re-exports the ones the engine names.
+export {
+  ANALYSIS_AGENT_KIND,
+  BUILT_IN_CONTAINER_AGENT_KINDS,
+  IMPLEMENTER_AGENT_KIND,
+  MERGER_AGENT_KIND,
+  TESTER_AGENT_KIND,
+  registerBuiltInContainerAgents,
+} from './agents/kinds/built-in-container.js'
 export {
   READ_ONLY_AGENT_KINDS,
   READ_ONLY_GUARDRAIL,

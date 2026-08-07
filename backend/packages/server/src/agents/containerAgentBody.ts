@@ -4,7 +4,6 @@ import {
   CONFLICT_RESOLVER_AGENT_KIND,
   MERGER_AGENT_KIND,
   SPEC_WRITER_AGENT_KIND,
-  UI_TESTER_AGENT_KIND,
 } from '@cat-factory/orchestration'
 import { DOC_WRITER_KIND, READ_ONLY_AGENT_KINDS } from '@cat-factory/agents'
 import type { McpServerJobSpec } from './toolServers.js'
@@ -34,12 +33,12 @@ import type {
  * where needed, its `agentKindRegistry`) as explicit params.
  */
 
-/**
- * The built-in implementer ("Coder") kind. The multi-repo coding fan-out
- * (service-connections phase 3) started ONLY on this kind: it is the step that makes the
- * cross-service change.
- */
-export const IMPLEMENTER_AGENT_KIND = 'coder'
+// The built-in implementer ("Coder") kind id now lives beside its REGISTRATION in
+// `@cat-factory/agents` (`kinds/built-in-container.ts`), the same pattern the blueprints /
+// spec-writer / inline-reviewer ids follow. Re-exported here so every existing importer of this
+// module is unchanged.
+export { IMPLEMENTER_AGENT_KIND } from '@cat-factory/agents'
+import { IMPLEMENTER_AGENT_KIND } from '@cat-factory/agents'
 
 export const githubRepoOrigin: ResolveRepoOrigin = (repo) => ({
   cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`,
@@ -56,25 +55,6 @@ export function buildRepoSpec(repo: RepoTarget, origin: RepoOrigin) {
     ...(repo.serviceDirectory ? { serviceDirectory: repo.serviceDirectory } : {}),
   }
 }
-
-/**
- * The PRE-REGISTRY built-in kinds that fan out across the task's connected repos as sibling
- * checkouts (service-connections phases 3–4). The `coder` opens the PRs; the `ci-fixer` resumes
- * those SAME work branches to fix red CI across every repo in one container (a cross-repo
- * contract break is exactly what a single-repo fixer can't fix). The conflict-resolver stays
- * SINGLE-repo (a git conflict is per-repo textual — handled by targeting the conflicted repo,
- * not fan-out).
- *
- * These two are not yet migrated to the agent-kind registry, so they can't declare
- * `fanOutMultiRepo` on a definition — hence this small allow-list. Registry-backed kinds (the
- * read-only `bug-investigator`, and any custom cross-service explore kind a deployment registers)
- * opt in via {@link AgentKindRegistry.fansOutMultiRepo} instead of being added here — so a new
- * fan-out kind is a registry flag, not another entry in this Set.
- */
-export const MULTI_REPO_FANOUT_BUILTIN_KINDS: ReadonlySet<string> = new Set([
-  IMPLEMENTER_AGENT_KIND,
-  'ci-fixer',
-])
 
 /**
  * Assemble the fields EVERY harness job body carries (`common`), built once so the per-kind
@@ -97,16 +77,24 @@ export function buildCommonBody(
     guardLimits?: unknown
   },
   deps: ContainerAgentExecutorDependencies,
+  agentKindRegistry: AgentKindRegistry,
 ): Record<string, unknown> {
   const { jobId, model, auth, ghToken, packageRegistries, repoSpec, contextFiles } = args
   const { skillsBody, mcpServers, generatorSecrets, guardLimits } = args
-  // The UI tester uploads its captured screenshots back to the backend from inside the
+  // A browser-driven kind uploads its captured screenshots back to the backend from inside the
   // container. It reuses the SAME container session token it already carries for the LLM
   // proxy (auth.sessionToken), POSTing to the harness ingest route that shares the proxy
-  // base URL — so no extra credential and no extra public-URL dependency. Only the
-  // `tester-ui` kind gets it; every other kind never sees an upload seam.
+  // base URL — so no extra credential and no extra public-URL dependency. Keyed off the kind's
+  // DECLARED `ui` image (only a browser image captures anything); every other kind never sees
+  // an upload seam.
+  //
+  // Read off the executor's NORMALIZED registry (passed in), never `deps.agentKindRegistry`,
+  // which is optional and undefined whenever the facade leaves the default registry implicit. The
+  // image the transport dispatches to is chosen from the normalized one, so reading the optional
+  // dep here would route a `tester-ui` job to the browser image with no upload seam and lose
+  // every screenshot it captured — silently, since a missing seam is not an error anywhere.
   const artifactUpload =
-    context.agentKind === UI_TESTER_AGENT_KIND &&
+    agentKindRegistry.agentStep(context.agentKind)?.image === 'ui' &&
     typeof auth.proxyBaseUrl === 'string' &&
     typeof auth.sessionToken === 'string'
       ? { url: `${auth.proxyBaseUrl}/artifacts/ingest`, token: auth.sessionToken }
@@ -199,9 +187,9 @@ export async function resolveMultiRepoFanout(
   let repoSpecOverride: Record<string, unknown> | undefined
   const repoTargets: RepoTarget[] = []
   const involvedServices = context.involvedServices ?? []
-  const fansOutMultiRepo =
-    MULTI_REPO_FANOUT_BUILTIN_KINDS.has(context.agentKind) ||
-    agentKindRegistry.fansOutMultiRepo(context.agentKind)
+  // Every fan-out kind — the built-in implementer and CI-fixer included — declares
+  // `fanOutMultiRepo` on its own registration, so there is no allow-list beside this lookup.
+  const fansOutMultiRepo = agentKindRegistry.fansOutMultiRepo(context.agentKind)
   if (fansOutMultiRepo && involvedServices.length > 0 && deps.resolveRepoTargets) {
     // Reuse the primary repo already resolved above so the plural resolver skips re-reading the
     // installation and re-walking the primary block's ancestry — it only needs to resolve +
@@ -377,7 +365,7 @@ export async function resolveMergerCombinedDiff(
 /**
  * The kinds that consume a task's read-only `referenceRepos` — cloned as READ-ONLY sibling
  * checkouts the agent may read (to reuse existing solutions) but never write to. Deliberately
- * a SEPARATE gate from {@link MULTI_REPO_FANOUT_BUILTIN_KINDS}: reference repos are not involved
+ * a SEPARATE gate from a kind's `fanOutMultiRepo` declaration: reference repos are not involved
  * services (never writable, no branch/PR, don't need to be board services), so they must not be
  * folded into the fan-out path. Only the document writer reads them today.
  */

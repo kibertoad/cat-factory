@@ -8,7 +8,11 @@ import type {
 import { TOOL_SERVER_BUDGET } from '@cat-factory/kernel'
 import { AgentKindRegistry } from '@cat-factory/agents'
 import { describe, expect, it } from 'vitest'
-import { createEnvToolSecretResolver, resolveToolServers } from './toolServers.js'
+import {
+  createEnvToolSecretResolver,
+  resolveToolServers,
+  stepToolServerRecord,
+} from './toolServers.js'
 
 // Tool servers (MCP) for one dispatch. The two channels a server splits into are the point of
 // these: the PROMPT-FACING projection must never carry a credential (it is copied into the
@@ -813,5 +817,49 @@ describe('the OAuth header and a static credential naming it', () => {
     })
 
     expect(result.mcpServers[0]?.headers).toEqual({ 'x-api-key': 'resolved' })
+  })
+})
+
+describe('stepToolServerRecord', () => {
+  it('projects both lists and carries no credential into the run record', async () => {
+    // The record is persisted on the run and rendered in a browser, so what it must NOT contain
+    // is the assertion that matters: `mcpServers` (which holds every resolved credential) has no
+    // projection at all, by construction rather than by field-skipping.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(STDIO, {
+        id: 'docs',
+        label: 'Docs',
+        transport: { kind: 'http', url: 'https://docs.example.com/mcp' },
+        secretKeys: [{ key: 'DOCS_TOKEN', header: 'authorization' }],
+      }),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ ISSUE_TOKEN: 'issue-secret' }),
+    })
+
+    const record = stepToolServerRecord(result)
+
+    expect(record.wired).toEqual([
+      { id: 'issues', label: 'Issue tracker', transport: 'stdio', tools: ['search_issues'] },
+    ])
+    expect(record.unavailable).toEqual([{ id: 'docs', label: 'Docs', reason: 'missing_secret' }])
+    expect(JSON.stringify(record)).not.toContain('issue-secret')
+  })
+
+  it('records a kind that declared nothing as two EMPTY lists, not as absent', async () => {
+    // Absent means "no container dispatch recorded here"; both-empty means one ran and had
+    // nothing to wire. A projection that collapsed them would make an inline step and a
+    // tool-server-less container step read identically on the run surface.
+    const record = stepToolServerRecord(
+      await resolveToolServers({
+        context: context(),
+        agentKindRegistry: registryWith(),
+        harness: 'claude-code',
+        workspaceId: 'ws1',
+      }),
+    )
+
+    expect(record).toEqual({ wired: [], unavailable: [] })
   })
 })

@@ -32,7 +32,6 @@ import {
   SUBSCRIPTION_VENDORS,
   isIndividualVendor,
   isSubscriptionVendor,
-  runBestEffort,
 } from '@cat-factory/kernel'
 import { resolveAprioriWorkingBranch, resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
@@ -50,6 +49,7 @@ import { buildContextFiles, renderSkillsForHarness } from './contextFiles.js'
 import {
   dispatchToolServerDeps,
   resolveDispatchToolServers,
+  stepToolServerRecord,
   type ResolvedToolServers,
 } from './toolServers.js'
 import { resolveBinaryGeneratorSecrets } from './binaryGenerators.js'
@@ -57,13 +57,9 @@ import { buildFailureMeta, buildRunningUpdate, toRunResult } from './containerAg
 import { buildKindBody } from './jobBody.js'
 import { containerJobLog } from './containerAgentLogging.js'
 import { acceptContainerJob } from './containerAgentDispatch.js'
-import { buildAgentContextRecord } from './agentContextRecord.js'
+import { recordAgentContextSnapshot } from './agentContextRecord.js'
 import { type RecordToolCalls, drainToolCalls } from './toolTrajectory.js'
-import {
-  UI_TESTER_AGENT_KIND,
-  isTesterKind,
-  type HarnessCallsRecordInput,
-} from '@cat-factory/orchestration'
+import { isTesterKind, type HarnessCallsRecordInput } from '@cat-factory/orchestration'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import type { ResolveRepoTargets } from './resolveRepoTarget.js'
@@ -505,25 +501,22 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     const options = this.dispatchOptions(context)
     const fields = { model, provider, kind }
     await acceptContainerJob(this.jobs, { workspaceId, ref, body, kind, options, jobLog, fields })
-    // Capture the complete provided context for observability (best-effort, gated inside
-    // the recorder). This is the only place the fully composed prompts + the injected
-    // file bodies exist as one unit; proxy telemetry never sees the `.cat-context` files.
-    // Awaited (not fire-and-forget): this runs AFTER the container job is already dispatched,
-    // so it is off the container's critical path — the only thing it delays is the driver's
-    // return of the handle, which then sleeps before its first poll regardless. A bare
-    // `void promise` here would be silently dropped on the Worker: `startJob` runs inside a
-    // Cloudflare Workflow step, and the isolate hibernates on the next durable `step.sleep`
-    // before an un-awaited insert can land (see `http/waitUntil.ts`), so the snapshot would
-    // stop recording on the primary runtime. Awaiting keeps it reliable on both facades; the
-    // swallow guarantees a recorder failure still never breaks a dispatch.
-    const recorder = this.deps.agentContextObservability
-    if (recorder) {
-      await runBestEffort(jobLog.logger, 'containerAgent.recordAgentContext', () =>
-        recorder.record(
-          buildAgentContextRecord(context, body, model, { workspaceId, executionId, toolServers }),
-        ),
-      )
-    }
+    // The one projection of what this dispatch decided about its tool servers. It lands on the
+    // STEP (below), which is the authority; the snapshot takes the same value only to keep serving
+    // the `extras` copy its consumers already read, until that deprecation window closes.
+    const toolServerRecord = stepToolServerRecord(toolServers)
+    // Capture the complete provided context for observability (best-effort, gated inside the
+    // recorder, awaited for a reason `recordAgentContextSnapshot` states). This is the only place
+    // the fully composed prompts + the injected file bodies exist as one unit; proxy telemetry
+    // never sees the `.cat-context` files.
+    await recordAgentContextSnapshot(this.deps.agentContextObservability, jobLog.logger, {
+      context,
+      body,
+      model,
+      workspaceId,
+      executionId,
+      toolServers: toolServerRecord,
+    })
     // Carry the run id + workspace on the handle so the poll/stop site can re-address
     // the same per-run container (Cloudflare vs. self-hosted pool) given only the
     // handle; carry the leased subscription token id so a finished subscription job
@@ -537,6 +530,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       agentKind: context.agentKind,
       search,
       repo: repoSummary,
+      // The run's own record of what the agent could call. Unconditional on purpose: see
+      // `stepToolServerRecord`, where the empty-vs-absent rule lives.
+      toolServers: toolServerRecord,
       ...(subscriptionTokenId ? { subscriptionTokenId } : {}),
       ...(context.initiatedByUserId ? { initiatedByUserId: context.initiatedByUserId } : {}),
     }
@@ -611,7 +607,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // modeled quota-cycle counters. Both are idempotent (once per job id) and behaviour-neutral.
     await this.recordSubscriptionUsageOnce(handle, result)
     await this.recordSubscriptionQuotaUsageOnce(handle, result)
-    const runResult = toRunResult(result, handle.agentKind)
+    const runResult = toRunResult(result, handle.agentKind, this.agentKindRegistry)
     // The poll site can't resolve the model ref, but the dispatch captured its label
     // (`handle.model`, already used for `recordHarnessCalls`). Fold it onto the result so the
     // durable poll path's `recordStepResult` → `spend.record` records the REAL model instead of
@@ -842,9 +838,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   private dispatchOptions(context: AgentRunContext): RunnerDispatchOptions | undefined {
     const provider = context.service?.cloudProvider
     const size = context.service?.instanceSize
-    // The UI tester needs the heavier Playwright+browser image; every other kind uses
-    // the default harness image (so the browser never bloats their cold-start).
-    const image: 'ui' | undefined = context.agentKind === UI_TESTER_AGENT_KIND ? 'ui' : undefined
+    // The image the kind DECLARED on its registration (`ui` selects the heavier
+    // Playwright + browser image); absent ⇒ the default harness image, so the browser never
+    // bloats every other kind's cold start.
+    const image = this.agentKindRegistry.agentStep(context.agentKind)?.image
     if (!provider && !size && !image) return undefined
     return {
       ...(provider || size ? { instanceTypeId: resolveInstanceTypeId(provider, size) } : {}),
@@ -1094,6 +1091,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         ),
       },
       this.deps,
+      this.agentKindRegistry,
     )
     // The prompt's linked-context summary index is rendered from the block's own docs/tasks: every
     // one of them was materialised, because `buildContextFiles` refuses a corpus that would not fit

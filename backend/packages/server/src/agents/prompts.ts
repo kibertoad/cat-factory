@@ -1,128 +1,22 @@
 import { type AgentRunContext, hostMarkdown } from '@cat-factory/kernel'
-import { type AgentKindRegistry, userPromptFor } from '@cat-factory/agents'
 import {
   frameProfile,
   FRONTEND_WIREMOCK_PORT,
   resolveFrontendServePort,
 } from '@cat-factory/contracts'
-import type { RepoTarget } from './ContainerAgentExecutor.js'
 
 /**
- * The role/system prompts, structured-output shape hints, and per-kind user-prompt
- * builders for the built-in container agent kinds the {@link ContainerAgentExecutor}
- * dispatches through the generic `agent` harness surface but that are NOT yet real
- * `registerAgentKind` entries (merger / on-call / tester). Extracted verbatim from
- * `ContainerAgentExecutor.ts` so the prompt material lives in one cohesive unit; the
- * executor imports it at its original call sites. Pure strings + pure builder functions —
- * no executor state. (The migrated `blueprints` / `spec-writer` prompts now live with their
- * definitions in `@cat-factory/agents` — `agents/kinds/spec-blueprints.ts`.)
+ * What the container dispatch layer still renders itself: the TESTER INFRA spec (derived per run
+ * from the frame's capability profile and what the run provisioned) and the pull-request body.
+ * Both are facts about this deployment's checkout and VCS, not about an agent's role.
+ *
+ * Every per-KIND prompt has moved out. The bespoke role prompts (`merger`, `on-call`) live in
+ * `@cat-factory/agents` (`agents/prompts/bespoke-kinds.ts`) because the ENGINE resolves a
+ * variant's alternate prompt against the shipped base; the task prompts and shape hints that used
+ * to sit here moved beside those kinds' registrations (`agents/prompts/built-in-container.ts`)
+ * when the built-ins became real `registerAgentKind` entries, since a registered kind's prompts
+ * are resolved through `userPromptFor` and could not be reached from the HTTP layer.
  */
-
-// The two bespoke container prompts (`merger`, `on-call`) now live in `@cat-factory/agents`
-// (`agents/prompts/bespoke-kinds.ts`) beside the inline-engine ones, because the ENGINE needs
-// the same answer they encode — a variant's alternate prompt is resolved against the SHIPPED
-// base once per dispatch, and for these two kinds that base is the ROLE half. Import them from
-// `@cat-factory/agents` directly; this layer reads them through the bespoke-prompt map that
-// ./promptOverrides.ts composes.
-
-/** Compact shape hint fed to the structured-output repair call for the merger assessment. */
-export const MERGE_ASSESSMENT_SHAPE_HINT =
-  'Expected a merge assessment: {"complexity": number 0..1, "risk": number 0..1, ' +
-  '"impact": number 0..1, "rationale": string}.'
-
-/** Compact shape hint fed to the structured-output repair call for the on-call assessment. */
-export const ON_CALL_ASSESSMENT_SHAPE_HINT =
-  'Expected an on-call assessment: {"culpritConfidence": number 0..1, "recommendation": ' +
-  '"revert"|"hold"|"monitor", "rationale": string, "evidence": string[]}.'
-
-/** Compact shape hint fed to the structured-output repair call for the tester report. */
-export const TEST_REPORT_SHAPE_HINT =
-  'Expected a test report: {"greenlight": boolean, "summary": string, "tested": string[], ' +
-  '"outcomes": [{"name": string, "status": "passed"|"failed"|"skipped", "detail"?: string}], ' +
-  '"concerns": [{"title": string, "detail": string, "severity": "low"|"medium"|"high"|"critical"}]}.'
-
-/** Shape hint for the UI tester: a test report that also lists captured screenshots. */
-export const UI_TEST_REPORT_SHAPE_HINT =
-  TEST_REPORT_SHAPE_HINT.replace(/\}\.$/, '') +
-  ', "screenshots": [{"view": string, "artifactId": string, "hash"?: string}]}. Each ' +
-  'screenshot must be a distinct view you captured and uploaded to the artifact store.'
-
-/**
- * The merger's task prompt — the instructions + diff guidance the bespoke harness `/merge`
- * handler used to build. Kept backend-side now that the merger dispatches the generic
- * explore agent. Names the PR/branches so the agent diffs against the right base.
- */
-export function mergerUserPrompt(context: AgentRunContext, repo: RepoTarget): string {
-  const prNumber = context.block.pullRequest?.number
-  const branch = context.block.pullRequest?.branch ?? repo.baseBranch
-  const pr = prNumber !== undefined ? ` (PR #${prNumber})` : ''
-  return [
-    'Assess the pull request on the head branch against the base branch and return the ' +
-      'complexity / risk / impact scores + rationale as JSON.',
-    '',
-    `The pull request${pr} is on branch \`${branch}\`; the base branch is ` +
-      `\`${repo.baseBranch}\`. Inspect the change (e.g. \`git fetch origin ${repo.baseBranch}\` ` +
-      `then \`git diff origin/${repo.baseBranch}...HEAD\`) and score complexity, risk and impact.`,
-    '',
-    'Respond with ONLY a JSON object {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"}.',
-  ].join('\n')
-}
-
-/**
- * The merger's task prompt for a MULTI-REPO task (service-connections phase 4): the change is one
- * PR per repo, each checked out as a read-only sibling on its PR branch. The exact per-repo diff
- * commands + sibling directories live in the "Multi-repo pull request" system-prompt section
- * (rendered by `renderMergerMultiRepoSection`), so this prompt just tells the agent to run them and
- * score the COMBINED cross-repo change as ONE assessment.
- */
-export function mergerMultiRepoUserPrompt(context: AgentRunContext): string {
-  return [
-    'This pull request spans MULTIPLE repositories — see the "Multi-repo pull request" section in ' +
-      'your instructions for each repository, its sibling directory, and the diff command to run.',
-    '',
-    'Run every per-repo diff, then assess the COMBINED change as one unit: its overall complexity, ' +
-      'the risk of the coordinated cross-repo change, and its combined blast radius. Return a SINGLE ' +
-      'assessment covering all repositories (not one per repo).',
-    '',
-    `Task: ${context.block.title}`,
-    '',
-    'Respond with ONLY a JSON object {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"}.',
-  ].join('\n')
-}
-
-/**
- * The on-call agent's task prompt — the regression evidence (the generic block/prior-output
- * prompt) plus the locate-the-merged-commit guidance the bespoke harness `/on-call` handler
- * used to build. The released PR already merged into the base branch (its work branch is
- * gone), so the agent is on the base branch and is told how to find the merged commit.
- */
-export function onCallUserPrompt(
-  context: AgentRunContext,
-  repo: RepoTarget,
-  registry: AgentKindRegistry,
-): string {
-  const prNumber = context.block.pullRequest?.number
-  const headBranch = context.block.pullRequest?.branch
-  const pr = prNumber !== undefined ? `#${prNumber}` : ''
-  const locate = prNumber
-    ? `It merged as a commit referencing ${pr} — find it with \`git log --oneline -n 50\` ` +
-      `(squash/merge commits include \`(${pr})\`; a merge commit mentions \`#${prNumber}\`), then ` +
-      `inspect it with \`git show <sha>\`.`
-    : headBranch
-      ? `Its work branch was \`${headBranch}\` (now deleted) — find the merged commit in ` +
-        `\`git log --oneline -n 50\` and inspect it with \`git show <sha>\`.`
-      : `Find the most recent merge/feature commit with \`git log --oneline -n 50\` and inspect ` +
-        `it with \`git show <sha>\`.`
-  return [
-    userPromptFor(context, registry, { materialized: true }),
-    '',
-    `You are on the base branch \`${repo.baseBranch}\`, which already contains the released ` +
-      `pull request ${pr}. ${locate} Correlate that change with the regression evidence above. ` +
-      `Beware correlation vs causation.`,
-    '',
-    'Respond with ONLY a JSON object {"culpritConfidence":0.0,"recommendation":"revert"|"hold"|"monitor","rationale":"…","evidence":["…"]}.',
-  ].join('\n')
-}
 
 /**
  * The tester's infra stand-up spec for the generic agent job, derived from the frame's capability
