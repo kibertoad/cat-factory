@@ -501,8 +501,22 @@ export async function buildIr(doc) {
     )
   }
 
+  // The scope vocabulary the per-operation floors are drawn from, ordered least to greatest, as
+  // `generate-openapi.mjs` stamps it from the contracts' `PUBLIC_API_SCOPES`. Required rather
+  // than defaulted, for the reason `x-min-scope` is: an emitter that fell back to a restated copy
+  // would rank a key against a ladder the deployment may have moved past, and the failure is
+  // SILENT (an unknown rung ranks -1, so every capability filters out and the caller sees a key
+  // with no permissions rather than an error).
+  const scopeLadder = spec['x-public-api-scopes']
+  if (!Array.isArray(scopeLadder) || scopeLadder.length === 0) {
+    throw new Error(
+      'SDK IR: the spec carries no x-public-api-scopes ladder. Regenerate it (`pnpm gen:openapi`).',
+    )
+  }
+
   return {
     info: spec.info,
+    scopeLadder,
     security: spec.components?.securitySchemes ?? {},
     tags: spec.tags ?? [],
     types: [...registry.types.values()]

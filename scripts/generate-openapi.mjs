@@ -883,6 +883,111 @@ function sortDeep(value) {
   return value
 }
 
+/**
+ * Add the three `/api/v1` routes that are NOT route contracts, documented by hand.
+ *
+ * A contract needs a JSON request/response pair to describe; these three have none (two SSE
+ * streams and an image), so their entries are written out here instead of derived. That is also
+ * why each carries a hand-written `x-min-scope` literal restating what its handler enforces:
+ * there is no `withMinScope` to read it off, and no type that would catch the two drifting.
+ *
+ * Kept out of `buildOpenApiDoc` because it is a self-contained block of literals rather than
+ * part of that function's derivation, and it is where every future raw route lands.
+ */
+function addHandDocumentedRoutes(paths, tags) {
+  // The raw SSE routes that are NOT contracts (streaming Hono routes), documented by hand.
+  tags.add('Jobs')
+  paths[`${API_PREFIX}/jobs/{id}/events`] = {
+    get: {
+      operationId: 'streamPublicJobEvents',
+      // Hand-documented route: the handler's own `authorize(c, 'read')` literal, restated here
+      // because there is no contract to read it off. Keep the two in step.
+      'x-min-scope': 'read',
+      tags: ['Jobs'],
+      summary: 'Stream a job (SSE)',
+      description:
+        'Server-sent events for a headless job run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.',
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: {
+        200: {
+          description: 'An event stream of job updates',
+          content: { 'text/event-stream': { schema: { type: 'string' } } },
+        },
+        '4XX': {
+          description: STATUS_DESCRIPTIONS['4XX'],
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+          },
+        },
+      },
+    },
+  }
+  tags.add('Tasks')
+  paths[`${API_PREFIX}/tasks/{taskId}/events`] = {
+    get: {
+      operationId: 'streamPublicTaskRun',
+      // Hand-documented route: the handler's own `authorize(c, 'read')` literal, restated here
+      // because there is no contract to read it off. Keep the two in step.
+      'x-min-scope': 'read',
+      tags: ['Tasks'],
+      summary: 'Stream a task run (SSE)',
+      description:
+        'Server-sent events for a board task run: `progress` frames (the rich run projection) until a terminal `done`/`error` event, or a `timeout` when the connection cap is reached. Authenticated by the API key header.',
+      parameters: [{ name: 'taskId', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: {
+        200: {
+          description: 'An event stream of run updates',
+          content: { 'text/event-stream': { schema: { type: 'string' } } },
+        },
+        '4XX': {
+          description: STATUS_DESCRIPTIONS['4XX'],
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+          },
+        },
+      },
+    },
+  }
+
+  // The artifact BYTES: not a route contract, because the response is an image rather than JSON.
+  // Documented by hand for the same reason the two SSE routes above are, and named in the SDK
+  // surface table so all four clients expose it (each transport reads the body as bytes).
+  tags.add('Evidence')
+  paths[`${API_PREFIX}/artifacts/{artifactId}/blob`] = {
+    get: {
+      operationId: 'getPublicArtifactBlob',
+      // Hand-documented route: the handler's own `authorize(c, 'read')` literal, restated here
+      // because there is no contract to read it off. Keep the two in step.
+      'x-min-scope': 'read',
+      tags: ['Evidence'],
+      summary: "Download an artifact's bytes",
+      description:
+        'The stored bytes of one artifact listed by the run-artifacts endpoint, served with the recorded image content type (`nosniff`, never inline active content). Authenticated like every other call: the bytes are workspace-scoped, so a report that links here on a public repository leaks nothing to a reader without a key. 404 when the id is unknown to the key’s workspace, and separately when the metadata row survives but its bytes are gone from the blob backend.',
+      parameters: [{ name: 'artifactId', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: {
+        200: {
+          description: 'The artifact bytes',
+          // Every type the route can actually answer with, not one standing in for the rest: the
+          // handler serves the artifact's RECORDED type clamped to the image allow-list, and
+          // falls back to octet-stream only for a stored row it does not recognise. Declaring a
+          // single type would tell anyone generating a client from this document to expect a
+          // media type the endpoint never sends. `blobMediaTypes.spec.ts` pins this set to the
+          // server's own allow-list, so the two cannot drift.
+          content: Object.fromEntries(
+            BLOB_MEDIA_TYPES.map((media) => [media, { schema: BINARY_SCHEMA }]),
+          ),
+        },
+        '4XX': {
+          description: STATUS_DESCRIPTIONS['4XX'],
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+          },
+        },
+      },
+    },
+  }
+}
+
 export async function buildOpenApiDoc() {
   const contracts = await import(pathToFileURL(CONTRACTS_DIST).href)
 
@@ -979,100 +1084,27 @@ export async function buildOpenApiDoc() {
     paths[template][contract.method] = operation
   }
 
-  // The raw SSE routes that are NOT contracts (streaming Hono routes), documented by hand.
-  tags.add('Jobs')
-  paths[`${API_PREFIX}/jobs/{id}/events`] = {
-    get: {
-      operationId: 'streamPublicJobEvents',
-      // Hand-documented route: the handler's own `authorize(c, 'read')` literal, restated here
-      // because there is no contract to read it off. Keep the two in step.
-      'x-min-scope': 'read',
-      tags: ['Jobs'],
-      summary: 'Stream a job (SSE)',
-      description:
-        'Server-sent events for a headless job run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.',
-      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-      responses: {
-        200: {
-          description: 'An event stream of job updates',
-          content: { 'text/event-stream': { schema: { type: 'string' } } },
-        },
-        '4XX': {
-          description: STATUS_DESCRIPTIONS['4XX'],
-          content: {
-            'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
-          },
-        },
-      },
-    },
-  }
-  tags.add('Tasks')
-  paths[`${API_PREFIX}/tasks/{taskId}/events`] = {
-    get: {
-      operationId: 'streamPublicTaskRun',
-      // Hand-documented route: the handler's own `authorize(c, 'read')` literal, restated here
-      // because there is no contract to read it off. Keep the two in step.
-      'x-min-scope': 'read',
-      tags: ['Tasks'],
-      summary: 'Stream a task run (SSE)',
-      description:
-        'Server-sent events for a board task run: `progress` frames (the rich run projection) until a terminal `done`/`error` event, or a `timeout` when the connection cap is reached. Authenticated by the API key header.',
-      parameters: [{ name: 'taskId', in: 'path', required: true, schema: { type: 'string' } }],
-      responses: {
-        200: {
-          description: 'An event stream of run updates',
-          content: { 'text/event-stream': { schema: { type: 'string' } } },
-        },
-        '4XX': {
-          description: STATUS_DESCRIPTIONS['4XX'],
-          content: {
-            'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
-          },
-        },
-      },
-    },
-  }
+  addHandDocumentedRoutes(paths, tags)
 
-  // The artifact BYTES: not a route contract, because the response is an image rather than JSON.
-  // Documented by hand for the same reason the two SSE routes above are, and named in the SDK
-  // surface table so all four clients expose it (each transport reads the body as bytes).
-  tags.add('Evidence')
-  paths[`${API_PREFIX}/artifacts/{artifactId}/blob`] = {
-    get: {
-      operationId: 'getPublicArtifactBlob',
-      // Hand-documented route: the handler's own `authorize(c, 'read')` literal, restated here
-      // because there is no contract to read it off. Keep the two in step.
-      'x-min-scope': 'read',
-      tags: ['Evidence'],
-      summary: "Download an artifact's bytes",
-      description:
-        'The stored bytes of one artifact listed by the run-artifacts endpoint, served with the recorded image content type (`nosniff`, never inline active content). Authenticated like every other call: the bytes are workspace-scoped, so a report that links here on a public repository leaks nothing to a reader without a key. 404 when the id is unknown to the key’s workspace, and separately when the metadata row survives but its bytes are gone from the blob backend.',
-      parameters: [{ name: 'artifactId', in: 'path', required: true, schema: { type: 'string' } }],
-      responses: {
-        200: {
-          description: 'The artifact bytes',
-          // Every type the route can actually answer with, not one standing in for the rest: the
-          // handler serves the artifact's RECORDED type clamped to the image allow-list, and
-          // falls back to octet-stream only for a stored row it does not recognise. Declaring a
-          // single type would tell anyone generating a client from this document to expect a
-          // media type the endpoint never sends. `blobMediaTypes.spec.ts` pins this set to the
-          // server's own allow-list, so the two cannot drift.
-          content: Object.fromEntries(
-            BLOB_MEDIA_TYPES.map((media) => [media, { schema: BINARY_SCHEMA }]),
-          ),
-        },
-        '4XX': {
-          description: STATUS_DESCRIPTIONS['4XX'],
-          content: {
-            'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
-          },
-        },
-      },
-    },
+  // The scope VOCABULARY, ordered least to greatest: the ladder every operation's `x-min-scope`
+  // is drawn from, taken verbatim from the contracts' `PUBLIC_API_SCOPES` (whose array order IS
+  // the ranking, the same derivation the server's own `scope >= required` check uses).
+  //
+  // Published because a per-operation floor is unusable without it: OpenAPI's bearer scheme has
+  // no scope slot, so a consumer holding a key cannot otherwise tell whether `write` outranks
+  // `decide`. Stamping it here is what lets the generated projections DERIVE the ladder instead
+  // of restating it, so a rung added or reordered in the contracts moves the published helpers in
+  // the same `pnpm gen:sdk` rather than leaving them a stale copy that ranks a live key at -1.
+  if (!Array.isArray(contracts.PUBLIC_API_SCOPES) || contracts.PUBLIC_API_SCOPES.length === 0) {
+    throw new Error(
+      "Contracts export no PUBLIC_API_SCOPES ladder to publish as 'x-public-api-scopes'.",
+    )
   }
+  const scopeLadder = [...contracts.PUBLIC_API_SCOPES]
 
   const doc = {
     openapi: '3.1.0',
+    'x-public-api-scopes': scopeLadder,
     info: {
       title: 'cat-factory Public API',
       version: API_VERSION,

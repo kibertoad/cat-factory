@@ -13417,5 +13417,11 @@
       "description": "The workspace’s one outbound endpoint: register it to receive notifications, run-lifecycle events and platform-health alerts by push instead of polling. Requires an `admin`-scope key; the signing secret is write-only.",
       "name": "Webhook"
     }
+  ],
+  "x-public-api-scopes": [
+    "read",
+    "write",
+    "decide",
+    "admin"
   ]
 }

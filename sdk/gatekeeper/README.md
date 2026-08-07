@@ -26,7 +26,9 @@ One `GatekeeperBinding` per `/api/v1` operation:
   pipeline can park on a human.
 - `readOnly`, `consequence`: what a front-end needs to decide which calls get waved through,
   which get logged, and which need a human. `consequence` is present only where the stakes are
-  real money or a merged pull request, exactly as in the MCP tool table.
+  real money or a merged pull request, exactly as in the MCP tool table, so read it through
+  `resolveConsequence(binding)` rather than directly: an unannotated mutation is cautiously
+  destructive, and `binding.consequence?.destructive` would answer `false` for it.
 - `result`: how `invoke`'s answer comes back (`value`, SSE `stream`, or `binary` bytes), so a
   JSON-relay front-end can route or withhold the non-value operations, stating which.
 - `pathParams` / `queryParams` / `hasBody` and `invoke(client, args)`: enough to expose the
@@ -34,8 +36,9 @@ One `GatekeeperBinding` per `/api/v1` operation:
   convention is the MCP facade's (path params and query keys at the top level, body under
   `body`; unknown keys are dropped, never forwarded).
 
-Hand-written beside the table: `scopeSatisfies(have, need)`, `bindingsWithinScope(scope)` and
-`bindingByName(name)`, the ladder helpers a policy layer ranks keys with.
+Hand-written beside the table: `scopeSatisfies(have, need)`, `bindingsWithinScope(scope)`,
+`bindingByName(name)` and `resolveConsequence(binding)`, the helpers a policy layer ranks keys
+and classifies calls with.
 
 ## Example
 
@@ -44,13 +47,16 @@ import { CatFactoryClient } from '@cat-factory/sdk'
 import {
   bindingByName,
   bindingsWithinScope,
+  resolveConsequence,
   scopeSatisfies,
 } from '@cat-factory/gatekeeper-bindings'
 
 const client = new CatFactoryClient({ baseUrl: process.env.BASE_URL!, apiKey: process.env.KEY! })
 
-// Expose to this caller only what a `write` key can do, minus anything destructive.
-const exposed = bindingsWithinScope('write').filter((b) => !b.consequence?.destructive)
+// Expose to this caller only what a `write` key can do, minus anything destructive. Read the
+// consequence through the helper: most mutations carry no annotation, and the unannotated ones
+// are the cautious case, not the safe one.
+const exposed = bindingsWithinScope('write').filter((b) => !resolveConsequence(b).destructive)
 
 // Forward a metered call.
 const binding = bindingByName('tasks_create')!

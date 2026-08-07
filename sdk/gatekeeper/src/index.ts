@@ -17,12 +17,57 @@ export {
 } from './bindings.generated.js'
 
 /**
+ * Rank a rung on the ladder, REFUSING one the ladder does not carry.
+ *
+ * The refusal is the point. A rung this package has never heard of ranks -1 through a bare
+ * `indexOf`, which compares as "below everything": `scopeSatisfies` then answers `false` and
+ * `bindingsWithinScope` hands back an empty table, so a deployment one release ahead of this
+ * package reads as a key with no permissions rather than as the version skew it is. A policy
+ * layer typically takes its scope from configuration, where TypeScript is no help.
+ */
+function rankOf(scope: PublicApiScope): number {
+  const rank = PUBLIC_API_SCOPE_LADDER.indexOf(scope)
+  if (rank < 0) {
+    throw new TypeError(
+      `Unknown public-API scope '${scope}'. This package knows ` +
+        `${PUBLIC_API_SCOPE_LADDER.join(' < ')}; upgrade @cat-factory/gatekeeper-bindings if the ` +
+        'deployment has since added a rung.',
+    )
+  }
+  return rank
+}
+
+/**
  * Whether a key of scope `have` satisfies a floor of `need`. The ladder is inclusive: every rung
  * can do everything below it, so this is a rank comparison over `PUBLIC_API_SCOPE_LADDER`, whose
  * array order IS the ranking (the same derivation the server's own check uses).
+ *
+ * Throws a `TypeError` on a scope that is not on the ladder; see {@link rankOf}.
  */
 export function scopeSatisfies(have: PublicApiScope, need: PublicApiScope): boolean {
-  return PUBLIC_API_SCOPE_LADDER.indexOf(have) >= PUBLIC_API_SCOPE_LADDER.indexOf(need)
+  return rankOf(have) >= rankOf(need)
+}
+
+/**
+ * What calling a binding COSTS, with the cautious reading applied where the table states nothing.
+ *
+ * The generated `consequence` is present only where the stakes are real money or a merged pull
+ * request, so most mutations carry no annotation at all: reading `binding.consequence?.destructive`
+ * directly answers `false` for `tasks_update`, `tasks_stop` and every other unannotated write, and
+ * a front-end filtering on it waves through exactly the calls it meant to hold back. That inverts
+ * what the field documents, so the default lives here once rather than in each consumer.
+ *
+ * A GET is safe and idempotent by construction; anything else is assumed destructive and
+ * non-idempotent until the table says otherwise.
+ */
+export function resolveConsequence(binding: GatekeeperBinding): {
+  destructive: boolean
+  idempotent: boolean
+} {
+  return {
+    destructive: binding.consequence?.destructive ?? !binding.readOnly,
+    idempotent: binding.consequence?.idempotent ?? binding.readOnly,
+  }
 }
 
 /**

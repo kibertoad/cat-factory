@@ -93,7 +93,8 @@ Two things to know before minting `decide` or `admin`:
   and response bodies the SPA gates behind workspace RBAC. See the
   [auth section of `debug-api.md`](./debug-api.md#auth).
 - **Each operation's floor is machine-readable**: the OpenAPI document stamps it as
-  `x-min-scope` (spec 1.22.0), read off the same contract field the route enforces, and
+  `x-min-scope` (spec 1.23.0), beside the document-level `x-public-api-scopes` ladder those
+  floors are ranked against, both read off the same contracts the routes enforce, and
   `@cat-factory/gatekeeper-bindings` ([`sdk/gatekeeper`](../../sdk/gatekeeper)) ships the whole
   surface as a policy-annotated table for an integration that fronts a key for callers of its
   own. The stamp is the STATIC floor only; the dynamic escalations this section describes (a

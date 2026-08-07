@@ -19,7 +19,11 @@ import type { CatFactoryClient } from '@cat-factory/sdk'
  */
 export type PublicApiScope = 'read' | 'write' | 'decide' | 'admin'
 
-/** The scope ladder, least to greatest. The ARRAY ORDER is the ranking. */
+/**
+ * The scope ladder, least to greatest. The ARRAY ORDER is the ranking, and this is the
+ * deployment's own vocabulary: generated from the spec's `x-public-api-scopes`, which the
+ * server stamps from the same constant its admission check ranks with.
+ */
 export const PUBLIC_API_SCOPE_LADDER: readonly PublicApiScope[] = ['read', 'write', 'decide', 'admin']
 
 /** One `/api/v1` operation, as a policy-annotated capability. */
@@ -63,7 +67,12 @@ export interface GatekeeperBinding {
   queryParams: readonly string[]
   /** Whether `invoke` reads `args.body` as the request body. */
   hasBody: boolean
-  /** Forward a call to the SDK: path params and query keys at the top level, body under `body`. */
+  /**
+   * Forward a call to the SDK: path params and query keys at the top level, body under `body`.
+   *
+   * Every failure is a REJECTION, the SDK's own and a missing-argument `TypeError` alike, so one
+   * `.catch()` (or one `try` around an `await`) covers a forwarded call.
+   */
   invoke: (client: CatFactoryClient, args: Record<string, unknown>) => Promise<unknown>
 }
 
@@ -115,7 +124,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['id'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.jobs.cancel(str(args, 'id')),
+    invoke: async (client, args) => client.jobs.cancel(str(args, 'id')),
   },
   {
     name: 'jobs_create',
@@ -132,7 +141,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: [],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.jobs.create(args.body as Parameters<CatFactoryClient['jobs']['create']>[0]),
+    invoke: async (client, args) => client.jobs.create(args.body as Parameters<CatFactoryClient['jobs']['create']>[0]),
   },
   {
     name: 'jobs_get',
@@ -148,7 +157,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['id'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.jobs.get(str(args, 'id')),
+    invoke: async (client, args) => client.jobs.get(str(args, 'id')),
   },
   {
     name: 'jobs_list',
@@ -164,7 +173,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: [],
     queryParams: QUERY_JOBS_LIST,
     hasBody: false,
-    invoke: (client, args) => client.jobs.list(pick(args, QUERY_JOBS_LIST)),
+    invoke: async (client, args) => client.jobs.list(pick(args, QUERY_JOBS_LIST)),
   },
   {
     name: 'jobs_stream',
@@ -180,7 +189,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['id'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.jobs.stream(str(args, 'id')),
+    invoke: async (client, args) => client.jobs.stream(str(args, 'id')),
   },
   {
     name: 'services_list',
@@ -196,7 +205,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: [],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.services.list(),
+    invoke: async (client, args) => client.services.list(),
   },
   {
     name: 'tasks_create',
@@ -212,7 +221,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['serviceId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.tasks.create(str(args, 'serviceId'), args.body as Parameters<CatFactoryClient['tasks']['create']>[1]),
+    invoke: async (client, args) => client.tasks.create(str(args, 'serviceId'), args.body as Parameters<CatFactoryClient['tasks']['create']>[1]),
   },
   {
     name: 'tasks_delete',
@@ -229,7 +238,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['taskId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.tasks.delete(str(args, 'taskId')),
+    invoke: async (client, args) => client.tasks.delete(str(args, 'taskId')),
   },
   {
     name: 'tasks_get',
@@ -245,7 +254,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['taskId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.tasks.get(str(args, 'taskId')),
+    invoke: async (client, args) => client.tasks.get(str(args, 'taskId')),
   },
   {
     name: 'tasks_get_run',
@@ -261,7 +270,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['taskId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.tasks.getRun(str(args, 'taskId')),
+    invoke: async (client, args) => client.tasks.getRun(str(args, 'taskId')),
   },
   {
     name: 'tasks_list_by_service',
@@ -277,7 +286,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['serviceId'],
     queryParams: QUERY_TASKS_LIST_BY_SERVICE,
     hasBody: false,
-    invoke: (client, args) => client.tasks.listByService(str(args, 'serviceId'), pick(args, QUERY_TASKS_LIST_BY_SERVICE)),
+    invoke: async (client, args) => client.tasks.listByService(str(args, 'serviceId'), pick(args, QUERY_TASKS_LIST_BY_SERVICE)),
   },
   {
     name: 'tasks_retry',
@@ -294,7 +303,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['taskId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.tasks.retry(str(args, 'taskId')),
+    invoke: async (client, args) => client.tasks.retry(str(args, 'taskId')),
   },
   {
     name: 'tasks_start',
@@ -311,7 +320,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['taskId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.tasks.start(str(args, 'taskId'), args.body as Parameters<CatFactoryClient['tasks']['start']>[1]),
+    invoke: async (client, args) => client.tasks.start(str(args, 'taskId'), args.body as Parameters<CatFactoryClient['tasks']['start']>[1]),
   },
   {
     name: 'tasks_stop',
@@ -327,7 +336,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['taskId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.tasks.stop(str(args, 'taskId')),
+    invoke: async (client, args) => client.tasks.stop(str(args, 'taskId')),
   },
   {
     name: 'tasks_stream',
@@ -343,7 +352,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['taskId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.tasks.stream(str(args, 'taskId')),
+    invoke: async (client, args) => client.tasks.stream(str(args, 'taskId')),
   },
   {
     name: 'tasks_update',
@@ -359,7 +368,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['taskId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.tasks.update(str(args, 'taskId'), args.body as Parameters<CatFactoryClient['tasks']['update']>[1]),
+    invoke: async (client, args) => client.tasks.update(str(args, 'taskId'), args.body as Parameters<CatFactoryClient['tasks']['update']>[1]),
   },
   {
     name: 'pipelines_list',
@@ -375,7 +384,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: [],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.pipelines.list(),
+    invoke: async (client, args) => client.pipelines.list(),
   },
   {
     name: 'task_types_list',
@@ -391,7 +400,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: [],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.taskTypes.list(),
+    invoke: async (client, args) => client.taskTypes.list(),
   },
   {
     name: 'notifications_act',
@@ -408,7 +417,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['id'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.notifications.act(str(args, 'id')),
+    invoke: async (client, args) => client.notifications.act(str(args, 'id')),
   },
   {
     name: 'notifications_dismiss',
@@ -424,7 +433,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['id'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.notifications.dismiss(str(args, 'id')),
+    invoke: async (client, args) => client.notifications.dismiss(str(args, 'id')),
   },
   {
     name: 'notifications_list',
@@ -440,7 +449,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: [],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.notifications.list(),
+    invoke: async (client, args) => client.notifications.list(),
   },
   {
     name: 'webhook_delete',
@@ -457,7 +466,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: [],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.webhook.delete(),
+    invoke: async (client, args) => client.webhook.delete(),
   },
   {
     name: 'webhook_get',
@@ -473,7 +482,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: [],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.webhook.get(),
+    invoke: async (client, args) => client.webhook.get(),
   },
   {
     name: 'webhook_set',
@@ -490,7 +499,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: [],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.webhook.set(args.body as Parameters<CatFactoryClient['webhook']['set']>[0]),
+    invoke: async (client, args) => client.webhook.set(args.body as Parameters<CatFactoryClient['webhook']['set']>[0]),
   },
   {
     name: 'usage_get',
@@ -506,7 +515,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: [],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.usage.get(),
+    invoke: async (client, args) => client.usage.get(),
   },
   {
     name: 'me_get',
@@ -522,7 +531,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: [],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.me.get(),
+    invoke: async (client, args) => client.me.get(),
   },
   {
     name: 'decisions_answer_agent_decision',
@@ -538,7 +547,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'decisionId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.answerAgentDecision(str(args, 'runId'), str(args, 'decisionId'), args.body as Parameters<CatFactoryClient['decisions']['answerAgentDecision']>[2]),
+    invoke: async (client, args) => client.decisions.answerAgentDecision(str(args, 'runId'), str(args, 'decisionId'), args.body as Parameters<CatFactoryClient['decisions']['answerAgentDecision']>[2]),
   },
   {
     name: 'decisions_answer_follow_up',
@@ -554,7 +563,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'itemId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.answerFollowUp(str(args, 'runId'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['answerFollowUp']>[2]),
+    invoke: async (client, args) => client.decisions.answerFollowUp(str(args, 'runId'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['answerFollowUp']>[2]),
   },
   {
     name: 'decisions_answer_interview_question',
@@ -570,7 +579,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.answerInterviewQuestion(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['answerInterviewQuestion']>[1]),
+    invoke: async (client, args) => client.decisions.answerInterviewQuestion(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['answerInterviewQuestion']>[1]),
   },
   {
     name: 'decisions_approve_step',
@@ -586,7 +595,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'approvalId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.approveStep(str(args, 'runId'), str(args, 'approvalId'), args.body as Parameters<CatFactoryClient['decisions']['approveStep']>[2]),
+    invoke: async (client, args) => client.decisions.approveStep(str(args, 'runId'), str(args, 'approvalId'), args.body as Parameters<CatFactoryClient['decisions']['approveStep']>[2]),
   },
   {
     name: 'decisions_approve_visual_confirmation',
@@ -602,7 +611,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.decisions.approveVisualConfirmation(str(args, 'runId')),
+    invoke: async (client, args) => client.decisions.approveVisualConfirmation(str(args, 'runId')),
   },
   {
     name: 'decisions_challenge_pr_review_finding',
@@ -618,7 +627,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'findingId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.challengePrReviewFinding(str(args, 'runId'), str(args, 'findingId'), args.body as Parameters<CatFactoryClient['decisions']['challengePrReviewFinding']>[2]),
+    invoke: async (client, args) => client.decisions.challengePrReviewFinding(str(args, 'runId'), str(args, 'findingId'), args.body as Parameters<CatFactoryClient['decisions']['challengePrReviewFinding']>[2]),
   },
   {
     name: 'decisions_choose_fork',
@@ -634,7 +643,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.chooseFork(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['chooseFork']>[1]),
+    invoke: async (client, args) => client.decisions.chooseFork(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['chooseFork']>[1]),
   },
   {
     name: 'decisions_confirm_human_test',
@@ -650,7 +659,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.decisions.confirmHumanTest(str(args, 'runId')),
+    invoke: async (client, args) => client.decisions.confirmHumanTest(str(args, 'runId')),
   },
   {
     name: 'decisions_continue_interview',
@@ -666,7 +675,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.decisions.continueInterview(str(args, 'runId')),
+    invoke: async (client, args) => client.decisions.continueInterview(str(args, 'runId')),
   },
   {
     name: 'decisions_dismiss_follow_up',
@@ -682,7 +691,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'itemId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.decisions.dismissFollowUp(str(args, 'runId'), str(args, 'itemId')),
+    invoke: async (client, args) => client.decisions.dismissFollowUp(str(args, 'runId'), str(args, 'itemId')),
   },
   {
     name: 'decisions_dismiss_pr_review_finding',
@@ -698,7 +707,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'findingId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.decisions.dismissPrReviewFinding(str(args, 'runId'), str(args, 'findingId')),
+    invoke: async (client, args) => client.decisions.dismissPrReviewFinding(str(args, 'runId'), str(args, 'findingId')),
   },
   {
     name: 'decisions_file_follow_up',
@@ -714,7 +723,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'itemId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.decisions.fileFollowUp(str(args, 'runId'), str(args, 'itemId')),
+    invoke: async (client, args) => client.decisions.fileFollowUp(str(args, 'runId'), str(args, 'itemId')),
   },
   {
     name: 'decisions_incorporate',
@@ -730,7 +739,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.incorporate(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['incorporate']>[1]),
+    invoke: async (client, args) => client.decisions.incorporate(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['incorporate']>[1]),
   },
   {
     name: 'decisions_incorporate_brainstorm',
@@ -746,7 +755,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'stage'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.incorporateBrainstorm(str(args, 'runId'), str(args, 'stage'), args.body as Parameters<CatFactoryClient['decisions']['incorporateBrainstorm']>[2]),
+    invoke: async (client, args) => client.decisions.incorporateBrainstorm(str(args, 'runId'), str(args, 'stage'), args.body as Parameters<CatFactoryClient['decisions']['incorporateBrainstorm']>[2]),
   },
   {
     name: 'decisions_incorporate_clarity',
@@ -762,7 +771,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.incorporateClarity(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['incorporateClarity']>[1]),
+    invoke: async (client, args) => client.decisions.incorporateClarity(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['incorporateClarity']>[1]),
   },
   {
     name: 'decisions_list',
@@ -778,7 +787,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.decisions.list(str(args, 'runId')),
+    invoke: async (client, args) => client.decisions.list(str(args, 'runId')),
   },
   {
     name: 'decisions_proceed',
@@ -794,7 +803,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.decisions.proceed(str(args, 'runId')),
+    invoke: async (client, args) => client.decisions.proceed(str(args, 'runId')),
   },
   {
     name: 'decisions_proceed_brainstorm',
@@ -810,7 +819,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'stage'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.decisions.proceedBrainstorm(str(args, 'runId'), str(args, 'stage')),
+    invoke: async (client, args) => client.decisions.proceedBrainstorm(str(args, 'runId'), str(args, 'stage')),
   },
   {
     name: 'decisions_proceed_clarity',
@@ -826,7 +835,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.decisions.proceedClarity(str(args, 'runId')),
+    invoke: async (client, args) => client.decisions.proceedClarity(str(args, 'runId')),
   },
   {
     name: 'decisions_proceed_interview',
@@ -842,7 +851,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.decisions.proceedInterview(str(args, 'runId')),
+    invoke: async (client, args) => client.decisions.proceedInterview(str(args, 'runId')),
   },
   {
     name: 'decisions_reject_step',
@@ -858,7 +867,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'approvalId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.rejectStep(str(args, 'runId'), str(args, 'approvalId'), args.body as Parameters<CatFactoryClient['decisions']['rejectStep']>[2]),
+    invoke: async (client, args) => client.decisions.rejectStep(str(args, 'runId'), str(args, 'approvalId'), args.body as Parameters<CatFactoryClient['decisions']['rejectStep']>[2]),
   },
   {
     name: 'decisions_reply_to_brainstorm_option',
@@ -874,7 +883,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'stage', 'itemId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.replyToBrainstormOption(str(args, 'runId'), str(args, 'stage'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['replyToBrainstormOption']>[3]),
+    invoke: async (client, args) => client.decisions.replyToBrainstormOption(str(args, 'runId'), str(args, 'stage'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['replyToBrainstormOption']>[3]),
   },
   {
     name: 'decisions_reply_to_clarity_finding',
@@ -890,7 +899,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'itemId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.replyToClarityFinding(str(args, 'runId'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['replyToClarityFinding']>[2]),
+    invoke: async (client, args) => client.decisions.replyToClarityFinding(str(args, 'runId'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['replyToClarityFinding']>[2]),
   },
   {
     name: 'decisions_reply_to_finding',
@@ -906,7 +915,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'itemId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.replyToFinding(str(args, 'runId'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['replyToFinding']>[2]),
+    invoke: async (client, args) => client.decisions.replyToFinding(str(args, 'runId'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['replyToFinding']>[2]),
   },
   {
     name: 'decisions_request_human_test_fix',
@@ -922,7 +931,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.requestHumanTestFix(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['requestHumanTestFix']>[1]),
+    invoke: async (client, args) => client.decisions.requestHumanTestFix(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['requestHumanTestFix']>[1]),
   },
   {
     name: 'decisions_request_step_changes',
@@ -938,7 +947,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'approvalId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.requestStepChanges(str(args, 'runId'), str(args, 'approvalId'), args.body as Parameters<CatFactoryClient['decisions']['requestStepChanges']>[2]),
+    invoke: async (client, args) => client.decisions.requestStepChanges(str(args, 'runId'), str(args, 'approvalId'), args.body as Parameters<CatFactoryClient['decisions']['requestStepChanges']>[2]),
   },
   {
     name: 'decisions_request_visual_confirmation_fix',
@@ -954,7 +963,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.requestVisualConfirmationFix(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['requestVisualConfirmationFix']>[1]),
+    invoke: async (client, args) => client.decisions.requestVisualConfirmationFix(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['requestVisualConfirmationFix']>[1]),
   },
   {
     name: 'decisions_re_review',
@@ -970,7 +979,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.decisions.reReview(str(args, 'runId')),
+    invoke: async (client, args) => client.decisions.reReview(str(args, 'runId')),
   },
   {
     name: 'decisions_re_review_brainstorm',
@@ -986,7 +995,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'stage'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.decisions.reReviewBrainstorm(str(args, 'runId'), str(args, 'stage')),
+    invoke: async (client, args) => client.decisions.reReviewBrainstorm(str(args, 'runId'), str(args, 'stage')),
   },
   {
     name: 'decisions_re_review_clarity',
@@ -1002,7 +1011,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.decisions.reReviewClarity(str(args, 'runId')),
+    invoke: async (client, args) => client.decisions.reReviewClarity(str(args, 'runId')),
   },
   {
     name: 'decisions_resolve_brainstorm_exceeded',
@@ -1018,7 +1027,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'stage'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.resolveBrainstormExceeded(str(args, 'runId'), str(args, 'stage'), args.body as Parameters<CatFactoryClient['decisions']['resolveBrainstormExceeded']>[2]),
+    invoke: async (client, args) => client.decisions.resolveBrainstormExceeded(str(args, 'runId'), str(args, 'stage'), args.body as Parameters<CatFactoryClient['decisions']['resolveBrainstormExceeded']>[2]),
   },
   {
     name: 'decisions_resolve_clarity_exceeded',
@@ -1034,7 +1043,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.resolveClarityExceeded(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolveClarityExceeded']>[1]),
+    invoke: async (client, args) => client.decisions.resolveClarityExceeded(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolveClarityExceeded']>[1]),
   },
   {
     name: 'decisions_resolve_exceeded',
@@ -1050,7 +1059,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.resolveExceeded(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolveExceeded']>[1]),
+    invoke: async (client, args) => client.decisions.resolveExceeded(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolveExceeded']>[1]),
   },
   {
     name: 'decisions_resolve_input_gate',
@@ -1066,7 +1075,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.resolveInputGate(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolveInputGate']>[1]),
+    invoke: async (client, args) => client.decisions.resolveInputGate(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolveInputGate']>[1]),
   },
   {
     name: 'decisions_resolve_judge',
@@ -1082,7 +1091,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.resolveJudge(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolveJudge']>[1]),
+    invoke: async (client, args) => client.decisions.resolveJudge(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolveJudge']>[1]),
   },
   {
     name: 'decisions_resolve_pr_review',
@@ -1098,7 +1107,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.resolvePrReview(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolvePrReview']>[1]),
+    invoke: async (client, args) => client.decisions.resolvePrReview(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolvePrReview']>[1]),
   },
   {
     name: 'decisions_resolve_step_exceeded',
@@ -1114,7 +1123,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'approvalId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.resolveStepExceeded(str(args, 'runId'), str(args, 'approvalId'), args.body as Parameters<CatFactoryClient['decisions']['resolveStepExceeded']>[2]),
+    invoke: async (client, args) => client.decisions.resolveStepExceeded(str(args, 'runId'), str(args, 'approvalId'), args.body as Parameters<CatFactoryClient['decisions']['resolveStepExceeded']>[2]),
   },
   {
     name: 'decisions_send_back_follow_up',
@@ -1130,7 +1139,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'itemId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.decisions.sendBackFollowUp(str(args, 'runId'), str(args, 'itemId')),
+    invoke: async (client, args) => client.decisions.sendBackFollowUp(str(args, 'runId'), str(args, 'itemId')),
   },
   {
     name: 'decisions_set_brainstorm_option_status',
@@ -1146,7 +1155,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'stage', 'itemId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.setBrainstormOptionStatus(str(args, 'runId'), str(args, 'stage'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['setBrainstormOptionStatus']>[3]),
+    invoke: async (client, args) => client.decisions.setBrainstormOptionStatus(str(args, 'runId'), str(args, 'stage'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['setBrainstormOptionStatus']>[3]),
   },
   {
     name: 'decisions_set_clarity_finding_status',
@@ -1162,7 +1171,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'itemId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.setClarityFindingStatus(str(args, 'runId'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['setClarityFindingStatus']>[2]),
+    invoke: async (client, args) => client.decisions.setClarityFindingStatus(str(args, 'runId'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['setClarityFindingStatus']>[2]),
   },
   {
     name: 'decisions_set_finding_status',
@@ -1178,7 +1187,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId', 'itemId'],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.decisions.setFindingStatus(str(args, 'runId'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['setFindingStatus']>[2]),
+    invoke: async (client, args) => client.decisions.setFindingStatus(str(args, 'runId'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['setFindingStatus']>[2]),
   },
   {
     name: 'debug_get_agent_context',
@@ -1194,7 +1203,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['snapshotId'],
     queryParams: QUERY_DEBUG_GET_AGENT_CONTEXT,
     hasBody: false,
-    invoke: (client, args) => client.debug.getAgentContext(str(args, 'snapshotId'), pick(args, QUERY_DEBUG_GET_AGENT_CONTEXT)),
+    invoke: async (client, args) => client.debug.getAgentContext(str(args, 'snapshotId'), pick(args, QUERY_DEBUG_GET_AGENT_CONTEXT)),
   },
   {
     name: 'debug_get_llm_call',
@@ -1210,7 +1219,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['callId'],
     queryParams: QUERY_DEBUG_GET_LLM_CALL,
     hasBody: false,
-    invoke: (client, args) => client.debug.getLlmCall(str(args, 'callId'), pick(args, QUERY_DEBUG_GET_LLM_CALL)),
+    invoke: async (client, args) => client.debug.getLlmCall(str(args, 'callId'), pick(args, QUERY_DEBUG_GET_LLM_CALL)),
   },
   {
     name: 'debug_get_run',
@@ -1226,7 +1235,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.debug.getRun(str(args, 'runId')),
+    invoke: async (client, args) => client.debug.getRun(str(args, 'runId')),
   },
   {
     name: 'debug_list_agent_context',
@@ -1242,7 +1251,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: QUERY_DEBUG_LIST_AGENT_CONTEXT,
     hasBody: false,
-    invoke: (client, args) => client.debug.listAgentContext(str(args, 'runId'), pick(args, QUERY_DEBUG_LIST_AGENT_CONTEXT)),
+    invoke: async (client, args) => client.debug.listAgentContext(str(args, 'runId'), pick(args, QUERY_DEBUG_LIST_AGENT_CONTEXT)),
   },
   {
     name: 'debug_list_llm_calls',
@@ -1258,7 +1267,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: QUERY_DEBUG_LIST_LLM_CALLS,
     hasBody: false,
-    invoke: (client, args) => client.debug.listLlmCalls(str(args, 'runId'), pick(args, QUERY_DEBUG_LIST_LLM_CALLS)),
+    invoke: async (client, args) => client.debug.listLlmCalls(str(args, 'runId'), pick(args, QUERY_DEBUG_LIST_LLM_CALLS)),
   },
   {
     name: 'debug_list_logs',
@@ -1274,7 +1283,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: QUERY_DEBUG_LIST_LOGS,
     hasBody: false,
-    invoke: (client, args) => client.debug.listLogs(str(args, 'runId'), pick(args, QUERY_DEBUG_LIST_LOGS)),
+    invoke: async (client, args) => client.debug.listLogs(str(args, 'runId'), pick(args, QUERY_DEBUG_LIST_LOGS)),
   },
   {
     name: 'debug_list_runs',
@@ -1290,7 +1299,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: [],
     queryParams: QUERY_DEBUG_LIST_RUNS,
     hasBody: false,
-    invoke: (client, args) => client.debug.listRuns(pick(args, QUERY_DEBUG_LIST_RUNS)),
+    invoke: async (client, args) => client.debug.listRuns(pick(args, QUERY_DEBUG_LIST_RUNS)),
   },
   {
     name: 'debug_list_search_queries',
@@ -1306,7 +1315,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: QUERY_DEBUG_LIST_SEARCH_QUERIES,
     hasBody: false,
-    invoke: (client, args) => client.debug.listSearchQueries(str(args, 'runId'), pick(args, QUERY_DEBUG_LIST_SEARCH_QUERIES)),
+    invoke: async (client, args) => client.debug.listSearchQueries(str(args, 'runId'), pick(args, QUERY_DEBUG_LIST_SEARCH_QUERIES)),
   },
   {
     name: 'debug_list_tool_calls',
@@ -1322,7 +1331,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: QUERY_DEBUG_LIST_TOOL_CALLS,
     hasBody: false,
-    invoke: (client, args) => client.debug.listToolCalls(str(args, 'runId'), pick(args, QUERY_DEBUG_LIST_TOOL_CALLS)),
+    invoke: async (client, args) => client.debug.listToolCalls(str(args, 'runId'), pick(args, QUERY_DEBUG_LIST_TOOL_CALLS)),
   },
   {
     name: 'evidence_download_artifact',
@@ -1338,7 +1347,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['artifactId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.evidence.downloadArtifact(str(args, 'artifactId')),
+    invoke: async (client, args) => client.evidence.downloadArtifact(str(args, 'artifactId')),
   },
   {
     name: 'evidence_get_outcome',
@@ -1354,7 +1363,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.evidence.getOutcome(str(args, 'runId')),
+    invoke: async (client, args) => client.evidence.getOutcome(str(args, 'runId')),
   },
   {
     name: 'evidence_get_report',
@@ -1370,7 +1379,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.evidence.getReport(str(args, 'runId')),
+    invoke: async (client, args) => client.evidence.getReport(str(args, 'runId')),
   },
   {
     name: 'evidence_list_artifacts',
@@ -1386,7 +1395,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['runId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.evidence.listArtifacts(str(args, 'runId')),
+    invoke: async (client, args) => client.evidence.listArtifacts(str(args, 'runId')),
   },
   {
     name: 'keys_create',
@@ -1402,7 +1411,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: [],
     queryParams: [],
     hasBody: true,
-    invoke: (client, args) => client.keys.create(args.body as Parameters<CatFactoryClient['keys']['create']>[0]),
+    invoke: async (client, args) => client.keys.create(args.body as Parameters<CatFactoryClient['keys']['create']>[0]),
   },
   {
     name: 'keys_list',
@@ -1418,7 +1427,7 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: [],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.keys.list(),
+    invoke: async (client, args) => client.keys.list(),
   },
   {
     name: 'keys_revoke',
@@ -1434,6 +1443,6 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     pathParams: ['keyId'],
     queryParams: [],
     hasBody: false,
-    invoke: (client, args) => client.keys.revoke(str(args, 'keyId')),
+    invoke: async (client, args) => client.keys.revoke(str(args, 'keyId')),
   },
 ]

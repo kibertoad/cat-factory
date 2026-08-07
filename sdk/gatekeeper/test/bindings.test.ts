@@ -4,8 +4,10 @@ import {
   PUBLIC_API_SCOPE_LADDER,
   bindingByName,
   bindingsWithinScope,
+  resolveConsequence,
   scopeSatisfies,
 } from '../src/index.js'
+import type { PublicApiScope } from '../src/index.js'
 import type { CatFactoryClient } from '@cat-factory/sdk'
 
 // Structural relations over the GENERATED table, derived from the table itself rather than
@@ -37,6 +39,46 @@ describe('scope ladder helpers', () => {
     expect(
       bindingsWithinScope(PUBLIC_API_SCOPE_LADDER[PUBLIC_API_SCOPE_LADDER.length - 1]!),
     ).toHaveLength(GATEKEEPER_BINDINGS.length)
+  })
+
+  // A rung this package has not got is version skew, and the honest answer says so. Ranking it -1
+  // would make `scopeSatisfies` answer `false` and `bindingsWithinScope` answer `[]`, which reads
+  // as a key that may do nothing: the same value a correctly-ranked `read` key would get if the
+  // whole table were admin-only, and the opposite fact.
+  it('refuses a scope the ladder does not carry, rather than ranking it below everything', () => {
+    const unknown = 'decide:own' as PublicApiScope
+    expect(() => scopeSatisfies(unknown, 'read')).toThrow(TypeError)
+    expect(() => scopeSatisfies('read', unknown)).toThrow(TypeError)
+    expect(() => bindingsWithinScope(unknown)).toThrow(/decide:own/)
+  })
+})
+
+describe('resolveConsequence', () => {
+  it('reads a GET as safe and idempotent', () => {
+    const read = GATEKEEPER_BINDINGS.find((binding) => binding.readOnly)!
+    expect(resolveConsequence(read)).toEqual({ destructive: false, idempotent: true })
+  })
+
+  // The bug this exists to prevent: `binding.consequence?.destructive` answers `false` for an
+  // unannotated mutation, so a front-end filtering on it exposes exactly the calls it meant to
+  // hold back. The table annotates only the money/merge cases, so the unannotated mutations are
+  // the MAJORITY, not an edge.
+  it('reads an unannotated mutation as destructive and non-idempotent', () => {
+    const unannotated = GATEKEEPER_BINDINGS.filter(
+      (binding) => !binding.readOnly && !binding.consequence,
+    )
+    expect(unannotated.length).toBeGreaterThan(0)
+    for (const binding of unannotated) {
+      expect(resolveConsequence(binding)).toEqual({ destructive: true, idempotent: false })
+    }
+  })
+
+  it('defers to the annotation where the table carries one', () => {
+    const annotated = GATEKEEPER_BINDINGS.filter((binding) => binding.consequence)
+    expect(annotated.length).toBeGreaterThan(0)
+    for (const binding of annotated) {
+      expect(resolveConsequence(binding)).toEqual(binding.consequence)
+    }
   })
 })
 
@@ -98,6 +140,24 @@ describe('the generated table', () => {
       )
     },
   )
+
+  // `invoke` is typed as returning a Promise, and a policy layer forwards an argument bag it did
+  // not build. A synchronous throw from `str()` would escape past a caller's `.catch()`, so the
+  // missing-argument case has to arrive as a rejection like every SDK failure does.
+  it('rejects rather than throws when a required path parameter is missing', async () => {
+    const withPath = GATEKEEPER_BINDINGS.find((binding) => binding.pathParams.length > 0)!
+    // A client that would answer if it were reached, so the rejection is the missing argument and
+    // not an incidental read off a stub.
+    const client = new Proxy(
+      {},
+      { get: () => new Proxy({}, { get: () => () => Promise.resolve('ok') }) },
+    ) as CatFactoryClient
+    let returned: unknown
+    expect(() => {
+      returned = withPath.invoke(client, { body: {} })
+    }).not.toThrow()
+    await expect(returned).rejects.toThrow(withPath.pathParams[0]!)
+  })
 
   it('drops unknown keys instead of forwarding them as query parameters', async () => {
     const withQuery = GATEKEEPER_BINDINGS.find((binding) => binding.queryParams.length > 0)

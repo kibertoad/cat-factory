@@ -162,9 +162,11 @@ jobs:
               - 'backend/packages/contracts/src/public-api.ts'
               - 'backend/packages/contracts/src/public-api-keys.ts'
               - 'backend/packages/contracts/src/debug-api.ts'
-              - 'backend/packages/contracts/src/routes/public-api.ts'
-              - 'backend/packages/contracts/src/routes/public-decisions.ts'
-              - 'backend/packages/contracts/src/routes/debug-api.ts'
+              # The WHOLE routes directory, not the public files by name: the generator walks the
+              # contracts barrel and takes every `/api/v1` path it finds, so a new route file (or
+              # `_shared.ts`, which now carries the `withMinScope` floors the spec publishes)
+              # changes the spec without touching any name a hand-list could hold.
+              - 'backend/packages/contracts/src/routes/**'
               - 'backend/packages/server/src/modules/publicApi/**'
               - 'backend/internal/sdk-smoketest/**'
               # The harness boots the e2e test server, so a change to that wiring changes what the
