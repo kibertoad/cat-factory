@@ -19,7 +19,8 @@
 //   node scripts/check-runner-image-tag.mjs                 # consistency only
 //   node scripts/check-runner-image-tag.mjs --since <ref>   # + bump-vs-base
 //
-// The deploy.yml guard runs the same logic post-merge; this lets PR CI catch it first.
+// This repo publishes the images but deploys nothing, so PR CI is the only place the drift is
+// caught: the pins it guards are what a deployment reads as the supported tag.
 
 import { execFileSync } from 'node:child_process'
 import {

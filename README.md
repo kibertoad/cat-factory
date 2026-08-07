@@ -298,13 +298,13 @@ uses (and an all-AWS deployment composes all three):
 
 **Deployments** (examples; copy these to deploy on your own infra):
 
-| Path                                   | Package                        | Role                                                                                                                                                                                                                                                                                                                                                                               |
-| -------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`deploy/backend`](./deploy/backend)   | `@cat-factory/deploy-backend`  | Cloudflare Worker deployment: re-exports `@cat-factory/worker` + the production `wrangler.toml`. See [its README](./deploy/backend/README.md).                                                                                                                                                                                                                                     |
-| [`deploy/node`](./deploy/node)         | `@cat-factory/deploy-node`     | Node.js service deployment: calls `@cat-factory/node-server`'s `start()` (Postgres + pg-boss); ships a `Dockerfile` + `.env.example`. See [its README](./deploy/node/README.md).                                                                                                                                                                                                   |
-| [`deploy/frontend`](./deploy/frontend) | `@cat-factory/deploy-frontend` | Pages deployment: a thin Nuxt app that `extends` `@cat-factory/app` + the Pages `wrangler.toml`, plus a worked **consumer extension** example (the `acme:security` module, the frontend analogue of `example-custom-agent`, contributing a result window / nav entry / inspector panel / custom task type via `registerAppModule`). See [its README](./deploy/frontend/README.md). |
-| [`deploy/local`](./deploy/local)       | `@cat-factory/deploy-local`    | Local-mode deployment: calls `@cat-factory/local-server`'s `startLocal()`: agent jobs as local Docker containers, GitHub via a PAT, a local Postgres. See [its README](./deploy/local/README.md).                                                                                                                                                                                  |
-| [`deploy/preview`](./deploy/preview)   | —                              | Per-PR **test environments for cat-factory itself** (no package): a single-origin docker-compose stack for local deployments, and the reference preview workflow the built-in `cloudflare` environment backend drives (per-PR Worker + D1 + Pages preview). See [its README](./deploy/preview/README.md) and [`docs/internal/dogfooding.md`](./docs/internal/dogfooding.md).       |
+| Path                                   | Package                        | Role                                                                                                                                                                                                                                                                                                                                                                                        |
+| -------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`deploy/backend`](./deploy/backend)   | `@cat-factory/deploy-backend`  | Cloudflare Worker deployment TEMPLATE: re-exports `@cat-factory/worker` + a placeholder-filled `wrangler.toml`. See [its README](./deploy/backend/README.md).                                                                                                                                                                                                                               |
+| [`deploy/node`](./deploy/node)         | `@cat-factory/deploy-node`     | Node.js service deployment: calls `@cat-factory/node-server`'s `start()` (Postgres + pg-boss); ships a `Dockerfile` + `.env.example`. See [its README](./deploy/node/README.md).                                                                                                                                                                                                            |
+| [`deploy/frontend`](./deploy/frontend) | `@cat-factory/deploy-frontend` | Pages deployment TEMPLATE: a thin Nuxt app that `extends` `@cat-factory/app` + the Pages `wrangler.toml`, plus a worked **consumer extension** example (the `acme:security` module, the frontend analogue of `example-custom-agent`, contributing a result window / nav entry / inspector panel / custom task type via `registerAppModule`). See [its README](./deploy/frontend/README.md). |
+| [`deploy/local`](./deploy/local)       | `@cat-factory/deploy-local`    | Local-mode deployment: calls `@cat-factory/local-server`'s `startLocal()`: agent jobs as local Docker containers, GitHub via a PAT, a local Postgres. See [its README](./deploy/local/README.md).                                                                                                                                                                                           |
+| [`deploy/preview`](./deploy/preview)   | —                              | Per-PR **test environments for cat-factory itself** (no package): a single-origin docker-compose stack for local deployments, and the reference preview workflow the built-in `cloudflare` environment backend drives (per-PR Worker + D1 + Pages preview). See [its README](./deploy/preview/README.md) and [`docs/internal/dogfooding.md`](./docs/internal/dogfooding.md).                |
 
 In this repo the deployments depend on the libraries via `workspace:*`; in your
 own copy you swap that for the published npm version. The backend is a hexagonal
@@ -502,6 +502,14 @@ project in [`deploy/frontend/`](./deploy/frontend/wrangler.toml). The backend ca
 **your own** infrastructure, copy those directories and swap the `workspace:*`
 dependency for the published npm version; see each package's README.
 
+Those packages are **example projects**: templates you copy, not a deployment
+this repository operates. Every account id, resource id and hostname in them is a
+`REPLACE_WITH_*` placeholder or an `example.com` name, so nothing here deploys
+anywhere until you have filled them in, and this repository ships no CD workflow
+of its own. A real deployment lives in its own repository, depends on the
+published `@cat-factory/*` packages rather than `workspace:*`, and carries its own
+ids, secrets and deploy pipeline.
+
 A Cloudflare deployment is three resources, named in `deploy/*/wrangler.toml`
 and reachable at whatever hostnames you point at them:
 
@@ -593,13 +601,6 @@ deploy updates the production alias. Sanity-check after deploying:
 curl -s "$API_BASE/health"                          # {"status":"ok"}
 curl -s "$APP_BASE" | grep -o "${API_BASE#https://}"   # the API base baked into the SPA
 ```
-
-### Emergency takedown
-
-[`backend/scripts/teardown-production.sh`](./backend/scripts/teardown-production.sh)
-deletes the Worker (and its containers/workflows/crons), optionally the Pages
-project (`--include-pages`), and **always preserves** the D1 data.
-Re-deploying brings production back.
 
 ## Working on cat-factory itself
 

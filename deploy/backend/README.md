@@ -49,7 +49,9 @@ counterpart of `start({ … })` / `startLocal({ … })` on the Node and local fa
 
 ## Configure
 
-Edit `wrangler.toml`:
+Edit `wrangler.toml`. Everything deployment-specific in it ships as a
+`REPLACE_WITH_*` placeholder or an `example.com` hostname, so a copy you have not
+finished configuring fails the deploy instead of pointing at a stranger's account:
 
 - `name`, `[[d1_databases]].database_id`: your Worker name + D1 id
   (`wrangler d1 create cat_factory`).

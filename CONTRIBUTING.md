@@ -117,16 +117,16 @@ runner image:**
 
 This keeps the published image tag in lockstep with the source that produced it.
 
-### Publishing the runner image to Cloudflare (maintainer-only)
+### Mirroring the runner image into a Cloudflare account
 
-> This step is specific to **this** repo's own Cloudflare deployment: external
-> orgs deploying the libraries do not need it, so it is documented here rather
-> than in `deploy/*/README.md`.
+> This repo publishes the image but deploys nothing. The step below belongs to
+> whoever operates a Cloudflare deployment; it is documented here because the
+> `image:publish` script and the tag pins it depends on live in this tree.
 
 CI publishes the runner image to **GHCR**, but Cloudflare Containers cannot pull
 from GHCR (only the Cloudflare managed registry, Docker Hub, and ECR are
-supported pull sources). So before deploying the backend, mirror the image into
-the managed registry the Worker actually pulls from:
+supported pull sources). So before deploying a Worker, the operator mirrors the
+image into the managed registry that Worker pulls from:
 
 ```sh
 pnpm --filter @cat-factory/deploy-backend image:publish   # build + push to registry.cloudflare.com
@@ -134,9 +134,12 @@ pnpm --filter @cat-factory/deploy-backend deploy          # wrangler deploy
 ```
 
 `image:publish` builds the harness `Dockerfile` and pushes it with
-`wrangler containers build --push`; pin the `registry.cloudflare.com/...:<tag>`
-ref it prints in `deploy/backend/wrangler.toml`. Bump the `:<tag>` in lockstep
-with `@cat-factory/executor-harness`'s version whenever the image changes.
+`wrangler containers build --push`, printing a
+`registry.cloudflare.com/<account-id>/...:<tag>` ref to pin in that deployment's
+`wrangler.toml`. In this repo, `deploy/backend/wrangler.toml` holds the same pin
+as a placeholder-account TEMPLATE, and its `:<tag>` must move in lockstep with
+`@cat-factory/executor-harness`'s version whenever the image changes: that tag is
+what tells a deployment which image the release supports.
 
 ### Changes that need no release
 

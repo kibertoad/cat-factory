@@ -10,13 +10,20 @@ so it doesn't ship as an empty shell.
 **Any change to what goes into the runner image** (harness `src/**`, `Dockerfile`,
 `tsconfig.json`, the pinned `PI_*` args) MUST bump `@cat-factory/executor-harness`'s version AND
 the matching tag in `deploy/backend/package.json`, `deploy/backend/wrangler.toml`, and
-`RECOMMENDED_HARNESS_IMAGE` in `backend/runtimes/local/src/harnessImage.ts`; then
-`pnpm image:publish` + `pnpm deploy` from `deploy/backend`. The deployment serves the Cloudflare
-managed-registry image, not GHCR, so the GHCR auto-publish does not roll it out.
+`RECOMMENDED_HARNESS_IMAGE` in `backend/runtimes/local/src/harnessImage.ts`.
 
-**Reusing a tag does NOT deploy** (`wrangler deploy` diffs by tag string), leaving new containers
-on stale code; the symptom is `Container dispatch failed (HTTP 404)`. Only a fresh immutable tag
-forces the rollout.
+This repository publishes the image (`docker-publish.yml`, to GHCR + Docker Hub) but deploys
+nothing: `deploy/backend` is a template, and the real deployments live in their own repositories.
+Those pins are therefore a DECLARATION of the supported tag, which is what a deployment reads to
+decide what to run. `scripts/check-runner-image-tag.mjs` guards them on every PR, since no
+post-merge deploy would catch the drift.
+
+A Cloudflare deployment serves the managed-registry image rather than GHCR (Cloudflare Containers
+cannot pull from GHCR), so it republishes the tag into its own registry with `image:publish` before
+`wrangler deploy`. **Reusing a tag does NOT deploy** there (`wrangler deploy` diffs by tag string),
+leaving new containers on stale code; the symptom is `Container dispatch failed (HTTP 404)`. Only a
+fresh immutable tag forces the rollout, which is why the pin bump above is mandatory rather than
+tidy.
 
 The release PR re-syncs the pins automatically, so don't hand-fix a red release PR. Consequence:
 the released tag may differ from the one the feature PR published; content is identical, but the
