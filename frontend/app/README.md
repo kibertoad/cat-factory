@@ -183,10 +183,18 @@ is not stale and not fresh, and ranking it as either invents a fact), and **ever
 board order**, since these re-run on every live push and an unresolved tie makes the lane shuffle
 itself. `nullsLast` is the single place the first rule lives.
 
-**Sizing is decoupled from content** (`utils/laneGeometry.ts`, read by both `contentSize` and
-`FrameSwimlanes`). A lane scrolls; it does not grow. A service with 300 open tasks gets the same
-frame as one with three, which is what the old free layout could not do — a busy service grew until
-it dwarfed its neighbours. A dragged frame border raises the floor those constants set.
+**Sizing is decoupled from content** (`utils/laneGeometry.ts`). A lane scrolls; it does not grow. A
+service with 300 open tasks gets the same frame as one with three, which is what the old free layout
+could not do — a busy service grew until it dwarfed its neighbours.
+
+Three consumers have to agree about that size, which is why the module exports two FUNCTIONS rather
+than leaving each to do the arithmetic: `frameContentSize` is the frame's floor (read by
+`contentSize`, and by `framePlacement.EMPTY_FRAME_SIZE`, which has to reserve a spot for a frame
+that does not exist yet and so cannot measure it), and `laneBodyHeightIn` is its inverse, handing a
+lane whatever the frame's ACTUAL size leaves it. A dragged border therefore grows the lanes rather
+than leaving dead canvas below them, and a constant restating either answer is exactly what went
+stale before. A frame with no children at all is the one that skips the lanes: it renders one "add
+the first task" panel and is sized for that.
 
 **Two preferences, deliberately different scopes.** The sort/group choice is per user, per browser
 (`stores/laneView.ts`, persisted like the interface tier): it is personal and changes several times
@@ -214,6 +222,18 @@ something a drop can decide — the lane is derived from state, so dropping a no
 reader has grouping set to `module`, the inspector carries a **module picker** that does not depend
 on the current grouping; module sub-frames no longer render as boxes, so without it the only route
 into a module would be to change a view preference first.
+
+**A move re-stamps the module the task DECLARES**, which is the one thing about that drag that is
+not obvious. A task names its module twice: the block it is parented to, and `moduleName`, which
+exists because the engine only materialises the module block on merge, so a task can name its module
+before anything is its parent. Grouping reads the parent and falls back to the declared name — so a
+card dragged OUT of a module and left still declaring it lands right back in the group it came from.
+`BoardService.reparent` therefore rewrites the name from the destination container, exactly as it
+already rewrote the `type` a task inherits from its frame, and the SPA's optimistic write predicts
+the same answer through the shared `moduleNameInContainer` (`@cat-factory/contracts`) so the card
+does not visibly jump when the response lands. "No module" is the EMPTY STRING on the wire, the way
+every other clearable field spells a clear; `undefined` is dropped by `JSON.stringify` and reaches
+the server as an empty patch.
 
 ## Interface modes (basic / advanced)
 

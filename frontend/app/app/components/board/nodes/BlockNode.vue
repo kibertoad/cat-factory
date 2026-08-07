@@ -10,6 +10,7 @@ import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameStacking } from '~/composables/useFrameStacking'
 import { useViewport } from '~/composables/useViewport'
+import { laneBodyHeightIn } from '~/utils/laneGeometry'
 
 // Vue Flow passes the node's `id` and `data` as props to custom node components.
 // Only frames are rendered as board nodes; their tasks live inside the card.
@@ -53,6 +54,9 @@ const hasTasks = computed(
 )
 const prTasks = computed(() => allTasks.value.filter((t) => t.status === 'pr_ready').length)
 const canvas = computed(() => board.containerSize(props.id))
+// A lane's scroll viewport fills whatever the frame's actual size leaves it, so dragging the
+// frame's border gives the reader more of the lane rather than dead canvas beneath it.
+const laneBodyHeight = computed(() => laneBodyHeightIn(canvas.value, initiativeBlocks.value.length))
 
 // Frame status is derived from its tasks — services never reach "done".
 const frameStatus = computed<BlockStatus>(() => board.frameStatus(props.id))
@@ -492,7 +496,7 @@ const ITEM_ICON: Record<string, string> = {
             <InitiativeCard v-for="i in initiativeBlocks" :key="i.id" :block-id="i.id" />
           </div>
 
-          <FrameSwimlanes v-if="hasTasks" :frame-id="block.id" />
+          <FrameSwimlanes v-if="hasTasks" :frame-id="block.id" :lane-body-height="laneBodyHeight" />
 
           <button
             v-if="!hasTasks && access.canWriteBoard.value"

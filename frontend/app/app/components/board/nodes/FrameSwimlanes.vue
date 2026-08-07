@@ -14,7 +14,11 @@ import { LANE_META } from '~/utils/swimlanes'
  * three lanes a reader actually works in. As a strip it is one row when shut and a wide grid when
  * opened, which is also the better shape for scanning history.
  */
-const props = defineProps<{ frameId: string }>()
+const props = defineProps<{
+  frameId: string
+  /** A live lane's scroll viewport, resolved by the frame from its own size. */
+  laneBodyHeight: number
+}>()
 
 const { t } = useI18n()
 const laneView = useLaneViewStore()
@@ -52,11 +56,10 @@ const withheldNote = computed(() => {
       <TaskLane
         v-for="rendered in liveLanes"
         :key="rendered.lane"
-        :lane="rendered.lane"
-        :groups="rendered.groups"
-        :total="rendered.total"
+        :rendered="rendered"
         :group-key="laneView.groupKey"
         :frame-id="frameId"
+        :body-height="laneBodyHeight"
       />
     </div>
 
@@ -100,13 +103,18 @@ const withheldNote = computed(() => {
         }}</span>
       </button>
 
+      <!-- The archive opens as a WIDE GRID: each group takes the strip's full width and wraps its
+           own cards across it, and the groups stack. Wrapping the GROUPS instead read correctly
+           only when there were several of them — under the default `none` grouping a lane is
+           exactly one group, so the whole archive rendered as a single card-wide column down the
+           left of an otherwise empty strip. -->
       <div
         v-if="!laneView.doneLaneCollapsed"
         :data-drop-zone="frameId"
         data-testid="lane-done"
         data-lane="done"
-        class="nodrag flex flex-wrap items-start gap-2 overflow-y-auto p-2 pt-0"
-        :style="{ maxHeight: LANE_GEOMETRY.laneBodyHeight + 'px' }"
+        class="nodrag space-y-2 overflow-y-auto p-2 pt-0"
+        :style="{ maxHeight: laneBodyHeight + 'px' }"
       >
         <!-- A zero cap is a real setting ("count them, show none"), so the strip explains why it
              has nothing in it rather than looking broken. -->
@@ -116,14 +124,15 @@ const withheldNote = computed(() => {
         >
           {{ t('board.lanes.done.allWithheld') }}
         </p>
-        <div
+        <LaneGroup
           v-for="(group, i) in doneLane.groups"
           v-else
           :key="group.label ?? `catch-all-${i}`"
-          :style="{ width: LANE_GEOMETRY.cardWidth + 'px' }"
-        >
-          <LaneGroup :group="group" :group-key="laneView.groupKey" :frame-id="frameId" />
-        </div>
+          :group="group"
+          :group-key="laneView.groupKey"
+          :frame-id="frameId"
+          layout="grid"
+        />
       </div>
     </div>
   </div>

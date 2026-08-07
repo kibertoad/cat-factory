@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import LaneTask from './LaneTask.vue'
 import { MODULE_META, taskTypeMeta } from '~/utils/catalog'
+import { LANE_GEOMETRY } from '~/utils/laneGeometry'
 import type { LaneGroup, LaneGroupKey } from '~/utils/laneSort'
 import { LANE_REASON_LABEL_KEYS, type LaneReason } from '~/utils/swimlanes'
 
@@ -17,12 +18,20 @@ import { LANE_REASON_LABEL_KEYS, type LaneReason } from '~/utils/swimlanes'
  * longer render as boxes, so this is the board's drag route into a module. The inspector's module
  * picker is the route that does not depend on the current grouping.
  */
-const props = defineProps<{
-  group: LaneGroup
-  groupKey: LaneGroupKey
-  /** The enclosing service frame, so the catch-all group can be the way back OUT of a module. */
-  frameId: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    group: LaneGroup
+    groupKey: LaneGroupKey
+    /** The enclosing service frame, so the catch-all group can be the way back OUT of a module. */
+    frameId: string
+    /**
+     * How the group's own cards run: down a lane column (the default) or wrapped across the full
+     * width of the Done strip, which is what makes the opened archive a grid rather than a column.
+     */
+    layout?: 'column' | 'grid'
+  }>(),
+  { layout: 'column' },
+)
 
 const { t } = useI18n()
 
@@ -72,6 +81,13 @@ const icon = computed(() => {
       <span class="truncate" :title="label">{{ label }}</span>
       <span class="ms-auto shrink-0 tabular-nums">{{ group.entries.length }}</span>
     </div>
-    <LaneTask v-for="entry in group.entries" :key="entry.task.id" :task-id="entry.task.id" />
+    <div :class="layout === 'grid' ? 'flex flex-wrap items-start gap-2' : 'space-y-1.5'">
+      <LaneTask
+        v-for="entry in group.entries"
+        :key="entry.task.id"
+        :task-id="entry.task.id"
+        :style="layout === 'grid' ? { width: LANE_GEOMETRY.cardWidth + 'px' } : undefined"
+      />
+    </div>
   </div>
 </template>

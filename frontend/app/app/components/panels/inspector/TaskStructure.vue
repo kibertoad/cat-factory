@@ -47,8 +47,10 @@ async function setModule(name: string) {
   if (name === previous) return
   try {
     // The declared module is what the engine reads when it materialises the module block on
-    // merge, so it is written first and is authoritative.
-    await board.updateBlock(props.block.id, { moduleName: name || undefined })
+    // merge, so it is written first and is authoritative. "No module" sends the EMPTY STRING,
+    // which is how `updateBlock` spells a clear: `undefined` is dropped by `JSON.stringify`, so
+    // it reached the server as an empty patch and the response then restored the old value.
+    await board.updateBlock(props.block.id, { moduleName: name })
 
     // When a block for that module already exists, move the task under it now rather than waiting
     // for a merge, so the board's grouping matches what was just chosen.

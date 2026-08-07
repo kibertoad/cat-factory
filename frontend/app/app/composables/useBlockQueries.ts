@@ -1,6 +1,6 @@
 import { computed, type Ref } from 'vue'
 import type { Block, BlockStatus } from '~/types/domain'
-import { LANE_GEOMETRY } from '~/utils/laneGeometry'
+import { frameContentSize, LANE_GEOMETRY } from '~/utils/laneGeometry'
 
 /**
  * Pure, read-only queries over a board's blocks. Extracted from the board store
@@ -172,6 +172,9 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
    * fixes the old behaviour where a service accumulating work grew a taller and taller frame
    * until it dwarfed its neighbours, and it is also what keeps this function pure over blocks:
    * a lane's population depends on run state, which this layer cannot see and must not need to.
+   *
+   * The arithmetic itself lives in `frameContentSize` so the placement helper, which sizes a
+   * frame that does not exist yet, reserves the same footprint this one will render at.
    */
   function contentSize(id: string): { w: number; h: number } {
     const b = getBlock(id)
@@ -180,21 +183,15 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
     // honest rather than returning zero, which would read as "measured, and empty".
     if (b?.level === 'module') return { w: LANE_GEOMETRY.laneWidth, h: 0 }
 
-    // Initiative cards sit in a wrapping band above the lanes, one fixed row height each.
-    const perRow = Math.max(
-      1,
-      Math.floor(LANE_GEOMETRY.canvasWidth / LANE_GEOMETRY.initiativeWidth),
-    )
-    const initiativeRows = Math.ceil(initiativesOf(id).length / perRow)
-
-    return {
-      w: LANE_GEOMETRY.canvasWidth,
-      h:
-        initiativeRows * LANE_GEOMETRY.initiativeHeight +
-        LANE_GEOMETRY.laneBodyHeight +
-        LANE_GEOMETRY.laneHeaderHeight +
-        LANE_GEOMETRY.doneStripHeight,
-    }
+    const initiatives = initiativesOf(id)
+    return frameContentSize({
+      // The predicate `BlockNode` renders the lanes on: an empty service shows one "add the first
+      // task" panel instead, and reserving lane-sized space for it would leave the frame two and
+      // a half times taller than its own contents.
+      hasChildren:
+        allTasksUnder(id).length > 0 || modulesOf(id).length > 0 || initiatives.length > 0,
+      initiatives: initiatives.length,
+    })
   }
 
   /**

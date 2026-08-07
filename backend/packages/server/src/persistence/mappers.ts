@@ -475,7 +475,10 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   optField('initiativeId', { clearOnEmpty: true }),
   optBoolIntField('autoStartDependents'),
   optField('confidence'),
-  optField('moduleName'),
+  // The declared module; an empty string detaches the task from it, like `epicId`/`initiativeId`
+  // above. A picker and a reparent can both clear it now, and storing `''` rather than NULL would
+  // leave two spellings of "no module" for every reader to remember to handle.
+  optField('moduleName', { clearOnEmpty: true }),
   optJsonField('fragmentIds'),
   // Service-level selection (frame blocks). Insert keeps a truthy value verbatim; patch
   // treats an empty array as "clear it" (length check), so the two directions differ.

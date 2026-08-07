@@ -838,6 +838,28 @@ function registerBlockRepositoryTests(harness: ConformanceHarness): void {
       await repo.update(workspace.id, id, { status: 'in_progress' })
       expect((await repo.get(workspace.id, id))?.completedAt ?? null).toBeNull()
     })
+
+    it('clears a task’s declared module on an empty patch, leaving one spelling of "none"', async () => {
+      // The board now has two routes that DETACH a task from its module (the inspector's picker
+      // and dragging it out of a module's group), and both spell the detach as the empty string,
+      // the way `updateBlock` spells every other clear. A store that wrote `''` verbatim instead
+      // of NULL would leave two spellings of "no module" for every reader to handle, and only one
+      // of the two runtimes would have it — so the store is what has to agree here.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const repo = app.blockRepository()
+      const created = await app.call<Block>(
+        'POST',
+        `/workspaces/${workspace.id}/blocks/blk_auth/tasks`,
+        { title: 'Rotate the signing keys' },
+      )
+      const id = created.body.id
+      await repo.update(workspace.id, id, { moduleName: 'Sessions' })
+      expect((await repo.get(workspace.id, id))?.moduleName).toBe('Sessions')
+
+      await repo.update(workspace.id, id, { moduleName: '' })
+      expect((await repo.get(workspace.id, id))?.moduleName ?? null).toBeNull()
+    })
   })
 }
 
