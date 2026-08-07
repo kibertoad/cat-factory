@@ -63,5 +63,15 @@ new `[[d1_databases]]` entry, a `files` entry in package.json, and a line in `de
 `db:migrate:*` scripts plus deploy.yml's `migrations` path filter, or its schema never reaches
 production.
 
+## The deployment extension surface
+
+`src/index.ts` publishes every app-owned registry constructor plus the authoring types, so a
+deployment's only cat-factory runtime dependency is this facade
+([ADR 0042](../../docs/adr/0042-facade-extension-surface.md)). This runtime takes its registries as
+`overrides: Partial<CoreDependencies>`, so it accepts every seam by construction and the
+reachability guard has nothing to say here; what still binds is constructibility, asserted by
+`test/extension-surface.test.ts`. That list is a SYMMETRY copy of the Node facade's classification
+(no shared dependency could carry one), so a seam added there lands here in the same change.
+
 **See also:** `CLAUDE.md` → "Multi-runtime facades & cross-runtime conformance", "Execution
 flow", "Repo bootstrap flow".

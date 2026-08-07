@@ -95,6 +95,115 @@ export {
   type BinaryGeneratorDefinition,
   defaultBinaryGeneratorRegistry,
 } from '@cat-factory/kernel'
+// Installation-level extension point for polling GATES and STEP RESOLVERS (parity with the Node
+// facade). `gateRegistryWithBuiltins()` is the one a deployment almost always wants: a bare
+// `defaultGateRegistry()` is EMPTY, so injecting one silently drops `ci` / `conflicts` /
+// `post-release-health` from every pipeline that names them.
+export {
+  GateRegistry,
+  defaultGateRegistry,
+  type GateDefinition,
+  type GateRegistration,
+  type GateFactory,
+  type GateProbe,
+  type GateContext,
+  type GateConfigFields,
+  StepResolverRegistry,
+  defaultStepResolverRegistry,
+  type StepCompletionResolver,
+  type StepResolverFactory,
+  type StepResolution,
+  type StepResolverContext,
+  type ResolverContext,
+} from '@cat-factory/kernel'
+// Through the Node facade rather than `@cat-factory/gates` directly: local IS the Node stack with
+// two differentiators, and it already depends on it, so a second physical path to the same builder
+// would be one more package a consumer could float out of step.
+export { gateRegistryWithBuiltins } from '@cat-factory/node-server'
+// Installation-level extension point for JUDGES (the inline-LLM-against-a-rubric bucket of the step
+// taxonomy). Empty by default: the platform ships none.
+export {
+  JudgeRegistry,
+  defaultJudgeRegistry,
+  type JudgeDefinition,
+  type JudgeFactory,
+  type JudgeRubric,
+  type JudgeSubject,
+  type JudgeAssessor,
+  type JudgeContext,
+} from '@cat-factory/kernel'
+// Installation-level extension point for VCS PROVIDERS: the neutral seam a deployment adds a git
+// host through, rather than re-hardcoding GitHub in a shared path.
+export {
+  VcsProviderRegistry,
+  defaultVcsRegistry,
+  type VcsProviderBundle,
+  type VcsProvider,
+} from '@cat-factory/kernel'
+// The app-owned PROMPT-FRAGMENT registry: the best-practice standards pool an operation's
+// `defaultFragmentIds` resolve against.
+//
+// `promptFragmentRegistryWithBuiltins()` is what a deployment wants unless it means the opposite:
+// an injected registry REPLACES the pool rather than merging with it, so a bare
+// `defaultPromptFragmentRegistry()` is a deployment whose agents fold its own standards and none of
+// the platform's. Both are legitimate, which is why both are exported and neither is inferred.
+export { PromptFragmentRegistry, defaultPromptFragmentRegistry } from '@cat-factory/kernel'
+export { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
+// The environment + runner backend registries, registered together on ONE bundle because an
+// environment backend and its runner backend are two halves of one deployment's infrastructure.
+export { createBackendRegistries, type BackendRegistries } from '@cat-factory/integrations'
+// The REUSABLE-OPERATION authoring vocabulary: the shapes a deployment's registration literals ARE,
+// re-exported so an org package types them against the facade it boots through and needs no direct
+// `@cat-factory/kernel` or `@cat-factory/contracts` dependency of its own. That is not a
+// convenience: a `workspace:*` dependency publishes as an EXACT version, so a consumer floating the
+// range onto a newer patch resolves a SECOND physical copy, and the registration lands in the one
+// nothing reads (ADR 0040).
+export type {
+  CustomTaskType,
+  TaskTypePresentation,
+  TaskTypeFieldDescriptor,
+  TaskTypeFieldType,
+  TaskTypeFieldOption,
+  DescriptorField,
+  DescriptorFieldType,
+  DescriptorFieldOption,
+  DescriptorFieldShowWhen,
+  DescriptorFieldValue,
+  DescriptorFieldValues,
+  PromptFragment,
+  Pipeline,
+  PipelineStep,
+  AgentKind,
+} from '@cat-factory/kernel'
+// The boot-validation problem shape, so a deployment can type the `escalateRegistrationWarning`
+// predicate it passes to `startLocal()` without a direct `@cat-factory/orchestration` dependency.
+export type { RegistrationProblem } from '@cat-factory/orchestration'
+// The pure rules over a descriptor's fields, so a deployment's own tests can check a form it
+// declares against the same validator the platform's four doors run.
+export {
+  isDescriptorFieldVisible,
+  renderDescriptorFieldValue,
+  sanitizeDescriptorFields,
+  validateDescriptorFields,
+} from '@cat-factory/kernel'
+// The BUILT-IN pipeline ids, so an operation can pin one of the shipped pipelines (or a task type
+// can name it as its `defaultPipelineId`) without restating a string the platform owns.
+export {
+  BLUEPRINT_PIPELINE_ID,
+  INITIATIVE_PIPELINE_ID,
+  INITIATIVE_DOCS_PIPELINE_ID,
+  BUILD_PIPELINE_ID,
+  SIMPLE_PIPELINE_ID,
+  ADAPTIVE_BUILD_PIPELINE_ID,
+  TECH_DEBT_PIPELINE_ID,
+  BUG_TRIAGE_PIPELINE_ID,
+  BUGFIX_PIPELINE_ID,
+  CODE_COMMENTS_PIPELINE_ID,
+  BUSINESS_DOCS_PIPELINE_ID,
+  DOCUMENT_PIPELINE_ID,
+  DOCUMENT_QUICK_PIPELINE_ID,
+  REVIEW_PIPELINE_ID,
+} from '@cat-factory/kernel'
 // The built-in model-preset ids + the catalog fallback default, re-exported so a local deploy-app
 // wrapper can name a preset when passing `startLocal({ defaultModelPresetId })` without a direct
 // `@cat-factory/kernel` import (parity with the Node facade).

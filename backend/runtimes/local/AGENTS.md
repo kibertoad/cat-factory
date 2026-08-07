@@ -110,4 +110,14 @@ transport + the GitHub token/client seams differ.
   inside the spawn's `stdout` listener and the flush on the killed path runs before the failure is
   enriched with what the run had burned.
 
+## The deployment extension surface
+
+`src/index.ts` publishes every app-owned registry constructor, the authoring types and the
+descriptor helpers, so a local deployment's only cat-factory runtime dependency is this facade
+([ADR 0042](../../docs/adr/0042-facade-extension-surface.md)). `test/registry-seams.spec.ts`
+derives both halves from the Node facade rather than re-listing them: the options are a superset of
+its seams, and the exports a superset of its registry constructors. That derivation matters most
+here, because `startLocal` withholds `buildContainer`, so a seam this facade cannot construct is one
+a local deployment cannot register AT ALL.
+
 **See also:** `deploy/local/README.md`, `CLAUDE.md` → "Multi-runtime facades".

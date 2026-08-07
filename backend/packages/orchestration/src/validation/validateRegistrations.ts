@@ -186,6 +186,30 @@ export interface ValidateRegistrationsOptions {
    * (errors still throw).
    */
   onWarn?: (problem: RegistrationProblem) => void
+  /**
+   * Raise a `warn` to an ERROR: return `true` and the problem joins the aggregated boot failure
+   * instead of the log.
+   *
+   * The severities here are set by ONE bar: boot ERRORS on what is fully knowable from a
+   * registration and WARNS only where it structurally cannot see the answer (ADR 0040). That bar is
+   * about what the PLATFORM can know, and for one warn in particular the DEPLOYMENT knows more.
+   * `task_type_unknown_fragment` fires for two causes it cannot separate: a typo in a code-owned id,
+   * and an account/workspace-tier id that merges per workspace at run time and is invisible at boot.
+   * A deployment whose operations reference only fragments it registers itself knows the second
+   * cause cannot apply to it, and for that deployment the warn names a real defect: part of an
+   * operation's standing guidance silently never enters a run, and for a `conditionalFragmentIds`
+   * entry it goes missing only for the cases matching the condition.
+   *
+   * So the SEVERITY is platform judgement and the DISPOSITION is deployment policy, which is the
+   * split this hook exists to express. It takes the whole problem rather than a list of codes on
+   * purpose: a deployment can escalate one code, a prefix, or everything, and a warn added later is
+   * covered by a predicate that never mentioned it.
+   *
+   * Escalated problems are collected and thrown TOGETHER with the genuine errors, so a boot failure
+   * still names every problem at once. A predicate that throws is a bug in the predicate and
+   * propagates unchanged, rather than being swallowed into a warn about warnings.
+   */
+  escalateWarning?: (problem: RegistrationProblem) => boolean
 }
 
 /**
@@ -1375,13 +1399,28 @@ function checkCustomTaskTypes(opts: ValidateRegistrationsOptions): RegistrationP
  * Validate the registered extensions, throwing an aggregated error on any `error`-severity
  * problem and logging `warn`-severity ones. Call once at facade boot, after every `register*`
  * import side effect + provider wiring, before serving requests.
+ *
+ * A deployment may raise selected warnings to errors with
+ * {@link ValidateRegistrationsOptions.escalateWarning}; an escalated problem is thrown with the
+ * errors and is NOT also logged, so one problem produces one report.
  */
 export function validateRegistrations(opts: ValidateRegistrationsOptions): void {
   const problems = collectRegistrationProblems(opts)
-  if (opts.onWarn) {
-    for (const w of problems.filter((p) => p.severity === 'warn')) opts.onWarn(w)
+  const escalate = opts.escalateWarning
+  // Partition in ONE pass, before either half acts, so an escalated warn is reported exactly once
+  // and lands in the same aggregated failure as the genuine errors rather than a second one after
+  // them. The predicate is called once per warning for the same reason: it is deployment code, and
+  // calling it twice would make an impure one disagree with itself between the log and the throw.
+  const errors: RegistrationProblem[] = []
+  const warnings: RegistrationProblem[] = []
+  for (const problem of problems) {
+    if (problem.severity === 'error') errors.push(problem)
+    else if (escalate?.(problem)) errors.push(problem)
+    else warnings.push(problem)
   }
-  const errors = problems.filter((p) => p.severity === 'error')
+  if (opts.onWarn) {
+    for (const warning of warnings) opts.onWarn(warning)
+  }
   if (errors.length > 0) {
     throw new Error(
       `Invalid extension registrations (${errors.length}):\n` +

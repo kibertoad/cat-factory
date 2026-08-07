@@ -204,6 +204,75 @@ describe('custom task types (reusable operations)', () => {
     expect(problems[0]?.code).toBe('task_type_unknown_fragment')
   })
 
+  it('lets a deployment ESCALATE the unresolvable-fragment warn into a boot failure', () => {
+    // The severity is platform judgement and the disposition is deployment policy. Boot has to WARN
+    // here because it cannot separate a typo from an account/workspace-tier id that merges per
+    // workspace at run time. But a deployment whose operations reference only fragments it
+    // registers itself knows the second cause cannot apply, and for it the warn names an operation
+    // silently running short of its own standing guidance. So it says so, rather than the platform
+    // guessing which kind of deployment this is.
+    const taskTypeRegistry = defaultTaskTypeRegistry()
+    taskTypeRegistry.register({
+      ...base,
+      taskType: 'org:introduce-api',
+      defaultFragmentIds: ['org.api-guidelins'],
+    })
+    const registries = {
+      agentKindRegistry: defaultAgentKindRegistry(),
+      gateRegistry: defaultGateRegistry(),
+      taskTypeRegistry,
+      promptFragmentRegistry,
+    }
+    const warned: string[] = []
+
+    // Default disposition: logged, boot continues.
+    expect(() =>
+      validateRegistrations({ registries, onWarn: (p) => warned.push(p.code) }),
+    ).not.toThrow()
+    expect(warned).toEqual(['task_type_unknown_fragment'])
+
+    // Escalated: the SAME problem now throws, and is not ALSO logged: one problem, one report.
+    warned.length = 0
+    expect(() =>
+      validateRegistrations({
+        registries,
+        onWarn: (p) => warned.push(p.code),
+        escalateWarning: (p) => p.code === 'task_type_unknown_fragment',
+      }),
+    ).toThrow(/task_type_unknown_fragment/)
+    expect(warned).toEqual([])
+  })
+
+  it('throws an escalated warn TOGETHER with the genuine errors, in one report', () => {
+    // A boot failure that named the error and swallowed the escalated warn (or reported them in two
+    // passes) would send the reader back for a second round trip, which is the thing the aggregated
+    // message exists to avoid.
+    const taskTypeRegistry = defaultTaskTypeRegistry()
+    taskTypeRegistry.register({
+      ...base,
+      taskType: 'org:introduce-api',
+      defaultFragmentIds: ['org.api-guidelins'],
+      defaultPipelineId: 'pl_org_nonexistent',
+    })
+    let message = ''
+    try {
+      validateRegistrations({
+        registries: {
+          agentKindRegistry: defaultAgentKindRegistry(),
+          gateRegistry: defaultGateRegistry(),
+          taskTypeRegistry,
+          promptFragmentRegistry,
+        },
+        escalateWarning: () => true,
+      })
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error)
+    }
+    expect(message).toContain('task_type_unknown_pipeline')
+    expect(message).toContain('task_type_unknown_fragment')
+    expect(message).toContain('(2)')
+  })
+
   it('names the DECLARATION the unresolvable ids came from, not always defaultFragmentIds', () => {
     // The conditional check reuses the unconditional checker, which used to hardcode
     // `defaultFragmentIds` into its message. An operator then greps their registration for an id

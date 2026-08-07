@@ -229,6 +229,14 @@ Both links are absolute on purpose: this page ships inside the `@cat-factory/app
 relative path out of it resolves only from a checkout, which is the one place its reader is not.
 (`scripts/check-shipped-doc-links.mjs` fails CI on a shipped doc that grows one.)
 
+The BACKEND half of an operation is registered with one dependency: the runtime facade you boot
+through (`@cat-factory/node-server`, `@cat-factory/local-server` or `@cat-factory/worker`) exports
+every registry constructor and every type a registration literal names. Do not reach below it for
+`@cat-factory/kernel`, `@cat-factory/contracts` or `@cat-factory/prompt-fragments`: those publish at
+EXACT versions, so floating one past what your facade pins resolves a second physical copy and your
+registrations land where nothing reads them
+([ADR 0042](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0042-facade-extension-surface.md)).
+
 The **same type can be delivered from the backend** instead of code-shipped: register it on the
 deployment's app-owned `TaskTypeRegistry` and it arrives in the workspace snapshot's
 `customTaskTypes`, folded into the SAME merged catalog (data over the wire, never components). The
