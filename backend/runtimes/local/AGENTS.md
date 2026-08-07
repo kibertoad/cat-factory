@@ -57,7 +57,11 @@ transport + the GitHub token/client seams differ.
   `/internal/*` machine API and only credentials/settings/the work queue/**telemetry** stay on the
   laptop in `node:sqlite`. `mothershipPropagator.ts` (outbound engine events) and
   `mothershipSubscriber.ts` (inbound per-workspace subscriptions, opened on demand from the local
-  hub's rooms) are the two halves of its real-time channel. Read
+  hub's rooms) are the two halves of its real-time channel. The key split cuts BOTH ways: the
+  laptop's own credentials never go up, and the ORG's never come down as keys: a sealed org row is
+  opened (and a row this node provisions is sealed) BY the mothership, addressed by row, through
+  the `secretDelegate` `composeMothership` builds. So a mothership-mode node provisions
+  environments and probes release-health monitors for real without ever holding the org key. Read
   `docs/initiatives/mothership-mode.md` before touching any of it, and `CLAUDE.md` → "Every new
   feature ships MOTHERSHIP-READY" before adding a repository method anywhere in the backend.
 - `sqlite/telemetryStore.ts` (+ `sqlite/telemetryRows.ts`, `sqlite/telemetryIngestReader.ts`) +

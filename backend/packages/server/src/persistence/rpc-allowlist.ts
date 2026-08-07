@@ -460,10 +460,34 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // workspaceId → the `workspace` rule.
     listByRefs: { scope: { kind: 'workspace', arg: 0 } },
   },
-  // The agent context also resolves the block's provisioned environment per step
-  // (`resolveForBlock`/`get`, both workspace-keyed). Reads only — the connect/provision surface
-  // (and decrypting a remotely-sealed env cipher, which needs the mothership's key) is a later slice.
+  // The agent context resolves the block's provisioned environment per step
+  // (`resolveForBlock`/`get`, both workspace-keyed), and, since the secrets-delegation slice,
+  // a mothership-mode node PROVISIONS for real: the access handle and the provider's
+  // status/teardown fields are sealed and opened by the mothership over
+  // `/internal/secrets/{unseal,seal}`, so the rows this repo stores carry no cipher the org
+  // cannot read. That is what makes the WRITE half (`insert`/`update`) safe to open here; before
+  // it, a laptop-sealed row would have been unopenable by the mothership's own teardown and by
+  // every hosted teammate, with nothing saying so until the reclaim failed.
+  //
+  // `insert(record)` binds on the record's `workspaceId` FIELD (`workspaceField`);
+  // `update(workspaceId, id, patch)` takes it positionally (`workspace`). The cross-workspace
+  // sweeper reads (`listExpired`, and the retention `delete*`) stay mothership-internal: its cron
+  // owns them, per the global-sweeper exclusion above.
   environmentRegistryRepository: {
+    // The provisioning WRITE path (`EnvironmentProvisioningService.provisionSync` /
+    // `refreshStatus` / the async deploy poll). With these off, a mothership-mode run reached the
+    // deployer step and failed there, and the ephemeral-environment self-test could start and
+    // never complete.
+    insert: { scope: { kind: 'workspaceField', arg: 0 } },
+    update: { scope: { kind: 'workspace', arg: 0 } },
+    // The TOMBSTONE half of that same write path, and inseparable from it. Two unguarded callers
+    // reach it: `supersedePriorEnvironment`, which every re-provision runs before inserting (so a
+    // deployer re-run fails outright without it), and `EnvironmentTeardownService.tombstone`, which
+    // is how EVERY reclaim ends. Opening the insert while leaving this closed would let a
+    // mothership-mode node stand infrastructure up and never record it as reclaimed, which is the
+    // one failure the seal direction was opened to prevent. `softDelete(workspaceId, id, at)` takes
+    // the workspaceId positionally → the `workspace` rule.
+    softDelete: { scope: { kind: 'workspace', arg: 0 } },
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
     // The per-`(block, service frame)` discovery read. `AgentContextBuilder.resolveEnvironment`
     // (and `RunDispatcher.attachEnvironmentProjection`) resolve the OWN service frame's env by
@@ -495,12 +519,12 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // handler secrets as a SEALED blob (`secretsCipher`) — the repo returns it verbatim (it does NOT
   // decrypt); sealing/decryption live in `EnvironmentConnectionService` under the LOCAL key, so no
   // plaintext credential crosses the machine API and the mothership only ever stores ciphertext (the
-  // initiative's "the mothership ENCRYPTION_KEY never reaches the laptop" split holds). What this
-  // does NOT yet unlock: actually PROVISIONING an environment in mothership mode — the registry
-  // WRITE path (`environmentRegistryRepository.insert`/`update`) + decrypting a remotely-sealed
-  // access cipher stay off, the later secrets-delegation slice, exactly like the observability gate
-  // probe. The `workspaceField` rule binds only the record's top-level `workspaceId` (see its note
-  // above), so a connection row can only ever land in the caller's own in-scope workspace.
+  // initiative's "the mothership ENCRYPTION_KEY never reaches the laptop" split holds). Opening
+  // the SEALED BUNDLE on the node is the secrets-delegation slice's job, not this table's: the
+  // node names the row over `/internal/secrets/unseal` and the mothership decrypts it under its
+  // own key, which is also why the registry WRITE path above could finally open. The
+  // `workspaceField` rule binds only the record's top-level `workspaceId` (see its note above), so
+  // a connection row can only ever land in the caller's own in-scope workspace.
   environmentConnectionRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     getByWorkspaceAndType: { scope: { kind: 'workspace', arg: 0 } },
@@ -755,11 +779,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // (the `workspaceField` rule). The sweeper-only cross-workspace `listStale` stays
   // mothership-internal (its cron owns it), per the global-sweeper exclusion above. The GitHub
   // half of the self-test (branch create/delete via `resolveRunRepoContext`) rides mothership
-  // GitHub token delegation (`/internal/github/installation-token`), not this table. What
-  // still gates a FULL mothership-mode self-test: the provisioning WRITES
-  // (`environmentRegistryRepository.insert`/`update`) stay off until the secrets-delegation
-  // slice, so the run's provisioning stage fails cleanly there — the store itself is proxied
-  // so the runs surface, clean up, and complete the moment that slice lands.
+  // GitHub token delegation (`/internal/github/installation-token`), not this table, and the
+  // provisioning stage rides the registry WRITES above plus `/internal/secrets/{unseal,seal}`
+  // so the self-test now runs end to end in mothership mode.
   environmentTestRunRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
     insert: { scope: { kind: 'workspaceField', arg: 0 } },
@@ -833,9 +855,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // read back), not read-only, in mothership mode.
   //
   // Scope of what this unlocks: the settings PANELS work end-to-end (save + read back the
-  // redacted summary, which never decrypts). The saved connection cannot yet DRIVE a
-  // post-release-health gate probe in mothership mode — decrypting the sealed connection cipher
-  // at gate-probe time belongs to the later secrets-delegation slice. The connection `get` here
+  // redacted summary, which never decrypts), and, since the secrets-delegation slice, the
+  // saved connection DRIVES a post-release-health gate probe in mothership mode too: the probe
+  // names the row over `/internal/secrets/unseal` and the mothership opens it. The `get` here
   // returns the FULL record (the sealed `credentials` blob), not the redacted service view: the
   // RPC client is the trusted local node, the blob is sealed and account-scoped, so this matches
   // the existing `environmentRegistryRepository.get` precedent (sealed cipher over the machine

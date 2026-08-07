@@ -10,6 +10,7 @@ import {
   HttpDeploymentDocumentResolver,
   HttpPromptFragmentSource,
   HttpPersistenceRpcClient,
+  HttpSecretDelegate,
   type LocalFirstPersistenceRepository,
   type Logger,
   type MothershipConnector,
@@ -169,6 +170,17 @@ export interface MothershipComposition {
    */
   notificationChannel: RemoteNotificationChannel
   /**
+   * The SECRET DELEGATION client: opens (and seals) the ORG-owned credentials this laptop holds no
+   * key for (a provisioned environment's access handle, an infra handler's secret bundle, a
+   * release-health connection) over `POST /internal/secrets/{unseal,seal}`. It is the mirror
+   * image of the local credential store beside it: that keeps the laptop's OWN secrets off the
+   * mothership; this makes the ORG's secrets usable here without the mothership's key ever
+   * moving. `buildLocalContainer` threads it into `buildNodeContainer`'s `secretDelegate` seam, so
+   * every service holding one of those rows composes it with its own cipher. Reads the SAME
+   * per-request machine token as the persistence RPC.
+   */
+  secretDelegate: HttpSecretDelegate
+  /**
    * The telemetry INGEST client: uploads a quiesced run's locally captured rows to the mothership
    * over `POST /internal/telemetry/ingest` (product decision 5's sync UP). Without it a run this
    * laptop drove is observable ONLY on this laptop, and only until the local retention window
@@ -300,6 +312,11 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
         ...ctx,
       }),
   })
+  // Secret delegation: the org's sealed rows are opened (and this node's writes sealed) by the
+  // mothership, on the SAME base URL + per-request token. A token-less node simply cannot open
+  // them: the client REJECTS rather than answering an empty credential, because provisioning
+  // against an empty bundle would fail somewhere far less legible.
+  const secretDelegate = new HttpSecretDelegate({ baseUrl, token: machineToken })
   // Telemetry sync UP: the local-first capture above stays on the laptop until this carries a
   // quiesced run's rows to the mothership. Same base URL + per-request token again, so it follows
   // the same connect/expiry lifecycle as the rest of the machine API.
@@ -321,6 +338,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     realtimeAdapter,
     realtimeSubscriber,
     notificationChannel,
+    secretDelegate,
     telemetryClient,
     credentialStore,
     localSettingsStore,

@@ -99,6 +99,7 @@ import { workspaceController } from './modules/workspaces/WorkspaceController.js
 import { workspaceMemberController } from './modules/workspaces/WorkspaceMemberController.js'
 import { persistenceController } from './modules/persistence/PersistenceController.js'
 import { githubDelegationController } from './modules/persistence/GitHubDelegationController.js'
+import { secretDelegationController } from './modules/persistence/SecretDelegationController.js'
 import { foundationalBuiltinsController } from './modules/foundationalServices/FoundationalBuiltinsController.js'
 import { binaryGeneratorsController } from './modules/binaryGenerators/BinaryGeneratorsController.js'
 import { promptFragmentsInternalController } from './modules/promptFragments/PromptFragmentsInternalController.js'
@@ -158,6 +159,17 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // mothership. Machine-token gated like the persistence RPC; 503 unless the facade wired
   // `githubTokenDelegation`. Mounted on both facades so either can be a mothership.
   app.route('/', githubDelegationController())
+  // Mothership-mode SECRET DELEGATION (`/internal/secrets/{unseal,seal}`): the key split that
+  // keeps the mothership's `ENCRYPTION_KEY` off a laptop also leaves the laptop unable to open the
+  // org credentials it must USE (a provisioned environment's access handle, an infra handler's
+  // secret bundle, a release-health connection. The node names the ROW (never the ciphertext) and
+  // the mothership re-reads it, scope-checks it and opens it under its own key; the seal half
+  // keeps a secret the NODE produces readable by the org. Machine-token gated like the persistence
+  // RPC; 503 unless the facade wired `secretCipherFor`, which it does only when it holds its own
+  // main database and so is AUTHORITATIVE for the rows (a mothership-mode node holds only a local
+  // key). Mounted on both facades so either can be a mothership. See
+  // docs/initiatives/mothership-mode.md.
+  app.route('/', secretDelegationController())
   // Mothership-mode foundational-services `builtin` tier (`GET /internal/foundational-services`
   // + the batched `POST .../contracts`):
   // the catalog tier a deployment registers in CODE is org state, and a mothership-mode node has

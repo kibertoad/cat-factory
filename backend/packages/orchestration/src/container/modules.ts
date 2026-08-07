@@ -486,6 +486,7 @@ export function createEnvironmentsModule(
     environmentConnectionRepository,
     workspaceRepository: deps.workspaceRepository,
     secretCipher,
+    ...(deps.secretDelegate ? { secretDelegate: deps.secretDelegate } : {}),
     clock: deps.clock,
     environmentBackendRegistry:
       deps.environmentBackendRegistry ?? defaultEnvironmentBackendRegistry(),
@@ -548,6 +549,10 @@ export function createEnvironmentsModule(
     connectionService,
     environmentRegistryRepository,
     secretCipher,
+    // Wired in lockstep with the provisioning service's own delegate below: teardown opens the
+    // very `provisionFieldsCipher` that provisioning sealed, so a node holding one and not the
+    // other could stand an environment up and never reclaim it.
+    ...(deps.secretDelegate ? { secretDelegate: deps.secretDelegate } : {}),
     clock: deps.clock,
     ...(provisioningLog ? { provisioningLog } : {}),
     logger: deps.logger,

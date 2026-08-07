@@ -269,6 +269,46 @@ installation", but only where the run authenticates as the App. Installation sco
 what any run in the workspace could ever ask for, and it is what the checklist's item 3 is about;
 it is now a ceiling rather than the blast radius of every single run.
 
+### What a MACHINE token reaches: the one surface that answers with a plaintext credential
+
+A mothership-mode node's machine token addresses a set of `/internal/*` endpoints, and all but one
+of them answer with ciphertext, identifiers or events. `POST /internal/secrets/unseal` is the
+exception: it returns an ORG credential in the clear (a provisioned environment's access handle, an
+infra handler's secret bundle, a release-health connection), because the node is the process that
+provisions that infrastructure and probes those monitors. Its bound is three things, in this order:
+
+- **The audience pin.** A `machine` token only, checked before anything else, so no session, WS
+  ticket or container token reaches it and its availability is not probeable.
+- **The request names a ROW, never an envelope.** The mothership re-reads the row from its own
+  store and opens THAT, so a caller cannot present ciphertext it obtained elsewhere. This is what
+  keeps the endpoint from being a decryption oracle, and it is the same choice the notification
+  relay made for the same reason.
+- **The account scope, plus a CLOSED source table.** The workspace resolves to its owning account
+  and anything outside the token's scope is a uniform 404. Within scope, `SEALED_SECRET_SOURCES`
+  enumerates every readable row: five sources today, each bound to one repository read, one record
+  field and one HKDF tag. A source not in that table is unreachable, whatever the row is worth.
+
+Two properties of the answering deployment bound it further, and both are structural rather than
+conventional. **Only a deployment holding its own main database serves the pair at all**, gated on
+the `secretCipherFor` capability: a mothership-mode node would otherwise answer under the LOCAL key
+that seals its own agent credentials, sealing rows the org can never open. And **no failure on this
+path is logged through a bare message read**: every one is bound with kernel's `describeError`, so
+`redactSecrets` runs over it first. This is the one surface whose SUBJECT is a credential, and a
+driver or WebCrypto error routinely echoes back the value it choked on.
+
+So the honest statement of the blast radius is: **a stolen machine token reads the org credentials
+of the accounts it is scoped to, for the sources in that table.** That is strictly more than the
+same token could read before, and strictly less than the mothership's `ENCRYPTION_KEY`, which still
+never leaves the mothership: a revoked node loses the access at its next call, where a leaked key
+would have been unrecoverable. The mitigation is the machine-node roster (revoke the node) and
+keeping the table small, which is why widening it is a deliberate act rather than a routing detail.
+
+The seal direction (`POST /internal/secrets/seal`) grants nothing further: encryption is not
+decryption, and a caller in scope can already write arbitrary bytes into those fields through the
+allow-listed repository `upsert`. It exists so a secret the NODE produces is sealed under the key
+the ORG can read, rather than under a laptop key that would make the row unopenable by the
+mothership's own teardown.
+
 ## Layer 4: no agent DECISION merges to the default branch (mechanism + configuration, given Layer 2)
 
 Pushing a malicious commit to a `work` branch is, by design, _allowed_: that is what a PR is for.

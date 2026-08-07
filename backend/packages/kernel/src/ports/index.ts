@@ -445,6 +445,15 @@ export type {
 } from './sealed-secret-inventory.js'
 export type { PersonalSecretCipher } from './personal-secret-cipher.js'
 export type {
+  OrgSecretSource,
+  DelegatedSecretRef,
+  DelegatedSealRef,
+  SecretDelegate,
+  OrgSecretCipher,
+  OrgSecretCipherOptions,
+} from './secret-delegation.js'
+export { ORG_SECRET_SOURCES, createOrgSecretCipher } from './secret-delegation.js'
+export type {
   EnvironmentProvider,
   AsyncProvisionCapability,
   DeployProvisionJob,
