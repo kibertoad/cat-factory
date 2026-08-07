@@ -143,6 +143,58 @@ Four properties of that record are load-bearing:
   built from the prompt-facing half of the resolution and `mcpServers` (where every resolved value
   lives) has no projection into it. The step is persisted and rendered in a browser.
 
+### What the CLI itself reported (the observed half)
+
+The record above is the PLATFORM's account, decided before the container started. It structurally
+cannot answer the other question a person asks about a run: a server that passed every check and
+then failed to come up anyway. A vendor endpoint that 500s, a pinned `npx` package that no longer
+resolves, a token the vendor revoked between dispatch and launch — each leaves the server in
+`wired`, the prompt promising a tool nothing can call, and no evidence anywhere.
+
+The claude-code CLI announces its resolved session before its first model call: the MCP servers it
+loaded, a status each, and the flat list of tools it will expose. The harness reads that one event
+into `step.toolServers.observed` (per server: `id`, a normalised `status`, and how many of the
+CLI's tools were namespaced to it), the engine folds it onto the record the dispatch already wrote,
+and the step detail renders it on the same chips. Three distinctions carry the whole value, and
+each of them reads as a healthy server if it collapses:
+
+- **Absent is NOT "the CLI loaded nothing."** It means no observation was made. Codex's CLI
+  publishes no such report, nor does an image older than 1.95.0, nor a runner pool whose manifest
+  leaves `response.toolServersPath` unset. All of them leave the field absent and the surface then
+  says nothing at all, because the alternative is accusing every wired server on every deployment
+  one release behind. A `wired` id missing from a report that IS present is the opposite: positive
+  evidence the CLI never loaded it.
+- **`toolCount: 0` is NOT an uncounted server.** A server that connected and exposes nothing
+  reaches the agent exactly like one that was never wired, while every other signal about it says
+  healthy — the likeliest causes being an `allowedTools` list that matches nothing and a vendor
+  that authenticated and served an empty catalog. So zero is recorded and rendered as its own
+  sentence, and a CLI that listed no tools leaves the count absent instead of defaulting to it. The
+  count is attributed by matching each tool name against the ids the SAME report declared, never by
+  splitting `mcp__<id>__<tool>` on its first separator: a server id may itself contain `__`, so the
+  split files `code__search`'s tools under a server called `code` and leaves the real one reporting
+  the one value that reads as a fault. Where two declared ids could both own a name (`code` and
+  `code__search` both could own `mcp__code__search__query`), nothing in the report says which, so
+  both counts stay absent rather than one being guessed.
+- **`unknown` is a fact about this BUILD, not about the server.** The CLI's status words belong to
+  a third party that may add to them; an unmappable one records as `unknown` and renders neutrally
+  rather than as a fault, or a CLI upgrade would send operators to debug working integrations. The
+  statuses this platform maps are `ready`, `failed` (the CLI could not start it) and `needs_auth`
+  (it answered and refused the credential, which is a different fix from `failed`). A server the CLI
+  reported as still handshaking (`pending`) also records as `unknown`: it has no resolved state to
+  report, and calling that `needs_auth` would send an operator to re-issue a working credential for
+  a server that simply came up a moment later.
+
+Nothing in the engine branches on an observation: it is evidence for a person, never a control
+signal, and a failed server does not fail a step. It rides all three poll dispositions — a job
+short enough to settle between two polls is never observed `running`, and a job that FAILED is the
+one whose post-mortem needs this most.
+
+A self-hosted runner pool that proxies the executor-harness verbatim should set
+`response.toolServersPath` to `toolServers` in its manifest. Leaving it unset costs the diagnostic
+and never manufactures a false one, which is exactly the trade the absent-vs-empty rule above buys.
+The mapping is written up for pool operators beside its sibling response paths in
+[`runner-pool-integration.md`](./runner-pool-integration.md#3-describe-your-scheduler-as-a-manifest-application-team).
+
 This is deliberately not the agent-context telemetry snapshot, which carried the same facts in its
 untyped `extras` bag. That snapshot is double-gated (`LLM_RECORD_PROMPTS` plus the per-workspace
 `storeAgentContext`) and pruned on the telemetry retention window, so a surface reading it would be
@@ -549,11 +601,12 @@ this list exists so an adopting deployment learns the ceiling from the docs rath
   every workspace's runs of the kinds it is declared on; only the credential half is per-workspace
   today. Capability credentials are also SPA-only (absent from the public API) until the same
   slice.
-- **What a run WIRED is recorded; what the CLI actually REACHED is not** (slice 5's remaining
-  half). `step.toolServers` states the platform's own decision, which is the answer to "why did the
-  agent not use the tool". It cannot answer "the server was wired and the CLI still failed to start
-  it": that needs the agent CLI's own startup report, which is a harness change and therefore a
-  runner-image bump. Until then a wired-but-broken server is diagnosed with the probe.
+- **Only the claude-code harness reports what it reached.** `step.toolServers.observed` carries
+  the agent CLI's own startup report (see above), and codex's CLI publishes none, so a codex run
+  records the platform's half alone. That is stated as ABSENT rather than as a healthy or failed
+  server, and on that harness a wired-but-broken server is still diagnosed with the probe. The same
+  holds for a runner pool that leaves `response.toolServersPath` unmapped, and for any image older
+  than 1.95.0.
 - **Pi has no MCP client** (standing non-goal, ADR 0029). A deployment whose model provisioning
   resolves to Pi runs gets no tool servers there, stated per run as `harness_unsupported`.
 - **`http` means streamable HTTP.** The legacy HTTP+SSE transport is deliberately not a vocabulary

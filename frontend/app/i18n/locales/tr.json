@@ -1446,6 +1446,16 @@
           "oauthNotConnected": "Bu panoyu Altyapı penceresinden ona bağlayın. ENCRYPTION_KEY olmayan bir dağıtımda izni saklayacak bir yer yoktur, bu yüzden önce bir operatörün bunu ayarlaması gerekir.",
           "oauthTokenFailed": "Altyapı penceresinden yeniden bağlayın ya da sağlayıcının kesintisinin geçmesini bekleyin.",
           "overBudget": "Tek bir çalıştırma hepsini taşıyabilsin diye ajanın bildirdiklerini kısaltın."
+        },
+        "observed": {
+          "ready": "başlatıldı",
+          "readyTools": "{count} araç",
+          "readyNoTools": "başlatıldı, araç yok",
+          "failed": "başlatılamadı",
+          "needsAuth": "yetkilendirme gerekiyor",
+          "unknown": "durum belirsiz",
+          "notLoaded": "hiç yüklenmedi",
+          "unattributed": "Ajan CLI'si bu adımın bağlamadığı bir sunucu bildirdi: {id}."
         }
       },
       "adherence": {
@@ -5561,6 +5571,15 @@
     "ask": {
       "title": "Ne istenmişti",
       "none": "Bu görevin açıklaması yok, dolayısıyla sonucu karşılaştıracak bir şey de yok."
+    },
+    "sources": {
+      "title": "Şuradan üretildi",
+      "unchecked": "Kaynakla karşılaştırılmadı.",
+      "noSource": "Karşılaştırılacak bir kaynak sayfa yok.",
+      "moved": "Bu sayfa çalışma sürerken değişti, bu yüzden önceki adımlar daha eski bir sürümü okudu.",
+      "gap": {
+        "none_linked": "Bu çalıştırmanın ajanlarına hiçbir sayfa ulaşmadı, bu yüzden yalnızca görev açıklamasıyla çalıştılar."
+      }
     },
     "gap": {
       "run_unavailable": "Bu görevin çalışması yüklenmediği için kaydettiği kanıtlar burada gösterilemiyor. Bu, hiçbir şey kaydetmemiş bir çalışmayla aynı şey değildir."

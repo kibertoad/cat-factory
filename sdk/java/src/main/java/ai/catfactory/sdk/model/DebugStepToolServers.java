@@ -4,6 +4,7 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -11,12 +12,16 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code DebugStepToolServers} wire model.
  * @param agentKind the {@code agentKind} field.
+ * @param observed May be absent entirely.
  * @param unavailable the {@code unavailable} field.
  * @param wired the {@code wired} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record DebugStepToolServers(
     @JsonProperty("agentKind") String agentKind,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("observed") @Nullable List<DebugObservedToolServer> observed,
 
     @JsonProperty("unavailable") List<DebugUnavailableToolServer> unavailable,
 
@@ -36,12 +41,19 @@ public record DebugStepToolServers(
      */
     public static final class Builder {
         private @Nullable String agentKind;
+        private @Nullable List<DebugObservedToolServer> observed;
         private @Nullable List<DebugUnavailableToolServer> unavailable;
         private @Nullable List<DebugWiredToolServer> wired;
 
         /** Set {@code agentKind}. */
         public Builder agentKind(@Nullable String agentKind) {
             this.agentKind = agentKind;
+            return this;
+        }
+
+        /** Set {@code observed}. */
+        public Builder observed(@Nullable List<DebugObservedToolServer> observed) {
+            this.observed = observed;
             return this;
         }
 
@@ -59,7 +71,7 @@ public record DebugStepToolServers(
 
         /** Build the {@link DebugStepToolServers}. */
         public DebugStepToolServers build() {
-            return new DebugStepToolServers(agentKind, unavailable, wired);
+            return new DebugStepToolServers(agentKind, observed, unavailable, wired);
         }
     }
 }

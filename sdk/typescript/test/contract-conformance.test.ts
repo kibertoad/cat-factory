@@ -297,6 +297,21 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.prVerificationReportSchema>
 >()
 expectMutuallyAssignable<sdk.PrReportRun, v.InferOutput<typeof contracts.prReportRunSchema>>()
+expectMutuallyAssignable<
+  sdk.PrReportContext,
+  v.InferOutput<typeof contracts.prReportContextSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportContextDocument,
+  v.InferOutput<typeof contracts.prReportContextDocumentSchema>
+>()
+// Hoisted because it is a VARIANT reached from two sections (the report's `context` and the
+// outcome's `sources`), so left inline it would ship twice under two positional names that
+// RENUMBER if the union's members are reordered.
+expectMutuallyAssignable<
+  sdk.DocumentFreshness,
+  v.InferOutput<typeof contracts.documentFreshnessSchema>
+>()
 expectMutuallyAssignable<sdk.PrReportStep, v.InferOutput<typeof contracts.prReportStepSchema>>()
 expectMutuallyAssignable<sdk.PrReportIssue, v.InferOutput<typeof contracts.prReportIssueSchema>>()
 expectMutuallyAssignable<sdk.PrReportCi, v.InferOutput<typeof contracts.prReportCiSchema>>()
@@ -431,6 +446,9 @@ const ASSERTED_COMPONENTS = [
   'PublicRunArtifactList',
   'PrVerificationReport',
   'PrReportRun',
+  'PrReportContext',
+  'PrReportContextDocument',
+  'DocumentFreshness',
   'PrReportStep',
   'PrReportIssue',
   'PrReportCi',

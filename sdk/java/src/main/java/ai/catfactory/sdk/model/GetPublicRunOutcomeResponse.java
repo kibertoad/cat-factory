@@ -15,6 +15,7 @@ import org.jspecify.annotations.Nullable;
  * @param disposition the {@code disposition} field.
  * @param pullRequests the {@code pullRequests} field.
  * @param requirements the {@code requirements} field.
+ * @param sources the {@code sources} field.
  * @param tests the {@code tests} field.
  * @param title the {@code title} field.
  * @param truncations the {@code truncations} field.
@@ -33,6 +34,8 @@ public record GetPublicRunOutcomeResponse(
     @JsonProperty("pullRequests") List<GetPublicRunOutcomeResponsePullRequest> pullRequests,
 
     @JsonProperty("requirements") GetPublicRunOutcomeResponseRequirements requirements,
+
+    @JsonProperty("sources") GetPublicRunOutcomeResponseSources sources,
 
     @JsonProperty("tests") GetPublicRunOutcomeResponseTests tests,
 
@@ -62,6 +65,7 @@ public record GetPublicRunOutcomeResponse(
         private @Nullable GetPublicRunOutcomeResponseDisposition disposition;
         private @Nullable List<GetPublicRunOutcomeResponsePullRequest> pullRequests;
         private @Nullable GetPublicRunOutcomeResponseRequirements requirements;
+        private @Nullable GetPublicRunOutcomeResponseSources sources;
         private @Nullable GetPublicRunOutcomeResponseTests tests;
         private @Nullable String title;
         private @Nullable List<String> truncations;
@@ -98,6 +102,12 @@ public record GetPublicRunOutcomeResponse(
             return this;
         }
 
+        /** Set {@code sources}. */
+        public Builder sources(@Nullable GetPublicRunOutcomeResponseSources sources) {
+            this.sources = sources;
+            return this;
+        }
+
         /** Set {@code tests}. */
         public Builder tests(@Nullable GetPublicRunOutcomeResponseTests tests) {
             this.tests = tests;
@@ -130,7 +140,7 @@ public record GetPublicRunOutcomeResponse(
 
         /** Build the {@link GetPublicRunOutcomeResponse}. */
         public GetPublicRunOutcomeResponse build() {
-            return new GetPublicRunOutcomeResponse(ask, checks, disposition, pullRequests, requirements, tests, title, truncations, version, visuals);
+            return new GetPublicRunOutcomeResponse(ask, checks, disposition, pullRequests, requirements, sources, tests, title, truncations, version, visuals);
         }
     }
 }

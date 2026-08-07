@@ -2001,6 +2001,16 @@
           "oauthNotConnected": "Collega questa lavagna al server dalla finestra Infrastruttura. Un deployment senza ENCRYPTION_KEY non ha dove conservare una concessione, quindi un operatore deve impostarla prima.",
           "oauthTokenFailed": "Ricollegalo dalla finestra Infrastruttura, oppure attendi la fine del disservizio del fornitore.",
           "overBudget": "Riduci ciò che l'agente dichiara, così una singola esecuzione può portarlo tutto."
+        },
+        "observed": {
+          "ready": "avviato",
+          "readyTools": "{count} strumenti",
+          "readyNoTools": "avviato, nessuno strumento",
+          "failed": "non si è avviato",
+          "needsAuth": "richiede autorizzazione",
+          "unknown": "stato non determinato",
+          "notLoaded": "mai caricato",
+          "unattributed": "La CLI dell'agente ha segnalato un server che questo passo non ha collegato: {id}."
         }
       },
       "adherence": {
@@ -6117,6 +6127,15 @@
     "ask": {
       "title": "Che cosa era stato chiesto",
       "none": "Questa attività non ha una descrizione, quindi non c'è nulla con cui confrontare l'esito."
+    },
+    "sources": {
+      "title": "Costruito a partire da",
+      "unchecked": "Non verificato con la sorgente.",
+      "noSource": "Nessuna pagina di origine con cui confrontare.",
+      "moved": "Questa pagina è cambiata mentre l'esecuzione era in corso, quindi i passi precedenti hanno letto una revisione più vecchia.",
+      "gap": {
+        "none_linked": "Nessuna pagina è arrivata agli agenti di questa esecuzione, che hanno lavorato solo sulla descrizione dell'attività."
+      }
     },
     "gap": {
       "run_unavailable": "L'esecuzione di questa attività non è stata caricata, quindi le prove che ha registrato non possono essere mostrate qui. Non è la stessa cosa di un'esecuzione che non ha registrato nulla."

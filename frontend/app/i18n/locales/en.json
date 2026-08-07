@@ -1537,6 +1537,16 @@
           "oauthNotConnected": "Connect this board to it from the Infrastructure window. A deployment with no ENCRYPTION_KEY has nowhere to keep a grant, so an operator has to set that first.",
           "oauthTokenFailed": "Reconnect it from the Infrastructure window, or wait out the vendor's outage.",
           "overBudget": "Trim what the agent declares, so one run can carry all of it."
+        },
+        "observed": {
+          "ready": "started",
+          "readyTools": "{count} tools",
+          "readyNoTools": "started, no tools",
+          "failed": "failed to start",
+          "needsAuth": "needs authorization",
+          "unknown": "state unresolved",
+          "notLoaded": "never loaded",
+          "unattributed": "The agent CLI reported a server this step did not wire: {id}."
         }
       },
       "adherence": {
@@ -5830,6 +5840,15 @@
     "ask": {
       "title": "What was asked",
       "none": "This task carries no description, so there is nothing here to compare the result against."
+    },
+    "sources": {
+      "title": "Built from",
+      "unchecked": "Not checked against the source.",
+      "noSource": "No source page to compare against.",
+      "moved": "This page changed while the run was in flight, so earlier steps read an older revision.",
+      "gap": {
+        "none_linked": "No page reached this run's agents, so they worked from the task description alone."
+      }
     },
     "gap": {
       "run_unavailable": "This task's run was not loaded, so none of the evidence it recorded can be shown here. That is not the same as a run that recorded nothing."

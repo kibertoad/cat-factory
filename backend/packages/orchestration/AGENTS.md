@@ -77,6 +77,15 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   environment lifecycle** proof (environment up → evidence captured from it while live →
   teardown confirmed) because it is the one section composed from a source outside the
   in-memory run: the provisioning event log, which is what dates the bring-up and the teardown.
+  `prReport.context.ts` holds the **context sources** section, the one that answers what the run
+  built FROM: it reduces the per-dispatch `step.contextDocuments` records into one row per linked
+  page, keeping the LAST verdict (the state the run ended on) and deriving `movedDuringRun` from
+  the distinct revisions the run's own steps saw, since a final revision alone reads as though
+  every step had it. Its sibling is the outcome summary's `sources` (in `composeRunOutcome`, see
+  below): two renderings of one reduction, and both key a row by the document's source identity
+  rather than by anything the row DISPLAYS, because an `upload` carries no URL and a title-keyed
+  fallback folds two same-titled uploads into one row that then reads as a page which moved
+  mid-run.
   `prReport.commands.ts` holds the two CAPTURED-OUTPUT sections (the platform's own pre-PR
   validation run off `step.validation`, and the bugfix reproduction proof off `step.reproduction`),
   which are the report's only sections carrying raw command logs rather than a verdict somebody

@@ -11,6 +11,42 @@ import { shouldPersistActivity } from './job.logic.js'
 // it and it is the exact counterpart the poll site reads back.
 
 /**
+ * Rebuild the job handle a settled/running POLL addresses, from the step alone.
+ *
+ * The exact counterpart of {@link recordDispatchAttribution}, and here for the same reason it is:
+ * the poll site has no dispatch in scope, so everything the executor needs off the handle has to
+ * be read back from what the dispatch persisted. Each field is load-bearing on the container
+ * executor:
+ *
+ *  - `agentKind` — `toRunResult` maps a migrated `merger`/`on-call`'s structured result into
+ *    `mergeAssessment`/`onCallAssessment` KIND-AWARE, so without it the coercion no-ops and the
+ *    merge gate / post-release-health gate see no assessment at all;
+ *  - `runId` — the executor addresses the same per-run container; the step stored only a job id;
+ *  - `model` — absent, `recordStepResult` records 'unknown', which `SpendService.parseModel`
+ *    splits into provider "unknown" / model "", corrupting the `token_usage` row of EVERY
+ *    subscription-harness step;
+ *  - `subscriptionTokenId` — gates the pooled-token usage feedback that drives usage-aware
+ *    rotation; absent, it is skipped outright;
+ *  - `initiatedByUserId` — the quota-cycle counters' fallback target for a PERSONAL
+ *    (individual-usage) run, which leases no pooled token; absent, the target is null.
+ */
+export function pollHandleFor(
+  step: PipelineStep,
+  workspaceId: string,
+  executionId: string,
+): AgentJobHandle {
+  return {
+    jobId: step.jobId!,
+    runId: executionId,
+    workspaceId,
+    agentKind: step.agentKind,
+    model: step.model,
+    subscriptionTokenId: step.subscriptionTokenId,
+    initiatedByUserId: step.initiatedByUserId,
+  }
+}
+
+/**
  * Persist the attribution a DISPATCH knows and the poll site cannot re-derive: the resolved
  * model, plus (for a subscription-harness job) the leased pool row and the run's initiator,
  * plus the agent kind the job actually ran AS.

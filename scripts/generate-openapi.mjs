@@ -120,11 +120,11 @@ const API_PREFIX = '/api/v1'
 // `extras` bag, which keeps serving them until the window in `public-api.md` closes, so no
 // consumer has to move on this version. 1.20.0 is main's published number as of this branch's last
 // merge; re-read this line after any merge rather than trusting that the VERSION auto-merged clean.
-// 1.23.0: every operation gains `x-min-scope`, the key-scope floor its route enforces (read off
-// each contract's `minScope`; see `withMinScope` in the contracts routes). Additive metadata: no
-// path, shape or vocabulary moves, and a consumer that ignores the extension sees the surface it
-// always saw. It is the floor only: a run-starting operation can still escalate to `decide` at
-// request time when the named pipeline can park.
+// 1.24.0: `PATCH /api/v1/tasks/:taskId` accepts `fields`, the task's per-type bag, merged over
+// what the task already carries. Additive (a new optional request field; a caller that never sends
+// one is unaffected), and it is what makes the pre-dispatch input gate's findings FIXABLE
+// headlessly: four of its seven codes name a field of that bag, and until now the surface named a
+// remedy it did not offer.
 //
 // 1.22.0 belongs to `GET /api/v1/runs/:runId/outcome` and the verification report's new optional
 // `requirements.unmatchedVerdicts`. Two diffs claiming one number is a lie a consumer pinning
@@ -143,19 +143,39 @@ const API_PREFIX = '/api/v1'
 // tolerate: they map an unknown enum member through rather than refusing it, so a client compiled
 // against 1.24.0 keeps parsing every response it already understood and simply never asks for the
 // new source. No existing member changes meaning and no persisted `source` value moves.
+// 1.26.0, not 1.22.0: a step's `toolServers` on `GET /api/v1/debug/runs/:runId` gains an optional
+// `observed`, the agent CLI's own account of the servers it managed to load beside the `wired` /
+// `unavailable` account of what the platform decided. Additive: a consumer written against 1.21.0
+// reads both existing lists unchanged, and an ABSENT `observed` is not an empty one: it means no
+// observation was made (a harness whose CLI publishes no such report, an older runner image, an
+// unmapped runner pool), which is a distinction a consumer has to keep or it will report working
+// servers as dead.
 //
-// This branch has now lost that race TWICE (it claimed 1.22.0, then 1.23.0, then 1.24.0, each
-// published by main while the branch was in flight), which is the paragraph above's point made
-// again: the VERSION line auto-merges clean to a number main has already used, and only this
-// comment block conflicts. Re-read it after every merge.
-// 1.26.0, not 1.25.0: the outbound webhook becomes a COLLECTION, `GET /api/v1/notification-webhooks`
-// plus `GET|PUT|DELETE /api/v1/notification-webhooks/:webhookId`, beside the singular routes, which
-// keep working and now address the `default` entry. Additive on every axis: four new operations, and
-// two new fields (`id`, `name`) on a response projection a consumer already tolerates unknown members
-// of. This branch claimed 1.25.0 and lost it to `gitlab` above, the third branch in a row to lose
-// this race: the VERSION line auto-merges clean to a number main has already published, so re-read
-// it here, not there, after every merge.
-const API_VERSION = '1.26.0'
+// FIFTH number this one addition has held: written against 1.21.0 (the number the `toolServers`
+// record itself took), then displaced in turn by the run outcome endpoint, `x-min-scope`, the
+// task-`fields` patch and the GitLab source above, each published by main while this branch was in
+// flight. Not one of the five announced itself on the VERSION line, which auto-merged clean every
+// time to the number main had just used; every one surfaced as a conflict in THIS comment block,
+// only because each version step writes its own paragraph here. That is the whole reason the
+// paragraphs exist, and it is why the note at the top of the block says to re-read this line after
+// every merge rather than trust a clean one.
+//
+// 1.27.0: the verification report gains a `context` section and the run outcome summary a
+// `sources` one, both saying which linked pages a run's agents read and at which revision.
+// Additive on both surfaces (a new section object beside the existing ones, on two endpoints and
+// inside the PR body's fenced block), and inert for a consumer that ignores it: every section it
+// already reads is byte-for-byte unchanged. `PR_VERIFICATION_REPORT_VERSION` steps to 9 and
+// `RUN_OUTCOME_VERSION` to 2 with it.
+//
+// 1.28.0, not 1.26.0: the outbound webhook becomes a COLLECTION,
+// `GET /api/v1/notification-webhooks` plus `GET|PUT|DELETE /api/v1/notification-webhooks/:webhookId`,
+// beside the singular routes, which keep working and now address the `default` entry. Additive on
+// every axis: four new operations, and two new fields (`id`, `name`) on a response projection a
+// consumer already tolerates unknown members of. FOURTH number this one has held: it claimed
+// 1.25.0, then 1.26.0, then 1.27.0, each published by main while the branch was in flight, and not
+// one of them announced itself on the VERSION line, which auto-merged clean to a number main had
+// already used every time. Re-read this line here, not there, after every merge.
+const API_VERSION = '1.28.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -282,6 +302,19 @@ const COMPONENT_SCHEMAS = {
   PrReportTests: 'prReportTestsSchema',
   PrReportTestOutcome: 'prReportTestOutcomeSchema',
   PrReportTestConcern: 'prReportTestConcernSchema',
+  PrReportContext: 'prReportContextSchema',
+  PrReportContextDocument: 'prReportContextDocumentSchema',
+  /**
+   * The freshness verdict, hoisted for the reason this whole map exists: it is a VARIANT, so left
+   * inline it ships as `…ContextDocumentFreshnessVariant0/1/2` in four languages, and reordering
+   * the union's members would silently RENUMBER a type a consumer had written code against.
+   */
+  DocumentFreshness: 'documentFreshnessSchema',
+  // Its sibling `documentOriginSchema` is deliberately NOT hoisted beside it: a bare picklist has
+  // no object body, and the SDK emitter renders a hoisted one as an empty `interface`. It stays
+  // an inline enum named after the first path that reaches it, which is what every other
+  // vocabulary on this surface does (`PublicTaskSourceDocumentSource`, `PrReportCiStatus`).
+  // `sdk/typescript/test/contract-conformance.test.ts` is what refuses the empty interface.
   PrReportRequirements: 'prReportRequirementsSchema',
   PrReportEnvironments: 'prReportEnvironmentsSchema',
   PrReportMerge: 'prReportMergeSchema',

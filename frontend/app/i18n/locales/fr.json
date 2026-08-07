@@ -1446,6 +1446,16 @@
           "oauthNotConnected": "Connectez ce tableau à ce serveur depuis la fenêtre Infrastructure. Un déploiement sans ENCRYPTION_KEY n’a nulle part où conserver une autorisation : un opérateur doit d’abord la définir.",
           "oauthTokenFailed": "Reconnectez-le depuis la fenêtre Infrastructure, ou attendez la fin de la panne du fournisseur.",
           "overBudget": "Réduisez ce que l’agent déclare, pour qu’une exécution puisse tout transporter."
+        },
+        "observed": {
+          "ready": "démarré",
+          "readyTools": "{count} outils",
+          "readyNoTools": "démarré, aucun outil",
+          "failed": "n'a pas démarré",
+          "needsAuth": "autorisation requise",
+          "unknown": "état non déterminé",
+          "notLoaded": "jamais chargé",
+          "unattributed": "La CLI d'agent a signalé un serveur que cette étape n'a pas branché : {id}."
         }
       },
       "adherence": {
@@ -5561,6 +5571,15 @@
     "ask": {
       "title": "Ce qui était demandé",
       "none": "Cette tâche n'a pas de description, il n'y a donc rien à quoi comparer le résultat."
+    },
+    "sources": {
+      "title": "Construit à partir de",
+      "unchecked": "Non vérifié auprès de la source.",
+      "noSource": "Aucune page source à laquelle comparer.",
+      "moved": "Cette page a changé pendant l'exécution : les étapes antérieures ont donc lu une révision plus ancienne.",
+      "gap": {
+        "none_linked": "Aucune page n'est parvenue aux agents de cette exécution, ils ont donc travaillé uniquement à partir de la description de la tâche."
+      }
     },
     "gap": {
       "run_unavailable": "L'exécution de cette tâche n'a pas été chargée : les éléments qu'elle a enregistrés ne peuvent donc pas être affichés ici. Ce n'est pas la même chose qu'une exécution qui n'a rien enregistré."

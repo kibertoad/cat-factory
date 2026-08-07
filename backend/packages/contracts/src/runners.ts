@@ -144,6 +144,18 @@ export const runnerPoolResponseMappingSchema = v.object({
    */
   sliceReviewsPath: v.optional(v.string()),
   /**
+   * Dot-path to what the agent's CLI reported about the tool servers (MCP) it loaded (the harness
+   * `toolServers` latest-value channel — NOT a drain buffer). A pool that proxies the cat-factory
+   * executor-harness verbatim should set this to `toolServers`.
+   *
+   * Absent ⇒ the run's tool-server record carries the dispatch's half only, which is the honest
+   * answer for a pool this deployment has not mapped: "not observed" and "observed, all healthy"
+   * are different facts, and only an unmapped path can be reported as the first one. Unmapped is
+   * therefore a lost DIAGNOSTIC, never a false accusation — a server that failed to start on a
+   * pool-backed run simply goes unreported, exactly as it did before this channel existed.
+   */
+  toolServersPath: v.optional(v.string()),
+  /**
    * Dot-path, IN THE DISPATCH RESPONSE (not the poll one), to the harness's capability handshake:
    * the list of optional job-body fields the running image actually parses. A pool that proxies
    * `POST /jobs` verbatim should set this to `capabilities`.
