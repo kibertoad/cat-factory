@@ -2030,7 +2030,9 @@
       },
       "members": {
         "title": "Membres",
-        "empty": "Aucun membre pour l'instant."
+        "empty": "Aucun membre pour l'instant.",
+        "revokeSessions": "Déconnecter de tous les appareils",
+        "sessionsRevoked": "Déconnecté de tous les appareils"
       },
       "invite": {
         "title": "Inviter un coéquipier",
@@ -2069,7 +2071,8 @@
         "sendInvite": "Impossible d'envoyer l'invitation",
         "revokeInvite": "Impossible de révoquer l'invitation",
         "connectEmail": "Impossible de connecter l'expéditeur des e-mails",
-        "disconnectEmail": "Impossible de déconnecter l'expéditeur des e-mails"
+        "disconnectEmail": "Impossible de déconnecter l'expéditeur des e-mails",
+        "revokeSessions": "Impossible de déconnecter le membre"
       },
       "emailNoun": "l’envoi d’e-mails"
     },
@@ -2479,6 +2482,39 @@
     },
     "accountFoundational": {
       "intro": "Les capacités partagées que cette organisation exploite déjà - stockage de fichiers, notifications, audit - avec leurs contrats d'API. Chaque tableau en hérite, et il est demandé à un architecte de les consommer plutôt que de proposer de les reconstruire. Les services que ce déploiement enregistre dans le code sont également hérités ici : ils peuvent être remplacés par identifiant ou écartés ci-dessous."
+    },
+    "auditLog": {
+      "title": "Journal d’audit",
+      "description": "Qui a modifié quoi dans ce compte, et quand. Les entrées sont uniquement ajoutées et ne peuvent être ni modifiées ni supprimées.",
+      "empty": "Rien n’a encore été enregistré pour ce compte.",
+      "loadMore": "Charger les entrées plus anciennes",
+      "refresh": "Actualiser",
+      "retiredAction": "a effectué une action que cette version ne reconnaît plus ({action})",
+      "actors": {
+        "system": "Le système",
+        "apiKey": "Clé d’API {id}"
+      },
+      "values": {
+        "none": "aucun"
+      },
+      "actions": {
+        "accountMemberAdded": "a ajouté {target} au compte en tant que {roles}",
+        "accountMemberRolesChanged": "a changé les rôles de {target} de {previousRoles} à {roles}",
+        "accountBudgetChanged": "a fixé la limite de dépenses mensuelle à {limit}",
+        "accountSettingsChanged": "a défini le fournisseur cloud par défaut sur {defaultCloudProvider}",
+        "accountInvitationCreated": "a invité {email} en tant que {roles}",
+        "accountInvitationRevoked": "a révoqué l’invitation de {email}",
+        "accountInvitationAccepted": "a accepté l’invitation de {email} en tant que {roles}",
+        "accountMemberSessionsRevoked": "a déconnecté {target} de tous les appareils",
+        "workspaceMemberAdded": "a ajouté {target} à un tableau en tant que {role}",
+        "workspaceMemberRoleChanged": "a changé le rôle de tableau de {target} de {previousRole} à {role}",
+        "workspaceMemberRemoved": "a retiré {target} d’un tableau (il ou elle était {role})",
+        "workspaceAccessModeChanged": "a défini l’accès au tableau sur {accessMode}"
+      },
+      "errors": {
+        "load": "Le journal d’audit n’a pas pu être chargé.",
+        "loadMore": "Impossible de charger les entrées plus anciennes"
+      }
     }
   },
   "settings": {

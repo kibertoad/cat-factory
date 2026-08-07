@@ -229,6 +229,49 @@ export function defineAuditEventSuite(name: string, makeRepo: () => AuditEventRe
       expect((await repo.listByAccount(acc)).events).toHaveLength(3)
     })
 
+    // The retention sweep is the ONE delete on an append-only table, and the pair below pins what
+    // it must NOT do as much as what it does.
+    //
+    // Note what these assert and what they deliberately do not. The prune takes a cutoff and
+    // nothing else — no account predicate — so its RETURNED COUNT spans rows every other case in
+    // this file seeded, which no case owns. Asserting an exact number there would be asserting a
+    // fact about a population the test did not make, and it would break on any addition to this
+    // suite. So the counts are asserted as RELATIONS and the exact outcomes are asserted per
+    // account, over rows these cases created themselves. The timestamps are large and per-case so
+    // the two cutoffs cannot reach each other's fixtures.
+    it('prunes strictly by age and across every account, reporting what it reclaimed', async () => {
+      const repo = makeRepo()
+      const { acc } = ids()
+      const other = `${acc}-other`
+      await repo.append(event({ id: `aud-${acc}-old`, accountId: acc, at: 1_000_000 }))
+      await repo.append(event({ id: `aud-${acc}-old2`, accountId: other, at: 1_500_000 }))
+      await repo.append(event({ id: `aud-${acc}-new`, accountId: acc, at: 9_000_000 }))
+
+      const removed = await repo.deleteOlderThan(2_000_000)
+
+      // A count, not a boolean: the sweeper reports what it reclaimed, so "pruned nothing" and
+      // "pruned the table" must be distinguishable. At least the two seeded here went.
+      expect(removed).toBeGreaterThanOrEqual(2)
+      // Both accounts pruned by the one cutoff — the property that says there is no account
+      // predicate hiding in the implementation.
+      expect((await repo.listByAccount(acc)).events.map((e) => e.id)).toEqual([`aud-${acc}-new`])
+      expect((await repo.listByAccount(other)).events).toEqual([])
+    })
+
+    it('keeps a row exactly ON the cutoff (the boundary is strict)', async () => {
+      // `at < cutoff`, not `<=`. Retention is expressed as "keep the last N days", and an
+      // off-by-one here silently shortens every deployment's window by a tick.
+      const repo = makeRepo()
+      const { acc } = ids()
+      await repo.append(event({ id: `aud-${acc}-on`, accountId: acc, at: 5_000_000 }))
+      await repo.append(event({ id: `aud-${acc}-under`, accountId: acc, at: 4_999_999 }))
+
+      await repo.deleteOlderThan(5_000_000)
+
+      // The row one tick under the cutoff went; the one exactly on it stayed.
+      expect((await repo.listByAccount(acc)).events.map((e) => e.id)).toEqual([`aud-${acc}-on`])
+    })
+
     it('reads an unknown account and an unreadable cursor as the start of an empty log', async () => {
       const repo = makeRepo()
       const { acc } = ids()

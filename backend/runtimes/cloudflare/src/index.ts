@@ -12,7 +12,7 @@ import type {
   GitHubSyncMessage,
   TrackerSyncMessage,
 } from './infrastructure/env'
-import { requireTelemetryDb } from './infrastructure/env'
+import { requireAuditDb, requireTelemetryDb } from './infrastructure/env'
 import { D1AgentRunRepository } from './infrastructure/repositories/D1AgentRunRepository'
 import { D1CommitProjectionRepository } from './infrastructure/repositories/D1CommitProjectionRepository'
 import { D1LiveContainerRepository } from './infrastructure/repositories/D1LiveContainerRepository'
@@ -33,6 +33,7 @@ import { D1PasswordResetTokenRepository } from './infrastructure/repositories/D1
 import { D1GateOutcomeRepository } from './infrastructure/repositories/D1GateOutcomeRepository'
 import { D1NotificationRepository } from './infrastructure/repositories/D1NotificationRepository'
 import { D1PlatformMetricsRepository } from './infrastructure/repositories/D1PlatformMetricsRepository'
+import { D1AuditEventRepository } from './infrastructure/repositories/D1AuditEventRepository'
 import { D1SpendRollupRepository } from './infrastructure/repositories/D1SpendRollupRepository'
 import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
 import {
@@ -371,6 +372,10 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
       // (they are account-scoped through the same `workspaces` sub-select).
       gateOutcomeRepository: new D1GateOutcomeRepository({ db: env.DB }),
       platformMetricsRepository: new D1PlatformMetricsRepository({ db: env.DB }),
+      // The account audit log lives in its OWN database (AUDIT_DB), which is why this is the one
+      // prune here that does not read `env.DB`: audit retention is measured in years and must not
+      // compete with live transactional state for the per-database ceiling.
+      auditEventRepository: new D1AuditEventRepository({ db: requireAuditDb(env) }),
       // The durable cost-attribution rollup: this sweep is its only writer, and prunes it
       // nowhere (see `RetentionDeps`).
       spendRollupRepository: new D1SpendRollupRepository({ db: env.DB }),

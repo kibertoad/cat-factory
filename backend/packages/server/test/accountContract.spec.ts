@@ -46,6 +46,7 @@ function makeApp(overrides: Partial<Record<string, unknown>> = {}) {
       avatarUrl: null,
       aud: 'session',
       exp: 0,
+      gen: 0,
     })
     await next()
   })

@@ -25,6 +25,7 @@ function fakeRepos(): {
     notifications: number | null
     gateOutcomes: number | null
     runDays: number | null
+    auditEvents: number | null
     rollup: [number, number] | null
     spendRollup: [number, number] | null
     /** Every pass in the order it ran, so ordering constraints can be asserted. */
@@ -43,6 +44,7 @@ function fakeRepos(): {
     notifications: null as number | null,
     gateOutcomes: null as number | null,
     runDays: null as number | null,
+    auditEvents: null as number | null,
     /** The [from, to) window the rollup pass recomputed. */
     rollup: null as [number, number] | null,
     /** The [from, to) window the durable spend rollup materialised. */
@@ -139,6 +141,12 @@ function fakeRepos(): {
           return 1
         },
       },
+      auditEventRepository: {
+        deleteOlderThan: async (c) => {
+          cutoffs.auditEvents = c
+          return 2
+        },
+      },
       // The durable cost-attribution rollup: a watermark read plus a materialise, and no
       // prune to fake, since the port has none.
       spendRollupRepository: {
@@ -163,6 +171,7 @@ function policy(overrides: Partial<RetentionConfig> = {}): RetentionConfig {
     notificationsMs: 90 * DAY,
     gateOutcomesMs: 90 * DAY,
     runDaysMs: 400 * DAY,
+    auditEventsMs: 730 * DAY,
     ...overrides,
   }
 }
@@ -184,6 +193,10 @@ describe('sweepRetention', () => {
     expect(cutoffs.notifications).toBe(now - 90 * DAY)
     expect(cutoffs.gateOutcomes).toBe(now - 90 * DAY)
     expect(cutoffs.runDays).toBe(now - 400 * DAY)
+    // The longest window of the lot, and the one with its own env knob: audit retention answers a
+    // compliance question, so it must never be shortened as a side effect of tuning a telemetry
+    // window.
+    expect(cutoffs.auditEvents).toBe(now - 730 * DAY)
     // The rollup recomputes a short trailing lookback, so a missed pass self-heals instead of
     // leaving a day permanently half-counted.
     expect(cutoffs.rollup).toEqual([now - 3 * DAY, now])
@@ -204,6 +217,7 @@ describe('sweepRetention', () => {
       notifications: 9,
       gateOutcomes: 2,
       runDays: 1,
+      auditEvents: 2,
       runDaysRolledUp: 11,
       spendDaysRolledUp: 13,
       failedTables: [],
@@ -280,6 +294,7 @@ describe('sweepRetention', () => {
       notifications: 9,
       gateOutcomes: 2,
       runDays: 1,
+      auditEvents: 2,
       // The rollups are WRITES, not prunes: disabling a RETENTION window says "never delete",
       // never "stop materialising", so they still run. `spend_days` has no window to disable
       // in the first place.

@@ -8,7 +8,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import type { Hono } from 'hono'
 import type { Context } from 'hono'
 import { deleteCookie, getCookie } from 'hono/cookie'
-import { UnavailableError, oidcIdentitySubject } from '@cat-factory/kernel'
+import { UnavailableError, oidcIdentitySubject, runBestEffort } from '@cat-factory/kernel'
 import type { Logger } from '@cat-factory/kernel'
 import {
   OidcClient,
@@ -37,6 +37,7 @@ import {
   peekInvite,
   pickPostLoginRedirect,
   resolveRedirect,
+  sessionGenerationFor,
   sessionUser,
   setRoundTripCookie,
   withToken,
@@ -207,13 +208,109 @@ export function registerSsoRoutes(app: Hono<AppEnv>): void {
 
     const admission = judgeSsoAdmission(identity, sso)
     if (!admission.allowed) {
-      requestLogger(c).info('sso.refused', { reason: admission.reason, login: identity.login })
+      // A refusal the DIRECTORY evidenced is the offboarding signal, not merely a failed login:
+      // the directory that used to admit this person no longer does. Re-reading the groups on
+      // sign-in already stops them getting a NEW session; this ends the ones they are already
+      // holding, which is the half a stateless token cannot do on its own and the reason SSO's
+      // offboarding promise needed a revocation slice at all.
+      //
+      // An `indeterminate` refusal does NOT revoke. It is a claim we did not receive rather than
+      // a person the directory excluded (`SsoRefusalEvidence`), and the two arrive identically at
+      // this line while meaning opposite things. Acting on the second as if it were the first is
+      // the failure worth designing against: one dropped scope refuses every returning employee,
+      // and revoking on each of those refusals would sign the whole deployment out of every
+      // device — including the admin holding the session needed to fix the configuration. The
+      // login is still refused either way; only the irreversible half is withheld.
+      const sessions =
+        admission.evidence === 'directory'
+          ? await revokeRefusedSessions(c, issuer, identity.sub)
+          : 'withheld'
+      requestLogger(c).info('sso.refused', {
+        reason: admission.reason,
+        evidence: admission.evidence,
+        login: identity.login,
+        // Recorded because "we refused them and they still hold a live bearer" and "we refused
+        // them and cut their sessions" are different security outcomes, and only the second is
+        // the offboarding this feature claims. Four outcomes rather than a boolean: a revocation
+        // that FAILED and a user who never had an account here are opposite facts about whether
+        // somebody is still holding a live bearer, and a boolean reports them identically —
+        // which is exactly the reading an operator would use to decide whether to go and revoke
+        // by hand. See `SessionRevocationOutcome`.
+        sessionsRevoked: sessions,
+      })
       return c.redirect(refuse(trip.redirect, admission.reason))
     }
 
     const token = await establishSession(c, cfg, identity, issuer, trip)
     return c.redirect(withToken(trip.redirect, token))
   })
+}
+
+/**
+ * What became of the sessions of a refused sign-in. Four outcomes rather than a boolean, because
+ * the question an operator reads this to answer is "is this person still holding a live bearer",
+ * and three different answers collapse onto `false`:
+ *
+ *  - `revoked` — they had an account here and every session of theirs is now dead. This is the
+ *    offboarding the feature claims, and the only outcome that delivers it.
+ *  - `no_account` — nobody ever signed in with this identity, so there was nothing to end. The
+ *    ordinary case for an outsider hitting the login, and not a failure.
+ *  - `failed` — the store could not be reached or the write did not land. They ARE still holding
+ *    a live bearer and somebody has to go and revoke it by hand. Reported as its own value
+ *    because it is the only outcome that needs an operator, and the one a boolean hides behind
+ *    the same `false` the harmless case uses.
+ *  - `withheld` — the refusal was `indeterminate`, so revocation was deliberately not attempted.
+ *    Distinct from `no_account`: there may well be sessions, and the decision was not to touch
+ *    them on evidence this weak.
+ */
+type SessionRevocationOutcome = 'revoked' | 'no_account' | 'failed' | 'withheld'
+
+/**
+ * End every live session of a user the directory has just refused, reporting what became of them.
+ *
+ * Keyed on the SAME `iss#sub` subject the sign-in path uses, never the email: a departed employee
+ * whose address was reassigned must not have the new holder's sessions revoked, and the email is
+ * display data precisely because it moves.
+ *
+ * BEST-EFFORT, and this is the one place in the flow where that is right. The refusal itself has
+ * already succeeded — the person is not getting a session — so a store failure here must not turn
+ * a correct denial into a 500 that reads to an operator as a broken SSO configuration. It is
+ * WARNED rather than swallowed, because a revocation that silently did not happen is exactly the
+ * gap this closes, and `runBestEffort` is what keeps the report attached to the cause.
+ *
+ * The failure is also RETURNED, not only logged. `runBestEffort` swallows so the caller cannot be
+ * broken by it, which is right, but a best-effort path that reports the same value on success and
+ * failure has swallowed the outcome as well as the exception — and here the two differ on exactly
+ * the security question the log line exists to answer.
+ */
+async function revokeRefusedSessions<E extends AppEnv>(
+  c: Context<E>,
+  issuer: string,
+  sub: string,
+): Promise<SessionRevocationOutcome> {
+  const container = c.get('container')
+  // Starts at `failed`, so anything that throws before an outcome is assigned reports as one.
+  // The alternative (start optimistic, mark on error) reports a store outage as a success on any
+  // path the catch does not run, which is the direction this must never fail in.
+  let outcome: SessionRevocationOutcome = 'failed'
+  await runBestEffort(
+    requestLogger(c),
+    'sso.revoke_refused_sessions',
+    async () => {
+      const user = await container.userService.findByIdentity(
+        'oidc',
+        oidcIdentitySubject(issuer, sub),
+      )
+      if (!user) {
+        outcome = 'no_account'
+        return
+      }
+      await container.userService.revokeSessions(user.id)
+      outcome = 'revoked'
+    },
+    { issuer },
+  )
+  return outcome
 }
 
 /**
@@ -305,7 +402,11 @@ async function establishSession<E extends AppEnv>(
       await acceptInvite(c, trip.invite, user.id, user.email)
     }
   }
-  const { token } = await mintSession(cfg, sessionUser(user, identity.login))
+  const { token } = await mintSession(
+    cfg,
+    sessionUser(user, identity.login),
+    await sessionGenerationFor(c, user.id),
+  )
   logSignIn(requestLogger(c), user.id, identity, issuer)
   return token
 }
