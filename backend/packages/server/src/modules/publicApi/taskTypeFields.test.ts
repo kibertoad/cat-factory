@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { defaultTaskTypeRegistry } from '@cat-factory/kernel'
-import type { TaskTypeRegistry } from '@cat-factory/kernel'
-import { publicTaskTypeCatalog, resolveTaskTypeFields } from './taskTypeFields.js'
+import type { Block, TaskTypeRegistry } from '@cat-factory/kernel'
+import {
+  publicTaskTypeCatalog,
+  resolveTaskTypeFields,
+  resolveTaskTypeFieldsPatch,
+} from './taskTypeFields.js'
 
 // The public surface's two halves over ONE table: what the catalog advertises, and what creation
 // then accepts. Every assertion here is really about those two agreeing.
@@ -178,5 +182,136 @@ describe('resolveTaskTypeFields', () => {
     // collected", so an empty object would announce a brief that does not exist.
     expect(create({ title: 't' })).toBeUndefined()
     expect(create({ title: 't', taskType: 'feature', fields: {} })).toBeUndefined()
+  })
+})
+
+// The PATCH counterpart. Its whole difference from creation is that a caller sends a FRAGMENT of
+// the bag, because this API never serves the bag back — so these are all really about the merge.
+describe('resolveTaskTypeFieldsPatch', () => {
+  const registry = registryWith(OPERATION)
+  const task = (extra: Partial<Block> = {}): Block =>
+    ({
+      id: 'blk_1',
+      title: 'Task',
+      type: 'service',
+      description: '',
+      position: { x: 0, y: 0 },
+      status: 'planned',
+      progress: 0,
+      dependsOn: [],
+      executionId: null,
+      level: 'task',
+      parentId: 'frame_svc',
+      ...extra,
+    }) as Block
+
+  it('writes the keys sent and leaves every other stored value alone', () => {
+    const patch = resolveTaskTypeFieldsPatch(
+      task({
+        taskType: 'org:introduce-api',
+        taskTypeFields: { custom: { entity: 'Order', auth: 'user' } },
+      }),
+      { entity: 'Invoice' },
+      registry,
+    )
+    expect(patch).toEqual({ customTaskTypeFields: { entity: 'Invoice', auth: 'user' } })
+  })
+
+  it('validates the MERGED bag, so a required field already answered need not be restated', () => {
+    // Validating the fragment alone would refuse every partial patch of a type declaring a
+    // required field, which is most of the operations this exists to repair.
+    expect(() =>
+      resolveTaskTypeFieldsPatch(
+        task({ taskType: 'org:introduce-api', taskTypeFields: { custom: { entity: 'Order' } } }),
+        { auth: 'user' },
+        registry,
+      ),
+    ).not.toThrow()
+    // ...and one that is NOT answered anywhere is still refused, naming it.
+    expect(() =>
+      resolveTaskTypeFieldsPatch(
+        task({ taskType: 'org:introduce-api' }),
+        { auth: 'user' },
+        registry,
+      ),
+    ).toThrow(/entity/)
+  })
+
+  it('fills a bug’s missing reproduction steps, the gate’s most expensive gap', () => {
+    // `reproduction_missing` is a BLOCKING input-gate finding naming this exact field, and until
+    // the patch carried it the only headless exits were waiving the finding or deleting the task.
+    expect(
+      resolveTaskTypeFieldsPatch(
+        task({ taskType: 'bug', taskTypeFields: { severity: 'high' } }),
+        { stepsToReproduce: '1. open export 2. click' },
+        registry,
+      ),
+    ).toEqual({
+      builtinTaskTypeFields: { severity: 'high', stepsToReproduce: '1. open export 2. click' },
+    })
+  })
+
+  it('carries a built-in type’s INTERNAL-only keys through untouched', () => {
+    // `targetPath` and the per-DocKind prose are deliberately absent from the public descriptors,
+    // so a caller cannot name them — and a replace that dropped what it could not see would delete
+    // what the app collected.
+    const patch = resolveTaskTypeFieldsPatch(
+      task({
+        taskType: 'document',
+        taskTypeFields: {
+          docKind: 'adr',
+          targetPath: 'docs/adr/0001-x.md',
+          decisionDrivers: 'cost',
+        },
+      }),
+      { audience: 'platform engineers' },
+      registry,
+    )
+    expect(patch).toEqual({
+      builtinTaskTypeFields: {
+        docKind: 'adr',
+        targetPath: 'docs/adr/0001-x.md',
+        decisionDrivers: 'cost',
+        audience: 'platform engineers',
+      },
+    })
+  })
+
+  it('never touches the other half of the bag', () => {
+    // A custom bag on a built-in-typed task is unusual but storable; the point is that naming one
+    // half can never clear the other.
+    const patch = resolveTaskTypeFieldsPatch(
+      task({ taskType: 'bug', taskTypeFields: { custom: { leftover: 'x' } } }),
+      { severity: 'low' },
+      registry,
+    )
+    expect(patch).toEqual({ builtinTaskTypeFields: { severity: 'low' } })
+    expect(patch.builtinTaskTypeFields).not.toHaveProperty('custom')
+  })
+
+  it('refuses through the same door creation does, with every problem at once', () => {
+    let thrown: unknown
+    try {
+      resolveTaskTypeFieldsPatch(
+        task({ taskType: 'org:introduce-api', taskTypeFields: { custom: { entity: 'Order' } } }),
+        { auth: 'root', bogus: 'x' },
+        registry,
+      )
+    } catch (error) {
+      thrown = error
+    }
+    const details = (thrown as { details?: { reason?: string; problems?: string[] } }).details
+    expect(details?.reason).toBe('task_type_fields_invalid')
+    expect(details?.problems?.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('merges an UNREGISTERED namespaced type’s values verbatim, as creation carries them', () => {
+    expect(
+      resolveTaskTypeFieldsPatch(
+        task({ taskType: 'org:not-here', taskTypeFields: { custom: { a: '1', b: '2' } } }),
+        { b: '3' },
+        registry,
+      ),
+    ).toEqual({ customTaskTypeFields: { a: '1', b: '3' } })
   })
 })

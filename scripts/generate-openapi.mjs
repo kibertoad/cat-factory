@@ -120,7 +120,14 @@ const API_PREFIX = '/api/v1'
 // `extras` bag, which keeps serving them until the window in `public-api.md` closes, so no
 // consumer has to move on this version. 1.20.0 is main's published number as of this branch's last
 // merge; re-read this line after any merge rather than trusting that the VERSION auto-merged clean.
-const API_VERSION = '1.21.0'
+// 1.23.0, not 1.22.0: `PATCH /api/v1/tasks/:taskId` accepts `fields`, the task's per-type bag,
+// merged over what the task already carries. Additive (a new optional request field; a caller that
+// never sends one is unaffected), and it is what makes the pre-dispatch input gate's findings
+// FIXABLE headlessly: four of its seven codes name a field of that bag, and until now the surface
+// named a remedy it did not offer. 1.22.0 is deliberately SKIPPED rather than taken: PR #1792 is in
+// flight against it, and this is exactly the silent collision the note above describes, caught by
+// re-reading the line rather than by any conflict git would have raised.
+const API_VERSION = '1.23.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

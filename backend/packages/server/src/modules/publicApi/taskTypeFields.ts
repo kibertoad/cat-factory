@@ -8,10 +8,13 @@ import {
   withDescriptorFieldDefaults,
 } from '@cat-factory/contracts'
 import type {
+  Block,
   CreatePublicTaskInput,
   DescriptorField,
+  DescriptorFieldValues,
   PublicTaskType,
   TaskTypeFields,
+  UpdateBlockInput,
 } from '@cat-factory/contracts'
 import { ValidationError } from '@cat-factory/kernel'
 import type { TaskTypeRegistry } from '@cat-factory/kernel'
@@ -138,10 +141,69 @@ export function resolveTaskTypeFields(
   // `prNumber` of `3.7` passed the descriptor and landed on the block as the PR to review.
   const parsed = parseBuiltinPublicTaskFields(sanitized)
   if (!parsed.ok) {
-    throw new ValidationError(
-      `The fields supplied for task type '${taskType}' do not match what it accepts: ${parsed.problems.join(' ')}`,
-      { reason: 'task_type_fields_invalid', problems: parsed.problems },
-    )
+    throw refusal(taskType, parsed.problems)
   }
   return parsed.fields
+}
+
+/** The ONE refusal shape for a `fields` bag, at either door and for either half. */
+function refusal(taskType: string, problems: string[]): ValidationError {
+  return new ValidationError(
+    `The fields supplied for task type '${taskType}' do not match what it accepts: ${problems.join(' ')}`,
+    { reason: 'task_type_fields_invalid', problems },
+  )
+}
+
+/** The values a task's stored bag already carries for the descriptors this type declares. */
+function storedValuesFor(
+  descriptors: readonly DescriptorField[],
+  stored: Readonly<Record<string, unknown>>,
+): DescriptorFieldValues {
+  const current: DescriptorFieldValues = {}
+  for (const { key } of descriptors) {
+    const value = stored[key]
+    if (value !== undefined) current[key] = value as DescriptorFieldValues[string]
+  }
+  return current
+}
+
+/**
+ * Turn a caller's PARTIAL `fields` bag on `PATCH /api/v1/tasks/:taskId` into the internal patch
+ * keys, checked against the same descriptors creation uses.
+ *
+ * The public surface MERGES where the internal one replaces, and the asymmetry is the point: this
+ * API does not serve the bag back (see `updatePublicTaskSchema.fields`), so a replacing patch
+ * would ask a caller to restate values it cannot read. The merge therefore happens HERE, at the
+ * door that offers the ergonomic, and what reaches `updateBlock` is a whole half exactly as the
+ * app's own form sends one. Validation runs on the MERGED bag rather than the fragment, or a type
+ * whose descriptor declares a required field would refuse every patch that does not restate it.
+ *
+ * A built-in type's INTERNAL-only keys (a document's `targetPath`, the per-`DocKind` prose the
+ * public descriptors deliberately omit) are carried through untouched: the caller cannot name
+ * them, and a replace that dropped what it could not see would delete a value the app collected.
+ */
+export function resolveTaskTypeFieldsPatch(
+  block: Block,
+  fields: DescriptorFieldValues,
+  registry: TaskTypeRegistry | undefined,
+): Pick<UpdateBlockInput, 'customTaskTypeFields' | 'builtinTaskTypeFields'> {
+  const taskType = block.taskType ?? 'feature'
+  const stored = block.taskTypeFields ?? {}
+  const descriptors = descriptorsFor(taskType, registry)
+  // Nothing to check against (an unregistered namespaced type, or one whose bespoke form owns the
+  // bag): carry the values verbatim, as creation does, merged over what is there.
+  if (!descriptors) return { customTaskTypeFields: { ...stored.custom, ...fields } }
+
+  const builtin = isBuiltinCreateTaskType(taskType)
+  const current = builtin ? storedValuesFor(descriptors, stored) : (stored.custom ?? {})
+  const merged = withDescriptorFieldDefaults(descriptors, { ...current, ...fields })
+  const problems = validateDescriptorFields(descriptors, merged)
+  if (problems.length > 0) throw refusal(taskType, problems)
+  const sanitized = sanitizeDescriptorFields(descriptors, merged)
+  if (!builtin) return { customTaskTypeFields: sanitized }
+
+  const parsed = parseBuiltinPublicTaskFields(sanitized)
+  if (!parsed.ok) throw refusal(taskType, parsed.problems)
+  const { custom: _custom, ...storedBuiltin } = stored
+  return { builtinTaskTypeFields: { ...storedBuiltin, ...parsed.fields } }
 }

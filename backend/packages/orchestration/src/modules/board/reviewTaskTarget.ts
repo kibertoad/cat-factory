@@ -137,6 +137,25 @@ export async function resolveReviewTaskTarget(
 }
 
 /**
+ * The paragraph a review task's target PR reference (URL / #number) and focus fold down to, or
+ * the empty string when there is nothing to say. Pure and TOTAL over the fields, which is what
+ * lets {@link refoldReviewDescription} recompute a description's existing preamble rather than
+ * needing a marker to have been stored beside it.
+ */
+function reviewPreamble(fields: Block['taskTypeFields']): string {
+  const ref = fields?.prUrl?.trim() || (fields?.prNumber ? `#${fields.prNumber}` : '')
+  const focus = fields?.reviewFocus?.trim()
+  return [ref ? `Review pull request ${ref}.` : '', focus ? `Review focus: ${focus}` : '']
+    .filter(Boolean)
+    .join(' ')
+}
+
+/** Join a (possibly empty) preamble to a (possibly empty) body the way creation always has. */
+function withPreamble(preamble: string, body: string): string {
+  return [preamble, body].filter(Boolean).join('\n\n')
+}
+
+/**
  * For a REVIEW task, fold the target PR reference (URL / #number) and any review focus into the
  * description so the read-only `pr-reviewer` (which clones the base branch and fetches the PR
  * head by number) knows WHICH PR to review from its prompt. Returns the description unchanged
@@ -148,10 +167,47 @@ export function buildReviewDescription(
   description: string,
 ): string {
   if (taskType !== 'review') return description
-  const ref = fields?.prUrl?.trim() || (fields?.prNumber ? `#${fields.prNumber}` : '')
-  const focus = fields?.reviewFocus?.trim()
-  const preamble = [ref ? `Review pull request ${ref}.` : '', focus ? `Review focus: ${focus}` : '']
-    .filter(Boolean)
-    .join(' ')
-  return preamble ? [preamble, description].filter(Boolean).join('\n\n') : description
+  return withPreamble(reviewPreamble(fields), description)
+}
+
+/**
+ * Re-fold the preamble when a review task's target or focus is EDITED after creation, returning
+ * the description to store.
+ *
+ * The fold is a prepend, so repeating it would leave the description naming two pull requests
+ * and the reviewer reading whichever it met first. The old paragraph is therefore removed before
+ * the new one goes on, and it is identified by RECOMPUTING it from the fields as they stand now
+ * (idempotency by content, not by a marker: no review task in any database carries one, and a
+ * marker added today would still be absent from every task this exists to repair).
+ *
+ * Three outcomes, and the third is the reason this returns a discriminated result rather than a
+ * string. Nothing folded before (the `review_target_missing` repair this whole path exists for)
+ * ⇒ the new preamble is prepended, exactly as creation would have. The recomputed old paragraph
+ * IS the description's prefix ⇒ it is swapped for the new one. It is NOT ⇒ somebody has since
+ * rewritten the description, so the platform cannot tell what of it was the fold: refusing names
+ * that, where prepending anyway would state a second, contradicting target and stripping a guess
+ * would eat prose a human wrote.
+ */
+export function refoldReviewDescription(
+  taskType: Block['taskType'],
+  previous: Block['taskTypeFields'],
+  next: Block['taskTypeFields'],
+  description: string,
+): { ok: true; description: string } | { ok: false; problem: string } {
+  if (taskType !== 'review') return { ok: true, description }
+  const prior = reviewPreamble(previous)
+  const updated = reviewPreamble(next)
+  if (prior === updated) return { ok: true, description }
+  if (!prior) return { ok: true, description: withPreamble(updated, description) }
+  const body = description.startsWith(prior) ? description.slice(prior.length).trimStart() : null
+  if (body === null) {
+    return {
+      ok: false,
+      problem:
+        'The review target cannot be changed: this task’s description no longer starts with the ' +
+        'reference folded into it at creation, so replacing that reference would leave the ' +
+        'description naming a pull request the run does not review. Edit the description instead.',
+    }
+  }
+  return { ok: true, description: withPreamble(updated, body) }
 }

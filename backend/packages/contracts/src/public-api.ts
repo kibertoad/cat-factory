@@ -384,15 +384,54 @@ export const startPublicTaskSchema = v.object({
 export type StartPublicTaskInput = v.InferOutput<typeof startPublicTaskSchema>
 
 /**
- * Edit a task's mutable fields (typically before it runs) — the external counterpart of the
- * SPA's inline title/description edit. Deliberately narrower than the internal `updateBlock`
- * patch (which also carries model/risk/pipeline pins and board-layout knobs that have no
- * external meaning): the public surface exposes only the two human-authored fields, so it
- * stays small and stable. Both fields are optional; an empty patch is a harmless no-op.
+ * Edit a task's mutable INPUT — the external counterpart of the SPA's inline edit. Deliberately
+ * narrower than the internal `updateBlock` patch (which also carries model/risk/pipeline pins and
+ * board-layout knobs that have no external meaning): what a human AUTHORS, and nothing else. Every
+ * field is optional; an empty patch is a harmless no-op.
  */
 export const updatePublicTaskSchema = v.object({
   title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
   description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
+  /**
+   * The per-case values for the task's own type, keyed by field, checked against the SAME
+   * descriptors `POST /services/:serviceId/tasks` validates a `fields` bag against
+   * (`GET /api/v1/task-types` serves them) and refused the same way: a `422` with
+   * `details.reason: 'task_type_fields_invalid'` and a `problems` list naming every problem at
+   * once.
+   *
+   * This is what makes a REFUSED INPUT REPAIRABLE. The pre-dispatch input gate parks a run for
+   * free when a task is structurally unactionable and names exactly which input is missing, and
+   * four of its seven issue codes name a field of this bag: `reproduction_missing`,
+   * `review_target_missing`, `success_criteria_missing` and `required_field_missing`. Until this
+   * field existed the platform could accept a task, refuse to run it, say precisely what to go and
+   * fix, and offer no way to fix it: the only exits were waiving the finding or deleting a task
+   * whose id every stored reference points at (losing its ticket claim, which then refuses every
+   * future filing of that ticket, and its attached documents). Supply the named value, then
+   * `recheck` the parked run.
+   *
+   * **MERGED over what the task already carries, not substituted for it.** A key you send is
+   * written; a key you omit keeps its stored value. That differs from the create call, where the
+   * bag is all there is, and the reason is that this API does not serve the bag BACK: a task's
+   * collected values are not projected onto {@link publicTaskSchema} (a deployment's own type may
+   * declare a `password` field, and a read surface cannot tell those from the rest), so a
+   * replacing patch would ask a caller to restate values it has no way to learn.
+   *
+   * Two consequences of merging, both deliberate:
+   *
+   * - An EMPTY value means "not supplied", exactly as at creation, so it leaves the stored value
+   *   alone. There is no way to CLEAR a field over this surface; nothing needed one, and adding it
+   *   later is additive where guessing at it now would not be.
+   * - The best-practice fragments a task carries are derived from these values at CREATION and are
+   *   not re-derived here, matching what an edit through the app does.
+   *
+   * A `review` task's target is the one value with resolution behind it: the pull request is
+   * verified against the provider and folded into the description, exactly as at creation, so a
+   * reference this patch lands is one creation would have accepted. Where the description has
+   * since been rewritten by hand the platform can no longer tell which part of it was the fold,
+   * and changing the target is refused (with that stated in `problems`) rather than leaving a
+   * description naming a pull request the run does not review.
+   */
+  fields: v.optional(descriptorFieldValuesSchema),
 })
 export type UpdatePublicTaskInput = v.InferOutput<typeof updatePublicTaskSchema>
 

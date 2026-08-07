@@ -49,6 +49,7 @@ import {
 import type { AppEnv } from '../../http/env.js'
 import { authorize } from './publicApiAuth.js'
 import { createTaskWithAttachments, taskCreationDeps } from './taskCreation.js'
+import { resolveTaskTypeFieldsPatch } from './taskTypeFields.js'
 import {
   type AdmissiblePipelineShape,
   publicRunParkSurfaces,
@@ -921,9 +922,11 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
   // headless anchors) — so an external key can never edit/stop/retry/read an arbitrary
   // in-workspace run. Each delegates to the SAME service method the SPA uses; no new logic.
 
-  // Edit a task's title/description. Intended for pre-start authoring, but — like the SPA's
-  // inline edit and the underlying `updateBlock` — it is NOT restricted to the pre-start
-  // window; editing a running/finished task's title/description does not re-drive the run.
+  // Edit a task's authored input: title, description, and the per-type `fields` bag. Intended for
+  // pre-start authoring, but — like the SPA's inline edit and the underlying `updateBlock` — it is
+  // NOT restricted to the pre-start window; editing a running/finished task does not re-drive the
+  // run. That is deliberate and is what makes the input gate's park recoverable: a run parked on a
+  // missing field is cleared by supplying it here and then `recheck`ing.
   buildHonoRoute(app, updatePublicTaskContract, async (c) => {
     const gate = await authorize(c, 'write')
     if ('fail' in gate) {
@@ -939,12 +942,19 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
     if (!found) {
       return c.json({ error: { code: 'not_found', message: 'Task not found' } }, 404)
     }
+    const { fields, ...authored } = c.req.valid('json')
+    const patch = fields
+      ? {
+          ...authored,
+          ...resolveTaskTypeFieldsPatch(found.block, fields, container.taskTypeRegistry),
+        }
+      : authored
     const block = await container.boardService.updateBlock(
       auth.workspaceId,
       taskId,
-      c.req.valid('json'),
+      patch,
       // Unattributed by the same reading a headless start gets (ADR 0037): an API key holds
-      // scopes, not a workspace tier. The contract exposes title/description only, so no merge
+      // scopes, not a workspace tier. The contract exposes authored input only, so no merge
       // preset can be selected here in any case.
       UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )

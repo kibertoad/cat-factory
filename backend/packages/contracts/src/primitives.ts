@@ -300,6 +300,19 @@ export const taskTypeFieldsSchema = v.object({
 })
 export type TaskTypeFields = v.InferOutput<typeof taskTypeFieldsSchema>
 
+/**
+ * The BUILT-IN half of {@link taskTypeFieldsSchema}: every per-type key the platform itself
+ * declares, without the deployment-owned `custom` bag.
+ *
+ * The two halves are patched through separate keys on {@link updateBlockSchema} because they are
+ * validated by different things and by nothing in common: a built-in key is schema-typed HERE,
+ * where a `custom` value is checked against the descriptor its deployment registered. Splitting
+ * the bag at the request boundary is what lets each half be parsed by its own authority instead
+ * of one door asserting the other's rules.
+ */
+export const builtinTaskTypeFieldsSchema = v.omit(taskTypeFieldsSchema, ['custom'])
+export type BuiltinTaskTypeFields = v.InferOutput<typeof builtinTaskTypeFieldsSchema>
+
 /** A kind-specific document field key on {@link taskTypeFieldsSchema}. */
 export type DocKindFieldKey =
   | 'targetUsers'
