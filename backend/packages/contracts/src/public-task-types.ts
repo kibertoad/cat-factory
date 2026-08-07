@@ -98,13 +98,52 @@ export const BUILTIN_PUBLIC_TASK_FIELDS: Readonly<Record<string, readonly Descri
       key: 'prUrl',
       label: 'Pull request URL',
       type: 'text',
-      help: 'The PR’s full web URL. Wins over the number when both are given.',
+      // Says the NUMBER wins because `resolvePrNumber` does, at creation and at dispatch alike;
+      // the help previously claimed the opposite, which no code path has ever implemented. Sending
+      // both is only ambiguous in the one request that names them: the target is canonicalised
+      // against the provider immediately after, so the stored pair always agrees from then on. A
+      // URL naming a DIFFERENT repository is refused outright rather than silently outranked
+      // (`assertRepoMatches`).
+      help: 'The PR’s full web URL. Supply this or the number; the number wins when both are given.',
       maxLength: 500,
     },
     { key: 'reviewFocus', label: 'Review focus', type: 'textarea', maxLength: 2000 },
   ],
   feature: [],
   ralph: [],
+}
+
+/**
+ * Keys of a built-in type that are alternate SPELLINGS of ONE value, grouped.
+ *
+ * A `review` task's target is a single pull request, named either by number or by URL, and
+ * `resolvePrNumber` prefers the number when it sees both. At CREATION that preference is exactly
+ * what the descriptor help promises, because both spellings came from the same author in the same
+ * request. On a MERGING patch it inverts: a caller that repoints the task by sending `prUrl` alone
+ * would have the stored `prNumber` merged back in beside it, win, and silently revert the target to
+ * the pull request the caller was replacing, answered `200`.
+ *
+ * So a patch naming any member of a group supersedes the group's stored members: the value the
+ * caller did not send is not a value it kept, it is the same value spelled the other way. Stated
+ * here beside the descriptors rather than at the patch door, because the help text that claims the
+ * URL "wins" and the merge that must not contradict it are two statements of one fact.
+ */
+const BUILTIN_PUBLIC_FIELD_ALIASES: Readonly<Record<string, readonly (readonly string[])[]>> = {
+  review: [['prNumber', 'prUrl']],
+}
+
+/**
+ * The stored keys a patch NAMING `named` supersedes for this type: every other member of an alias
+ * group one of the named keys belongs to. Empty for a type that declares no groups, which is all of
+ * them but `review`.
+ */
+export function supersededBuiltinFieldKeys(taskType: string, named: readonly string[]): string[] {
+  const groups = BUILTIN_PUBLIC_FIELD_ALIASES[taskType]
+  if (!groups) return []
+  const supplied = new Set(named)
+  return groups
+    .filter((group) => group.some((key) => supplied.has(key)))
+    .flatMap((group) => group.filter((key) => !supplied.has(key)))
 }
 
 /**

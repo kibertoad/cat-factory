@@ -218,6 +218,52 @@ describe('BoardService review-target patch', () => {
     )
   })
 
+  it('replaces the fold a READ-MODIFY-WRITE caller sends back, rather than stating it twice', async () => {
+    // The read surface serves the FOLDED description, so a client that reads a task, changes the
+    // target and sends the whole thing back returns the old preamble to us. Prepending onto it
+    // left a description naming two different pull requests, and the reviewer reads whichever it
+    // meets first: the exact failure the refold exists to prevent, arriving through the other door.
+    const seed = task({
+      taskType: 'review',
+      taskTypeFields: { prNumber: 1, prUrl: 'https://github.com/o/r/pull/1' },
+      description: 'Review pull request https://github.com/o/r/pull/1.\n\nNotes.',
+    })
+    const service = build(seed, {
+      resolveRunRepoContext: async () =>
+        repoContext(async () => openPr(9, 'https://github.com/o/r/pull/9')),
+    })
+    await patchFields(service, {
+      description: 'Review pull request https://github.com/o/r/pull/1.\n\nNotes.',
+      builtinTaskTypeFields: { prNumber: 9 },
+    })
+    expect(written?.description).toBe(
+      'Review pull request https://github.com/o/r/pull/9.\n\nNotes.',
+    )
+  })
+
+  it('does not double the fold when a returned description accompanies an unmoved target', async () => {
+    const seed = task({
+      taskType: 'review',
+      taskTypeFields: { prNumber: 1, prUrl: 'https://github.com/o/r/pull/1' },
+      description: 'Review pull request https://github.com/o/r/pull/1.\n\nNotes.',
+    })
+    const service = build(seed, {
+      resolveRunRepoContext: async () =>
+        repoContext(async () => openPr(1, 'https://github.com/o/r/pull/1')),
+    })
+    await patchFields(service, {
+      description: 'Review pull request https://github.com/o/r/pull/1.\n\nNotes, expanded.',
+      builtinTaskTypeFields: {
+        prNumber: 1,
+        prUrl: 'https://github.com/o/r/pull/1',
+        severity: 'high',
+      },
+    })
+    expect(written?.description).toBe(
+      'Review pull request https://github.com/o/r/pull/1.\n\nNotes, expanded.',
+    )
+  })
+
   it('leaves the description alone when the patch changes a field the fold does not read', async () => {
     const seed = task({
       taskType: 'review',

@@ -156,6 +156,16 @@ function withPreamble(preamble: string, body: string): string {
 }
 
 /**
+ * The body under `prior`, or `null` when `prior` is not this description's prefix (so what of the
+ * description was the fold can no longer be told). An empty `prior` is nothing to strip, so the
+ * whole description is the body.
+ */
+function bodyUnder(prior: string, description: string): string | null {
+  if (!prior) return description
+  return description.startsWith(prior) ? description.slice(prior.length).trimStart() : null
+}
+
+/**
  * For a REVIEW task, fold the target PR reference (URL / #number) and any review focus into the
  * description so the read-only `pr-reviewer` (which clones the base branch and fetches the PR
  * head by number) knows WHICH PR to review from its prompt. Returns the description unchanged
@@ -198,8 +208,7 @@ export function refoldReviewDescription(
   const prior = reviewPreamble(previous)
   const updated = reviewPreamble(next)
   if (prior === updated) return { ok: true, description }
-  if (!prior) return { ok: true, description: withPreamble(updated, description) }
-  const body = description.startsWith(prior) ? description.slice(prior.length).trimStart() : null
+  const body = bodyUnder(prior, description)
   if (body === null) {
     return {
       ok: false,
@@ -210,4 +219,34 @@ export function refoldReviewDescription(
     }
   }
   return { ok: true, description: withPreamble(updated, body) }
+}
+
+/**
+ * Fold the target reference into a description the caller is authoring in THIS request, replacing
+ * any fold the text already carries.
+ *
+ * The sibling of {@link refoldReviewDescription} for the other case, and the difference is only
+ * what happens when the recomputed prior preamble is NOT the text's prefix. There it is a stored
+ * description somebody has since rewritten, so the platform refuses rather than rewrite prose it
+ * cannot account for. Here the text arrived in the request, so there is no prose at risk: whatever
+ * the caller sent is the body, and the current preamble goes on the front of it.
+ *
+ * Stripping first is what this adds over a plain {@link buildReviewDescription}, and a
+ * READ-MODIFY-WRITE caller is why it is needed: `GET /api/v1/tasks/:taskId` serves the FOLDED
+ * description, so a client that reads a task, edits a field and sends the whole thing back returns
+ * the preamble to a prepend that would then state it twice. When the target moved in the same
+ * request, the two paragraphs name DIFFERENT pull requests and the reviewer reads whichever it
+ * meets first, which is the exact failure the refold exists to prevent.
+ */
+export function foldReviewDescriptionOnto(
+  taskType: Block['taskType'],
+  previous: Block['taskTypeFields'],
+  next: Block['taskTypeFields'],
+  description: string,
+): string {
+  if (taskType !== 'review') return description
+  return withPreamble(
+    reviewPreamble(next),
+    bodyUnder(reviewPreamble(previous), description) ?? description,
+  )
 }

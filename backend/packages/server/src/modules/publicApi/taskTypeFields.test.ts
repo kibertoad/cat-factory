@@ -314,4 +314,80 @@ describe('resolveTaskTypeFieldsPatch', () => {
       ),
     ).toEqual({ customTaskTypeFields: { a: '1', b: '3' } })
   })
+
+  it('repoints a review task by URL alone, without the stored number outranking it', () => {
+    // `prNumber` and `prUrl` are two spellings of ONE target and `resolvePrNumber` prefers the
+    // number, so merging the stored number back in beside the caller's URL would silently revert
+    // the task to the pull request being replaced, and answer 200 for it.
+    const patch = resolveTaskTypeFieldsPatch(
+      task({ taskType: 'review', taskTypeFields: { prNumber: 7, reviewFocus: 'locking' } }),
+      { prUrl: 'https://github.com/acme/app/pull/42' },
+      registry,
+    )
+    expect(patch.builtinTaskTypeFields).toEqual({
+      prUrl: 'https://github.com/acme/app/pull/42',
+      reviewFocus: 'locking',
+    })
+    expect(patch.builtinTaskTypeFields).not.toHaveProperty('prNumber')
+  })
+
+  it('supersedes the other spelling in BOTH directions, and only for the group named', () => {
+    const byNumber = resolveTaskTypeFieldsPatch(
+      task({
+        taskType: 'review',
+        taskTypeFields: { prUrl: 'https://github.com/acme/app/pull/7', reviewFocus: 'locking' },
+      }),
+      { prNumber: 42 },
+      registry,
+    )
+    expect(byNumber.builtinTaskTypeFields).toEqual({ prNumber: 42, reviewFocus: 'locking' })
+    // A patch naming NEITHER spelling leaves the stored target entirely alone.
+    const untouched = resolveTaskTypeFieldsPatch(
+      task({ taskType: 'review', taskTypeFields: { prNumber: 7, prUrl: 'https://x/pull/7' } }),
+      { reviewFocus: 'locking' },
+      registry,
+    )
+    expect(untouched.builtinTaskTypeFields).toMatchObject({
+      prNumber: 7,
+      prUrl: 'https://x/pull/7',
+      reviewFocus: 'locking',
+    })
+  })
+
+  it('never re-judges a stored value against the NARROWER public descriptor', () => {
+    // `stepsToReproduce` is 2000 in the public descriptors and 4000 in `taskTypeFieldsSchema`, so a
+    // reproduction authored in the app can legitimately exceed what this surface advertises.
+    // Judging it on every patch would refuse each one identically, for something the patch did not
+    // do, leaving the task permanently un-repairable over the surface that exists to repair it.
+    const patch = resolveTaskTypeFieldsPatch(
+      task({ taskType: 'bug', taskTypeFields: { stepsToReproduce: 'x'.repeat(2500) } }),
+      { severity: 'high' },
+      registry,
+    )
+    expect(patch.builtinTaskTypeFields).toMatchObject({ severity: 'high' })
+    expect(patch.builtinTaskTypeFields?.stepsToReproduce).toHaveLength(2500)
+    // A value the caller DOES send is still held to the descriptor.
+    expect(() =>
+      resolveTaskTypeFieldsPatch(
+        task({ taskType: 'bug' }),
+        { stepsToReproduce: 'x'.repeat(2500) },
+        registry,
+      ),
+    ).toThrow(/stepsToReproduce/)
+  })
+
+  it('lets a patch land beside a stored key the descriptor no longer declares', () => {
+    // A node-local task type routinely outlives a registration, and the verbatim create path
+    // stores whatever an unregistered one was given. Refusing the whole patch for a key the caller
+    // did not name (and cannot read back) locked such a task out of every repair.
+    const patch = resolveTaskTypeFieldsPatch(
+      task({
+        taskType: 'org:introduce-api',
+        taskTypeFields: { custom: { entity: 'Order', auth: 'user', retired: 'stale' } },
+      }),
+      { entity: 'Invoice' },
+      registry,
+    )
+    expect(patch).toEqual({ customTaskTypeFields: { entity: 'Invoice', auth: 'user' } })
+  })
 })

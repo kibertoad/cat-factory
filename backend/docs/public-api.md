@@ -572,7 +572,7 @@ POST /api/v1/runs/run_4/decisions/input-gate/resolve
 The recheck re-evaluates the task as it now stands, so it comes back `passed` only if the gap is
 genuinely closed; a still-blocked recheck is an ordinary `200` with refreshed findings.
 
-Three rules differ from the create call, each for a stated reason:
+Five rules differ from the create call, each for a stated reason:
 
 - **`fields` is MERGED, not substituted.** A key you send is written; a key you omit keeps its
   stored value. This API does not serve the bag back (a deployment's own type may declare a
@@ -581,16 +581,31 @@ Three rules differ from the create call, each for a stated reason:
 - **An empty value means "not supplied"**, exactly as at creation, so it leaves the stored value
   alone. There is no way to CLEAR a field here; nothing has needed one, and adding it later is
   additive where guessing at it now would not be.
+- **Only the keys you SEND are checked against the descriptors.** A stored value was admitted by
+  another authority: the descriptors for a built-in type restate the platform's internal schema more
+  narrowly (`stepsToReproduce` is 2000 here against the schema's 4000), and a deployment can
+  re-register a custom type's form under tighter bounds than a stored task was filled in under.
+  Judging those on every patch would refuse your write for something it did not do, and refuse each
+  later one identically, leaving the task permanently un-repairable over the surface that exists to
+  repair it. Completeness is still judged on the RESULT, so a `required` field answered by neither
+  the stored bag nor your patch is named.
+- **Two spellings of one value supersede each other rather than merging.** A `review` task's target
+  is `prNumber` or `prUrl`, and the number wins when a single request carries both. Send `prUrl`
+  alone and the stored `prNumber` is dropped rather than merged back in beside it, which would
+  otherwise outrank your URL and silently revert the task to the pull request you were replacing.
 - **The best-practice fragments a task carries are frozen at creation** and are not re-derived from
   a later edit, matching what an edit through the app does.
 
 A `review` task's target is the one value with resolution behind it, and the patch repeats that
 resolution rather than skipping it: the pull request is verified against the service's linked
 repository (a provider's own "no such PR" is a `422`; an outage is not) and the confirmed reference
-is folded into the description, exactly as at creation. Where the description has since been
-rewritten by hand the platform can no longer tell which part of it was that fold, so **changing the
-target is refused** (with the reason in `problems`) rather than leaving a description naming a pull
-request the run does not review. Edit the description in the same patch, or on its own first.
+is folded into the description, exactly as at creation. Sending `description` in the same request is
+safe for a read-modify-write client: `GET /api/v1/tasks/:taskId` serves the description with that
+fold already in it, and sending it back replaces the fold rather than stating it a second time.
+Where a STORED description has since been rewritten by hand the platform can no longer tell which
+part of it was that fold, so **changing the target is refused** (with the reason in `problems`)
+rather than leaving a description naming a pull request the run does not review. Send the
+description you want alongside the new target, or edit it on its own first.
 
 #### Filing a task from a tracker ticket
 

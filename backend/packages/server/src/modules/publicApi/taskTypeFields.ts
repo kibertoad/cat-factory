@@ -4,7 +4,9 @@ import {
   isBuiltinCreateTaskType,
   parseBuiltinPublicTaskFields,
   sanitizeDescriptorFields,
+  supersededBuiltinFieldKeys,
   validateDescriptorFields,
+  validatePatchedDescriptorFields,
   withDescriptorFieldDefaults,
 } from '@cat-factory/contracts'
 import type {
@@ -154,17 +156,44 @@ function refusal(taskType: string, problems: string[]): ValidationError {
   )
 }
 
-/** The values a task's stored bag already carries for the descriptors this type declares. */
+/**
+ * The values a task's stored bag already carries for the descriptors this type declares, minus the
+ * keys this request SUPERSEDES (see {@link supersededBuiltinFieldKeys}).
+ */
 function storedValuesFor(
   descriptors: readonly DescriptorField[],
   stored: Readonly<Record<string, unknown>>,
+  superseded: ReadonlySet<string>,
 ): DescriptorFieldValues {
   const current: DescriptorFieldValues = {}
   for (const { key } of descriptors) {
     const value = stored[key]
-    if (value !== undefined) current[key] = value as DescriptorFieldValues[string]
+    if (value !== undefined && !superseded.has(key)) {
+      current[key] = value as DescriptorFieldValues[string]
+    }
   }
   return current
+}
+
+/**
+ * The stored built-in keys to carry under a settled patch: everything on the row that is not the
+ * `custom` sub-bag and not superseded.
+ *
+ * The carry-through is what keeps a built-in type's INTERNAL-only keys (a document's `targetPath`,
+ * the per-`DocKind` prose the public descriptors deliberately omit) alive across a patch that
+ * cannot name them. Supersession is the one exception, and it has to be applied HERE as well as to
+ * the validated bag: a `prNumber` dropped from the values but left on the carry-through would be
+ * spread straight back over the caller's `prUrl`, which is the revert this exists to prevent.
+ */
+function carriedBuiltinKeys(
+  stored: Readonly<Record<string, unknown>>,
+  superseded: ReadonlySet<string>,
+): Record<string, unknown> {
+  const carried: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(stored)) {
+    if (key !== 'custom' && !superseded.has(key)) carried[key] = value
+  }
+  return carried
 }
 
 /**
@@ -181,6 +210,18 @@ function storedValuesFor(
  * A built-in type's INTERNAL-only keys (a document's `targetPath`, the per-`DocKind` prose the
  * public descriptors deliberately omit) are carried through untouched: the caller cannot name
  * them, and a replace that dropped what it could not see would delete a value the app collected.
+ *
+ * Two things the merge is careful about, both of them cases where "what is stored" is not simply
+ * "what the caller kept":
+ *
+ * - Values the caller did NOT name are not re-judged (`validatePatchedDescriptorFields`). The
+ *   public descriptors for a built-in type are a deliberately NARROWER restatement of
+ *   `taskTypeFieldsSchema` (`stepsToReproduce` is 2000 here against the schema's 4000), so judging
+ *   a stored value by them refuses a patch for something the patch did not do, and refuses every
+ *   later one identically: a task authored in the app with a 2500-character reproduction would be
+ *   permanently un-repairable over the surface that exists to repair it.
+ * - Keys the request SUPERSEDES are dropped before merging rather than merged back in. Today that
+ *   is a `review` task's two spellings of one target; see {@link supersededBuiltinFieldKeys}.
  */
 export function resolveTaskTypeFieldsPatch(
   block: Block,
@@ -190,20 +231,25 @@ export function resolveTaskTypeFieldsPatch(
   const taskType = block.taskType ?? 'feature'
   const stored = block.taskTypeFields ?? {}
   const descriptors = descriptorsFor(taskType, registry)
+  const named = Object.keys(fields)
   // Nothing to check against (an unregistered namespaced type, or one whose bespoke form owns the
   // bag): carry the values verbatim, as creation does, merged over what is there.
   if (!descriptors) return { customTaskTypeFields: { ...stored.custom, ...fields } }
 
   const builtin = isBuiltinCreateTaskType(taskType)
-  const current = builtin ? storedValuesFor(descriptors, stored) : (stored.custom ?? {})
+  const superseded = new Set(builtin ? supersededBuiltinFieldKeys(taskType, named) : [])
+  const current = builtin ? storedValuesFor(descriptors, stored, superseded) : (stored.custom ?? {})
   const merged = withDescriptorFieldDefaults(descriptors, { ...current, ...fields })
-  const problems = validateDescriptorFields(descriptors, merged)
+  const problems = validatePatchedDescriptorFields(descriptors, merged, named)
   if (problems.length > 0) throw refusal(taskType, problems)
   const sanitized = sanitizeDescriptorFields(descriptors, merged)
+  // A stored CUSTOM key the descriptor no longer declares does not survive: `sanitizeDescriptorFields`
+  // keeps the declared keys only, which is what the internal door writes on every save from the
+  // app's own form, and what `checkCustomFields` (the authority behind that door) would refuse to
+  // accept back. Carrying it here would diverge the two doors and then be rejected one layer down.
   if (!builtin) return { customTaskTypeFields: sanitized }
 
   const parsed = parseBuiltinPublicTaskFields(sanitized)
   if (!parsed.ok) throw refusal(taskType, parsed.problems)
-  const { custom: _custom, ...storedBuiltin } = stored
-  return { builtinTaskTypeFields: { ...storedBuiltin, ...parsed.fields } }
+  return { builtinTaskTypeFields: { ...carriedBuiltinKeys(stored, superseded), ...parsed.fields } }
 }

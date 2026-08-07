@@ -2,7 +2,7 @@ import type { Block, BlockPatch, TaskTypeFields } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
 import type { UpdateBlockInput } from '@cat-factory/contracts'
 import type { ResolvedTaskType } from './taskTypeCreationDefaults.js'
-import { buildReviewDescription, refoldReviewDescription } from './reviewTaskTarget.js'
+import { foldReviewDescriptionOnto, refoldReviewDescription } from './reviewTaskTarget.js'
 
 // Turning a per-type FIELDS patch into the `taskTypeFields` a block row stores: the one narrowing
 // that changes the patch's SHAPE (the request names two halves of a bag the row keeps whole), and
@@ -115,10 +115,17 @@ export async function applyTaskTypeFieldsPatch(
 /**
  * The description to store alongside a settled built-in patch, or nothing when it is unchanged.
  *
- * A description arriving in the SAME patch is text the caller has just authored, so there is no
- * earlier fold inside it to reconcile and the preamble simply goes on the front, exactly as
- * creation does. Only an UNTOUCHED description has a fold with a history, which is the case
- * {@link refoldReviewDescription} judges.
+ * Both cases strip the fold the text already carries before folding the current one on, and they
+ * differ only in what happens when the old fold cannot be found. A description arriving in the SAME
+ * patch is text the caller is authoring now, so an unrecognised prefix is simply prose to fold
+ * onto; an UNTOUCHED one is a stored description whose fold has a history, and there an
+ * unrecognised prefix means somebody has rewritten it, which {@link refoldReviewDescription}
+ * refuses rather than guesses at.
+ *
+ * The supplied-description case is not a plain prepend, and a READ-MODIFY-WRITE caller is why:
+ * `GET /api/v1/tasks/:taskId` serves the FOLDED description, so a client that reads a task, changes
+ * a field and sends the description back with it would otherwise get the preamble stated twice, and
+ * (when the target moved in the same request) naming two different pull requests.
  */
 function refold(
   patched: { description?: string },
@@ -127,7 +134,14 @@ function refold(
   resolved: Block['taskTypeFields'],
 ): { description?: string } {
   if (typeof patched.description === 'string') {
-    return { description: buildReviewDescription(taskType, resolved, patched.description) }
+    return {
+      description: foldReviewDescriptionOnto(
+        taskType,
+        block.taskTypeFields,
+        resolved,
+        patched.description,
+      ),
+    }
   }
   const outcome = refoldReviewDescription(
     taskType,

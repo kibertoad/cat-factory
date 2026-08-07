@@ -12,11 +12,24 @@ descriptors `GET /api/v1/task-types` serves and refused the same way (`422`,
 gate's seven issue codes name a field of that bag, and it was accepted at creation and nowhere else,
 so the platform could accept a task, refuse to run it, name precisely what to go and fix, and leave
 a caller with `proceed` (waiving the finding) or deleting a task whose id every stored reference
-points at. OpenAPI `info.version` 1.23.0; all four SDKs and the MCP facade regenerated.
+points at. OpenAPI `info.version` 1.24.0; all four SDKs and the MCP facade regenerated.
 
 The public `fields` MERGES over what the task carries where the internal patch keys replace, because
 this API does not serve the bag back: a deployment's own type may declare a `password` field, so
-there is no read surface to restate values from.
+there is no read surface to restate values from. Three rules keep that merge from judging or
+rewriting what the caller never sent:
+
+- Only the keys a request NAMES are checked against the descriptors. A stored value was admitted by
+  another authority (the public descriptors for a built-in type restate `taskTypeFieldsSchema` more
+  narrowly, and a deployment may re-register a custom type under tighter bounds), so re-judging it
+  refuses the patch for something it did not do, identically every time. Completeness (`required`)
+  is still judged on the merged result.
+- Alternate SPELLINGS of one value supersede each other. A `review` task's target is `prNumber` or
+  `prUrl`; merging the stored number back in beside a caller's URL would outrank it and silently
+  revert the target.
+- A description arriving with the patch has the fold it already carries REPLACED rather than
+  prepended to. The read surface serves the folded description, so a read-modify-write client
+  returns it, and prepending left the task naming two different pull requests.
 
 Internally the per-type bag is now patched through two keys that each replace their own half:
 `customTaskTypeFields` (unchanged) and a new `builtinTaskTypeFields`, validated by the schema rather

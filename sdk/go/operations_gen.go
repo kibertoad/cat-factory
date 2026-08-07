@@ -674,9 +674,13 @@ func (s *TasksService) Stream(ctx context.Context, taskID string) (*EventStream,
 	return s.client.stream(ctx, req)
 }
 
-// Update edit a task's title/description
-// Edit a task’s human-authored fields (title/description) before it runs. Both fields are
-// optional.
+// Update edit a task's inputs
+// Edit a task’s human-authored inputs before it runs: its title, its description, and `fields`,
+// the per-case values for its own task type (checked against the descriptors `GET
+// /api/v1/task-types` serves). All are optional. `fields` is MERGED over what the task already
+// carries — a key you send is written, a key you omit keeps its stored value — because this API
+// does not serve the bag back. This is what makes an input the pre-dispatch gate refused
+// repairable: supply the value it named, then recheck the parked run.
 // PATCH /api/v1/tasks/{taskId} (operation updatePublicTask).
 func (s *TasksService) Update(ctx context.Context, taskID string, body UpdatePublicTask) (*PublicTask, error) {
 	req := requestSpec{

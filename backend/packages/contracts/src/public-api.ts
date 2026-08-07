@@ -416,20 +416,31 @@ export const updatePublicTaskSchema = v.object({
    * declare a `password` field, and a read surface cannot tell those from the rest), so a
    * replacing patch would ask a caller to restate values it has no way to learn.
    *
-   * Two consequences of merging, both deliberate:
+   * Four consequences of merging, all deliberate:
    *
    * - An EMPTY value means "not supplied", exactly as at creation, so it leaves the stored value
    *   alone. There is no way to CLEAR a field over this surface; nothing needed one, and adding it
    *   later is additive where guessing at it now would not be.
+   * - Only the keys you SEND are validated against the descriptors. A stored value was admitted by
+   *   another authority (the internal schema these descriptors restate more narrowly, or an earlier
+   *   revision of a deployment's own descriptor), and re-judging it would refuse your patch for
+   *   something it did not do, identically every time: a task authored in the app with a
+   *   2500-character reproduction would be permanently un-repairable here. Completeness is still
+   *   judged on the RESULT, so a `required` field neither stored nor sent is named.
+   * - Alternate SPELLINGS of one value supersede each other rather than merging. Sending a `review`
+   *   task's `prUrl` alone repoints it; the stored `prNumber` is not merged back in beside it,
+   *   which would otherwise outrank the URL and silently revert the target.
    * - The best-practice fragments a task carries are derived from these values at CREATION and are
    *   not re-derived here, matching what an edit through the app does.
    *
    * A `review` task's target is the one value with resolution behind it: the pull request is
    * verified against the provider and folded into the description, exactly as at creation, so a
-   * reference this patch lands is one creation would have accepted. Where the description has
-   * since been rewritten by hand the platform can no longer tell which part of it was the fold,
-   * and changing the target is refused (with that stated in `problems`) rather than leaving a
-   * description naming a pull request the run does not review.
+   * reference this patch lands is one creation would have accepted. Sending `description` in the
+   * same request is safe for a read-modify-write client: the fold this API served you is replaced,
+   * not stated a second time. Where a STORED description has since been rewritten by hand the
+   * platform can no longer tell which part of it was the fold, and changing the target is refused
+   * (with that stated in `problems`) rather than leaving a description naming a pull request the
+   * run does not review; send the description you want alongside the new target to resolve it.
    */
   fields: v.optional(descriptorFieldValuesSchema),
 })
