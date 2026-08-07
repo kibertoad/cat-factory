@@ -1039,11 +1039,22 @@ that never opened a pull request at all (a headless job, or a run that failed be
 those get `run.repo: null` rather than an invented one.
 
 Every section carries `status: "reported" | "absent"` plus a `note`, so _"this pipeline had no
-tester step"_ and _"the tester found nothing"_ never read the same. What it covers: the CI gate's
-verdict and failing checks, the platform's own run of the service's lint/test/build commands with
-the failing output, the red-then-green reproduction proof for a bugfix, the tester's structured
-report, requirement coverage, the throwaway-environment lifecycle, judge verdicts, and the merge
-decision. `truncations` names anything a per-list cap left out.
+tester step"_ and _"the tester found nothing"_ never read the same. What it covers: what the run
+built FROM, the CI gate's verdict and failing checks, the platform's own run of the service's
+lint/test/build commands with the failing output, the red-then-green reproduction proof for a
+bugfix, the tester's structured report, requirement coverage, the throwaway-environment lifecycle,
+judge verdicts, and the merge decision. `truncations` names anything a per-list cap left out.
+
+`context` is the one that answers what the run was working from: each linked document its agents
+read, with the revision the dispatch confirmed it at. `freshness` is the same three-way verdict the
+board surfaces (`confirmed` naming a `version`, `not-applicable` for a body with no source,
+`unconfirmed` naming which of four gaps applies), and an ABSENT `freshness` means the deployment
+runs no freshness check at all, which is not the same fact as a check that ran and could not
+conclude. `movedDuringRun` is computed from the run's own records: the source moved WHILE the run
+was in flight, so its earlier steps built against something its later ones did not read. Nothing
+here is re-probed at read time, by design: the source has moved on since, so a fresh probe would
+answer about a revision no agent on this run ever saw. Added in 1.27.0 (report `version` 9), so a
+consumer written earlier simply does not see the key.
 
 `observability` carries the links back: `runUrl` (the app's panel, for a person), `trajectoryUrl`
 (the run's tool calls in order, on the debug surface) and `reportUrl` (this endpoint). Each is
@@ -1063,10 +1074,19 @@ unaffected.
 reader: the report is a reviewer's bundle (every failing check by name, every captured log tail, the
 merge assessment), and the outcome is the product-language answer for someone reporting what shipped:
 `disposition`, the requester's own `ask`, every pull request the run opened, requirement coverage,
-the tester's verdict and concerns, the views it captured, and the machine checks that recorded a
-verdict. It is the reduction the app's outcome card renders, served verbatim for the same reason the
-report is: one deployment answering a question two ways is how the app and an integration come to
-disagree about what a run did.
+the tester's verdict and concerns, the views it captured, the linked pages its agents built from,
+and the machine checks that recorded a verdict. It is the reduction the app's outcome card renders,
+served verbatim for the same reason the report is: one deployment answering a question two ways is
+how the app and an integration come to disagree about what a run did.
+
+`sources` is the outcome's half of the report's `context`, reduced from the same per-dispatch
+records by the same code, so the card, this endpoint and the pull request cannot disagree about
+which revision a run built from. One row per linked page, carrying the LAST verdict the run
+recorded about it (that is the state the run ended on) plus `movedDuringRun`, which says the source
+changed while the run was in flight and is therefore the one thing that last verdict cannot say.
+`url` is null for an `upload`, which has no source page to open, and a null `freshness` means the
+deployment runs no freshness check at all rather than a check that ran and could not conclude. Its
+`gap` when absent is `none_linked` or `run_unavailable`. Added in 1.27.0 (outcome `version` 2).
 
 Both are composed by the same code over one read of the run's evidence, so the coverage counts
 (`met` / `notMet` / `notCovered` / `regressions` / `total`) and the regression rule are the same
@@ -1074,7 +1094,8 @@ numbers on both endpoints and on the pull request. What differs is the SHAPE, de
 report is bounded to what FITS IN A PULL-REQUEST BODY, a budget of a few dozen rows, so a tally
 taken off its capped tables would be quietly wrong. The outcome's own caps are a ceiling on a
 pathological producer rather than a routine truncation (500 requirement rows, 200 tester areas or
-concerns, 2000 characters of any one free-text field), so an ordinary run is complete.
+concerns, 200 linked-source rows, 2000 characters of any one free-text field), so an ordinary run
+is complete.
 
 Both name what they left out in `truncations`, in one vocabulary
 (`"requirements.entries: showing 500 of 640"`), and **neither endpoint's counts are ever affected**:
@@ -1086,7 +1107,8 @@ so a cut can never leave half a credential in the payload.
 
 Every outcome section is `{ status: "reported" } | { status: "absent", gap }` where
 `gap` is a machine-readable CODE (`no_tester_step`, `tester_not_reported`, `no_verdicts`,
-`no_requirements`, `run_unavailable`) rather than prose, since the platform does not localize:
+`no_requirements`, `none_linked`, `run_unavailable`) rather than prose, since the platform does not
+localize:
 `requirements.spec` says whether coverage was counted against the service's `spec/` (`joined`) or
 only against the ids the tester reported (`not_read`, a narrower denominator), and
 `unmatchedVerdicts` counts rulings the spec could not place, on both endpoints. A spec that

@@ -2,6 +2,7 @@ import type {
   DocumentFreshness,
   DocumentFreshnessChange,
   DocumentFreshnessGap,
+  StepContextDocument,
 } from '@cat-factory/contracts'
 
 // How current the body of a linked context document actually is at the moment a run reads it.
@@ -25,10 +26,22 @@ import type {
 //   - a confirmed document STATES its revision rather than saying nothing, so "which revision did
 //     this run build against" is answerable from the materialised context after the fact.
 
-export type { DocumentFreshness, DocumentFreshnessChange, DocumentFreshnessGap }
+export type {
+  DocumentFreshness,
+  DocumentFreshnessChange,
+  DocumentFreshnessGap,
+  StepContextDocument,
+}
 
-/** The human-readable half of a {@link DocumentFreshnessGap}, for the note the agent reads. */
-function describeGap(reason: DocumentFreshnessGap): string {
+/**
+ * The human-readable half of a {@link DocumentFreshnessGap}.
+ *
+ * Exported because a SECOND English-prose reader of the verdict exists: the PR verification
+ * report, which states the same gap to a human reviewer in a pull-request body. Both are
+ * backend-authored prose (the SPA is the localized reader and keys its own `Record` off the
+ * members), and one gap must not acquire two wordings that a reader would have to reconcile.
+ */
+export function describeFreshnessGap(reason: DocumentFreshnessGap): string {
   switch (reason) {
     case 'not_connected':
       return 'this workspace is no longer connected to the source'
@@ -78,8 +91,8 @@ export function freshnessHeaderLines(freshness?: DocumentFreshness): string {
       return ''
     case 'unconfirmed':
       return (
-        `Freshness: NOT confirmed against the source (${describeGap(freshness.reason)}). This is ` +
-        `the copy stored at import time and may be behind the current version — treat anything ` +
+        `Freshness: NOT confirmed against the source (${describeFreshnessGap(freshness.reason)}). ` +
+        `This is the copy stored at import time and may be behind the current version — treat anything ` +
         `that looks inconsistent with the task as possibly out of date.\n`
       )
     default:

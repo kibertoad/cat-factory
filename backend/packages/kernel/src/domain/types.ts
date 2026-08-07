@@ -462,6 +462,9 @@ export type {
   PrReportTestOutcome,
   PrReportTestConcern,
   PrReportTests,
+  // What the run built FROM: the linked documents its dispatches read, at which revision.
+  PrReportContext,
+  PrReportContextDocument,
   // Captured command output: the platform's own pre-PR check run, and the bugfix
   // reproduction proof across the pre-fix and final trees.
   PrReportValidation,

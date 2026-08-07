@@ -5570,6 +5570,15 @@
       "title": "Qué se pidió",
       "none": "Esta tarea no tiene descripción, así que no hay nada con lo que comparar el resultado."
     },
+    "sources": {
+      "title": "Creado a partir de",
+      "unchecked": "No se ha comprobado con la fuente.",
+      "noSource": "No hay página de origen con la que comparar.",
+      "moved": "Esta página cambió mientras la ejecución estaba en curso, así que los pasos anteriores leyeron una revisión más antigua.",
+      "gap": {
+        "none_linked": "Ninguna página llegó a los agentes de esta ejecución, así que trabajaron solo con la descripción de la tarea."
+      }
+    },
     "gap": {
       "run_unavailable": "La ejecución de esta tarea no se cargó, así que aquí no pueden mostrarse las pruebas que registró. No es lo mismo que una ejecución que no registró nada."
     },

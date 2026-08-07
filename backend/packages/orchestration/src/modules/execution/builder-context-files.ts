@@ -9,10 +9,11 @@ import type { InjectedContextFile } from '@cat-factory/kernel'
 import type { LinkedContext, LinkedContextOptions } from './linked-context.js'
 
 // ---------------------------------------------------------------------------
-// The BUILDER's own injected-context-file contributors, extracted from `AgentContextBuilder`
-// as a cohesive collaborator (the file-size ratchet's split trigger). These are the context
-// files the builder derives from run STATE — as opposed to the repo-derived files a registered
-// kind's preOps contribute — plus the fold that keeps the two from clobbering each other.
+// The BUILDER's own context contributions derived from run STATE, extracted from
+// `AgentContextBuilder` as a cohesive collaborator (the file-size ratchet's split trigger): the
+// injected context FILES it derives itself — as opposed to the repo-derived files a registered
+// kind's preOps contribute — plus the fold that keeps the two from clobbering each other, and the
+// prior-output index a step reads its predecessors' work from.
 // ---------------------------------------------------------------------------
 
 /**
@@ -56,6 +57,29 @@ export function linkedContextWithDesignFlag(
     () => settle(false),
   )
   return { linkedContext, hasDesignContext }
+}
+
+/**
+ * What the steps BEFORE this one produced, as the prior-output list a prompt folds in.
+ *
+ * Only settled predecessors count (`currentStep` bounds it), and a finalized architecture
+ * direction leads the list as a synthetic entry: it is a decision the run already took, so the
+ * agents downstream of it must read it as prior work rather than re-open it, and it has no step
+ * output of its own to be carried by.
+ */
+export function priorOutputsFor(
+  instance: { steps: readonly PipelineStep[]; currentStep: number },
+  architectureDirection: string | null,
+): { agentKind: string; output: string }[] {
+  return [
+    ...(architectureDirection
+      ? [{ agentKind: 'architecture-brainstorm', output: architectureDirection }]
+      : []),
+    ...instance.steps
+      .slice(0, instance.currentStep)
+      .filter((step) => step.output)
+      .map((step) => ({ agentKind: step.agentKind, output: step.output! })),
+  ]
 }
 
 /**

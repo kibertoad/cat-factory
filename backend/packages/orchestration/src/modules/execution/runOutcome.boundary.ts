@@ -2,6 +2,7 @@ import type {
   OutcomeConcern,
   OutcomeRequirement,
   OutcomeRequirements,
+  OutcomeSources,
   OutcomeTests,
   OutcomeVisuals,
   RunOutcome,
@@ -53,6 +54,13 @@ const MAX_REQUIREMENT_ENTRIES = 500
 
 /** How many tester areas and concerns one response carries. Same reasoning as the rows. */
 const MAX_TESTER_LIST = 200
+
+/**
+ * How many linked-source rows one response carries. A task links a handful of pages; the cap is
+ * the same pathological ceiling the rows above are, and the run's own reading ORDER is what a cap
+ * keeps, so the note needs no ordering caveat.
+ */
+const MAX_SOURCE_ROWS = 200
 
 /** Scrub, then clamp. Null in, null out: an absent value is not an empty one. */
 function text(value: string | null): string | null {
@@ -160,6 +168,30 @@ function boundVisuals(visuals: OutcomeVisuals): OutcomeVisuals {
   }
 }
 
+function boundSources(sources: OutcomeSources, truncations: string[]): OutcomeSources {
+  if (sources.status === 'absent') return sources
+  return {
+    status: 'reported',
+    sources: cap(sources.sources, 'sources', truncations, MAX_SOURCE_ROWS).map((source) => ({
+      // Title and URL are authored on the SOURCE, by whoever owns the page, so they are the same
+      // untrusted text the verification report scrubs before writing this row onto a PR body. A
+      // document URL routinely carries a query string, which is where a share token would ride.
+      title: required(source.title),
+      url: text(source.url),
+      origin: source.origin,
+      // `version` is the source's own opaque revision token (a Figma file version, a git sha):
+      // short, machine-shaped, and the one field a reviewer opens the source WITH, so it is
+      // scrubbed like any other source-supplied string but never clamped away. The rest of the
+      // variant is a closed vocabulary.
+      freshness:
+        source.freshness?.status === 'confirmed'
+          ? { ...source.freshness, version: required(source.freshness.version) }
+          : source.freshness,
+      movedDuringRun: source.movedDuringRun,
+    })),
+  }
+}
+
 /**
  * The outcome summary as a public response body: scrubbed, clamped, bounded, and honest about
  * every drop.
@@ -184,6 +216,7 @@ export function boundOutcomeForApi(outcome: RunOutcome): RunOutcome {
     requirements: boundRequirements(outcome.requirements, truncations),
     tests: boundTests(outcome.tests, truncations),
     visuals: boundVisuals(outcome.visuals),
+    sources: boundSources(outcome.sources, truncations),
     // A closed vocabulary of enum members and one nullable enum: nothing here is authored text.
     checks: outcome.checks.map((check) => ({
       kind: check.kind,

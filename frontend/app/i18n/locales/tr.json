@@ -5570,6 +5570,15 @@
       "title": "Ne istenmişti",
       "none": "Bu görevin açıklaması yok, dolayısıyla sonucu karşılaştıracak bir şey de yok."
     },
+    "sources": {
+      "title": "Şuradan üretildi",
+      "unchecked": "Kaynakla karşılaştırılmadı.",
+      "noSource": "Karşılaştırılacak bir kaynak sayfa yok.",
+      "moved": "Bu sayfa çalışma sürerken değişti, bu yüzden önceki adımlar daha eski bir sürümü okudu.",
+      "gap": {
+        "none_linked": "Bu çalıştırmanın ajanlarına hiçbir sayfa ulaşmadı, bu yüzden yalnızca görev açıklamasıyla çalıştılar."
+      }
+    },
     "gap": {
       "run_unavailable": "Bu görevin çalışması yüklenmediği için kaydettiği kanıtlar burada gösterilemiyor. Bu, hiçbir şey kaydetmemiş bir çalışmayla aynı şey değildir."
     },

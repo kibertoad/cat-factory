@@ -14,6 +14,7 @@ import {
   tallyTestOutcomes,
   unmatchedVerdictIds,
 } from './run-evidence.js'
+import { documentFreshnessSchema, documentOriginSchema } from './documents.js'
 import { requirementStateSchema } from './spec.js'
 import type { ServiceSpecView } from './spec.js'
 import { requirementVerdictStatusSchema, testConcernSeveritySchema } from './testing.js'
@@ -66,7 +67,7 @@ import { UI_TESTER_AGENT_KIND } from './visual-pipeline.js'
  * consumer would want to notice; never a compatibility switch (the surface is additive, so a
  * consumer written against an older number keeps reading the fields it knows).
  */
-export const RUN_OUTCOME_VERSION = 1
+export const RUN_OUTCOME_VERSION = 2
 
 /**
  * Where the run stands, in the terms the person reading the outcome cares about. Derived from
@@ -274,6 +275,43 @@ export const outcomeVisualsSchema = v.variant('status', [
 ])
 export type OutcomeVisuals = v.InferOutput<typeof outcomeVisualsSchema>
 
+// ---- What it was built FROM ------------------------------------------------
+
+/** Why there is no linked source to show. */
+export const sourcesGapSchema = v.picklist([runUnavailableGap, 'none_linked'])
+export type SourcesGap = v.InferOutput<typeof sourcesGapSchema>
+
+/**
+ * One linked document the run's agents read, reduced from the per-dispatch records its steps
+ * carry.
+ *
+ * The verdict is the LAST one the run recorded, because that is the state it ended on. What a
+ * last verdict cannot say is that the page moved WHILE the run was in flight, so that is carried
+ * separately: a designer editing a frame mid-run leaves the early steps building against
+ * something the late ones never read, and a row showing only the final revision reads as though
+ * every step had it.
+ */
+export const outcomeSourceSchema = v.object({
+  title: v.string(),
+  /** Null for an `upload`, which has no source page to open. */
+  url: v.nullable(v.string()),
+  origin: documentOriginSchema,
+  /** Null ⇒ this deployment ran no freshness check, which is not "checked and unsure". */
+  freshness: v.nullable(documentFreshnessSchema),
+  /**
+   * True when the run's own steps recorded more than one distinct revision of this document.
+   * Computed from the recorded verdicts, never asserted by a model.
+   */
+  movedDuringRun: v.boolean(),
+})
+export type OutcomeSource = v.InferOutput<typeof outcomeSourceSchema>
+
+export const outcomeSourcesSchema = v.variant('status', [
+  v.object({ status: v.literal('absent'), gap: sourcesGapSchema }),
+  v.object({ status: v.literal('reported'), sources: v.array(outcomeSourceSchema) }),
+])
+export type OutcomeSources = v.InferOutput<typeof outcomeSourcesSchema>
+
 // ---- The machine checks ----------------------------------------------------
 
 /** The three recorded machine verdicts a non-code reader still needs: did it build, does it work. */
@@ -309,6 +347,8 @@ export const runOutcomeSchema = v.object({
   requirements: outcomeRequirementsSchema,
   tests: outcomeTestsSchema,
   visuals: outcomeVisualsSchema,
+  /** The linked pages the run built from, and how current the copy its agents read was. */
+  sources: outcomeSourcesSchema,
   /** Only the checks that actually ran: an absent check is omitted, never rendered as passing. */
   checks: v.array(outcomeCheckSchema),
   /**
@@ -511,6 +551,39 @@ function composeVisuals(
   }
 }
 
+/**
+ * Reduce every dispatch's `contextDocuments` record into one row per linked page.
+ *
+ * The same reduction the PR verification report runs, over the same records, so the card a person
+ * opens and the report a reviewer reads cannot disagree about which revision the run built from.
+ * Order is first-read-first, so the list follows the run's own reading order.
+ *
+ * Rows are keyed by the document's SOURCE identity rather than by anything shown in them: an
+ * `upload` carries no URL, so a key falling back to the title would fold two same-titled uploads
+ * into one row and read their differing revisions as a page that moved mid-run.
+ */
+function composeSources(steps: readonly PipelineStep[]): OutcomeSources {
+  const rows = new Map<string, OutcomeSource>()
+  const revisions = new Map<string, Set<string>>()
+  for (const step of steps) {
+    for (const doc of step.contextDocuments ?? []) {
+      const key = `${doc.origin}:${doc.externalId}`
+      const seen = revisions.get(key) ?? new Set<string>()
+      if (doc.freshness?.status === 'confirmed') seen.add(doc.freshness.version)
+      revisions.set(key, seen)
+      rows.set(key, {
+        title: doc.title,
+        url: doc.url || null,
+        origin: doc.origin,
+        freshness: doc.freshness ?? null,
+        movedDuringRun: seen.size > 1,
+      })
+    }
+  }
+  if (rows.size === 0) return { status: 'absent', gap: 'none_linked' }
+  return { status: 'reported', sources: [...rows.values()] }
+}
+
 function composeChecks(steps: readonly PipelineStep[]): OutcomeCheck[] {
   const checks: OutcomeCheck[] = []
 
@@ -595,6 +668,7 @@ export function composeRunOutcome({ block, instance, spec }: ComposeRunOutcomeIn
       requirements: { status: 'absent', gap: runUnavailableGap },
       tests: { status: 'absent', gap: runUnavailableGap },
       visuals: { status: 'absent', gap: runUnavailableGap, detail: null },
+      sources: { status: 'absent', gap: runUnavailableGap },
       checks: [],
     }
   }
@@ -606,6 +680,7 @@ export function composeRunOutcome({ block, instance, spec }: ComposeRunOutcomeIn
     requirements: composeRequirements(steps, spec),
     tests: composeTests(tester),
     visuals: composeVisuals(steps, tester),
+    sources: composeSources(steps),
     checks: composeChecks(steps),
   }
 }
@@ -620,6 +695,9 @@ export function composeRunOutcome({ block, instance, spec }: ComposeRunOutcomeIn
  * A run this summary could not resolve answers false unless the block still carries a pull
  * request: there is nothing to show, and an affordance that opened onto four "not loaded"
  * notices would be the same empty card by another route.
+ *
+ * Linked SOURCES deliberately do not count. They say what the run was working FROM, not what it
+ * produced, so a run that has only read its brief has nothing for this card to answer yet.
  */
 export function hasOutcomeToShow(outcome: RunOutcome): boolean {
   return (

@@ -5570,6 +5570,15 @@
       "title": "O co proszono",
       "none": "To zadanie nie ma opisu, więc nie ma do czego porównać wyniku."
     },
+    "sources": {
+      "title": "Zbudowano na podstawie",
+      "unchecked": "Nie sprawdzono ze źródłem.",
+      "noSource": "Brak strony źródłowej do porównania.",
+      "moved": "Ta strona zmieniła się w trakcie uruchomienia, więc wcześniejsze kroki czytały starszą wersję.",
+      "gap": {
+        "none_linked": "Do agentów tego przebiegu nie trafiła żadna strona, więc pracowali wyłącznie na opisie zadania."
+      }
+    },
     "gap": {
       "run_unavailable": "Przebieg tego zadania nie został wczytany, więc zapisane w nim dowody nie są tutaj pokazane. To co innego niż przebieg, który niczego nie zapisał."
     },

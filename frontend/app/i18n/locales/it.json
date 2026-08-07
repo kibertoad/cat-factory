@@ -6126,6 +6126,15 @@
       "title": "Che cosa era stato chiesto",
       "none": "Questa attività non ha una descrizione, quindi non c'è nulla con cui confrontare l'esito."
     },
+    "sources": {
+      "title": "Costruito a partire da",
+      "unchecked": "Non verificato con la sorgente.",
+      "noSource": "Nessuna pagina di origine con cui confrontare.",
+      "moved": "Questa pagina è cambiata mentre l'esecuzione era in corso, quindi i passi precedenti hanno letto una revisione più vecchia.",
+      "gap": {
+        "none_linked": "Nessuna pagina è arrivata agli agenti di questa esecuzione, che hanno lavorato solo sulla descrizione dell'attività."
+      }
+    },
     "gap": {
       "run_unavailable": "L'esecuzione di questa attività non è stata caricata, quindi le prove che ha registrato non possono essere mostrate qui. Non è la stessa cosa di un'esecuzione che non ha registrato nulla."
     },
