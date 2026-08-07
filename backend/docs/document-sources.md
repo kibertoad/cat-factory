@@ -48,6 +48,37 @@ itself by the second, and a document surface has to label a design source withou
 it cannot see. They come off ONE exhaustive `Record<DocumentSourceKind, DocumentSourceTraits>`, so a
 new source fails to compile until it is classified.
 
+## Two credential homes: a tenant's connection, and the deployment's own
+
+Almost everything here is WORKSPACE-scoped: a tenant connects its own Confluence or Notion through
+the app, the credential is sealed per workspace, and `DocumentContentResolverService` resolves it
+per read. That is the model for documents people import onto their board.
+
+There is a second, narrower home. A DEPLOYMENT can configure credentials in its own environment
+(`DOC_SOURCE_<SOURCE>_<FIELD>`), and `DeploymentDocumentResolverService` reads them. It exists for
+one caller: a code-registered (`builtin`-tier) prompt fragment naming a LIVING standard, which
+belongs to the deployment and is folded by every workspace, so no tenant's credential should pay for
+it. See [ADR 0045](./adr/0045-deployment-scoped-documents.md) and
+[`reusable-operations.md`](./reusable-operations.md).
+
+Three things follow, and each is a rule rather than a detail:
+
+- **The provider port spells the deployment scope `null`**, never a sentinel workspace id, so a
+  provider that cannot serve it can REFUSE rather than substitute. A fake id would look exactly like
+  a real one to the method that had to reject it.
+- **Which sources can do this is the `deploymentScoped` TRAIT**, exhaustive over the source picklist
+  beside `design` and `hostPinned`. It is false for `github` alone: its credential is a WORKSPACE's
+  App installation, not a value a deployment holds. Do not infer the answer from whether a provider
+  happens to ignore its `workspaceId` argument, which is one refactor from changing silently.
+- **The variables are derived from each provider's own `credentialFields`**, the list that already
+  renders its connect form, so a new source needs no configuration code. A source with only SOME of
+  its variables set is reported at boot and left unconfigured, never quietly skipped.
+
+A deployment-scoped body is cached under ONE `DEPLOYMENT_DOCUMENT_CACHE_GROUP`, so a hundred
+workspaces folding one standard cost one fetch and one invalidation. In mothership mode the
+credential stays on the mothership and the node reads the resolved BODY over
+`POST /internal/prompt-fragments/document-bodies`.
+
 ## A document is attached to at most ONE block
 
 `linkedBlockId` is a single column, so attaching a document that another block already holds would

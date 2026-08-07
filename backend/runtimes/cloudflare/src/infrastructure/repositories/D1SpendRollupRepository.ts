@@ -60,6 +60,61 @@ const ROLLUP_JOINS = `LEFT JOIN workspaces w ON w.id = tu.workspace_id
                                     AND tk.linked_block_id = ar.block_id`
 
 /**
+ * The fold itself: `token_usage` for a `[from, to)` window aggregated per bucket with the run's
+ * board shape frozen onto it. `scoped` narrows it to ONE workspace (the board-delete fold),
+ * which adds a third bind after the two day-millisecond ones and before the window pair.
+ *
+ * One statement for both callers so the sweep's fold and the delete's cannot drift into
+ * attributing the same spend differently, which would be visible only as a board's last days
+ * disagreeing with every day before them.
+ */
+function foldSql(scoped: boolean): string {
+  return `INSERT INTO spend_days (
+     workspace_id, day_start, execution_id, agent_kind, provider, model, billing, vendor,
+     account_id, workspace_name, block_id, block_title, service_id, service_name,
+     repo_id, repo_name, task_type, ticket_ref,
+     calls, input_tokens, output_tokens, metered_cost, subscription_cost)
+   SELECT tu.workspace_id,
+          CAST(tu.created_at / ? AS INTEGER) * ? AS day_start,
+          COALESCE(tu.execution_id, '') AS execution_id,
+          tu.agent_kind,
+          tu.provider,
+          tu.model,
+          tu.billing,
+          COALESCE(tu.vendor, '') AS vendor,
+          -- The ledger's own denormalized account wins; the board's is the fallback
+          -- for a row recorded before it was resolved.
+          MAX(COALESCE(tu.account_id, w.account_id, '')) AS account_id,
+          MAX(w.name) AS workspace_name,
+          MAX(COALESCE(ar.block_id, '')) AS block_id,
+          MAX(b.title) AS block_title,
+          MAX(COALESCE(ar.service_id, '')) AS service_id,
+          MAX(sl.title) AS service_name,
+          MAX(COALESCE(CAST(s.repo_github_id AS TEXT), '')) AS repo_id,
+          MAX(gr.owner || '/' || gr.name) AS repo_name,
+          MAX(COALESCE(b.task_type, '')) AS task_type,
+          MAX(COALESCE(tk.ticket_key, '')) AS ticket_ref,
+          COUNT(*) AS calls,
+          COALESCE(SUM(tu.input_tokens), 0) AS input_tokens,
+          COALESCE(SUM(tu.output_tokens), 0) AS output_tokens,
+          COALESCE(SUM(CASE WHEN tu.billing = 'subscription'
+                            THEN 0 ELSE tu.cost_estimate END), 0) AS metered_cost,
+          COALESCE(SUM(CASE WHEN tu.billing = 'subscription'
+                            THEN tu.cost_estimate ELSE 0 END), 0) AS subscription_cost
+   FROM token_usage tu
+   ${ROLLUP_JOINS}
+   WHERE ${scoped ? 'tu.workspace_id = ? AND ' : ''}tu.created_at >= ? AND tu.created_at < ?
+   GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+   ON CONFLICT(workspace_id, day_start, execution_id, agent_kind, provider, model,
+               billing, vendor)
+     DO UPDATE SET calls = excluded.calls,
+                   input_tokens = excluded.input_tokens,
+                   output_tokens = excluded.output_tokens,
+                   metered_cost = excluded.metered_cost,
+                   subscription_cost = excluded.subscription_cost`
+}
+
+/**
  * The two cost sums, spelled out rather than referenced by output alias.
  *
  * The alias would be `metered_cost`, which is also the name of the COLUMN being summed, and
@@ -128,53 +183,7 @@ export class D1SpendRollupRepository implements SpendRollupRepository {
              AND workspace_id IN (SELECT id FROM workspaces)`,
         )
         .bind(from, to),
-      this.db
-        .prepare(
-          `INSERT INTO spend_days (
-             workspace_id, day_start, execution_id, agent_kind, provider, model, billing, vendor,
-             account_id, workspace_name, block_id, block_title, service_id, service_name,
-             repo_id, repo_name, task_type, ticket_ref,
-             calls, input_tokens, output_tokens, metered_cost, subscription_cost)
-           SELECT tu.workspace_id,
-                  CAST(tu.created_at / ? AS INTEGER) * ? AS day_start,
-                  COALESCE(tu.execution_id, '') AS execution_id,
-                  tu.agent_kind,
-                  tu.provider,
-                  tu.model,
-                  tu.billing,
-                  COALESCE(tu.vendor, '') AS vendor,
-                  -- The ledger's own denormalized account wins; the board's is the fallback
-                  -- for a row recorded before it was resolved.
-                  MAX(COALESCE(tu.account_id, w.account_id, '')) AS account_id,
-                  MAX(w.name) AS workspace_name,
-                  MAX(COALESCE(ar.block_id, '')) AS block_id,
-                  MAX(b.title) AS block_title,
-                  MAX(COALESCE(ar.service_id, '')) AS service_id,
-                  MAX(sl.title) AS service_name,
-                  MAX(COALESCE(CAST(s.repo_github_id AS TEXT), '')) AS repo_id,
-                  MAX(gr.owner || '/' || gr.name) AS repo_name,
-                  MAX(COALESCE(b.task_type, '')) AS task_type,
-                  MAX(COALESCE(tk.ticket_key, '')) AS ticket_ref,
-                  COUNT(*) AS calls,
-                  COALESCE(SUM(tu.input_tokens), 0) AS input_tokens,
-                  COALESCE(SUM(tu.output_tokens), 0) AS output_tokens,
-                  COALESCE(SUM(CASE WHEN tu.billing = 'subscription'
-                                    THEN 0 ELSE tu.cost_estimate END), 0) AS metered_cost,
-                  COALESCE(SUM(CASE WHEN tu.billing = 'subscription'
-                                    THEN tu.cost_estimate ELSE 0 END), 0) AS subscription_cost
-           FROM token_usage tu
-           ${ROLLUP_JOINS}
-           WHERE tu.created_at >= ? AND tu.created_at < ?
-           GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
-           ON CONFLICT(workspace_id, day_start, execution_id, agent_kind, provider, model,
-                       billing, vendor)
-             DO UPDATE SET calls = excluded.calls,
-                           input_tokens = excluded.input_tokens,
-                           output_tokens = excluded.output_tokens,
-                           metered_cost = excluded.metered_cost,
-                           subscription_cost = excluded.subscription_cost`,
-        )
-        .bind(DAY_MS, DAY_MS, from, to),
+      this.db.prepare(foldSql(false)).bind(DAY_MS, DAY_MS, from, to),
       // The sweep's coverage, in the SAME batch (hence the same transaction) as the rewrite it
       // describes, and forward-only so a catch-up pass over an older window cannot present a
       // current rollup as a stalled one.
@@ -193,6 +202,39 @@ export class D1SpendRollupRepository implements SpendRollupRepository {
              updated_at = MAX(platform_rollup_state.updated_at, excluded.updated_at)`,
         )
         .bind(SPEND_DAYS_ROLLUP, lastCompleteRollupDay(toEpochMs), toEpochMs),
+    ])
+    return inserted?.meta.changes ?? 0
+  }
+
+  async rollupWorkspaceSpendDays(
+    workspaceId: string,
+    fromEpochMs: number,
+    toEpochMs: number,
+  ): Promise<number> {
+    const from = Math.floor(fromEpochMs / DAY_MS) * DAY_MS
+    const to = Math.ceil(toEpochMs / DAY_MS) * DAY_MS
+    if (to <= from) return 0
+    // The board's LAST fold, run inside its own deletion so the spend it made since the last
+    // rolled-up day is frozen before `token_usage` goes with the cascade. Same rewrite shape as
+    // the sweep's, narrowed to one board, and with the two differences the port documents:
+    //
+    // - The existence guard STAYS. This is called before the cascade, but the guard is what
+    //   makes that ordering enforced by the query rather than remembered at the call site:
+    //   after the cascade the fold reads nothing, and an unguarded DELETE would reclaim the
+    //   frozen rows this whole table exists to keep.
+    // - `platform_rollup_state` is NOT touched. That marker is deployment-scoped and says how
+    //   far the SWEEP has covered every board; one board's final fold covers no other board's
+    //   days, and the marker only moves forward, so advancing it here would permanently
+    //   present days nothing folded as covered.
+    const [, inserted] = await this.db.batch([
+      this.db
+        .prepare(
+          `DELETE FROM spend_days
+           WHERE workspace_id = ? AND day_start >= ? AND day_start < ?
+             AND workspace_id IN (SELECT id FROM workspaces)`,
+        )
+        .bind(workspaceId, from, to),
+      this.db.prepare(foldSql(true)).bind(DAY_MS, DAY_MS, workspaceId, from, to),
     ])
     return inserted?.meta.changes ?? 0
   }

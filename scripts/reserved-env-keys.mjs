@@ -32,6 +32,17 @@ export function documentedEnvVars(markdown) {
 }
 
 /**
+ * Drop `//` line comments and block comments, so a member scan never reads prose.
+ *
+ * Deliberately naive (these two arrays hold only string literals and comments, never a regex or a
+ * quote-carrying string), and naive in the SAFE direction: over-stripping would drop members and
+ * fail the guard loudly, where under-stripping is what silently un-reserves them.
+ */
+function stripComments(source) {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+}
+
+/**
  * The reserved exact names + prefixes, read out of the contracts module's source.
  *
  * Textual rather than an import because this guard is pure node with no build step (the module is
@@ -40,10 +51,18 @@ export function documentedEnvVars(markdown) {
  * list — hence the explicit "did we find both arrays" check.
  */
 export function reservedSpec(source) {
+  // Comments come out FIRST, before either list is located.
+  //
+  // The scan that reads the members is a single-quote pair match, so one apostrophe inside a
+  // comment in these arrays ("the deployment's own …") opens a string that swallows every entry
+  // after it. The guard then reports a long list of newly-unreserved variables and names none of
+  // the real cause, which is the exact silent rot it exists to prevent, aimed at itself. Stripping
+  // comments removes the hazard rather than asking every future editor to avoid apostrophes.
+  const code = stripComments(source)
   const list = (name) => {
     // Anchored on the DECLARATION, not the first occurrence of the name: each list is also
     // mentioned in the other's doc comment, and an unanchored match read the prefixes twice.
-    const match = source.match(new RegExp(`export const ${name}[^=]*=\\s*\\[([^\\]]*)\\]`))
+    const match = code.match(new RegExp(`export const ${name}[^=]*=\\s*\\[([^\\]]*)\\]`))
     if (!match) throw new Error(`could not find ${name} in reserved-env-keys.ts`)
     return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1])
   }

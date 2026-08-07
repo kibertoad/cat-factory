@@ -28,7 +28,7 @@ import { startOtelLogExport } from './logExport.js'
 import { startBootClock } from './bootTimings.js'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { validateRegistrationsOnce } from '@cat-factory/orchestration'
+import { type RegistrationProblem, validateRegistrationsOnce } from '@cat-factory/orchestration'
 import { PgBoss } from 'pg-boss'
 import { type AppCachesProfile, createAppCaches } from '@cat-factory/caching'
 import { buildCacheNotifications } from './cacheNotifications.js'
@@ -337,6 +337,22 @@ export interface StartOptions {
    * standards; the built-ins install through the same public methods, so there is no hidden tier.
    */
   promptFragmentRegistry?: NodeContainerOptions['promptFragmentRegistry']
+  /**
+   * Raise selected boot-validation WARNINGS to errors, failing boot instead of logging.
+   *
+   * The severities are set by what the PLATFORM can know, and for one warning the DEPLOYMENT knows
+   * more: `task_type_unknown_fragment` cannot separate a typo in a code-owned fragment id from a
+   * legitimate account/workspace-tier id that only merges per workspace at run time. A deployment
+   * whose operations reference only fragments it registers itself has no second cause, and for it
+   * the warning names an operation silently running short of its own standing guidance.
+   *
+   *     start({
+   *       escalateRegistrationWarning: (p) => p.code === 'task_type_unknown_fragment',
+   *     })
+   *
+   * Escalated problems join the aggregated boot failure rather than producing a second one.
+   */
+  escalateRegistrationWarning?: (problem: RegistrationProblem) => boolean
   /**
    * Build the resolver that supplies a registered capability's CREDENTIALS at dispatch. A tool
    * server's (MCP) and a generative binary integration's alike. Called once at composition with
@@ -834,6 +850,10 @@ async function bootServer(
     // site cannot fall behind its siblings the way the local mothership one did.
     registries: container,
     onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
+    // Deployment policy over platform judgement: a warning the platform must keep soft (because it
+    // structurally cannot see the answer) may be a hard defect for THIS deployment, which knows
+    // whether its own registrations use the tenant tier at all.
+    escalateWarning: options.escalateRegistrationWarning,
   })
 
   const runtime = executionRuntime(container.config, env)

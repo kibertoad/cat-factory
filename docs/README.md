@@ -70,5 +70,8 @@ found; check anything you plan to act on against the current code first.
   comments.
 - [`internal/modularisation.md`](./internal/modularisation.md): the
   modularisation tracker.
+- [`internal/layered-loader-upstream-gaps.md`](./internal/layered-loader-upstream-gaps.md):
+  what the Worker pull-coherency slice had to hand-roll around layered-loader
+  16.1, as candidates for a first-class home upstream.
 - [`internal/handover/`](./internal/handover): notes and reference material
   handed between agent sessions on a specific piece of work.

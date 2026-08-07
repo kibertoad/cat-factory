@@ -1527,11 +1527,11 @@
           "unknown": "was not available ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Run the step on an agent CLI that speaks MCP, or widen the server's harness list.",
+          "harnessUnsupported": "Run the step on an agent CLI that speaks MCP, or widen the server's harness list. A Codex run signed in with your own CLI login has nowhere per-run to keep the server, so use a platform credential instead.",
           "transportUnsupported": "Declare a stdio server for it, or run the step on an agent CLI that reaches HTTP servers.",
-          "missingSecret": "Set the credential it names under capability credentials, in the Infrastructure window.",
+          "missingSecret": "Set the credential it names, either as a deployment environment variable or under capability credentials in the Infrastructure window.",
           "reservedSecret": "Change the declaration to ask for another key; setting that variable is exactly what will not help.",
-          "oauthNotConnected": "Connect this board to it from the Infrastructure window.",
+          "oauthNotConnected": "Connect this board to it from the Infrastructure window. A deployment with no ENCRYPTION_KEY has nowhere to keep a grant, so an operator has to set that first.",
           "oauthTokenFailed": "Reconnect it from the Infrastructure window, or wait out the vendor's outage.",
           "overBudget": "Trim what the agent declares, so one run can carry all of it."
         }

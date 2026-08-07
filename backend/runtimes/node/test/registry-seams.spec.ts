@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import type { CoreDependencies } from '@cat-factory/orchestration'
+import * as kernel from '@cat-factory/kernel'
+import * as facade from '../src/index.js'
+import type {
+  CustomTaskType,
+  DescriptorField,
+  DescriptorFieldShowWhen,
+  GateDefinition,
+  JudgeDefinition,
+  PromptFragment,
+  StepCompletionResolver,
+  TaskTypeFieldDescriptor,
+  TaskTypeFieldOption,
+  TaskTypePresentation,
+} from '../src/index.js'
 import type { NodeContainerOptions } from '../src/container-options.js'
 import type { StartOptions } from '../src/server.js'
 
@@ -159,6 +173,86 @@ type _EveryEntryPointSeamIsAStartOption = EntryPointSeam extends keyof StartOpti
 // deployment-facing door, not the builder behind it.
 const _entryPointSeamsAreReachable: _EveryEntryPointSeamIsAStartOption = true
 
+// ---------------------------------------------------------------------------
+// The same guard, one layer out AGAIN: from "can a deployment PASS this seam" to "can it BUILD a
+// value to pass".
+//
+// The two classifications above grade the DOOR. Both were green for `gateRegistry`, `judgeRegistry`,
+// `stepResolverRegistry`, `vcsRegistry` and `promptFragmentRegistry` while this facade exported no
+// way to construct one, so the only route to a custom gate or an org standards pool was a direct
+// dependency on `@cat-factory/kernel` / `@cat-factory/gates` / `@cat-factory/prompt-fragments`.
+//
+// That is not a documentation problem. A `workspace:*` dependency publishes as an EXACT version, so
+// a consumer floating the range onto a newer patch resolves a SECOND physical copy of the package
+// it reached below the facade for: the registration lands in the copy the server does not read, and
+// the only symptom is agents that fold nothing. Making the seam's constructor an export of the
+// facade the deployment ALREADY depends on removes the second copy by construction, which is why
+// this belongs in the guard rather than in a doc.
+// ---------------------------------------------------------------------------
+
+/** The seams a DEPLOYMENT supplies a value for: everything the boot routes do not build itself. */
+type ConstructibleSeam = {
+  [K in RegistrySeam]: (typeof BOOT_ROUTES)[K] extends 'entry-point' | 'bundled' ? K : never
+}[RegistrySeam]
+
+/**
+ * What this facade must EXPORT for a deployment to produce a value for each seam it may inject,
+ * derived from {@link BOOT_ROUTES} rather than listed, so a new deployment-facing seam fails to
+ * compile here until its constructor is named.
+ *
+ * Each entry lists every supported construction, not one blessed path, because for three of these
+ * the choice between them is load-bearing and the platform must not make it: an injected
+ * `gateRegistry` / `promptFragmentRegistry` REPLACES the pool rather than merging with it, so
+ * `defaultGateRegistry()` and `promptFragmentRegistryWithBuiltins()` are opposite deployments and
+ * both are legitimate.
+ */
+const SEAM_CONSTRUCTORS = {
+  agentKindRegistry: ['AgentKindRegistry', 'defaultAgentKindRegistry'],
+  gateRegistry: ['GateRegistry', 'defaultGateRegistry', 'gateRegistryWithBuiltins'],
+  judgeRegistry: ['JudgeRegistry', 'defaultJudgeRegistry'],
+  stepResolverRegistry: ['StepResolverRegistry', 'defaultStepResolverRegistry'],
+  pipelineRegistry: ['PipelineRegistry', 'defaultPipelineRegistry'],
+  taskTypeRegistry: ['TaskTypeRegistry', 'defaultTaskTypeRegistry'],
+  initiativePresetRegistry: ['InitiativePresetRegistry', 'defaultInitiativePresetRegistry'],
+  vcsRegistry: ['VcsProviderRegistry', 'defaultVcsRegistry'],
+  foundationalServiceRegistry: [
+    'FoundationalServiceRegistry',
+    'defaultFoundationalServiceRegistry',
+  ],
+  binaryGeneratorRegistry: ['BinaryGeneratorRegistry', 'defaultBinaryGeneratorRegistry'],
+  promptFragmentRegistry: [
+    'PromptFragmentRegistry',
+    'defaultPromptFragmentRegistry',
+    'promptFragmentRegistryWithBuiltins',
+  ],
+  // Both halves of the bundle come from ONE builder, which is the point of bundling them.
+  environmentBackendRegistry: ['createBackendRegistries'],
+  runnerBackendRegistry: ['createBackendRegistries'],
+} as const satisfies Record<ConstructibleSeam, readonly string[]>
+
+/**
+ * The TYPE half of the same surface, which no runtime check can see: a deployment writing a
+ * registration literal names its shape, and a type it cannot import from the facade is a direct
+ * `@cat-factory/contracts` dependency with the same duplicate-copy hazard as a missing constructor.
+ *
+ * Enumerated rather than derived because a type union is not reflectable; the compile error when
+ * one is missing is the guard, and this value exists only to make the imports load-bearing.
+ */
+const _authoringVocabulary:
+  | {
+      taskType: CustomTaskType
+      presentation: TaskTypePresentation
+      field: TaskTypeFieldDescriptor
+      option: TaskTypeFieldOption
+      descriptorField: DescriptorField
+      condition: DescriptorFieldShowWhen
+      fragment: PromptFragment
+      gate: GateDefinition
+      judge: JudgeDefinition
+      resolver: StepCompletionResolver
+    }
+  | undefined = undefined
+
 describe('app-owned registry seams', () => {
   it('routes every registry on CoreDependencies, so a new one cannot land unthreaded', () => {
     // The compile-time assertions carry the guard; this keeps the classification honest at
@@ -203,5 +297,32 @@ describe('app-owned registry seams', () => {
       .map(([seam]) => seam as RegistrySeam)
     expect(facadeInternal.length).toBeGreaterThan(0)
     for (const seam of facadeInternal) expect(SEAM_ROUTES[seam]).toBe('option')
+  })
+
+  it('exports a way to CONSTRUCT every seam it lets a deployment inject', () => {
+    const exported = new Set(Object.keys(facade))
+    const missing = Object.entries(SEAM_CONSTRUCTORS).flatMap(([seam, names]) =>
+      names.filter((name) => !exported.has(name)).map((name) => `${seam}: ${name}`),
+    )
+    // Naming every gap at once rather than failing on the first: these arrive in batches (five did),
+    // and a guard that reports one per run trains the reader to fix one per run.
+    expect(missing).toEqual([])
+  })
+
+  it('re-exports every built-in pipeline id kernel publishes', () => {
+    // DERIVED from kernel, not listed: this set grows whenever the platform ships a pipeline, and a
+    // hand-copied list is how two of them (`pl_spike`, `pl_ralph`) came to be missing from all three
+    // facades at once, leaving a deployment pinning one to hard-code the string. Counting instead
+    // would fail on the next ordinary addition while naming nothing about what broke.
+    const published = Object.keys(kernel).filter((name) => name.endsWith('_PIPELINE_ID'))
+    expect(published.length).toBeGreaterThan(0)
+    const exported = new Set(Object.keys(facade))
+    expect(published.filter((name) => !exported.has(name))).toEqual([])
+  })
+
+  it('names the authoring vocabulary a registration literal is typed against', () => {
+    // Carried by the type annotation on `_authoringVocabulary`; the assertion exists so a missing
+    // export fails a test rather than only a typecheck job the reader has to go find.
+    expect(_authoringVocabulary).toBeUndefined()
   })
 })

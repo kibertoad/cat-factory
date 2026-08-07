@@ -37,6 +37,14 @@ export const REASON_KEY: Record<ToolServerUnavailableReason, string> = {
  * (`docs`' table in `backend/docs/mcp-tool-servers.md` is the same mapping for a reader who never
  * opens the SPA); a reason with no remedy leaves the operator holding an accurate diagnosis and no
  * next step, which is the state this surface was built to end.
+ *
+ * EDITING ONE OF THESE MEANS READING EVERY CAUSE IT COVERS FIRST. A member is not a cause:
+ * `harness_unsupported`, `missing_secret` and `oauth_not_connected` are each reached from more
+ * than one place, and a line addressing only the obvious one is a dead end for whoever hit the
+ * other, which is worse than the bare diagnosis this replaced because it also costs them the
+ * attempt. The causes per member are enumerated on kernel's `UnavailableToolServer` (which the SPA
+ * cannot import) and restated in that doc's table, whose "What happened" column is the list to
+ * check a remedy against.
  */
 export const REMEDY_KEY: Record<ToolServerUnavailableReason, string> = {
   harness_unsupported: 'panels.stepDetail.toolServers.remedy.harnessUnsupported',

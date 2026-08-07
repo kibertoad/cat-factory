@@ -85,7 +85,7 @@ export class ZeplinProvider implements DocumentSourceProvider {
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
-    _workspaceId: string,
+    _workspaceId: string | null,
   ): Promise<DocumentContent> {
     const { projectId, screenId } = splitZeplinExternalId(externalId)
     if (!projectId) {
@@ -150,7 +150,7 @@ export class ZeplinProvider implements DocumentSourceProvider {
   async probeVersion(
     credentials: DocumentCredentials,
     externalId: string,
-    _workspaceId: string,
+    _workspaceId: string | null,
   ): Promise<string> {
     const { projectId } = splitZeplinExternalId(externalId)
     if (!projectId) {

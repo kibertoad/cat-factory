@@ -36,6 +36,12 @@ import { D1PlatformMetricsRepository } from './infrastructure/repositories/D1Pla
 import { D1AuditEventRepository } from './infrastructure/repositories/D1AuditEventRepository'
 import { D1SpendRollupRepository } from './infrastructure/repositories/D1SpendRollupRepository'
 import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
+// The deployment's OWN document credentials, read from `env`. Shared with the per-request container
+// build so the boot check and the engine agree about what this deployment can read.
+import {
+  deploymentDocumentDeps,
+  deploymentDocumentProblems,
+} from './infrastructure/container-documents-deps'
 import {
   GITHUB_RECONCILE_STALE_MS,
   escalateStaleNotifications,
@@ -67,6 +73,7 @@ import {
 } from './infrastructure/github/sync-consumer'
 import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
+import { runWithExecutionContext } from './infrastructure/requestContext'
 import { runPlatformMetricsSweep } from './infrastructure/observability/platformMetrics'
 import { flushOperationalMetricsForIsolate } from './infrastructure/observability/operationalFlush'
 import { flushOtelLogsForIsolate } from './infrastructure/observability/logExport'
@@ -117,6 +124,8 @@ export { ExecutionContainer } from './infrastructure/containers/ExecutionContain
 export { DeployContainer } from './infrastructure/containers/DeployContainer'
 // Per-workspace WebSocket fan-out hub (real-time execution/board events).
 export { WorkspaceEventsHub } from './infrastructure/durable-objects/WorkspaceEventsHub'
+// Cross-isolate cache-coherency directory (per-group generation counters; see appCachesHost.ts).
+export { CacheGenerationDirectory } from './infrastructure/durable-objects/CacheGenerationDirectory'
 
 // Installation-level AI provisioning extension point: a deployment registers extra
 // model-provider registries at startup (e.g. AWS Bedrock from
@@ -192,8 +201,110 @@ export {
 // sets on it by reference, and injects it via the `promptFragmentRegistry` override. Replaces the
 // module-global `registerPromptFragment` seam, which was correct only while every reader resolved
 // the same physical copy of `@cat-factory/prompt-fragments`.
+// `promptFragmentRegistryWithBuiltins()` is what a deployment wants unless it means the opposite:
+// an injected registry REPLACES the pool rather than merging with it, so a bare
+// `defaultPromptFragmentRegistry()` is a deployment whose agents fold its own standards and none of
+// the platform's. Both are legitimate, which is why both are exported and neither is inferred.
 export { PromptFragmentRegistry, defaultPromptFragmentRegistry } from '@cat-factory/kernel'
 export { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
+// Installation-level extension point for polling GATES and STEP RESOLVERS. `gateRegistryWithBuiltins()`
+// is the one a deployment almost always wants: a bare `defaultGateRegistry()` is EMPTY, so injecting
+// one silently drops `ci` / `conflicts` / `post-release-health` from every pipeline that names them.
+export {
+  GateRegistry,
+  defaultGateRegistry,
+  type GateDefinition,
+  type GateRegistration,
+  type GateFactory,
+  type GateProbe,
+  type GateContext,
+  type GateConfigFields,
+  StepResolverRegistry,
+  defaultStepResolverRegistry,
+  type StepCompletionResolver,
+  type StepResolverFactory,
+  type StepResolution,
+  type StepResolverContext,
+  type ResolverContext,
+} from '@cat-factory/kernel'
+export { gateRegistryWithBuiltins } from '@cat-factory/gates'
+// Installation-level extension point for JUDGES (the inline-LLM-against-a-rubric bucket of the step
+// taxonomy). Empty by default: the platform ships none.
+export {
+  JudgeRegistry,
+  defaultJudgeRegistry,
+  type JudgeDefinition,
+  type JudgeFactory,
+  type JudgeRubric,
+  type JudgeSubject,
+  type JudgeAssessor,
+  type JudgeContext,
+} from '@cat-factory/kernel'
+// Installation-level extension point for VCS PROVIDERS: the neutral seam a deployment adds a git
+// host through, rather than re-hardcoding GitHub in a shared path.
+export {
+  VcsProviderRegistry,
+  defaultVcsRegistry,
+  type VcsProviderBundle,
+  type VcsProvider,
+} from '@cat-factory/kernel'
+// The environment + runner backend registries, registered together on ONE bundle because an
+// environment backend and its runner backend are two halves of one deployment's infrastructure.
+export { createBackendRegistries, type BackendRegistries } from '@cat-factory/integrations'
+// The REUSABLE-OPERATION authoring vocabulary: the shapes a deployment's registration literals ARE,
+// re-exported so an org package types them against the facade it boots through and needs no direct
+// `@cat-factory/kernel` or `@cat-factory/contracts` dependency of its own. That is not a
+// convenience: a `workspace:*` dependency publishes as an EXACT version, so a consumer floating the
+// range onto a newer patch resolves a SECOND physical copy, and the registration lands in the one
+// nothing reads (ADR 0040).
+export type {
+  CustomTaskType,
+  TaskTypePresentation,
+  TaskTypeFieldDescriptor,
+  TaskTypeFieldType,
+  TaskTypeFieldOption,
+  DescriptorField,
+  DescriptorFieldType,
+  DescriptorFieldOption,
+  DescriptorFieldShowWhen,
+  DescriptorFieldValue,
+  DescriptorFieldValues,
+  PromptFragment,
+  Pipeline,
+  PipelineStep,
+  AgentKind,
+} from '@cat-factory/kernel'
+// The boot-validation problem shape, so a deployment can type the `escalateRegistrationWarning`
+// predicate it passes to `createWorker()` without a direct `@cat-factory/orchestration` dependency.
+export type { RegistrationProblem } from '@cat-factory/orchestration'
+// The pure rules over a descriptor's fields, so a deployment's own tests can check a form it
+// declares against the same validator the platform's four doors run.
+export {
+  isDescriptorFieldVisible,
+  renderDescriptorFieldValue,
+  sanitizeDescriptorFields,
+  validateDescriptorFields,
+} from '@cat-factory/kernel'
+// The BUILT-IN pipeline ids, so an operation can pin one of the shipped pipelines (or a task type
+// can name it as its `defaultPipelineId`) without restating a string the platform owns.
+export {
+  BLUEPRINT_PIPELINE_ID,
+  INITIATIVE_PIPELINE_ID,
+  INITIATIVE_DOCS_PIPELINE_ID,
+  BUILD_PIPELINE_ID,
+  SIMPLE_PIPELINE_ID,
+  ADAPTIVE_BUILD_PIPELINE_ID,
+  TECH_DEBT_PIPELINE_ID,
+  BUG_TRIAGE_PIPELINE_ID,
+  BUGFIX_PIPELINE_ID,
+  CODE_COMMENTS_PIPELINE_ID,
+  BUSINESS_DOCS_PIPELINE_ID,
+  DOCUMENT_PIPELINE_ID,
+  DOCUMENT_QUICK_PIPELINE_ID,
+  REVIEW_PIPELINE_ID,
+  SPIKE_PIPELINE_ID,
+  RALPH_PIPELINE_ID,
+} from '@cat-factory/kernel'
 // The options {@link createWorker} takes — re-exported from the root so a deployment can name the
 // type of what it passes without reaching for the `@cat-factory/worker/app` subpath.
 export type { CreateAppOptions } from './app'
@@ -797,6 +908,16 @@ async function handleScheduled(
   env: Env,
   ctx: ExecutionContext,
 ): Promise<void> {
+  // The ambient ExecutionContext (requestContext.ts): the module-scope cache bag's background
+  // work adopts the CURRENT invocation's `waitUntil` through it.
+  return runWithExecutionContext(ctx, () => runScheduled(controller, env, ctx))
+}
+
+async function runScheduled(
+  controller: ScheduledController,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<void> {
   applyLogSettings(env)
   const clock = new SystemClock()
   const tick = new SweepTick(ctx)
@@ -859,10 +980,13 @@ async function handleQueue(
   env: Env,
   ctx: ExecutionContext,
 ): Promise<void> {
-  applyLogSettings(env)
-  const work = routeQueueBatch(batch, env)
-  flushTelemetryAfter(work, env, ctx, new SystemClock())
-  await work
+  // Same ambient-ExecutionContext bracket as `handleScheduled` (requestContext.ts).
+  return runWithExecutionContext(ctx, async () => {
+    applyLogSettings(env)
+    const work = routeQueueBatch(batch, env)
+    flushTelemetryAfter(work, env, ctx, new SystemClock())
+    await work
+  })
 }
 
 /** The routing half of {@link handleQueue}, split out so the flush can bracket the whole batch. */
@@ -951,19 +1075,64 @@ export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
       // `env` binding. Cheap and idempotent, so it runs on every entry point rather than being
       // guarded — a `scheduled`/`queue` invocation can be the FIRST to run in a fresh isolate.
       applyLogSettings(env)
+      reportDeploymentDocumentProblemsOnce(env)
       validateRegistrationsOnce({
         // The resolved bundle whole, for the reason the two Node-hosted facades pass their
         // container: a hand-picked list is the one shape that can silently be short by one.
-        registries,
+        //
+        // The deployment's document resolver joins it HERE rather than at `createWorker`, because
+        // it is the one member derived from `env`, which a Worker only has once a request arrives.
+        // Omitting it read as "this deployment configured no document credentials", so every
+        // `builtin`-tier fragment naming a living document failed validation on a deployment that
+        // had configured them correctly, and since the once-guard flips only after a clean pass,
+        // it failed on every request rather than once.
+        registries: { ...registries, ...deploymentDocumentDeps(env) },
         onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
+        // Deployment policy over platform judgement, the same seam the Node/local entry points
+        // expose: a warning the platform must keep soft (it structurally cannot see whether an
+        // unresolved fragment id is a typo or a tenant-tier row) may be a hard defect for THIS
+        // deployment. Here the refusal surfaces as a failing request rather than a failed boot,
+        // because a Worker has no boot moment; the once-guard flips only after a clean pass, so it
+        // stays loud until fixed.
+        escalateWarning: options.escalateRegistrationWarning,
       })
-      const response = Promise.resolve(app.fetch(request, env, ctx))
+      // The ambient-ExecutionContext bracket (requestContext.ts): background work the
+      // module-scope cache bag starts while serving this request adopts THIS request's
+      // `waitUntil` through it, resolved at spawn time.
+      const response = Promise.resolve(
+        runWithExecutionContext(ctx, () => app.fetch(request, env, ctx)),
+      )
       // Flush whatever THIS isolate counted while serving the request, after the response.
       flushTelemetryAfter(response, env, ctx, new SystemClock())
       return response
     },
     scheduled: handleScheduled,
     queue: handleQueue,
+  }
+}
+
+/**
+ * Report every deployment document source whose credentials are set but unusable, once per isolate.
+ *
+ * A Worker has no boot moment, so the report the two Node facades make while starting has to be
+ * staged against the first request here: the same shape, and for the same reason, as the
+ * once-guarded registration check it sits beside. Left ungated it would repeat on every request,
+ * which is how an operator learns to filter out the one line naming the variable they mistyped.
+ *
+ * Per-ISOLATE rather than per-deployment, like every other module-scope value in this file
+ * (`defaultWorker`): an isolate is the only lifetime a Worker has to hang one on, and a report
+ * repeated once per cold start is the honest cost of that.
+ */
+let deploymentDocumentProblemsReported = false
+function reportDeploymentDocumentProblemsOnce(env: Env): void {
+  if (deploymentDocumentProblemsReported) return
+  deploymentDocumentProblemsReported = true
+  for (const { source, problem } of deploymentDocumentProblems(env)) {
+    logger.warn(
+      'Deployment-wide document-source credentials are set but unusable, so this source cannot ' +
+        'back a code-registered prompt fragment',
+      { source, problem },
+    )
   }
 }
 

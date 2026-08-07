@@ -58,6 +58,30 @@ test('anchors each list on its DECLARATION, not on a mention in the other’s do
   assert.deepEqual(spec.prefixes, ['AUTH_', 'GITHUB_'])
 })
 
+test('reads a list whose members carry COMMENTS, apostrophes included', () => {
+  // The second way this extractor has silently read half a list. The member scan is a
+  // single-quote pair match, so one apostrophe inside an in-array comment opens a string that
+  // swallows every entry after it: the guard then reports dozens of newly-unreserved variables
+  // and names none of the cause. Found by writing an ordinary English comment beside a new
+  // prefix, which is the least suspicious edit anyone could make to that file.
+  const commented = `
+export const PLATFORM_RESERVED_ENV_PREFIXES: readonly string[] = [
+  'AUTH_',
+  // The deployment's own document-source credentials, whose apostrophe used to end the scan.
+  'DOC_SOURCE_',
+  /* A block comment with an apostrophe in it too: the operator's own variables. */
+  'GITHUB_',
+]
+
+export const PLATFORM_RESERVED_ENV_KEYS: readonly string[] = ['ENCRYPTION_KEY', 'PORT']
+`
+  const spec = reservedSpec(commented)
+  assert.deepEqual(spec.prefixes, ['AUTH_', 'DOC_SOURCE_', 'GITHUB_'])
+  assert.deepEqual(spec.keys, ['ENCRYPTION_KEY', 'PORT'])
+  assert.ok(isReserved(spec, 'DOC_SOURCE_NOTION_API_TOKEN'))
+  assert.ok(isReserved(spec, 'GITHUB_APP_ID'))
+})
+
 test('fails loudly when a list is no longer a plain literal, rather than reading half of one', () => {
   assert.throws(() => reservedSpec('export const PLATFORM_RESERVED_ENV_PREFIXES = computed()'))
 })

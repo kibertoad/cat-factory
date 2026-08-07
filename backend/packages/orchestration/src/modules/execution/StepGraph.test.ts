@@ -85,7 +85,7 @@ describe('StepGraph.resetStepForRerun', () => {
     // The two halves of one rule, asserted together because the rule is the DIFFERENCE between
     // them: both are pinned at dispatch by `recordDispatchAttribution` and only one is consumed
     // again. `model` and its two siblings are read when the job's usage lands, so a reset that
-    // cleared them would put every re-run's `token_usage` row back to provider "unknown" — the bug
+    // cleared them would put every re-run's `token_usage` row back to provider "unknown", the bug
     // the guard in that function exists to prevent. The tool-server record has no such reader, so
     // holding it past a reset only lets a re-armed step render chips for a resolution no dispatch
     // has made yet.
@@ -95,6 +95,7 @@ describe('StepGraph.resetStepForRerun', () => {
       model: 'anthropic/claude-x',
       subscriptionTokenId: 'tok_1',
       initiatedByUserId: 'user_1',
+      dispatches: [{ agentKind: 'coder', count: 1 }],
       toolServers: {
         agentKind: 'coder',
         wired: [{ id: 'linear', label: 'Linear', transport: 'http' }],
@@ -108,6 +109,11 @@ describe('StepGraph.resetStepForRerun', () => {
       'tok_1',
       'user_1',
     ])
+    // The pair that keeps the cleared field HONEST, asserted here rather than left to the
+    // cross-attempt suite below: `stepToolServersSchema` says an absent record means the CURRENT
+    // attempt has no resolution, never that the step did not run, and `dispatches` standing beside
+    // it is the whole of what makes that reading available to a diagnosing reader.
+    expect(s.dispatches).toEqual([{ agentKind: 'coder', count: 1 }])
   })
 })
 

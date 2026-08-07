@@ -544,6 +544,10 @@ export {
 // drifting one. Its dedicated `/internal/*` endpoint is the server half.
 export { HttpFoundationalBuiltinSource } from './persistence/foundationalBuiltins.js'
 export { HttpPromptFragmentSource } from './persistence/promptFragments.js'
+// The mothership-mode reader for DEPLOYMENT-scoped documents: the credentials stay on the
+// mothership, so a node reads the resolved BODY.
+export { HttpDeploymentDocumentResolver } from './persistence/deploymentDocuments.js'
+export { documentBodyRefKey } from './modules/promptFragments/PromptFragmentsInternalController.js'
 // The deployment's generative binary integrations, read from the mothership for the same reason:
 // the set a run resolves against must be the set the picker offered, and a node's own build can
 // only hold a second copy of it.
