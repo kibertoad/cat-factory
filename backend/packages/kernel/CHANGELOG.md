@@ -1,5 +1,13 @@
 # @cat-factory/kernel
 
+## 0.260.0
+
+### Minor Changes
+
+- 9d6bce0: Seed a terminal `disposer` step into the built-in `pl_bug_triage` pipeline, so a scheduled triage
+  run reclaims the ephemeral environment it stood up instead of leaving it to the TTL sweep. Version
+  bumped to 5, which offers the reseed to already-seeded workspaces.
+
 ## 0.259.0
 
 ### Minor Changes
