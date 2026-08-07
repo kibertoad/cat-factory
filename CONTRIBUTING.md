@@ -117,26 +117,17 @@ runner image:**
 
 This keeps the published image tag in lockstep with the source that produced it.
 
-### Publishing the runner image to Cloudflare (maintainer-only)
+### Mirroring the runner image into a Cloudflare account
 
-> This step is specific to **this** repo's own Cloudflare deployment: external
-> orgs deploying the libraries do not need it, so it is documented here rather
-> than in `deploy/*/README.md`.
-
-CI publishes the runner image to **GHCR**, but Cloudflare Containers cannot pull
-from GHCR (only the Cloudflare managed registry, Docker Hub, and ECR are
-supported pull sources). So before deploying the backend, mirror the image into
-the managed registry the Worker actually pulls from:
-
-```sh
-pnpm --filter @cat-factory/deploy-backend image:publish   # build + push to registry.cloudflare.com
-pnpm --filter @cat-factory/deploy-backend deploy          # wrangler deploy
-```
-
-`image:publish` builds the harness `Dockerfile` and pushes it with
-`wrangler containers build --push`; pin the `registry.cloudflare.com/...:<tag>`
-ref it prints in `deploy/backend/wrangler.toml`. Bump the `:<tag>` in lockstep
-with `@cat-factory/executor-harness`'s version whenever the image changes.
+This repo publishes the image but operates no deployment of its own; the mirror
+step belongs to whoever runs a Cloudflare deployment, because Cloudflare
+Containers cannot pull from GHCR. The recipe, the full pin list and the
+release-PR re-sync behaviour live in
+[`docs/internal/releases.md`](docs/internal/releases.md): that doc is the
+authority, so extend it there rather than restating it here. The one rule that
+binds every PR in this tree: the `cat-factory-executor:<tag>` pins move in
+lockstep with `@cat-factory/executor-harness`'s version whenever the image
+changes (`scripts/check-runner-image-tag.mjs` guards it).
 
 ### Changes that need no release
 

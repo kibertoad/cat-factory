@@ -1,5 +1,6 @@
 import { withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
+import type { PublicApiScope } from '../public-api-keys.js'
 
 // ---------------------------------------------------------------------------
 // Shared building blocks for the route contracts (`routes/<domain>.ts`). The
@@ -7,6 +8,25 @@ import * as v from 'valibot'
 // response, consumed by the backend (`buildHonoRoute`) and the frontend client
 // (`sendByApiContract`). See backend/packages/server for the wiring.
 // ---------------------------------------------------------------------------
+
+/**
+ * Attach the public-API scope FLOOR to a `/api/v1` route contract: the least key rung the route
+ * admits (`public-api.md`, "Pick the right scope"). Declared on the contract so the three readers
+ * of the same fact cannot drift: the controller enforces `contract.minScope`, the OpenAPI
+ * generator stamps it as `x-min-scope` (and REFUSES a public contract without one), and the
+ * generated SDK projections carry it as policy metadata.
+ *
+ * This is enforcement, not documentation: lowering an annotation lowers the gate, so review a
+ * `minScope` diff exactly like a permission change. It is also only the STATIC floor. A handler
+ * may still escalate at request time (starting a pipeline that can park requires `decide`), and
+ * that dynamic half stays in the handler.
+ */
+export function withMinScope<const TScope extends PublicApiScope, TContract extends object>(
+  minScope: TScope,
+  contract: TContract,
+): TContract & { readonly minScope: TScope } {
+  return Object.assign(contract, { minScope } as const)
+}
 
 /**
  * The error envelope every controller emits, produced by the shared `handleError`
