@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { GATEKEEPER_BINDINGS, bindingsWithinScope } from '@cat-factory/gatekeeper-bindings'
+import { DECISION_BINDINGS } from '../src/decisions'
 import { PolicyError } from '../src/errors'
 import { POLICY } from '../src/policy.config'
 import { compilePolicy, tierForActor, type GatekeeperPolicy } from '../src/policy'
@@ -148,5 +149,23 @@ describe('the shipped policy', () => {
     const granted = new Set(compiled.tiers.get('observer')?.granted.map((binding) => binding.name))
     expect(granted).toContain('debug_list_runs')
     expect(granted).toContain('debug_get_run')
+  })
+
+  // The relation that makes `approver` a tier rather than a transcription. A run can park on
+  // thirteen different things and each takes its own operations; the first cut of this policy
+  // named fifteen decision bindings by hand and the surface has more than forty, so the tier
+  // could answer the parks somebody remembered and reported every other one as stale.
+  it('grants the approver tier everything answering a park takes', () => {
+    const granted = new Set(compiled.tiers.get('approver')?.granted.map((b) => b.name))
+    expect(DECISION_BINDINGS.filter((name) => !granted.has(name))).toEqual([])
+  })
+
+  // And the tier below it must NOT have them: `operator` is the delivery loop, and answering a
+  // parked decision is what `approver` exists for.
+  it('grants the operator tier no way to answer a parked decision', () => {
+    const granted = new Set(compiled.tiers.get('operator')?.granted.map((b) => b.name))
+    expect(
+      DECISION_BINDINGS.filter((name) => name !== 'decisions_list' && granted.has(name)),
+    ).toEqual([])
   })
 })

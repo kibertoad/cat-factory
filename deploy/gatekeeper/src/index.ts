@@ -1,9 +1,10 @@
-// The Worker entry point: four routes and a cron, and no logic of its own beyond translating
+// The Worker entry point: five routes and a cron, and no logic of its own beyond translating
 // between HTTP and the Gatekeeper.
 //
 //   POST /webhook        the platform's outbound delivery receiver
 //   ALL  /rpc            the Cap'n Web endpoint the paired Cloudflare OS talks to
 //   POST /admin/enroll   re-assert this Worker's webhook registration on demand
+//   POST /admin/retire   revoke every key minted for one OS user, for offboarding
 //   GET  /health         liveness plus whether the policy compiles
 //
 // Two conventions are worth stating because they look like sloppiness and are not.
@@ -115,6 +116,23 @@ export default {
       if (url.pathname === '/admin/enroll') {
         if (request.method !== 'POST') return problem(405, 'method_not_allowed', 'POST only.')
         return Response.json(await gatekeeper.enroll())
+      }
+
+      // Offboarding. It sits on the admin surface rather than on a capability because it is a
+      // decision the OS deployment makes ABOUT a person, and an agent acting as one of them must
+      // not be able to make it for the others.
+      if (url.pathname === '/admin/retire') {
+        if (request.method !== 'POST') return problem(405, 'method_not_allowed', 'POST only.')
+        const actorId = url.searchParams.get('actorId') ?? ''
+        if (actorId.length === 0) {
+          return problem(
+            400,
+            'unknown_actor',
+            'Name the OS user identity to retire as `?actorId=`. It is the same value connect() ' +
+              'takes, and the value every key minted for them is stamped with.',
+          )
+        }
+        return Response.json(await gatekeeper.retire(actorId))
       }
 
       if (url.pathname === '/rpc') {

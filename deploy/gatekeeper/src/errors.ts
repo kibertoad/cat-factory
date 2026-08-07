@@ -26,6 +26,16 @@ export type GatekeeperReason =
   | 'card_not_found'
   | 'card_already_resolved'
   | 'unsupported_action'
+  /** The verb needs a field the caller did not send. Named rather than defaulted. */
+  | 'invalid_answer'
+  /** The run holds no pending decision of the kind the caller named. */
+  | 'no_such_park'
+  /** The run is parked on more than one thing and the caller named none. */
+  | 'ambiguous_park'
+  /** The platform sent a parked decision without the id every answer to it addresses. */
+  | 'malformed_decision'
+  /** A minted credential was refused upstream and re-minting it was refused too. */
+  | 'credential_rejected'
 
 /** A refusal the caller (or the OS deployment operating it) acts on. */
 export class GatekeeperError extends Error {

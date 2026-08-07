@@ -203,6 +203,48 @@ Four decisions worth carrying forward:
   the run is still parked) and `stale` (with the run's own `unanswerable` entry quoted). Collapsing
   them into "it worked" is the integration bug the platform's docs warn about.
 
+#### The review of the first cut, and what it changed (same slice)
+
+The reference implementation shipped understanding ONE of the platform's thirteen park kinds, and
+the review of it found that the shape of the mistake mattered more than its size. Five corrections
+landed, and each is a rule worth carrying into anything else that consumes this surface.
+
+- **The answer path may not know any kind.** `approvals_answer` looked for a pending
+  `approval-gate`, so a card raised for a requirements review, a fork, a judge verdict or a
+  follow-up triage could never be answered from the inbox, and the failure was INVISIBLE, because
+  it reported `stale`, which is also what a card whose run genuinely moved on reports. The fix is a
+  data table (`src/decisions.ts`) keyed on the SDK's own `PublicDecision['kind']` union with
+  `satisfies Record<…>`, so a park the platform adds fails this package's BUILD. The shipped
+  `approver` tier derives its grants from that table for the same reason: fifteen hand-typed
+  decision bindings against a surface carrying more than forty is a tier that answers the parks
+  somebody remembered.
+- **A card the surface cannot settle is a NOTICE, and says so.** `merge_review` is answered by a
+  real merge (`notifications_act`), deliberately withheld from every tier because the merge policy
+  wants a person the platform can name (ADR 0037/0039). Subscribing to it was right; presenting it
+  as answerable was not. The type list became a map to a `disposition`, stamped onto the card.
+- **`stale` settles nothing.** The card was being resolved as `superseded` on the first stale
+  answer, which destroys the inbox entry of a run that may still be parked. The platform
+  re-delivers a card under a NEW notification id, so a wrongly settled one is never re-raised. Only
+  an answer that leaves the run UNPARKED settles the card.
+- **A dedupe marker and the effect it guards are ONE write.** They were two Durable Object calls,
+  so a failed card write turned the platform's retry into a `duplicate` and the approval reached
+  nobody, silently. `applyDelivery` now does both in one multi-key `put`, which is exactly the
+  repo's own "commit the local state first, and a claim that ERRORS must propagate" rule arriving
+  from the receiver's side.
+- **A cached credential needs a claim in front of it and an invalidation behind it.** `POST
+/api/v1/keys` returns its secret exactly once, so a read-then-mint-then-write has two pipelined
+  first calls both minting and the loser's key live upstream with nothing recording it; and a cache
+  with no 401 path makes the documented kill switch (rotate the provisioning key) a permanent
+  outage. Both are now the standard shapes: an atomic, EXPIRING claim taken before the effect, and
+  one re-mint on a 401. The mint race is the one fact not observable in a response, so the scripted
+  origin counts what it was asked to issue.
+
+The two additions that make it a base rather than a sample fall out of the same work:
+`approvals_inspect` (the live park, its verbs, the fields each needs, and whether this tier holds
+the operation behind it) and `runs_watched` (the lifecycle projection the `run.*` subscription was
+already paying for and then discarding). Offboarding moved onto the admin surface as
+`POST /admin/retire`, because revoking another person's keys is a decision the OS makes ABOUT them.
+
 #### How it gets tested (decided in slice 2, before the Worker exists)
 
 The obvious ambition is a FULL end-to-end: boot a real Cloudflare OS, point it at a real
@@ -278,10 +320,26 @@ disagreement the hermetic suite structurally cannot see.
       ([#1804](https://github.com/kibertoad/cat-factory/pull/1804))
 - [x] Slice 2: outbound webhook collection (both runtimes + conformance + SDK surface)
 - [x] Slice 3: `externalIdentity` on key provisioning, echoed on run detail
-- [x] Slice 4: reference Gatekeeper Worker (`deploy/gatekeeper`, own CI lane, unpublished)
+- [x] Slice 4: reference Gatekeeper Worker (`deploy/gatekeeper`, own CI lane, unpublished), plus
+      the review corrections above (every park answerable, card dispositions, atomic delivery,
+      claimed minting, `approvals_inspect` / `runs_watched` / `POST /admin/retire`)
 - [ ] Slice 5: the two legs the scripted origin cannot cover (below)
 
 ## Gotchas the pilot surfaced
+
+- **"Card type" and "decision kind" are two vocabularies, and neither maps onto the other.** A
+  `decision_required` notification can be an approval gate or an agent question; `merge_review` maps
+  to no `/runs/:runId/decisions` entry at all; a run that parked twice is holding the SECOND park by
+  the time anyone opens the first card. So the notification type may drive what is SUBSCRIBED and
+  what an inbox renders, and must never drive what an answer posts. That comes from re-reading the
+  run, every time.
+- **A run can hold TWO parks at once.** A follow-up triage accrues while the step still runs, so it
+  can be pending under a later step's approval gate. The decision list is in a shape order, not a
+  priority order, so a consumer that answers `decisions[0]` settles whichever the projection built
+  first. Refusing without a named `kind` is the only honest option.
+- **`parked: false` does not mean "nothing to answer".** The follow-ups park is listed whenever any
+  item is `pending`, which is deliberately before the run stops. A predicate keyed on the run's
+  status misses every early triage, which is the case the surface added it for.
 
 - **`minScope` is the STATIC floor, not the whole admission story.** `startPublicTask` and
   `createPublicJob` escalate to `decide` at request time when the named pipeline can park

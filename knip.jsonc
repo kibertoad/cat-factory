@@ -179,12 +179,19 @@
     "deploy/backend": { "entry": ["src/**/*.ts"] },
     "deploy/node": { "entry": ["src/**/*.ts"] },
     "deploy/local": { "entry": ["src/**/*.ts"] },
-    // `src/index.ts` is the Worker entry; the specs are the second entry, and the fake origin is
-    // read as a SCRIPT STRING by vitest.config.ts rather than imported, so knip cannot see the
-    // edge and would report it as an unused file.
+    // `src/index.ts` is the Worker entry and the specs are the second, which is also why `project`
+    // is stated: the default (`**/*`) would sweep in `vitest.config.ts` and the fake origin, and
+    // neither is source this analysis has anything to say about.
     "deploy/gatekeeper": {
       "entry": ["src/index.ts", "test/**/*.ts"],
-      "ignore": ["test/fake-cat-factory.mjs"],
+      "project": ["src/**/*.ts", "test/**/*.ts"],
+      // The vitest config reads `./test/fake-cat-factory.mjs` relative to cwd, which fails when
+      // knip loads it from the repo root, and its test entries are covered by the explicit
+      // `test/` glob above anyway. Same reason the Worker runtime's config is skipped.
+      "vitest": false,
+      // `cloudflare` is knip misreading the `cloudflare:workers` / `cloudflare:test` module
+      // specifier scheme as an npm package, exactly as it does in `backend/runtimes/cloudflare`.
+      "ignoreDependencies": ["cloudflare"],
     },
     "deploy/frontend": {
       // Backs `nuxt typecheck` in the deploy consumer.

@@ -21,13 +21,20 @@ which is where your deployment's actual governance decision lives.
   (`externalIdentity`), so a run traces back to a human and role-scoped merge policy stays real.
   The keys are minted once and cached durably; the only credential this Worker is given is the
   `admin` provisioning key, which never leaves it.
-- **Approvals as an inbox.** The platform's outbound webhook delivers parked-decision cards here;
-  the Worker verifies the HMAC over the raw bytes, dedupes on `deliveryId`, and raises a card an
-  OS approval Gadget can answer. Answering re-reads the run's live decisions and posts through the
-  caller's own `decide` key.
-- **Self-enrolment.** The endpoint registers itself under a caller-chosen webhook id, hourly and
-  idempotently, so a cold-booting Worker enrols with no create-or-discover round trip and cannot
-  displace another integration's registration.
+- **Approvals as an inbox, for every park.** The platform's outbound webhook delivers
+  parked-decision cards here; the Worker verifies the HMAC over the raw bytes, dedupes on
+  `deliveryId`, and raises a card an OS approval Gadget can answer. A run can stop on THIRTEEN
+  different things (an approval gate, a requirements or clarity review, a fork, a judge verdict, a
+  follow-up triage, an interview, …) and `src/decisions.ts` carries an answerer for each, keyed on
+  the SDK's own kind union so a kind the platform gains fails this package's build. Answering
+  re-reads the run's live decisions and posts through the caller's own `decide` key.
+- **Run lifecycle without polling.** `run.started` / `run.completed` / `run.failed` land as a
+  `runs_watched()` projection, and a terminal event settles that run's open cards, so an inbox
+  never holds a question about a run that has ended.
+- **Self-enrolment and offboarding.** The endpoint registers itself under a caller-chosen webhook
+  id, hourly and idempotently, so a cold-booting Worker enrols with no create-or-discover round
+  trip and cannot displace another integration's registration. `POST /admin/retire?actorId=…`
+  revokes every key minted for one OS user, upstream first and then here.
 
 ## Configure
 
@@ -65,7 +72,10 @@ rather than serving methods that 403. Three tiers ship as a starting point (`obs
 approver: {
   description: 'Everything an operator can do, plus answering a run’s parked decisions.',
   keyScope: 'decide',
-  allow: ['tasks_start', 'decisions_list', 'decisions_approve_step', /* … */],
+  // DECISION_BINDINGS is derived from the answerer table, not transcribed: a run can park on
+  // thirteen different things and the surface carries more than forty operations for answering
+  // them, so a hand-typed list is a tier that answers what somebody remembered.
+  allow: [...DELIVERY_LOOP, ...DECISION_BINDINGS],
   mask: ['run.pullRequestUrl'],
 }
 ```
@@ -96,17 +106,47 @@ await cat.tier() // { tier: 'approver', keyScope: 'decide', … }
 await cat.tasks_start({ taskId: 'blk_4', body: { pipelineId: 'pl_standard_build' } })
 
 for (const card of await cat.approvals_list()) {
-  await cat.approvals_answer(card.cardId, { action: 'approve' })
+  // `approvals_list()` is the whole inbox: settled cards are included (the OS decides what it
+  // renders), and a `notice` is a run waiting on a person in the cat-factory app rather than a
+  // question this surface can settle.
+  if (card.resolvedAt !== null || card.disposition !== 'decision') continue
+
+  // What the run is parked on NOW, with the verbs that park takes, the fields each verb needs,
+  // and whether this tier holds the operation behind it. Composing an answer from here rather
+  // than from a doc is what keeps an agent from posting a body the platform refuses.
+  const { parks } = await cat.approvals_inspect(card.cardId)
+  const park = parks[0]
+  if (park === undefined) continue
+
+  if (park.kind === 'approval-gate') {
+    await cat.approvals_answer(card.cardId, { action: 'approve' })
+  } else if (park.kind === 'requirements-review') {
+    await cat.approvals_answer(card.cardId, { action: 'reply', itemId: 'ri_1', reply: 'Postgres.' })
+  }
 }
+
+await cat.runs_watched() // [{ runId, event: 'run.completed', terminal: true, run }, …]
 ```
 
 `connect()` takes the identity your OS deployment authenticated, and NOTHING else the caller sends
 picks a tier: an agent that could name its own tier would be its own authorization.
 
 `approvals_answer` returns one of three statuses, and collapsing them is the mistake to avoid:
-`answered` (the gate settled), `recorded` (the approval counted but the gate needs more, so the run
-is still parked), and `stale` (the run no longer holds the decision this card named, with the run's
-own `unanswerable` wait quoted so you know where to escalate).
+
+| status     | what it means                                                                          | the card |
+| ---------- | -------------------------------------------------------------------------------------- | -------- |
+| `answered` | the run left the park; the answer moved it                                             | settled  |
+| `recorded` | the answer was taken and the park still holds (a quorum unmet, a reply not yet folded) | open     |
+| `stale`    | nothing this surface can answer is holding the run, with the reason                    | open     |
+
+A `stale` answer settles nothing, deliberately: the run may still be parked on a wait a person has
+to clear, and the platform re-delivers a card under a NEW notification id, so a card settled in
+error is never re-raised and the inbox loses its only pointer to that run.
+
+A run genuinely can hold two parks at once (a follow-up triage accrues while a later step's gate is
+open). Answering then needs a `kind`, because the platform lists parks in a shape order rather than
+a priority order and picking the first would settle whichever the projection happened to build
+first.
 
 ## Tests
 
@@ -127,6 +167,12 @@ The provisioning key is a Worker secret and never leaves the platform's secret s
 keys it mints live in the Durable Object's storage: outside every agent's reach, but at rest in
 your account. If that is not acceptable for your deployment, mint per call and revoke after, at the
 cost of a key row per operation.
+
+Minting is claimed before it runs, so two concurrent first calls for one actor mint once rather
+than leaving the loser's credential live upstream with nothing here recording it. Revoking the
+provisioning key remains the kill switch, and it now heals: a call refused with a 401 drops the
+cached key and re-mints once, so a rotation costs one request rather than requiring the Durable
+Object to be wiped.
 
 `allowedTools`-style scoping is not a substitute for the scope floor, and neither is this Worker.
 What it enforces is which operations an actor may reach and on whose credential; what a run then

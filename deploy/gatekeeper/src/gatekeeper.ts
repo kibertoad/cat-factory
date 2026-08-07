@@ -1,7 +1,7 @@
 // The composition root: everything a request needs, assembled from the environment once.
 //
-// It also holds the two flows that are neither pure policy nor pure transport: enrolling this
-// Gatekeeper as an outbound webhook endpoint, and taking delivery of one.
+// It also holds the flows that are neither pure policy nor pure transport: enrolling this
+// Gatekeeper as an outbound webhook endpoint, taking delivery of one, and retiring an actor.
 
 import { CatFactoryClient } from '@cat-factory/sdk'
 import { buildCapability } from './capability'
@@ -11,7 +11,7 @@ import { KeyBroker, type Actor } from './keys'
 import { compilePolicy, tierForActor, type CompiledPolicy } from './policy'
 import { POLICY } from './policy.config'
 import type { GatekeeperState } from './state'
-import { cardEffectOf, PARKED_DECISION_CARD_TYPES, readDelivery } from './webhook/delivery'
+import { cardEffectOf, readDelivery, SUBSCRIBED_CARD_TYPES } from './webhook/delivery'
 import { verifyDelivery, type VerificationResult } from './webhook/signature'
 
 /** Identifies this integration in the deployment's logs, beside the SDK's own version. */
@@ -25,7 +25,11 @@ export type DeliveryOutcome =
   | { handled: 'rejected'; reason: RejectionReason }
   | { handled: 'unparseable' }
   | { handled: 'duplicate'; deliveryId: string }
-  | { handled: 'accepted'; deliveryId: string; card: 'opened' | 'superseded' | 'none' }
+  | {
+      handled: 'accepted'
+      deliveryId: string
+      effect: 'opened' | 'superseded' | 'run-event' | 'none'
+    }
 
 export class Gatekeeper {
   readonly #env: GatekeeperEnv
@@ -83,6 +87,16 @@ export class Gatekeeper {
   }
 
   /**
+   * Retire an actor: revoke every key this Gatekeeper minted for them, upstream and here.
+   *
+   * Exposed on the ADMIN surface rather than on a capability, because it is the OS deployment's
+   * offboarding action and not something an agent acting AS someone should be able to do to them.
+   */
+  async retire(actorId: string): Promise<{ revoked: string[]; remaining: string[] }> {
+    return await this.#keys.revoke({ id: actorId })
+  }
+
+  /**
    * Register this Worker as a named outbound webhook endpoint, idempotently.
    *
    * Safe to call on every cron tick and on demand: the route is keyed on the caller-chosen id, so
@@ -102,14 +116,17 @@ export class Gatekeeper {
       name: 'Cloudflare OS gatekeeper',
       secret: requireVar(this.#env, 'WEBHOOK_SECRET'),
       enabled: true,
-      // Subscribe to exactly the card types the inbox can act on, rather than leaving `types`
-      // unset for the platform's default tail: the defaults and this Gatekeeper's list are close
-      // but not equal, and the gap would arrive as cards that never appear (a type acted on but
-      // not subscribed) or cards nobody can answer (the reverse).
-      types: [...PARKED_DECISION_CARD_TYPES],
-      // The lifecycle family is what lets a status Gadget close a run out without polling. It is
-      // opt-in per event on purpose, so name all three: a Gatekeeper that hears only `run.started`
-      // shows every run as forever in flight.
+      // Subscribe to exactly the card types the inbox raises something for, rather than leaving
+      // `types` unset for the platform's default tail: the defaults and this Gatekeeper's list are
+      // close but not equal, and the gap would arrive as cards that never appear (a type acted on
+      // but not subscribed) or cards nobody can do anything with (the reverse). What each type
+      // OFFERS is the card's `disposition`, so the list can carry a `notice` without the inbox
+      // presenting it as answerable.
+      types: [...SUBSCRIBED_CARD_TYPES],
+      // The lifecycle family is what lets a status Gadget close a run out without polling: it
+      // lands as a `runs_watched()` record, and a terminal event settles the run's open cards. It
+      // is opt-in per event on purpose, so name all three: a Gatekeeper that hears only
+      // `run.started` shows every run as forever in flight.
       runEvents: ['run.started', 'run.completed', 'run.failed'],
     })
     return { webhookId, url }
@@ -119,9 +136,11 @@ export class Gatekeeper {
    * Take delivery of one webhook POST.
    *
    * Order matters and is the whole security story of this method: verify the MAC over the RAW
-   * bytes FIRST, dedupe SECOND, act THIRD. Parsing before verifying would run this deployment's
-   * JSON decoder over unauthenticated input, and acting before deduping would raise a card twice
-   * for one at-least-once terminal event.
+   * bytes FIRST, parse SECOND, and hand the dedupe and the effect to durable state as ONE call.
+   * Parsing before verifying would run this deployment's JSON decoder over unauthenticated input.
+   * Deduping in a call of its own would be worse than useless: a marker committed before the card
+   * write turns a failed write into a `duplicate` on the platform's retry, so the approval never
+   * reaches the inbox and nothing anywhere reports that it did not.
    */
   async takeDelivery(request: Request, now: number): Promise<DeliveryOutcome> {
     const rawBody = await request.text()
@@ -142,20 +161,13 @@ export class Gatekeeper {
     const delivery = readDelivery(parsed)
     if (delivery === null) return { handled: 'unparseable' }
 
-    if (!(await this.#state.recordDelivery(delivery.deliveryId, now))) {
-      return { handled: 'duplicate', deliveryId: delivery.deliveryId }
-    }
-
-    const effect = cardEffectOf(delivery)
-    if (effect.kind === 'open') {
-      await this.#state.openCard(effect.card)
-      return { handled: 'accepted', deliveryId: delivery.deliveryId, card: 'opened' }
-    }
-    if (effect.kind === 'supersede') {
-      await this.#state.resolveCard(effect.cardId, 'superseded', now)
-      return { handled: 'accepted', deliveryId: delivery.deliveryId, card: 'superseded' }
-    }
-    return { handled: 'accepted', deliveryId: delivery.deliveryId, card: 'none' }
+    const applied = await this.#state.applyDelivery(
+      delivery.deliveryId,
+      cardEffectOf(delivery),
+      now,
+    )
+    if (!applied.applied) return { handled: 'duplicate', deliveryId: delivery.deliveryId }
+    return { handled: 'accepted', deliveryId: delivery.deliveryId, effect: applied.effect }
   }
 }
 

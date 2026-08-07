@@ -13,12 +13,20 @@
 
 import { RpcTarget } from 'capnweb'
 import type { GatekeeperBinding } from '@cat-factory/gatekeeper-bindings'
-import { answerCard, assertAnswerable, type AnswerInput, type AnswerOutcome } from './approvals'
+import {
+  answerCard,
+  assertAnswerable,
+  pendingParks,
+  describeStale,
+  type AnswerInput,
+  type AnswerOutcome,
+  type DecisionListShape,
+} from './approvals'
 import { GatekeeperError, PolicyError } from './errors'
 import type { Actor, KeyBroker } from './keys'
 import { applyMask } from './masking'
 import { describeBinding, type CompiledTier } from './policy'
-import type { ApprovalCard, GatekeeperState } from './state'
+import type { ApprovalCard, GatekeeperState, RunState } from './state'
 
 /**
  * The methods a capability carries beyond its granted bindings.
@@ -33,7 +41,9 @@ const RESERVED_METHODS = [
   'bindings',
   'withheld',
   'approvals_list',
+  'approvals_inspect',
   'approvals_answer',
+  'runs_watched',
 ] as const
 
 export interface SessionDependencies {
@@ -49,6 +59,41 @@ export interface TierSummary {
   tier: string
   description: string
   keyScope: string
+}
+
+/**
+ * What `approvals_inspect()` answers: the card, what the run is ACTUALLY parked on now, and which
+ * verbs this tier can reach.
+ *
+ * The reason this exists beside `approvals_answer` is the same one `withheld()` exists beside
+ * `bindings()`: an agent composing an answer needs to know what the park takes and whether its own
+ * tier holds the operation, and deriving either from a doc is how an integration ends up posting a
+ * body the platform refuses with a 422 that names a field the agent never chose.
+ */
+export interface CardInspection {
+  card: ApprovalCard
+  /** The run's live decision list, verbatim. The webhook is a trigger; this is the truth. */
+  decisions: unknown
+  /** What the run is parked on and can be answered from here, with the verbs each takes. */
+  parks: {
+    kind: string
+    summary: string
+    actions: {
+      action: string
+      binding: string
+      summary: string
+      /** False when this tier was not granted the binding: the verb exists, this caller cannot use it. */
+      granted: boolean
+      fields: readonly {
+        name: string
+        required: boolean
+        choices?: readonly string[]
+        detail: string
+      }[]
+    }[]
+  }[]
+  /** Present only when nothing is answerable, saying which of the several reasons it is. */
+  stale?: string
 }
 
 /**
@@ -82,8 +127,10 @@ export function buildCapability(deps: SessionDependencies): RpcTarget {
         `Tier '${tier.name}' does not grant '${name}'.`,
       )
     }
-    const client = await deps.keys.clientFor(deps.actor, tier.keyScope)
-    return applyMask(await binding.invoke(client, args), tier.mask)
+    const result = await deps.keys.run(deps.actor, tier.keyScope, (client) =>
+      binding.invoke(client, args),
+    )
+    return applyMask(result, tier.mask)
   }
 
   class Capability extends RpcTarget {}
@@ -111,18 +158,51 @@ export function buildCapability(deps: SessionDependencies): RpcTarget {
 
   proto.approvals_list = (): Promise<ApprovalCard[]> => deps.state.listCards()
 
+  // The lifecycle projection the `run.*` subscription feeds. Without it those deliveries would be
+  // verified, deduped and dropped, and a status Gadget would be back to polling `tasks_get_run`
+  // for a transition the platform already pushed.
+  proto.runs_watched = (): Promise<RunState[]> => deps.state.listRunStates()
+
+  proto.approvals_inspect = async (cardId: string): Promise<CardInspection> => {
+    const card = await deps.state.getCard(cardId)
+    if (card === null) {
+      throw new GatekeeperError(
+        'card_not_found',
+        `No approval card '${cardId}'. It may have been raised against a different paired ` +
+          'workspace, or predate this Gatekeeper.',
+      )
+    }
+    const list = (await invoke('decisions_list', { runId: card.runId })) as DecisionListShape
+    const parks = pendingParks(list).map((park) => ({
+      kind: park.kind,
+      summary: park.summary,
+      actions: park.verbs.map((verb) => ({
+        action: verb.action,
+        binding: verb.binding,
+        summary: verb.summary,
+        granted: granted.has(verb.binding),
+        fields: verb.fields,
+      })),
+    }))
+    return {
+      card,
+      decisions: list,
+      parks,
+      ...(parks.length === 0 ? { stale: describeStale(list) } : {}),
+    }
+  }
+
   proto.approvals_answer = async (cardId: string, input: AnswerInput): Promise<AnswerOutcome> => {
     const card = assertAnswerable(await deps.state.getCard(cardId), cardId)
     const outcome = await answerCard(card, input, invoke)
-    // Only an answer that SETTLED the gate settles the card. A recorded-but-short-of-quorum
-    // approval leaves the card open, because the next approver still has to see it; a stale card
-    // is settled, because the decision it named is gone either way.
-    if (outcome.status !== 'recorded') {
-      await deps.state.resolveCard(
-        cardId,
-        outcome.status === 'stale' ? 'superseded' : input.action,
-        Date.now(),
-      )
+    // Only an answer that left the run UNPARKED settles the card. An approval short of quorum, or
+    // a reply the incorporation has not folded in yet, leaves it open because the next answerer
+    // still has to see it. A `stale` answer settles nothing either: the run may be held by a wait
+    // a person has to clear elsewhere, and destroying the card would remove the one pointer to it
+    // that the inbox had. The platform re-delivers a card under a new notification id, so a
+    // wrongly settled one is never re-raised.
+    if (outcome.status === 'answered') {
+      await deps.state.resolveCard(cardId, `${outcome.kind}:${outcome.action}`, Date.now())
     }
     return outcome
   }

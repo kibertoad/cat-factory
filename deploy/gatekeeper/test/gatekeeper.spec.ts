@@ -18,11 +18,22 @@ interface CapabilityMethods {
   tier(): Promise<{ actorId: string; tier: string; keyScope: string }>
   bindings(): Promise<{ name: string; destructive: boolean; idempotent: boolean }[]>
   withheld(): Promise<{ name: string; reason: string; detail: string }[]>
-  approvals_list(): Promise<{ cardId: string; runId: string; resolvedAt: number | null }[]>
+  approvals_list(): Promise<
+    { cardId: string; runId: string; disposition: string; resolvedAt: number | null }[]
+  >
+  approvals_inspect(cardId: string): Promise<{
+    card: { cardId: string; disposition: string }
+    parks: {
+      kind: string
+      actions: { action: string; granted: boolean; fields: { name: string; required: boolean }[] }[]
+    }[]
+    stale?: string
+  }>
   approvals_answer(
     cardId: string,
     input: Record<string, unknown>,
   ): Promise<{ status: string; [key: string]: unknown }>
+  runs_watched(): Promise<{ runId: string; event: string; terminal: boolean }[]>
 }
 
 /**
@@ -116,7 +127,15 @@ async function deliver(body: Record<string, unknown>): Promise<Response> {
   })
 }
 
-function parkedCard(runId: string, cardId: string): Record<string, unknown> {
+/**
+ * A parked-decision delivery. `decision_required` by default because that is the type an ordinary
+ * approval gate raises; `merge_review` is the deliberate NOTICE and is asked for by name.
+ */
+function parkedCard(
+  runId: string,
+  cardId: string,
+  type = 'decision_required',
+): Record<string, unknown> {
   return {
     deliveryId: `${cardId}-open`,
     sentAt: Date.now(),
@@ -125,12 +144,27 @@ function parkedCard(runId: string, cardId: string): Record<string, unknown> {
     taskId: 'blk_4',
     notification: {
       id: cardId,
-      type: 'merge_review',
+      type,
       status: 'open',
-      title: 'Ready to merge',
-      body: 'The merger scored the change.',
+      title: 'A run is waiting',
+      body: 'The step finished and needs an answer.',
     },
   }
+}
+
+/** A run lifecycle delivery, the family a status Gadget reads instead of polling. */
+function runEvent(runId: string, event: string): Record<string, unknown> {
+  return {
+    deliveryId: `${runId}:${event}`,
+    sentAt: Date.now(),
+    workspaceId: 'ws_1',
+    event,
+    run: { id: runId, status: event === 'run.failed' ? 'failed' : 'running' },
+  }
+}
+
+function approver(api: RemoteApi): RemoteCapability {
+  return api.connect({ actorId: 'approver@example.com' })
 }
 
 describe('the RPC surface', () => {
@@ -200,6 +234,25 @@ describe('per-actor credentials', () => {
     )
   })
 
+  // `POST /api/v1/keys` returns its secret exactly once, so two pipelined FIRST calls that both
+  // read "no key yet" both mint, and the loser's credential stays live upstream with nothing here
+  // recording that it exists. That is invisible from a response (the second mint answers a
+  // perfectly good key), so the scripted origin counts what it was actually asked to issue.
+  it('mints once for concurrent first calls by one actor', async () => {
+    const capability = (await connectRpc()).connect({ actorId: 'observer@example.com' })
+    await Promise.all([
+      operation(capability, 'tasks_get', { taskId: 'blk_1' }),
+      operation(capability, 'tasks_get', { taskId: 'blk_1' }),
+      operation(capability, 'tasks_get', { taskId: 'blk_1' }),
+    ])
+
+    const mints = (await (await fetch('https://cat-factory.example.com/__mints')).json()) as Record<
+      string,
+      number
+    >
+    expect(mints['pak_read_observer@example.com']).toBe(1)
+  })
+
   it('gives two actors two different keys', async () => {
     const api = await connectRpc()
     const first = (await operation(api.connect({ actorId: 'operator@example.com' }), 'tasks_get', {
@@ -238,7 +291,7 @@ describe('taking delivery', () => {
     const body = parkedCard('run_pending', 'ntf_dupe')
     const first = await deliver(body)
     expect(first.status).toBe(202)
-    expect(await first.json()).toMatchObject({ handled: 'accepted', card: 'opened' })
+    expect(await first.json()).toMatchObject({ handled: 'accepted', effect: 'opened' })
 
     const replay = await deliver({ ...body, sentAt: Date.now() + 1 })
     expect(replay.status).toBe(202)
@@ -248,17 +301,17 @@ describe('taking delivery', () => {
   it('takes a signed delivery of an unrecognised family without refusing it', async () => {
     const response = await deliver({ deliveryId: 'd_future', sentAt: Date.now(), somethingNew: {} })
     expect(response.status).toBe(202)
-    expect(await response.json()).toMatchObject({ handled: 'accepted', card: 'none' })
+    expect(await response.json()).toMatchObject({ handled: 'accepted', effect: 'none' })
   })
 })
 
 describe('the approval inbox', () => {
   it('raises a card a granted actor can answer, and settles it', async () => {
     await deliver(parkedCard('run_pending', 'ntf_answerable'))
-    const capability = (await connectRpc()).connect({ actorId: 'approver@example.com' })
+    const capability = approver(await connectRpc())
 
     const outcome = await capability.approvals_answer('ntf_answerable', { action: 'approve' })
-    expect(outcome.status).toBe('answered')
+    expect(outcome).toMatchObject({ status: 'answered', kind: 'approval-gate', action: 'approve' })
     expect((outcome.decisions as { echo: { path: string } }).echo.path).toBe(
       '/api/v1/runs/run_pending/decisions/approvals/ap_1/approve',
     )
@@ -277,37 +330,51 @@ describe('the approval inbox', () => {
   // moving when the next approver has not seen it yet.
   it('reports a recorded-but-short-of-quorum approval as such, and keeps the card open', async () => {
     await deliver(parkedCard('run_quorum', 'ntf_quorum'))
-    const capability = (await connectRpc()).connect({ actorId: 'approver@example.com' })
+    const capability = approver(await connectRpc())
 
     const outcome = await capability.approvals_answer('ntf_quorum', { action: 'approve' })
     expect(outcome).toMatchObject({
       status: 'recorded',
-      recordedApprovals: 1,
-      requiredApprovals: 2,
+      detail: '1 of 2 approvals recorded; the gate still needs the rest.',
     })
 
     const card = (await capability.approvals_list()).find((entry) => entry.cardId === 'ntf_quorum')
     expect(card?.resolvedAt).toBeNull()
   })
 
+  // A gate at its rework cap does not take `approve`, and the useful refusal names the verb that
+  // works, not a 409 whose remedy is in a doc.
   it('names the verb a gate at its rework cap actually takes', async () => {
     await deliver(parkedCard('run_exceeded', 'ntf_exceeded'))
-    const capability = (await connectRpc()).connect({ actorId: 'approver@example.com' })
-    await expect(
-      capability.approvals_answer('ntf_exceeded', { action: 'approve' }),
-    ).rejects.toThrow(/resolve-exceeded/)
+    const capability = approver(await connectRpc())
+    const outcome = await capability.approvals_answer('ntf_exceeded', {
+      action: 'resolve-exceeded',
+      choice: 'extra-round',
+    })
+    expect(outcome.status).toBe('answered')
+    expect((outcome.decisions as { echo: { path: string; body: unknown } }).echo).toMatchObject({
+      path: '/api/v1/runs/run_exceeded/decisions/approvals/ap_1/resolve-exceeded',
+      body: { choice: 'extra-round' },
+    })
   })
 
   // A card is a pointer, not the decision. Between the delivery and the answer the run can be
   // finished or held by a wait this surface cannot answer, and the run's own `unanswerable` entry
   // is what says which — reporting a bare failure would send someone to the wrong place.
-  it('reports a card whose run has moved on, quoting the run’s own unanswerable wait', async () => {
+  //
+  // The card STAYS OPEN. A stale answer settles nothing: the run may still be parked on something
+  // a person has to clear, and the platform re-delivers a card under a NEW notification id, so a
+  // wrongly settled one is never re-raised and the inbox quietly loses its only pointer to it.
+  it('reports a card whose run has moved on, quoting the wait, and leaves the card open', async () => {
     await deliver(parkedCard('run_stale', 'ntf_stale'))
-    const capability = (await connectRpc()).connect({ actorId: 'approver@example.com' })
+    const capability = approver(await connectRpc())
 
     const outcome = await capability.approvals_answer('ntf_stale', { action: 'approve' })
     expect(outcome.status).toBe('stale')
     expect(outcome.detail).toMatch(/human_wait_gate/)
+
+    const card = (await capability.approvals_list()).find((entry) => entry.cardId === 'ntf_stale')
+    expect(card?.resolvedAt).toBeNull()
   })
 
   // The approval flow gets no privilege of its own: it forwards through the SAME granted bindings,
@@ -321,10 +388,233 @@ describe('the approval inbox', () => {
   })
 
   it('refuses a card it never raised', async () => {
-    const capability = (await connectRpc()).connect({ actorId: 'approver@example.com' })
+    const capability = approver(await connectRpc())
     await expect(capability.approvals_answer('ntf_nope', { action: 'approve' })).rejects.toThrow(
       /No approval card/,
     )
+  })
+})
+
+// The half that used to be missing entirely. A run parks on THIRTEEN different things; the inbox
+// subscribed to ten card types and could answer exactly one of them.
+describe('answering the parks that are not approval gates', () => {
+  it('drives an iterative review through its own verbs', async () => {
+    await deliver(parkedCard('run_review', 'ntf_review', 'requirement_review'))
+    const capability = approver(await connectRpc())
+
+    const replied = await capability.approvals_answer('ntf_review', {
+      action: 'reply',
+      itemId: 'ri_1',
+      reply: 'Postgres, on the existing cluster.',
+    })
+    // A reply is recorded and folded in by a later incorporation, so the loop still holds the run.
+    expect(replied).toMatchObject({ status: 'recorded', kind: 'requirements-review' })
+    expect((replied.decisions as { echo: { path: string; body: unknown } }).echo).toMatchObject({
+      path: '/api/v1/runs/run_review/decisions/requirements/findings/ri_1/reply',
+      body: { reply: 'Postgres, on the existing cluster.' },
+    })
+
+    const incorporated = await capability.approvals_answer('ntf_review', {
+      action: 'incorporate',
+    })
+    expect(incorporated.status).toBe('recorded')
+  })
+
+  it('chooses an implementation fork', async () => {
+    await deliver(parkedCard('run_fork', 'ntf_fork', 'fork_decision_pending'))
+    const capability = approver(await connectRpc())
+
+    const outcome = await capability.approvals_answer('ntf_fork', {
+      action: 'choose',
+      forkId: 'fk_2',
+    })
+    expect(outcome).toMatchObject({ status: 'answered', kind: 'fork' })
+    expect((outcome.decisions as { echo: { path: string; body: unknown } }).echo).toMatchObject({
+      path: '/api/v1/runs/run_fork/decisions/fork/choose',
+      body: { forkId: 'fk_2' },
+    })
+  })
+
+  // Follow-ups accrue while the step still RUNS, so the run is not blocked and a predicate keyed
+  // on the run's status would report nothing to answer.
+  it('answers a follow-up item on a run that is not blocked', async () => {
+    await deliver(parkedCard('run_followups', 'ntf_followups', 'followup_pending'))
+    const capability = approver(await connectRpc())
+
+    const outcome = await capability.approvals_answer('ntf_followups', {
+      action: 'answer',
+      itemId: 'fu_1',
+      answer: 'Yes, share it.',
+    })
+    expect((outcome.decisions as { echo: { path: string } }).echo.path).toBe(
+      '/api/v1/runs/run_followups/decisions/follow-ups/items/fu_1/answer',
+    )
+  })
+
+  it('refuses to guess between two parks, and answers the one it is told', async () => {
+    await deliver(parkedCard('run_both', 'ntf_both'))
+    const capability = approver(await connectRpc())
+
+    await expect(capability.approvals_answer('ntf_both', { action: 'approve' })).rejects.toThrow(
+      /parked on 2 decisions/,
+    )
+    const outcome = await capability.approvals_answer('ntf_both', {
+      action: 'approve',
+      kind: 'approval-gate',
+    })
+    // The gate settled but the follow-up triage still holds the run, so the card stays open.
+    expect(outcome.status).toBe('answered')
+    const card = (await capability.approvals_list()).find((entry) => entry.cardId === 'ntf_both')
+    expect(card?.resolvedAt).not.toBeNull()
+  })
+
+  // A gate the SPA answered while the card sat in the inbox is PRESENT in the list and settled.
+  it('does not post against a park that was already answered elsewhere', async () => {
+    await deliver(parkedCard('run_settled', 'ntf_settled'))
+    const capability = approver(await connectRpc())
+    expect((await capability.approvals_answer('ntf_settled', { action: 'approve' })).status).toBe(
+      'stale',
+    )
+  })
+
+  it('says so when the deployment parks on something it does not model', async () => {
+    await deliver(parkedCard('run_unknown', 'ntf_unknown'))
+    const capability = approver(await connectRpc())
+    const outcome = await capability.approvals_answer('ntf_unknown', { action: 'approve' })
+    expect(outcome.detail).toMatch(/quantum-review/)
+  })
+
+  // The refusal that replaced an opaque 422: the platform rejects a blank `feedback` with
+  // `minLength(1)` after trim, naming a field the caller never chose to send.
+  it('refuses an answer missing a required field rather than forwarding a blank one', async () => {
+    await deliver(parkedCard('run_pending', 'ntf_blank'))
+    const capability = approver(await connectRpc())
+    await expect(
+      capability.approvals_answer('ntf_blank', { action: 'request-changes' }),
+    ).rejects.toThrow(/needs 'feedback'/)
+  })
+})
+
+describe('inspecting a card before answering it', () => {
+  it('reports the live park, its verbs, and which of them this tier holds', async () => {
+    await deliver(parkedCard('run_review', 'ntf_inspect', 'requirement_review'))
+    const inspection = await approver(await connectRpc()).approvals_inspect('ntf_inspect')
+
+    expect(inspection.parks).toHaveLength(1)
+    const park = inspection.parks[0]!
+    expect(park.kind).toBe('requirements-review')
+    expect(park.actions.map((action) => action.action)).toContain('incorporate')
+    expect(park.actions.every((action) => action.granted)).toBe(true)
+
+    const reply = park.actions.find((action) => action.action === 'reply')!
+    expect(reply.fields.filter((field) => field.required).map((field) => field.name)).toEqual([
+      'itemId',
+      'reply',
+    ])
+  })
+
+  // The degrade-loudly half. A tier that holds `decisions_list` but not the settling operations
+  // can SEE what the run is waiting on, and is told which verbs it cannot use, rather than
+  // discovering it one refusal at a time.
+  it('marks a verb this tier was not granted rather than hiding it', async () => {
+    await deliver(parkedCard('run_pending', 'ntf_ungranted'))
+    const observer = (await connectRpc()).connect({ actorId: 'observer@example.com' })
+    const inspection = await observer.approvals_inspect('ntf_ungranted')
+    const actions = inspection.parks[0]?.actions ?? []
+    expect(actions.length).toBeGreaterThan(0)
+    expect(actions.every((action) => action.granted)).toBe(false)
+  })
+
+  it('says why nothing is answerable rather than reporting an empty list', async () => {
+    await deliver(parkedCard('run_stale', 'ntf_inspect_stale'))
+    const inspection = await approver(await connectRpc()).approvals_inspect('ntf_inspect_stale')
+    expect(inspection.parks).toEqual([])
+    expect(inspection.stale).toMatch(/human_wait_gate/)
+  })
+
+  // `merge_review` is settled by a real merge, which no tier here grants. Stamping the card says
+  // so up front instead of letting the first answer attempt come back `stale`.
+  it('marks a card the API cannot settle as a notice', async () => {
+    await deliver(parkedCard('run_pending', 'ntf_notice', 'merge_review'))
+    const cards = await approver(await connectRpc()).approvals_list()
+    expect(cards.find((card) => card.cardId === 'ntf_notice')?.disposition).toBe('notice')
+    expect(cards.find((card) => card.cardId === 'ntf_notice')?.resolvedAt).toBeNull()
+  })
+})
+
+describe('run lifecycle', () => {
+  // Without this the `run.*` subscription was verified, deduped and dropped: a status Gadget would
+  // have been back to polling for a transition the platform already pushed.
+  it('records what the lifecycle subscription delivers', async () => {
+    await deliver(runEvent('run_watched', 'run.started'))
+    const watched = await approver(await connectRpc()).runs_watched()
+    expect(watched.find((state) => state.runId === 'run_watched')).toMatchObject({
+      event: 'run.started',
+      terminal: false,
+    })
+  })
+
+  // An inbox holding a question about a run that has ENDED is a question nobody can answer, and it
+  // is the shape people learn to ignore cards from.
+  it('settles a run’s open cards when the run reaches a terminal event', async () => {
+    await deliver(parkedCard('run_ending', 'ntf_ending'))
+    const capability = approver(await connectRpc())
+    expect(
+      (await capability.approvals_list()).find((card) => card.cardId === 'ntf_ending')?.resolvedAt,
+    ).toBeNull()
+
+    await deliver(runEvent('run_ending', 'run.failed'))
+    expect(
+      (await capability.approvals_list()).find((card) => card.cardId === 'ntf_ending')?.resolvedAt,
+    ).not.toBeNull()
+  })
+})
+
+describe('credential lifecycle', () => {
+  // The documented kill switch is revoking the provisioning key, which revokes every key it
+  // minted. A cache with no invalidation answers every call after that with the same dead secret,
+  // so the recovery is "wipe the Durable Object". One re-mint on a 401 is the whole fix.
+  it('re-mints once when the deployment refuses a cached key', async () => {
+    await deliver(parkedCard('run_rotated', 'ntf_rotated'))
+    const capability = approver(await connectRpc())
+
+    // The scripted origin 401s the first minted secret and accepts the replacement. The echo is
+    // what proves the recovery actually MINTED rather than retrying the dead one: without the
+    // drop-and-re-mint this rejects permanently, and with a blind retry it would 401 again.
+    const outcome = await capability.approvals_answer('ntf_rotated', { action: 'approve' })
+    expect(outcome.status).toBe('answered')
+    expect((outcome.decisions as { echo: { authorization: string } }).echo.authorization).toBe(
+      'Bearer cf_live_pak_decide_approver@example.com.reminted-secret',
+    )
+  })
+
+  // Offboarding lives on the admin surface, not on a capability: it is a decision the OS makes
+  // ABOUT a person, and an agent acting as one of them must not make it for the others.
+  it('revokes every key minted for an actor, and refuses to be told nobody', async () => {
+    await operation(
+      (await connectRpc()).connect({ actorId: 'operator@example.com' }),
+      'tasks_get',
+      { taskId: 'blk_1' },
+    )
+
+    const retired = await SELF.fetch(`${ORIGIN}/admin/retire?actorId=operator@example.com`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    })
+    expect(retired.status).toBe(200)
+    expect(await retired.json()).toMatchObject({
+      revoked: ['pak_write_operator@example.com'],
+      remaining: [],
+    })
+
+    const unnamed = await SELF.fetch(`${ORIGIN}/admin/retire`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    })
+    expect(unnamed.status).toBe(400)
+
+    const unauthorized = await SELF.fetch(`${ORIGIN}/admin/retire?actorId=x`, { method: 'POST' })
+    expect(unauthorized.status).toBe(401)
   })
 })
 
