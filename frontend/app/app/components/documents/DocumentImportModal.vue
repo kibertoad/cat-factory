@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DocumentSourceKind } from '~/types/domain'
+import DocumentSyncState from '~/components/documents/DocumentSyncState.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 // Import pages from a connected document source and pick one to expand into
@@ -147,6 +148,7 @@ function preview(externalId: string) {
                   {{ doc.title }}
                 </a>
                 <p class="mt-0.5 line-clamp-2 text-xs text-slate-500">{{ doc.excerpt }}</p>
+                <DocumentSyncState :doc="doc" class="mt-1" />
               </div>
               <UButton
                 color="primary"

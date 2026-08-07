@@ -117,6 +117,15 @@ const SPEND_DIMENSIONS: Record<
     key: "COALESCE(tk.ticket_key, '')",
     label: 'NULL',
   },
+  run: {
+    // The KEY needs no join (the ledger row records its run); the joins are the LABEL's, and
+    // both are 1:1 primary-key joins. A run with no block (a repo bootstrap) keeps its money
+    // and loses its name, like an unsynced repo above.
+    joins: `LEFT JOIN agent_runs ar ON ar.workspace_id = tu.workspace_id AND ar.id = tu.execution_id
+            LEFT JOIN blocks b ON b.workspace_id = ar.workspace_id AND b.id = ar.block_id`,
+    key: "COALESCE(tu.execution_id, '')",
+    label: 'MAX(b.title)',
+  },
 }
 
 /** The same, for the run-based activity breakdowns (a run already carries its service/block). */

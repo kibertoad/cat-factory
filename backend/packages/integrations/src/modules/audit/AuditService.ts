@@ -2,6 +2,7 @@ import type {
   AuditEvent,
   AuditEventPage,
   AuditEventRepository,
+  AuditLogReader,
   AuditRecorder,
   Clock,
   IdGenerator,
@@ -41,7 +42,7 @@ export interface AuditServiceDependencies {
   logger?: Logger
 }
 
-export class AuditService implements AuditRecorder {
+export class AuditService implements AuditRecorder, AuditLogReader {
   private readonly log: Logger
 
   constructor(private readonly deps: AuditServiceDependencies) {

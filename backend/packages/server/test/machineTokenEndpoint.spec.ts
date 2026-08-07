@@ -61,6 +61,8 @@ function makeSession(over: Record<string, unknown> = {}, secret = SECRET): Promi
     email: 'dev@x.test',
     aud: TOKEN_AUDIENCE.session,
     exp: Date.now() + 60_000,
+    // The session generation the bearer is valid under; the fake store answers 0 for every user.
+    gen: 0,
     ...over,
   })
 }
@@ -83,6 +85,8 @@ function makeApp(
       listForUser: async () => opts.accounts ?? [{ id: 'acc_1' }, { id: 'acc_2' }],
     },
     config: { auth: { sessionSecret: SECRET, machineTokenTtlMs: 60_000 } },
+    // `verifySession` checks the bearer's generation against the user row on every request.
+    userService: { sessionGeneration: async () => 0, refreshSessionGeneration: async () => 0 },
     ...(machineNodes ? { machineNodeRepository: machineNodes } : {}),
   } as unknown as ServerContainer
   const app = new Hono<AppEnv>()

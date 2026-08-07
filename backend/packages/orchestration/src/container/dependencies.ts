@@ -36,6 +36,7 @@ import type {
   AgentToolCallRepository,
   ApiContractRepository,
   AppCaches,
+  AuditLogReader,
   AuditRecorder,
   BinaryGeneratorRegistry,
   BinaryGeneratorSource,
@@ -133,6 +134,7 @@ import type {
   RepoBootstrapper,
   RepoProjectionRepository,
   ReportsRepository,
+  SpendRollupRepository,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
   ResolveRunRepoContext,
@@ -273,6 +275,20 @@ export interface CoreDependencies {
    * explicitly, which says so in code.
    */
   auditRecorder: AuditRecorder
+  /**
+   * The READ half of the same store, for the account-admin viewer.
+   *
+   * A second dependency rather than widening `auditRecorder`, because the two are handed to
+   * different callers: domain services get the write seam and must not be able to paginate the
+   * log, the viewer's controller gets this and must not be able to append to it. Both facades
+   * satisfy them with the SAME object (an `AuditService` is both), so this costs a line at the
+   * composition root and buys a capability boundary everywhere else.
+   *
+   * Optional, unlike the recorder, and the asymmetry is the honest one: an un-wired WRITE reads
+   * as "nobody changed anything" and must never happen silently, while an un-wired READ is a
+   * viewer that 503s and says so. A facade with no store passes nothing and the route refuses.
+   */
+  auditLogReader?: AuditLogReader
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository
@@ -500,6 +516,14 @@ export interface CoreDependencies {
    * the admin read endpoint; absent (tests / unconfigured facades) → no reports view.
    */
   reportsRepository?: ReportsRepository
+  /**
+   * The DURABLE cost-attribution rollup (`spend_days`) behind the Reports view's long
+   * windows, materialised by the retention sweep and never pruned. Optional, like
+   * {@link reportsRepository}: absent ⇒ every window falls back to the ledger and the
+   * projection reports `source: 'ledger'` rather than presenting ledger numbers as durable
+   * ones.
+   */
+  spendRollupRepository?: SpendRollupRepository
   /**
    * Whether the LLM observability sink persists the full prompt body with each metric.
    * Defaults to true; set false (via `LLM_RECORD_PROMPTS=false`) to keep the numeric

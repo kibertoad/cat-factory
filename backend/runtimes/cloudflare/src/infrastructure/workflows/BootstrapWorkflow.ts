@@ -10,6 +10,7 @@ import type { Env } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'
 import { logger } from '../observability/logger'
+import { withWorkflowLogExport } from './logExport'
 import { buildWorkflowRuntime } from './runtime'
 
 /** Params passed to a BootstrapWorkflow instance (its id is the bootstrap job id). */
@@ -35,11 +36,15 @@ const STEP_CONFIG = {
  * `jobMaxPolls` is a backstop in case it never reports terminal.
  */
 export class BootstrapWorkflow extends WorkflowEntrypoint<Env, BootstrapWorkflowParams> {
-  override async run(
-    event: WorkflowEvent<BootstrapWorkflowParams>,
-    step: WorkflowStep,
-  ): Promise<void> {
-    const { workspaceId, jobId } = event.payload
+  override run(event: WorkflowEvent<BootstrapWorkflowParams>, step: WorkflowStep): Promise<void> {
+    // The wake's logging bracket: settings applied for an isolate no other entry point has
+    // touched, and a drain before every durable suspension the body below reaches. The body is
+    // a method rather than a closure so `run` stays the bracket and nothing else.
+    return withWorkflowLogExport(this.env, step, (step) => this.drive(event.payload, step))
+  }
+
+  private async drive(params: BootstrapWorkflowParams, step: WorkflowStep): Promise<void> {
+    const { workspaceId, jobId } = params
     // One DI-graph assembly per wake (pure wiring over env bindings, no I/O) shared by
     // every poll in this invocation; a hibernation wake replays `run()` and rebuilds. Built
     // via `buildWorkflowRuntime` so a transient throw here can't kill the instance terminally

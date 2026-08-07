@@ -13,6 +13,7 @@ import type {
   ResolvedAccountSettings,
   ResolvedCatalogEntry,
   RiskPolicyCacheValue,
+  SessionGenerationCacheValue,
   SsoDiscoveryDocument,
   WorkspaceAccessCacheValue,
   WorkspaceSettingsCacheValue,
@@ -100,6 +101,7 @@ export interface AppCachesProfile {
   riskPolicy: GroupCacheProfile
   modelPreset: GroupCacheProfile
   workspaceAccess: GroupCacheProfile
+  userSessionGeneration: GroupCacheProfile
   ssoDiscovery: GroupCacheProfile
 }
 
@@ -230,6 +232,18 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
   // roster/access-mode/account-membership writes invalidate on commit), and it bounds how long a
   // just-revoked member keeps read access on the rare path an invalidation is missed.
   workspaceAccess: { enabled: true, ttlInMsecs: 60_000, maxGroups: 2000, maxItemsPerGroup: 256 },
+  // One session generation per user, grouped AND keyed by user id (one entry per group), read on
+  // every authenticated request. `maxGroups` is therefore sized against CONCURRENTLY ACTIVE users
+  // rather than registered ones, and each entry is a single small number. The 60s TTL is the
+  // freshness backstop only, exactly as on `workspaceAccess` above: a bump invalidates the key on
+  // commit, and the TTL bounds how long a revoked bearer survives on the rare path where an
+  // invalidation is missed (a peer replica with no notification bus wired).
+  userSessionGeneration: {
+    enabled: true,
+    ttlInMsecs: 60_000,
+    maxGroups: 5000,
+    maxItemsPerGroup: 1,
+  },
   // The deployment's discovered SSO provider (metadata + JWKS), grouped AND keyed by issuer
   // URL — so ONE group with one entry, since a deployment configures one provider. An
   // external document we never write: coherence is the TTL plus the key-rotation refetch the
@@ -313,6 +327,12 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   // TTL'd entry would keep granting access after a peer isolate revoked a member. The isolate
   // resolves it live every request — same class as `workspaceSettings`/`accountModelPolicy`.
   workspaceAccess: { ...DEFAULT_APP_CACHES_PROFILE.workspaceAccess, enabled: false },
+  // Pass-through, and the reason is `workspaceAccess`'s verbatim: the session generation is our own
+  // mutable D1 state with no cross-isolate invalidation bus, so a TTL'd entry would go on admitting
+  // a bearer that a peer isolate had already revoked — which on this slice means an offboarded
+  // person keeping a working login for up to a minute after the revocation reported success. The
+  // isolate resolves it live on every authenticated request instead.
+  userSessionGeneration: { ...DEFAULT_APP_CACHES_PROFILE.userSessionGeneration, enabled: false },
   // Stays ENABLED here, unlike every slice above it: the SSO discovery document is EXTERNAL
   // state we never write, and a stale entry self-heals — an ID token signed with a rotated
   // `kid` drops the entry and refetches, so a peer isolate's pre-rotation key set costs one
@@ -556,6 +576,11 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     profile.workspaceAccess,
     options,
   )
+  const userSessionGeneration = buildGroupCache<SessionGenerationCacheValue>(
+    'user-session-generation',
+    profile.userSessionGeneration,
+    options,
+  )
   const ssoDiscovery = buildGroupCache<SsoDiscoveryDocument>(
     'sso-discovery',
     profile.ssoDiscovery,
@@ -579,6 +604,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     riskPolicy,
     modelPreset,
     workspaceAccess,
+    userSessionGeneration,
     ssoDiscovery,
     close: async () => {
       await Promise.all([
@@ -599,6 +625,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
         riskPolicy.close(),
         modelPreset.close(),
         workspaceAccess.close(),
+        userSessionGeneration.close(),
         ssoDiscovery.close(),
       ])
     },

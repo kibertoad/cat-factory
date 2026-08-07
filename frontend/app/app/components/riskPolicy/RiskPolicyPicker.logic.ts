@@ -78,7 +78,13 @@ export function refusedRiskPolicySelections(input: {
   if (!from) return refusals
   const judge = (id: string, to: RiskPolicy | null) => {
     if (!to) return
-    const refusal = refuseRiskPolicySelection({ from, to, actor: input.actor })
+    // The same actor on both sides: a picker only ever offers the library of the ONE workspace the
+    // task is homed in, so both policies are in force there and the editor is the same person to
+    // each. The two-sided shape exists for the cross-home move, which the picker cannot express.
+    const refusal = refuseRiskPolicySelection({
+      from: { policy: from, actor: input.actor },
+      to: { policy: to, actor: input.actor },
+    })
     if (refusal) refusals.set(id, refusal)
   }
   judge('', input.defaultPolicy)

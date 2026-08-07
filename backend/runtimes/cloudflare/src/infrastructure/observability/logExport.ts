@@ -7,22 +7,16 @@ import { type Logger, type OtelConfig, logger, setLogSink } from '@cat-factory/s
 //
 // Node holds one process, so it flushes on a timer. A Worker's module state is per ISOLATE and
 // an isolate is discarded whenever the runtime decides, so a buffered line has no later tick
-// guaranteed to reach it: each of the three HANDLERS (`fetch` / `scheduled` / `queue`) installs
-// the sink for its isolate and flushes what that isolate accumulated as a `waitUntil` after the
-// response. Lines therefore leave in per-invocation batches, which is also why the exporter POSTs
-// the batch it is given rather than holding one open across calls.
+// guaranteed to reach it: every entry point installs the sink for its isolate and drains what
+// that isolate accumulated before it can lose it. Lines therefore leave in batches, which is
+// also why the exporter POSTs the batch it is given rather than holding one open across calls.
 //
-// NOT the three handlers alone as entry points, and the difference is a real gap rather than a
-// wording nicety. This script also exports Workflow entrypoints (`ExecutionWorkflow` and its
-// siblings) and Durable Objects (`WorkspaceEventsHub`, the container DOs), which workerd invokes
-// without going through any handler. They log through the same `@cat-factory/server` logger, but
-// `applyLogSettings` never runs for them, so their isolate has no sink installed and nothing
-// schedules a flush: the durable driver's own lines (a run's advance, a poll failure, a container
-// dispatch) reach the Workers log stream and never the OTLP collector, and they emit at the
-// default level rather than the deployment's `LOG_LEVEL`. Closing it means the entrypoints
-// calling the same install/flush pair the handlers do, which needs a `waitUntil` equivalent for a
-// Workflow step; until then a deployment reading its logs off the collector is reading the
-// REQUEST and CRON paths only, which is the opposite of what "every line" implies.
+// WHEN that drain happens splits the entry points in two, and this file covers only the first
+// half. `fetch`/`scheduled`/`queue` each serve one invocation and then end, so the drain trails
+// it as a `waitUntil` after the response. A `WorkflowEntrypoint` runs for as long as its run
+// takes and hands the isolate back in the middle of that, so a trailing drain reaches only its
+// last wake: the five workflows bracket their wakes instead, through `withWorkflowLogExport`
+// (`workflows/logExport.ts`), and a new one that skips it exports nothing.
 //
 // Cost, stated rather than assumed: one extra OTLP POST per invocation that logged anything,
 // which (the request-logging middleware emits a line per request) is essentially every
@@ -43,9 +37,9 @@ let installedFor: string | null = null
  * deployment has not opted in, in which case no sink is installed and the logging adapter's
  * fan-out stays a null check per line).
  *
- * Idempotent and cheap: all three handlers call it, because a `scheduled` or `queue` invocation
- * can be the FIRST to run in a fresh isolate, exactly like the `LOG_LEVEL` read it sits beside.
- * The Workflow/Durable-Object entrypoints do not (see the module header).
+ * Idempotent and cheap: every entry point calls it, because a `scheduled` or `queue`
+ * invocation can be the FIRST to run in a fresh isolate, exactly like the `LOG_LEVEL` read it
+ * sits beside.
  */
 export function installOtelLogSink(
   otel: OtelConfig,

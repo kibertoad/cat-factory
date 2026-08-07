@@ -1,7 +1,8 @@
 # Reports: design
 
 **Status:** Implemented (see the "Landed code" map at the end).
-**Scope:** account-scoped, admin-gated, read-only. No new table, no migration.
+**Scope:** account-scoped, admin-gated, read-only. One table: the durable cost-attribution
+rollup the long windows read (added after the first cut; see "Durable cost attribution").
 
 ## Problem
 
@@ -26,19 +27,23 @@ What existed was scattered and none of it composed:
 
 - One admin view over an **account**, with an optional narrowing to a single board, that
   slices the same window every way an operator asks about: **spend by model, by agent kind,
-  by board, by service, by repository, by task type, by tracker ticket**, and **run activity
-  by board, by service, by task type**, plus a **spend trend**. Repository and ticket are the
-  TCO axes: what an organisation actually budgets against.
+  by board, by service, by repository, by task type, by tracker ticket, by run**, and **run
+  activity by board, by service, by task type**, plus a **spend trend**. Run, repository and
+  ticket are the TCO axes: what an organisation actually budgets against, and the ones that
+  have to still be answerable a year later (see "Durable cost attribution").
 - **Never conflate real money with flat-rate quota usage.** A subscription harness call's
   cost is illustrative (what the same tokens WOULD have cost on the metered API); the spend
   gate excludes it, and so must every number here.
 - Every breakdown is **one SQL `GROUP BY`**, per the repo's N+1/aggregate ban.
 - Runtime-symmetric (D1 ⇄ Drizzle) with conformance coverage, per the parity rule.
-- **No new persistence.** Everything is already recorded.
+- **No new persistence for the live windows.** Everything the short windows need is already
+  recorded. The long (TCO) windows are the exception, and the reason is in "Durable cost
+  attribution" below: the ledger cannot answer their question durably at all.
 
-## The data, and why no table was added
+## The data the live windows read
 
-Every number comes from tables that already exist in the MAIN store on both runtimes:
+Every number on a `24h` / `7d` window comes from tables that already exist in the MAIN store on
+both runtimes (the long windows read the rollup in the next section instead):
 
 | Source         | Supplies                                                                                      |
 | -------------- | --------------------------------------------------------------------------------------------- |
@@ -54,6 +59,47 @@ Every number comes from tables that already exist in the MAIN store on both runt
 not the board shape), so those spend dimensions join through `execution_id → agent_runs` and
 then to the run's service/block. That join is why the port lives in the main store and
 never touches the telemetry database (a physically separate D1 database on Cloudflare).
+
+## Durable cost attribution: why the long windows read a rollup
+
+The first cut computed every dimension from the ledger at read time. That is correct for "what
+is this costing me now" and wrong for "what did this repository cost us last quarter", because
+each of the three sources it joins is mutable in a way the reader cannot see:
+
+- `token_usage` is pruned to `TOKEN_USAGE_RETENTION_DAYS` (~13 months).
+- `agent_runs`, the row every board-shape dimension reaches the board through, is prunable too;
+  a call whose run is gone falls into the unattributed bucket, which is honest and useless.
+- `services.repo_github_id` and `tasks.linked_block_id` are LIVE links. Re-point a service at a
+  new repository, or re-import an issue under a different ref, and last quarter's answer
+  changes underneath a report that already went into a budget.
+
+So the retention sweep now materialises **`spend_days`** (D1 migration 0084 ⇄ Drizzle
+`spendDays`): one row per `(workspace, UTC day, run, agent kind, provider:model, billing,
+vendor)`, carrying the attribution FROZEN at rollup time: the run, its block and title, its
+service and name, its repository id and `owner/name`, its task type, its ticket ref, and the
+account and board names. A read of it joins nothing.
+
+- **Routing is by window, not by preference**: `24h`/`7d` scan the ledger (millisecond-exact,
+  and a sweep cadence would show there as a missing tail); `30d`/`90d` read the rollup, which is
+  where TCO questions are actually asked. The projection reports `source` and, on the rollup
+  path, `rolledUpThrough`, because an un-materialised rollup and an account that spent nothing
+  produce the same empty breakdown. The SPA renders "no rollup yet" / "the rollup is behind" /
+  "complete through <date>" rather than a confident quarter of zeros, exactly as the operator
+  dashboard does for `platform_run_days`.
+- **One window is answered by ONE store.** Every breakdown partitions the same rows and the
+  totals fold from one of them, so mixing sources inside a window would leave the tiles and the
+  cards describing different data.
+- **The two must agree where they overlap**, or an account's spend would change the moment a
+  reader switched from `7d` to `30d`. The conformance suite asserts every dimension of the
+  rollup equals the ledger's answer over the same window, on the same fixture, including the
+  deterministic multi-ticket pick and the colliding-frame-block fan-out guard, which the fold
+  has to reproduce exactly rather than merely resemble.
+- **A rollup with a window would be pointless**, so it has none: no prune in either facade's
+  sweep, no `deleteOlderThan` on the port, and it is excluded from the workspace-delete cascade.
+  The storage arithmetic that makes that affordable is in
+  [`storage-and-retention.md`](./storage-and-retention.md) §1c.
+- **Freshness is the trade.** On the Worker the sweep is a daily cron, so a `30d` window can be
+  up to a day behind. That is what `rolledUpThrough` is for; it is not hidden.
 
 ## Design decisions
 
@@ -155,7 +201,7 @@ reports the real `since`, and the panel prints it, so the view always says what 
 
 A RUN carries no single agent kind or model: those are per-step facts, which is precisely
 what the spend breakdowns key on. So `ReportActivityDimension` is `workspace | service |
-taskType` while `ReportSpendDimension` adds `model`, `agentKind`, `repo` and `ticket`. The
+taskType` while `ReportSpendDimension` adds `model`, `agentKind`, `repo`, `ticket` and `run`. The
 contract encodes the difference rather than returning empty arrays for combinations that
 cannot exist. `repo` and `ticket` could in principle be activity axes too, but a run is
 already counted under the service that owns its repo, so the second population would answer
@@ -248,8 +294,9 @@ activity cards.
 | Service     | `backend/packages/orchestration/src/modules/reports/`                                                                                 |
 | Controller  | `backend/packages/server/src/modules/reports/ReportsController.ts`                                                                    |
 | Cloudflare  | `backend/runtimes/cloudflare/src/infrastructure/repositories/D1ReportsRepository.ts`                                                  |
-| Node        | `backend/runtimes/node/src/repositories/drizzle/reports.ts`                                                                           |
-| Conformance | `backend/internal/conformance/src/reports-suite.ts` (+ a spec in each runtime)                                                        |
+| Node        | `backend/runtimes/node/src/repositories/drizzle/reports.ts`, `drizzle/spendRollup.ts`                                                 |
+| Rollup port | `backend/packages/kernel/src/ports/spend-rollup.ts` (+ `D1SpendRollupRepository`, migration `0084`)                                   |
+| Conformance | `backend/internal/conformance/src/reports-suite.ts`, `spend-rollup-suite.ts` (+ a spec each, per runtime)                             |
 | SPA         | `frontend/app/app/components/panels/ReportsPanel.vue`, `ReportsSpendBreakdown.vue`, `stores/reports.ts`, `composables/api/reports.ts` |
 
 ## Not done (deliberately)
@@ -264,6 +311,11 @@ activity cards.
   Add that when someone hits the size, not before.
 - **No CSV/JSON export.** The endpoint already returns the whole projection as JSON; an
   export button is a thin SPA addition once someone asks for one.
+- **No backfill of ledger history older than 90 days.** The first rollup pass reaches back the
+  length of the longest report window and no further, so a deployment upgrading into this keeps
+  its older history only for as long as the ledger's own retention holds it. Widening that is a
+  one-constant change plus a slower first few passes; it is not done by default because the
+  catch-up cost lands on a cron nobody is watching.
 - **No per-user spend dimension.** `token_usage.user_id` is denormalized and would make one
   more spend axis trivial, but attributing cost to individuals is a policy decision, not a
   reporting one.

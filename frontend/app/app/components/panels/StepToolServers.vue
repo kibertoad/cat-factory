@@ -15,8 +15,8 @@
 // the Infrastructure window is where declarations are read; rendering it here would put an empty
 // section on every step of every run to say nothing happened. The distinction absent-vs-empty is
 // still carried on the wire and answered by the debug API, which is where a reader asking it looks.
-import type { StepToolServers, ToolServerUnavailableReason } from '~/types/toolServers'
-import { reasonText } from '~/components/panels/StepToolServers.logic'
+import type { StepToolServers } from '~/types/toolServers'
+import { reasonText, remedyText } from '~/components/panels/StepToolServers.logic'
 import { agentKindMeta } from '~/utils/catalog'
 
 const props = defineProps<{
@@ -44,9 +44,19 @@ const dispatchedAs = computed(() =>
     : null,
 )
 
-/** Bind this component's i18n instance onto the pure mapping (see `StepToolServers.logic.ts`). */
-const describeReason = (reason: ToolServerUnavailableReason) =>
-  reasonText(reason, (key, params) => t(key, params ?? {}))
+/**
+ * Each dropped server with both halves of its answer resolved: WHY it was dropped, and what to
+ * change so the next run gets it. Bound here rather than called from the template so the pure
+ * mappings (`StepToolServers.logic.ts`) stay assertable without mounting a component, and so a
+ * retired member's absent remedy is decided once instead of on every re-render.
+ */
+const drops = computed(() =>
+  props.toolServers.unavailable.map((server) => ({
+    ...server,
+    reasonText: reasonText(server.reason, (key, params) => t(key, params ?? {})),
+    remedy: remedyText(server.reason, (key, params) => t(key, params ?? {})),
+  })),
+)
 </script>
 
 <template>
@@ -87,9 +97,9 @@ const describeReason = (reason: ToolServerUnavailableReason) =>
       </li>
     </ul>
 
-    <ul v-if="toolServers.unavailable.length" class="mt-2 space-y-1">
+    <ul v-if="drops.length" class="mt-2 space-y-1.5">
       <li
-        v-for="server in toolServers.unavailable"
+        v-for="server in drops"
         :key="server.id"
         data-testid="step-tool-server-unavailable"
         class="flex items-start gap-1.5 text-[12px] text-slate-300"
@@ -97,7 +107,17 @@ const describeReason = (reason: ToolServerUnavailableReason) =>
         <UIcon name="i-lucide-plug-zap" class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400/80" />
         <span>
           <span class="font-medium text-slate-200">{{ server.label || server.id }}</span>
-          <span class="text-slate-400"> {{ describeReason(server.reason) }}</span>
+          <span class="text-slate-400"> {{ server.reasonText }}</span>
+          <!--
+            Absent for a reason this build no longer recognises: it knows the code was recorded and
+            not what it meant, so there is no surface it can honestly send an operator to.
+          -->
+          <span
+            v-if="server.remedy"
+            data-testid="step-tool-server-remedy"
+            class="mt-0.5 block text-slate-500"
+            >{{ server.remedy }}</span
+          >
         </span>
       </li>
     </ul>

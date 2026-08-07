@@ -1,4 +1,4 @@
-import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block, OpenedPullRequest, RepoFiles, RunRepoContext } from '@cat-factory/kernel'
 import { createRecordingLogger, DomainError } from '@cat-factory/kernel'
@@ -84,7 +84,7 @@ describe('BoardService review-task description folding', () => {
           reviewFocus: 'the token refresh',
         },
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.description).toBe(
       'Review pull request https://github.com/o/r/pull/7. Review focus: the token refresh\n\nExtra notes.',
@@ -102,7 +102,7 @@ describe('BoardService review-task description folding', () => {
         taskType: 'review',
         taskTypeFields: { prNumber: 42 },
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.description).toBe('Review pull request #42.')
   })
@@ -116,7 +116,7 @@ describe('BoardService review-task description folding', () => {
         taskType: 'review',
         taskTypeFields: { prUrl: 'https://github.com/o/r/pull/9', prNumber: 42 },
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.description).toBe('Review pull request https://github.com/o/r/pull/9.')
   })
@@ -132,7 +132,7 @@ describe('BoardService review-task PR validation', () => {
       WS,
       'frame_svc',
       { title: 'Review', taskType: 'review', taskTypeFields },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
 
   it('refuses a PR the provider reports as absent, before creating the block', async () => {
@@ -246,7 +246,7 @@ describe('BoardService review-task PR validation', () => {
       WS,
       'frame_svc',
       { title: 'Build it', taskType: 'feature' },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.taskType).toBe('feature')
     expect(probes).toBe(0)

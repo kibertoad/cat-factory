@@ -152,6 +152,8 @@ export type {
   ReportSpendTrendBucket,
   ReportsRepository,
 } from './reports.js'
+export type { SpendRollupRepository } from './spend-rollup.js'
+export { SPEND_DAYS_ROLLUP } from './spend-rollup.js'
 export type {
   AgentContextFile,
   AgentContextFragment,
@@ -412,6 +414,7 @@ export type {
   ModelPresetCacheValue,
   ResolvedFoundationalService,
   RiskPolicyCacheValue,
+  SessionGenerationCacheValue,
   WorkspaceAccessCacheValue,
   WorkspaceSettingsCacheValue,
 } from './caching.js'
@@ -585,6 +588,7 @@ export type {
   AuditEventRecord,
   AuditEventRepository,
   AuditEventView,
+  AuditLogReader,
   AuditRecorder,
 } from './audit.js'
 export { noopAuditRecorder } from './audit.js'
