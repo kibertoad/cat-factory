@@ -25,7 +25,11 @@ function fakeRepos(): {
     notifications: number | null
     gateOutcomes: number | null
     runDays: number | null
+    auditEvents: number | null
     rollup: [number, number] | null
+    spendRollup: [number, number] | null
+    /** Every pass in the order it ran, so ordering constraints can be asserted. */
+    order: string[]
   }
 } {
   const cutoffs = {
@@ -40,8 +44,12 @@ function fakeRepos(): {
     notifications: null as number | null,
     gateOutcomes: null as number | null,
     runDays: null as number | null,
+    auditEvents: null as number | null,
     /** The [from, to) window the rollup pass recomputed. */
     rollup: null as [number, number] | null,
+    /** The [from, to) window the durable spend rollup materialised. */
+    spendRollup: null as [number, number] | null,
+    order: [] as string[],
   }
   return {
     cutoffs,
@@ -49,6 +57,7 @@ function fakeRepos(): {
       tokenUsageRepository: {
         deleteOlderThan: async (c) => {
           cutoffs.tokenUsage = c
+          cutoffs.order.push('token_usage')
           return 3
         },
       },
@@ -132,6 +141,22 @@ function fakeRepos(): {
           return 1
         },
       },
+      auditEventRepository: {
+        deleteOlderThan: async (c) => {
+          cutoffs.auditEvents = c
+          return 2
+        },
+      },
+      // The durable cost-attribution rollup: a watermark read plus a materialise, and no
+      // prune to fake, since the port has none.
+      spendRollupRepository: {
+        spendRollupWatermark: async () => null,
+        rollupSpendDays: async (from, to) => {
+          cutoffs.spendRollup = [from, to]
+          cutoffs.order.push('spend_days')
+          return 13
+        },
+      },
     },
   }
 }
@@ -146,6 +171,7 @@ function policy(overrides: Partial<RetentionConfig> = {}): RetentionConfig {
     notificationsMs: 90 * DAY,
     gateOutcomesMs: 90 * DAY,
     runDaysMs: 400 * DAY,
+    auditEventsMs: 730 * DAY,
     ...overrides,
   }
 }
@@ -167,6 +193,10 @@ describe('sweepRetention', () => {
     expect(cutoffs.notifications).toBe(now - 90 * DAY)
     expect(cutoffs.gateOutcomes).toBe(now - 90 * DAY)
     expect(cutoffs.runDays).toBe(now - 400 * DAY)
+    // The longest window of the lot, and the one with its own env knob: audit retention answers a
+    // compliance question, so it must never be shortened as a side effect of tuning a telemetry
+    // window.
+    expect(cutoffs.auditEvents).toBe(now - 730 * DAY)
     // The rollup recomputes a short trailing lookback, so a missed pass self-heals instead of
     // leaving a day permanently half-counted.
     expect(cutoffs.rollup).toEqual([now - 3 * DAY, now])
@@ -187,9 +217,55 @@ describe('sweepRetention', () => {
       notifications: 9,
       gateOutcomes: 2,
       runDays: 1,
+      auditEvents: 2,
       runDaysRolledUp: 11,
+      spendDaysRolledUp: 13,
       failedTables: [],
     })
+  })
+
+  it('materialises the durable spend rollup BEFORE pruning the ledger it folds', async () => {
+    // Ordering is the correctness property, not a style preference: the rollup reads
+    // `token_usage`, so a pass that pruned first would drop spend that had never been rolled
+    // up, and `spend_days` is the only durable record of it.
+    const { repos, cutoffs } = fakeRepos()
+    await sweepRetention(repos, policy(), now)
+
+    expect(cutoffs.order.indexOf('spend_days')).toBeLessThan(cutoffs.order.indexOf('token_usage'))
+  })
+
+  it('resumes the durable spend rollup from the sweep watermark, not a fixed lookback', async () => {
+    // A day this rollup misses is missing from the only durable record of it, permanently, so
+    // it walks forward from where the last pass stopped rather than recomputing a fixed
+    // trailing window like the run rollup does.
+    const { repos, cutoffs } = fakeRepos()
+    repos.spendRollupRepository.spendRollupWatermark = async () => now - 10 * DAY
+    await sweepRetention(repos, policy(), now)
+
+    expect(cutoffs.spendRollup).toEqual([now - 10 * DAY, now])
+  })
+
+  it('bounds the spend-rollup catch-up by the SAME ledger window this pass prunes to', async () => {
+    // The catch-up horizon and the ledger prune have to be the same number, or the sweep
+    // steps over days its own next statement is about to delete. Asserted at the facade
+    // because this is the wiring: the walk is pure and cannot know the deployment's window,
+    // so a facade that forgot to thread it would silently fall back to a fixed 90 days and
+    // lose every day between there and the retention edge.
+    const { repos, cutoffs } = fakeRepos()
+    repos.spendRollupRepository.spendRollupWatermark = async () => now - 300 * DAY
+    await sweepRetention(repos, policy({ tokenUsageMs: 395 * DAY }), now)
+
+    expect(cutoffs.spendRollup?.[0]).toBe(now - 300 * DAY)
+    expect(cutoffs.tokenUsage).toBe(now - 395 * DAY)
+  })
+
+  it('backfills the durable spend rollup on a deployment that has never run one', async () => {
+    // 90 days, the longest report window it serves: starting at "today" would under-report
+    // that window for a quarter while looking complete, and the per-pass span caps the query.
+    const { repos, cutoffs } = fakeRepos()
+    await sweepRetention(repos, policy(), now)
+
+    expect(cutoffs.spendRollup).toEqual([now - 90 * DAY, now - 60 * DAY])
   })
 
   it('treats a non-positive window as disabled — no delete, zero reclaimed', async () => {
@@ -218,9 +294,12 @@ describe('sweepRetention', () => {
       notifications: 9,
       gateOutcomes: 2,
       runDays: 1,
-      // The rollup is a WRITE, not a prune: disabling a RETENTION window says "never delete",
-      // never "stop materialising", so it still runs.
+      auditEvents: 2,
+      // The rollups are WRITES, not prunes: disabling a RETENTION window says "never delete",
+      // never "stop materialising", so they still run. `spend_days` has no window to disable
+      // in the first place.
       runDaysRolledUp: 11,
+      spendDaysRolledUp: 13,
       failedTables: [],
     })
   })

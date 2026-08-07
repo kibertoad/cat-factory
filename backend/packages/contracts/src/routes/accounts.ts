@@ -14,6 +14,7 @@ import {
   updateAccountSchema,
 } from '../accounts.js'
 import { accountSettingsViewSchema, updateAccountSettingsSchema } from '../accountSettings.js'
+import { auditEventPageSchema } from '../audit.js'
 import {
   addApiKeySchema,
   apiKeyListResultSchema,
@@ -91,6 +92,49 @@ export const setMemberRolesContract = defineApiContract({
   pathResolver: ({ accountId, userId }) => `/accounts/${accountId}/members/${userId}/roles`,
   requestBodySchema: setMemberRolesSchema,
   responsesByStatusCode: { 200: accountMemberSchema, ...errorResponses },
+})
+
+// Admin-forced session revocation: end every session a member currently holds, without touching
+// their membership or roles. The offboarding lever an account admin needs when access must stop
+// NOW (a lost laptop, a departure processed ahead of the directory), and the deliberate companion
+// to the self-serve `/auth/sessions/revoke-all`.
+//
+// It is its own route rather than a side effect of a role change, because the two answer different
+// questions: roles decide what somebody may do on their NEXT request (the RBAC gate re-reads them,
+// so a downgrade needs no revocation), while this decides whether their existing bearers still
+// authenticate at all. Folding one into the other would sign a person out of every board because
+// their role on one of them was adjusted.
+//
+// Idempotent, and it returns no body: the new generation is an internal number, and reporting it
+// would invite a client to compare values that only the server may compare.
+export const revokeMemberSessionsContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: withObjectKeys(v.object({ accountId: v.string(), userId: v.string() })),
+  pathResolver: ({ accountId, userId }) =>
+    `/accounts/${accountId}/members/${userId}/revoke-sessions`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+})
+
+// ---- audit log ------------------------------------------------------------
+
+// One page of the account's audit log, newest first. Admin-gated for READ as well as write: the
+// log names who did what to whom, which is exactly the roster metadata a non-admin member has no
+// business enumerating.
+//
+// Paginated from day one and by KEYSET, because an audit table only grows: the unbounded SELECT
+// that is merely untidy on a young deployment is the one that times out on the deployment old
+// enough to have something worth auditing. `cursor` is opaque and round-trips verbatim; `limit` is
+// clamped server-side, so a client asking for the whole table gets a page.
+export const listAuditEventsContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: accountIdParams,
+  requestQuerySchema: v.object({
+    cursor: v.optional(v.string()),
+    limit: v.optional(v.pipe(v.unknown(), v.transform(Number), v.number(), v.minValue(1))),
+  }),
+  pathResolver: ({ accountId }) => `/accounts/${accountId}/audit-events`,
+  responsesByStatusCode: { 200: auditEventPageSchema, ...errorResponses },
 })
 
 // ---- invitations ----------------------------------------------------------

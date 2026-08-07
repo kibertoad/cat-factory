@@ -235,7 +235,7 @@ every registry constructor and every type a registration literal names. Do not r
 `@cat-factory/kernel`, `@cat-factory/contracts` or `@cat-factory/prompt-fragments`: those publish at
 EXACT versions, so floating one past what your facade pins resolves a second physical copy and your
 registrations land where nothing reads them
-([ADR 0042](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0042-facade-extension-surface.md)).
+([ADR 0044](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0044-facade-extension-surface.md)).
 
 The **same type can be delivered from the backend** instead of code-shipped: register it on the
 deployment's app-owned `TaskTypeRegistry` and it arrives in the workspace snapshot's

@@ -14,7 +14,7 @@ import type { TasksModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { runInitiatorRole } from '../../http/runAdmission.js'
-import { blockEditActor } from '../../http/workspaceAccess.js'
+import { blockEditAuthority } from '../../http/workspaceAccess.js'
 import { personalGateForBlock, readPersonalPassword } from '../providers/personalCredentialGate.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -92,7 +92,7 @@ export function bugHuntController(): Hono<AppEnv> {
       containerId,
       // Adopting is a member-tier board write, and the start below is an attributed one. Both
       // read the acting tier through their one accessor so the pair cannot disagree (ADR 0037).
-      editor: blockEditActor(c),
+      editor: blockEditAuthority(c),
       createdBy: c.get('user')?.id ?? null,
       pipelineId,
     })

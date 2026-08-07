@@ -18,8 +18,8 @@ The vehicle is the existing **custom task type**, carrying three things instead 
 A task type carrying only `presentation` is still just a work-item classification (a badge and
 a card). The three fields above are what turn it into an operation.
 
-> The design record, including the alternatives rejected and the slices still open, is
-> [`docs/initiatives/reusable-operations.md`](../../docs/initiatives/reusable-operations.md), and
+> The design record, including the alternatives rejected and what is deliberately left open, is
+> [ADR 0042](./adr/0042-reusable-operations.md), and
 > [ADR 0040](./adr/0040-deployment-extension-seam-reachability.md) records what an org build outside
 > this repo could not reach when it registered one against the published packages.
 > Related: [`custom-agents.md`](./custom-agents.md) (the extension trust model these
@@ -274,7 +274,7 @@ fragment source).
   the registration plus this process's own configuration, which is the bar every severity here is
   set by, and the alternative is a reference the library UI badges as live while every run folds the
   frozen body. In MOTHERSHIP mode the node is judged and served by the mothership, which is where
-  the credentials live; see [ADR 0043](./adr/0043-deployment-scoped-documents.md).
+  the credentials live; see [ADR 0045](./adr/0045-deployment-scoped-documents.md).
 
 - **Seeding STATES an unregistered type.** A task created on a process whose package lacks the
   registration is accepted and gets NONE of the operation's fragments, and a later build does not
@@ -664,7 +664,7 @@ foundational-services catalog via its trait), then the coder, the tester and the
 
 ## Not yet done
 
-Tracked in [`docs/initiatives/reusable-operations.md`](../../docs/initiatives/reusable-operations.md):
+Each with its warrant bar stated in [ADR 0042](./adr/0042-reusable-operations.md):
 
 - **A `detect` prefill probe** (the initiative-preset mirror), deferred: operation forms carry
   per-case BUSINESS input, which no repo probe can prefill.

@@ -1,4 +1,4 @@
-# ADR 0043: A deployment owns document credentials, so a code-registered fragment can name a living document
+# ADR 0045: A deployment owns document credentials, so a code-registered fragment can name a living document
 
 - **Status:** Accepted (implemented)
 - **Date:** 2026-08-07
@@ -7,7 +7,7 @@
   `@cat-factory/server`, all three runtime facades) + docs
 
 Closes the one substantive gap [ADR 0040](./0040-deployment-extension-seam-reachability.md) left
-open and [ADR 0042](./0042-facade-extension-surface.md) restated: a `documentRef` on a
+open and [ADR 0044](./0044-facade-extension-surface.md) restated: a `documentRef` on a
 code-registered prompt fragment was refused. Feature context:
 [reusable operations](../reusable-operations.md).
 

@@ -1,4 +1,4 @@
-# ADR 0042: A runtime facade is the whole extension surface a deployment needs
+# ADR 0044: A runtime facade is the whole extension surface a deployment needs
 
 - **Status:** Accepted (implemented)
 - **Date:** 2026-08-07
@@ -107,7 +107,7 @@ while stopping at the top-level shape.
   step. That is the residual gap, and it is bounded by the two derived guards on either side of it.
 - Deployment-owned `documentRef` was refused when this ADR landed, and the guide stated why in terms
   of the actual constraint: the registration is correctly deployment-wide, and what was missing was
-  a deployment-scoped CREDENTIAL HOME. [ADR 0043](./0043-deployment-scoped-documents.md) supplies
+  a deployment-scoped CREDENTIAL HOME. [ADR 0045](./0045-deployment-scoped-documents.md) supplies
   one, so a code-registered fragment may now name a living document for every source except
   `github`, whose credential is a workspace's App installation.
 - The descriptor condition vocabulary stays `equals` / `includes`. A third predicate is a live

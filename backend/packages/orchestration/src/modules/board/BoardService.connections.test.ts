@@ -1,4 +1,4 @@
-import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block } from '@cat-factory/kernel'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
@@ -70,7 +70,7 @@ describe('BoardService service-connection guards', () => {
       {
         serviceConnections: [{ serviceBlockId: 'b', description: 'sends email via it' }],
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(updated.serviceConnections).toEqual([
       { serviceBlockId: 'b', description: 'sends email via it' },
@@ -84,7 +84,7 @@ describe('BoardService service-connection guards', () => {
         WS,
         'a',
         { serviceConnections: [{ serviceBlockId: 'a' }] },
-        UNATTRIBUTED_BLOCK_EDITOR,
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       ),
     ).rejects.toThrow(/itself/)
   })
@@ -96,7 +96,7 @@ describe('BoardService service-connection guards', () => {
         WS,
         'a',
         { serviceConnections: [{ serviceBlockId: 'f' }] },
-        UNATTRIBUTED_BLOCK_EDITOR,
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       ),
     ).rejects.toThrow(/not a service/)
   })
@@ -110,7 +110,7 @@ describe('BoardService service-connection guards', () => {
         title: 'Renamed',
         serviceConnections: [{ serviceBlockId: 'a' }],
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(updates[0]?.patch).toEqual({ title: 'Renamed' })
   })
@@ -130,7 +130,7 @@ describe('BoardService service-connection guards', () => {
       {
         involvedServiceIds: ['provider', 'consumer'],
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(updated.involvedServiceIds).toEqual(['provider', 'consumer'])
     await expect(
@@ -138,7 +138,7 @@ describe('BoardService service-connection guards', () => {
         WS,
         't',
         { involvedServiceIds: ['unrelated'] },
-        UNATTRIBUTED_BLOCK_EDITOR,
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       ),
     ).rejects.toThrow(/not connected/)
   })
@@ -157,7 +157,12 @@ describe('BoardService service-connection guards', () => {
       }),
     ])
     await expect(
-      service.updateBlock(WS, 't', { involvedServiceIds: ['provider'] }, UNATTRIBUTED_BLOCK_EDITOR),
+      service.updateBlock(
+        WS,
+        't',
+        { involvedServiceIds: ['provider'] },
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+      ),
     ).rejects.toThrow(/multi-repo/)
   })
 
@@ -175,7 +180,7 @@ describe('BoardService service-connection guards', () => {
       WS,
       't',
       { involvedServiceIds: ['provider'] },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(updated.involvedServiceIds).toEqual(['provider'])
   })
@@ -186,7 +191,7 @@ describe('BoardService service-connection guards', () => {
       WS,
       'a',
       { title: 'Renamed', involvedServiceIds: ['b'] },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(updates[0]?.patch).toEqual({ title: 'Renamed' })
   })
@@ -236,7 +241,7 @@ describe('BoardService service-connection guards', () => {
       WS,
       't',
       { involvedServiceIds: ['foreign'] },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(updated.involvedServiceIds).toEqual(['foreign'])
   })

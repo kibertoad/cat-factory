@@ -114,7 +114,7 @@ transport + the GitHub token/client seams differ.
 
 `src/index.ts` publishes every app-owned registry constructor, the authoring types and the
 descriptor helpers, so a local deployment's only cat-factory runtime dependency is this facade
-([ADR 0042](../../docs/adr/0042-facade-extension-surface.md)). `test/registry-seams.spec.ts`
+([ADR 0044](../../docs/adr/0044-facade-extension-surface.md)). `test/registry-seams.spec.ts`
 derives both halves from the Node facade rather than re-listing them: the options are a superset of
 its seams, and the exports a superset of its registry constructors. That derivation matters most
 here, because `startLocal` withholds `buildContainer`, so a seam this facade cannot construct is one

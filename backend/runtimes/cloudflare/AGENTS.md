@@ -52,9 +52,13 @@ it only reaches the logger the Worker writes through while both imports resolve 
 - `durable-objects/`, `workflows/`, `containers/`, `runners/`: durable execution + real-time
   - per-run-container machinery.
 - `observability/`: the per-ISOLATE telemetry buffers and their flushes (`operationalFlush.ts`,
-  `logExport.ts`, `platformMetrics.ts`, `cronSweep.ts`). Every entry point installs what its
-  isolate needs and flushes it as a post-response `waitUntil`, because an isolate is discarded
-  without notice and no later tick is guaranteed to reach what it held. Node's twins use timers.
+  `logExport.ts`, `logSettings.ts`, `platformMetrics.ts`, `cronSweep.ts`). Every entry point
+  applies `applyLogSettings` and flushes what its isolate holds as a post-response `waitUntil`,
+  because an isolate is discarded without notice and no later tick is guaranteed to reach what
+  it held. Node's twins use timers. The WORKFLOW entry points cannot use that shape and have
+  their own bracket (`workflows/logExport.ts`): a wake gives its isolate back at every durable
+  wait (a sleep, a park, and a `step.do` attempt that threw into its retry backoff), so it drains
+  in front of each one instead of after a response it does not serve.
 
 Package root (not under `src/`): `migrations/` + `telemetry-migrations/` +
 `sandbox-migrations/` + `migrations-provisioning/` + `audit-migrations/` hold the D1 schema, the
@@ -67,7 +71,7 @@ production.
 
 `src/index.ts` publishes every app-owned registry constructor plus the authoring types, so a
 deployment's only cat-factory runtime dependency is this facade
-([ADR 0042](../../docs/adr/0042-facade-extension-surface.md)). This runtime takes its registries as
+([ADR 0044](../../docs/adr/0044-facade-extension-surface.md)). This runtime takes its registries as
 `overrides: Partial<CoreDependencies>`, so it accepts every seam by construction and the
 reachability guard has nothing to say here; what still binds is constructibility, asserted by
 `test/extension-surface.test.ts`. That list is a SYMMETRY copy of the Node facade's classification

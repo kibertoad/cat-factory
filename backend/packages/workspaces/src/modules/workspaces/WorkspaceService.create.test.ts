@@ -5,9 +5,12 @@ import type {
   EnvironmentHandlerSeeder,
   ExecutionRepository,
   PipelineRepository,
+  RiskPolicy,
+  RiskPolicyRepository,
   Workspace,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
+import { seedRiskPolicies } from '@cat-factory/kernel'
 import { WorkspaceService, type WorkspaceServiceDependencies } from './WorkspaceService.js'
 
 // `create` seeds a new board's deployment-declared environment handlers through a LATE-BOUND
@@ -82,6 +85,53 @@ describe('WorkspaceService.create — environment-handler seeding', () => {
     const snapshot = await service.create(INPUT, null, null)
 
     expect(getEnvironmentHandlerSeeder).toHaveBeenCalled()
+    expect(snapshot.workspace.id).toBe('ws-new')
+  })
+})
+
+describe('WorkspaceService.create: merge-preset seeding', () => {
+  // Which merge policy governs a run may not depend on whether anyone opened the board. The
+  // library used to be written by the first `list()`, so a board reached only over the public
+  // API had none and every run fell through to the refusing built-in fallback.
+  function makeWithPresets() {
+    const rows: RiskPolicy[] = []
+    const riskPolicyRepository = {
+      upsert: vi.fn((_ws: string, preset: RiskPolicy) => {
+        rows.push(preset)
+        return Promise.resolve()
+      }),
+      list: () => Promise.resolve(rows),
+    } as unknown as RiskPolicyRepository
+    return { ...makeService({ riskPolicyRepository }), rows }
+  }
+
+  it('writes the built-in preset library, with exactly one default', async () => {
+    const { service, rows } = makeWithPresets()
+
+    await service.create(INPUT, null, null)
+
+    // Derived from the catalog the service reads, not pinned to a count: adding a built-in is an
+    // ordinary change, and a hard number would fail on it while naming nothing about what broke.
+    expect(rows.map((p) => p.id)).toEqual(seedRiskPolicies().map((p) => p.id))
+    expect(rows.filter((p) => p.isDefault)).toHaveLength(1)
+  })
+
+  it('stamps createdAt in catalog order, which is the order `list` reads back', async () => {
+    const { service, rows } = makeWithPresets()
+
+    await service.create(INPUT, null, null)
+
+    expect(rows.map((p) => p.createdAt)).toEqual(rows.map((p) => p.createdAt).sort((a, b) => a - b))
+    expect(new Set(rows.map((p) => p.createdAt)).size).toBe(rows.length)
+  })
+
+  it('still creates the board when no preset repository is wired', async () => {
+    // Such a deployment has genuinely configured no merge policy; its runs report that rather
+    // than failing to create boards.
+    const { service } = makeService({})
+
+    const snapshot = await service.create(INPUT, null, null)
+
     expect(snapshot.workspace.id).toBe('ws-new')
   })
 })

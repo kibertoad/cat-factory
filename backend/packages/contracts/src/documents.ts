@@ -165,6 +165,95 @@ export function orderSourcesByClaimConfidence<T extends { kind: DocumentSourceKi
   ]
 }
 
+// ---- Freshness: how current a stored projection is ------------------------
+
+/**
+ * Why the platform could not confirm a source-backed document against its source. Each member
+ * needs a DIFFERENT fix, which is the whole reason they are not one value:
+ *
+ * - `not_connected`: the workspace's connection to the source is gone (revoked/disconnected), so
+ *   reconnecting it is the remedy.
+ * - `credentials_unreadable`: the connection could not be READ at all, so the platform never got
+ *   as far as asking the source. Distinct from `not_connected` (a definite "there is no
+ *   connection") because the remedy is the deployment's, not the workspace's, and distinct from
+ *   `source_unreachable` because the source is not the thing that failed. What makes it
+ *   load-bearing rather than defensive is MOTHERSHIP MODE, where a document-source connection is
+ *   sealed with the mothership's key and therefore cannot be served to a node at all: the read
+ *   fails permanently and by design there, and reporting it as an outage would send an operator
+ *   hunting a Figma incident that does not exist.
+ * - `unversioned`: the source answered but exposes no version token to compare, so there is
+ *   nothing to fix. Saying so beats implying the copy was checked.
+ * - `source_unreachable`: the probe or the re-fetch failed (a 403, a rate limit, an outage). The
+ *   stored body is still served; the operator's log line carries the cause.
+ *
+ * It lives HERE rather than in kernel because both sides have to agree about it: the engine
+ * renders the agent-facing warning from it, and the SPA states the same verdict to a human in
+ * their own language off an exhaustive `Record` keyed by these members (the backend does not
+ * localize prose).
+ */
+export const documentFreshnessGapSchema = v.picklist([
+  'not_connected',
+  'credentials_unreadable',
+  'unversioned',
+  'source_unreachable',
+])
+export type DocumentFreshnessGap = v.InferOutput<typeof documentFreshnessGapSchema>
+
+/**
+ * What a confirmed check found had changed in the board's copy. None of the three is a degradation
+ * (all leave the reader on the live revision), but they answer "did my edit land" differently and
+ * the middle one is the reason this is not a boolean:
+ *
+ * - `unchanged`: the source is still at the revision the stored copy was taken from. Nothing was
+ *   fetched and nothing was written.
+ * - `reimported`: the source had moved on, and the copy an agent reads was rewritten from it.
+ * - `revision_only`: the source's revision token moved, but nothing an agent reads differs. This is
+ *   the NORMAL case for a whole-file source with a per-file version: a Figma file's version bumps on
+ *   any edit anywhere in it, including frames a given document does not cover. Folding it into
+ *   `reimported` would tell a person their design was pulled in when their own edit may not have
+ *   been touched at all, and it is exactly the false confidence this vocabulary exists to remove.
+ *
+ * A closed picklist rather than a boolean for the same reason `DocumentFreshnessGap` is: the SPA
+ * keys translated copy off these members, and adding one has to fail a build rather than render an
+ * empty line.
+ */
+export const documentFreshnessChangeSchema = v.picklist([
+  'unchanged',
+  'reimported',
+  'revision_only',
+])
+export type DocumentFreshnessChange = v.InferOutput<typeof documentFreshnessChangeSchema>
+
+/**
+ * What a refresh attempt concluded about one linked document.
+ *
+ * A source-backed document is a PROJECTION of a page someone else keeps editing, so "is the copy
+ * we are about to read the current one" is a question with THREE answers, not two. "No source to
+ * confirm against" and "tried and failed" are different facts: an `upload` has nothing to be stale
+ * relative to, while a Figma file the API refused may well be behind the live design. Only the
+ * second is a warning, and only a `confirmed` verdict can name a revision.
+ */
+export const documentFreshnessSchema = v.variant('status', [
+  /**
+   * Checked against the source, which is now known to be the revision named here. What the check
+   * had to DO to get there is {@link DocumentFreshnessChange}.
+   */
+  v.object({
+    status: v.literal('confirmed'),
+    version: v.string(),
+    change: documentFreshnessChangeSchema,
+  }),
+  /**
+   * Nothing to confirm against: an `upload` body the platform was handed directly, or a source
+   * this deployment has no provider wired for. Not a gap and not a warning, because no fresher
+   * copy exists.
+   */
+  v.object({ status: v.literal('not-applicable') }),
+  /** The platform tried and could not confirm. The stored body stands; see the reason. */
+  v.object({ status: v.literal('unconfirmed'), reason: documentFreshnessGapSchema }),
+])
+export type DocumentFreshness = v.InferOutput<typeof documentFreshnessSchema>
+
 /**
  * The role a workspace+`DocKind`-scoped document link plays for the forward document-authoring
  * track (WS1 items 2–4). A `template` link's parsed sections REPLACE the built-in skeleton for
@@ -398,6 +487,38 @@ export const documentRefReasonSchema = v.picklist([
   'document_ref_claimed_by_other_source',
 ])
 export type DocumentRefReason = v.InferOutput<typeof documentRefReasonSchema>
+
+// ---- Manual refresh (the human dual of the dispatch-time one) --------------
+
+/**
+ * Re-confirm ONE stored document against its source right now: probe, and re-import if the page
+ * moved. The same ladder every dispatch runs, asked for by a person instead of by a run.
+ *
+ * `source` is the NARROW union, so an `upload` is refused at the boundary rather than answered
+ * with a `not-applicable` verdict. There is no provider to ask about a body the platform was
+ * handed directly, and a 200 saying so would leave the caller unable to tell "this document has no
+ * source" from "the check ran and found nothing to compare", which is exactly the distinction the
+ * freshness vocabulary exists to keep.
+ */
+export const refreshDocumentSchema = v.object({
+  source: documentSourceKindSchema,
+  externalId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+})
+export type RefreshDocumentInput = v.InferOutput<typeof refreshDocumentSchema>
+
+/**
+ * The refreshed projection plus what the check concluded about it.
+ *
+ * Both halves, because neither answers on its own: the document carries the (possibly rewritten)
+ * title/excerpt/`syncedAt` a caller has to re-render, and the verdict is the only thing that says
+ * whether the copy was CONFIRMED current. An unchanged document with an `unconfirmed` verdict and
+ * one with a `confirmed` one are byte-for-byte identical rows and opposite facts.
+ */
+export const refreshedDocumentViewSchema = v.object({
+  document: sourceDocumentSchema,
+  freshness: documentFreshnessSchema,
+})
+export type RefreshedDocumentView = v.InferOutput<typeof refreshedDocumentViewSchema>
 
 /** Search a source's catalogue by free text (title/content). */
 export const searchDocumentsSchema = v.object({

@@ -44,6 +44,8 @@ function token(u: TestUser): Promise<string> {
     name: u.login,
     avatarUrl: null,
     exp: Date.now() + 60_000,
+    // The generation a freshly created `users` row carries; these fixtures never revoke.
+    gen: 0,
   }
   return new HmacSigner(SECRET).sign(payload)
 }

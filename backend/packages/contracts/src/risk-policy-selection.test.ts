@@ -17,13 +17,27 @@ const policy = (over: Partial<RolePolicyView> = {}): RolePolicyView => ({
 
 const member: BlockEditActor = { role: 'member', managesPolicy: false }
 const admin: BlockEditActor = { role: 'admin', managesPolicy: true }
+/** An admin who does NOT own the preset library, so the rule still has something to decide. */
+const admin2: BlockEditActor = { role: 'admin', managesPolicy: false }
+const viewer: BlockEditActor = { role: 'viewer', managesPolicy: false }
+
+/**
+ * The SAME-workspace swap, which is what the picker and a `riskPolicyId` patch make: one library,
+ * so one actor answers for both sides. The two-sided cases at the bottom are the cross-home move,
+ * where the editor is a different person to each workspace.
+ */
+const judge = (input: { from: RolePolicyView; to: RolePolicyView; actor: BlockEditActor }) =>
+  refuseRiskPolicySelection({
+    from: { policy: input.from, actor: input.actor },
+    to: { policy: input.to, actor: input.actor },
+  })
 
 describe('refuseRiskPolicySelection: the sandbox arm', () => {
   it('refuses a swap that drops the sandbox the selector was under', () => {
     // The escape hatch this rule exists to close: editing `dryRunRoles` is admin-gated, but
     // pointing the task at a preset that lists nobody is a member-tier board write.
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({ dryRunRoles: ['member'] }),
         to: policy(),
         actor: member,
@@ -34,14 +48,14 @@ describe('refuseRiskPolicySelection: the sandbox arm', () => {
   it('allows a swap INTO a sandbox, and one that keeps it', () => {
     // Narrow-only cuts one way: adopting a stricter policy needs no permission at all.
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy(),
         to: policy({ dryRunRoles: ['member'] }),
         actor: member,
       }),
     ).toBeNull()
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({ dryRunRoles: ['member'] }),
         to: policy({ dryRunRoles: ['member', 'viewer'] }),
         actor: member,
@@ -53,7 +67,7 @@ describe('refuseRiskPolicySelection: the sandbox arm', () => {
     // A preset that sandboxes viewers says nothing about a member, so a member moving off it is
     // dropping nothing of their own.
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({ dryRunRoles: ['viewer'] }),
         to: policy(),
         actor: member,
@@ -65,7 +79,7 @@ describe('refuseRiskPolicySelection: the sandbox arm', () => {
 describe('refuseRiskPolicySelection: the class-rule arm', () => {
   it('refuses a swap that drops a class rule the ROLE layer narrowed', () => {
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({
           classRules: { source: 'always' },
           classRulesByRole: { member: { source: 'never' } },
@@ -81,7 +95,7 @@ describe('refuseRiskPolicySelection: the class-rule arm', () => {
     // less restricted, so there is nothing to refuse. What matters is the effective rule, not
     // which layer of the preset produced it.
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({
           classRules: { source: 'always' },
           classRulesByRole: { member: { source: 'never' } },
@@ -97,7 +111,7 @@ describe('refuseRiskPolicySelection: the class-rule arm', () => {
     // from a strict preset to a lax one is the ordinary per-task choice the library exists for;
     // refusing it here would make preset selection admin-only on deployments with no role policy.
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({ classRules: { source: 'never' } }),
         to: policy({ classRules: { source: 'always' } }),
         actor: member,
@@ -109,7 +123,7 @@ describe('refuseRiskPolicySelection: the class-rule arm', () => {
     // `{ source: 'always' }` under a role, on a base already at `thresholds`, grants nothing and
     // narrows nothing (`narrowMergeClassRule`), so losing it costs the selector nothing either.
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({ classRulesByRole: { member: { source: 'always' } } }),
         to: policy({ classRules: { source: 'always' } }),
         actor: member,
@@ -119,7 +133,7 @@ describe('refuseRiskPolicySelection: the class-rule arm', () => {
 
   it('refuses on ANY narrowed class, not only the first the preset authored', () => {
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({
           classRules: { docs: 'always', schema: 'always' },
           classRulesByRole: { member: { docs: 'never', schema: 'thresholds' } },
@@ -140,7 +154,7 @@ describe('refuseRiskPolicySelection: the submission-allowlist arm', () => {
     // The same escape hatch as the sandbox arm, through the field ADR 0039 added: a member the
     // preset holds to docs cannot re-point the task at one that leaves them unrestricted.
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({ submissionClassesByRole: { member: ['docs'] } }),
         to: policy(),
         actor: member,
@@ -150,7 +164,7 @@ describe('refuseRiskPolicySelection: the submission-allowlist arm', () => {
 
   it('refuses a swap that ADDS a class to the allowlist the selector was under', () => {
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({ submissionClassesByRole: { member: ['docs'] } }),
         to: policy({ submissionClassesByRole: { member: ['docs', 'source'] } }),
         actor: member,
@@ -163,7 +177,7 @@ describe('refuseRiskPolicySelection: the submission-allowlist arm', () => {
   // the setting can express, not a no-op between two falsy values.
   it('refuses moving off an EMPTY allowlist to an absent one', () => {
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({ submissionClassesByRole: { member: [] } }),
         to: policy(),
         actor: member,
@@ -173,14 +187,14 @@ describe('refuseRiskPolicySelection: the submission-allowlist arm', () => {
 
   it('allows a swap that narrows the allowlist, or keeps it', () => {
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({ submissionClassesByRole: { member: ['docs', 'source'] } }),
         to: policy({ submissionClassesByRole: { member: ['docs'] } }),
         actor: member,
       }),
     ).toBeNull()
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({ submissionClassesByRole: { member: ['docs'] } }),
         to: policy({ submissionClassesByRole: { member: ['docs'] } }),
         actor: member,
@@ -192,7 +206,7 @@ describe('refuseRiskPolicySelection: the submission-allowlist arm', () => {
     // Narrow-only cuts one way here too: the selector was under no allowlist, so the move takes
     // capability away rather than granting it.
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy(),
         to: policy({ submissionClassesByRole: { member: ['docs'] } }),
         actor: member,
@@ -202,7 +216,7 @@ describe('refuseRiskPolicySelection: the submission-allowlist arm', () => {
 
   it('reads an allowlist on ANOTHER tier as no restriction on this one', () => {
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({ submissionClassesByRole: { viewer: ['docs'] } }),
         to: policy(),
         actor: member,
@@ -214,7 +228,7 @@ describe('refuseRiskPolicySelection: the submission-allowlist arm', () => {
     // The arms run in the engine's own precedence order, so a swap that drops both restrictions
     // reports the one that bars LANDING rather than the one that only demands review.
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({
           classRules: { source: 'always' },
           classRulesByRole: { member: { source: 'never' } },
@@ -231,7 +245,7 @@ describe('refuseRiskPolicySelection: who it cannot refuse', () => {
   it('never refuses an editor who manages the policy library', () => {
     // An admin can delete `dryRunRoles` outright, so refusing them the swap protects nothing.
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({ dryRunRoles: ['admin'] }),
         to: policy(),
         actor: admin,
@@ -243,7 +257,7 @@ describe('refuseRiskPolicySelection: who it cannot refuse', () => {
     // No role means no role entry can match, so there is no restriction to drop: the same
     // reading an unattributed RUN gets, and the reason a board scan and an API key pass through.
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({ dryRunRoles: ['member', 'viewer', 'admin'] }),
         to: policy(),
         actor: UNATTRIBUTED_BLOCK_EDITOR,
@@ -255,11 +269,96 @@ describe('refuseRiskPolicySelection: who it cannot refuse', () => {
     // Every built-in ships with an empty role layer, so this is the common case: the guard cannot
     // refuse anything until an operator authors a role policy.
     expect(
-      refuseRiskPolicySelection({
+      judge({
         from: policy({ classRules: { docs: 'never' } }),
         to: policy({ classRules: { dependency: 'always' } }),
         actor: member,
       }),
     ).toBeNull()
+  })
+})
+
+describe('refuseRiskPolicySelection: two workspaces, two authorities', () => {
+  // The cross-home move. The two policies come from two libraries, and so do the two roles: a
+  // preset's role layer is a statement about roles in the workspace holding it, so reading the
+  // destination's layer against the role the mover holds at the SOURCE answers nothing anyone
+  // asked. Judging both sides against one pre-resolved actor is what these cases pin shut.
+
+  it('judges each side against the role the editor holds THERE', () => {
+    // Sandboxed as a member at the source, an admin at the destination where only viewers are.
+    // The restriction was real and the move drops it.
+    expect(
+      refuseRiskPolicySelection({
+        from: { policy: policy({ dryRunRoles: ['member'] }), actor: member },
+        to: { policy: policy({ dryRunRoles: ['viewer'] }), actor: admin2 },
+      }),
+    ).toBe('relaxes_role_sandbox')
+    // The mirror: the destination sandboxes the tier the editor holds THERE, so nothing is
+    // dropped, even though its layer says nothing about their source tier. Reading the
+    // destination against the source role would have called this an escape.
+    expect(
+      refuseRiskPolicySelection({
+        from: { policy: policy({ dryRunRoles: ['member'] }), actor: member },
+        to: { policy: policy({ dryRunRoles: ['admin'] }), actor: admin2 },
+      }),
+    ).toBeNull()
+  })
+
+  it('passes when the editor holds no tier at the DESTINATION', () => {
+    // They cannot admit a run in a workspace they are not a member of, so its policy holds
+    // nothing of theirs to drop. Absent is the strictest reading here, not the weakest: read the
+    // other way, moving a task into a service you are not a member of refuses with a sandbox
+    // nobody would have escaped.
+    expect(
+      refuseRiskPolicySelection({
+        from: { policy: policy({ dryRunRoles: ['member'] }), actor: member },
+        to: { policy: policy(), actor: UNATTRIBUTED_BLOCK_EDITOR },
+      }),
+    ).toBeNull()
+  })
+
+  it('passes when the editor holds no tier at the SOURCE', () => {
+    // Nothing held them there, so the move relaxes nothing. What they can do at the destination
+    // is their membership of it, which the move did not grant.
+    expect(
+      refuseRiskPolicySelection({
+        from: { policy: policy({ dryRunRoles: ['member'] }), actor: UNATTRIBUTED_BLOCK_EDITOR },
+        to: { policy: policy(), actor: member },
+      }),
+    ).toBeNull()
+  })
+
+  it('stands down when the editor manages the library on EITHER side', () => {
+    // Owning either library means authoring the outcome outright, so refusing the move is
+    // theatre with a support ticket attached. Both directions, because the source library is as
+    // editable as the destination one.
+    const manager: BlockEditActor = { role: 'member', managesPolicy: true }
+    expect(
+      refuseRiskPolicySelection({
+        from: { policy: policy({ dryRunRoles: ['member'] }), actor: manager },
+        to: { policy: policy(), actor: member },
+      }),
+    ).toBeNull()
+    expect(
+      refuseRiskPolicySelection({
+        from: { policy: policy({ dryRunRoles: ['member'] }), actor: member },
+        to: { policy: policy(), actor: manager },
+      }),
+    ).toBeNull()
+  })
+
+  it('refuses an allowlist the destination widens for the DESTINATION role', () => {
+    // Held to docs-only as a member at the source; a viewer at the destination, where viewers
+    // may also land dependency changes. The widening is only visible when each allowlist is read
+    // against its own side's role.
+    expect(
+      refuseRiskPolicySelection({
+        from: { policy: policy({ submissionClassesByRole: { member: ['docs'] } }), actor: member },
+        to: {
+          policy: policy({ submissionClassesByRole: { viewer: ['docs', 'dependency'] } }),
+          actor: viewer,
+        },
+      }),
+    ).toBe('relaxes_role_submission_allowlist')
   })
 })

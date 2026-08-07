@@ -7,10 +7,16 @@ import { type Logger, type OtelConfig, logger, setLogSink } from '@cat-factory/s
 //
 // Node holds one process, so it flushes on a timer. A Worker's module state is per ISOLATE and
 // an isolate is discarded whenever the runtime decides, so a buffered line has no later tick
-// guaranteed to reach it: every entry point installs the sink for its isolate and flushes what
-// that isolate accumulated as a `waitUntil` after the response. Lines therefore leave in
-// per-invocation batches, which is also why the exporter POSTs the batch it is given rather
-// than holding one open across calls.
+// guaranteed to reach it: every entry point installs the sink for its isolate and drains what
+// that isolate accumulated before it can lose it. Lines therefore leave in batches, which is
+// also why the exporter POSTs the batch it is given rather than holding one open across calls.
+//
+// WHEN that drain happens splits the entry points in two, and this file covers only the first
+// half. `fetch`/`scheduled`/`queue` each serve one invocation and then end, so the drain trails
+// it as a `waitUntil` after the response. A `WorkflowEntrypoint` runs for as long as its run
+// takes and hands the isolate back in the middle of that, so a trailing drain reaches only its
+// last wake: the five workflows bracket their wakes instead, through `withWorkflowLogExport`
+// (`workflows/logExport.ts`), and a new one that skips it exports nothing.
 //
 // Cost, stated rather than assumed: one extra OTLP POST per invocation that logged anything,
 // which (the request-logging middleware emits a line per request) is essentially every

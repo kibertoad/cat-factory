@@ -1,4 +1,4 @@
-import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block, Notification, WorkspaceSettings } from '@cat-factory/kernel'
 import { DEFAULT_WORKSPACE_SETTINGS, getErrorReason } from '@cat-factory/kernel'
@@ -83,13 +83,23 @@ describe('BoardService review-debt friction on task creation', () => {
       settings: { reviewFrictionMode: 'off' },
       open: [openCard('a', NOW), openCard('b', NOW), openCard('c', NOW)],
     })
-    const task = await svc.addTask(WS, 'frame_svc', { title: 'T' }, UNATTRIBUTED_BLOCK_EDITOR)
+    const task = await svc.addTask(
+      WS,
+      'frame_svc',
+      { title: 'T' },
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+    )
     expect(task.id).toBe('task_new')
   })
 
   it('seams unwired ⇒ pass-through (no friction, ever)', async () => {
     const svc = build({ wireSeams: false })
-    const task = await svc.addTask(WS, 'frame_svc', { title: 'T' }, UNATTRIBUTED_BLOCK_EDITOR)
+    const task = await svc.addTask(
+      WS,
+      'frame_svc',
+      { title: 'T' },
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+    )
     expect(task.id).toBe('task_new')
   })
 
@@ -99,7 +109,7 @@ describe('BoardService review-debt friction on task creation', () => {
       open: [openCard('a', NOW), openCard('b', NOW)],
     }
     const err = await build(cfg)
-      .addTask(WS, 'frame_svc', { title: 'T' }, UNATTRIBUTED_BLOCK_EDITOR)
+      .addTask(WS, 'frame_svc', { title: 'T' }, UNATTRIBUTED_BLOCK_EDIT_AUTHORITY)
       .catch((e: unknown) => e)
     expect(getErrorReason(err)).toBe('review_debt_warn')
 
@@ -111,7 +121,7 @@ describe('BoardService review-debt friction on task creation', () => {
         title: 'T',
         acknowledgeReviewDebt: true,
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.id).toBe('task_new')
   })
@@ -130,7 +140,7 @@ describe('BoardService review-debt friction on task creation', () => {
         WS,
         'frame_svc',
         { title: 'T', acknowledgeReviewDebt: true },
-        UNATTRIBUTED_BLOCK_EDITOR,
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       )
       .catch((e: unknown) => e)
     expect(getErrorReason(err)).toBe('review_debt_blocked')

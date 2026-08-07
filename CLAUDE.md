@@ -258,14 +258,14 @@ patterns: [`backend/docs/logging.md`](./backend/docs/logging.md).
   every error envelope), `containerJobLog` (the workflow↔container seam; the same ids ride the job body so
   the harness binds them beside `jobId`), and the durable drivers. A request line logs the PATHNAME only,
   because a query string carries the WS `?ticket=` and OAuth `?code=`.
-- **`LOG_LEVEL`** is applied FIRST in each boot path and an unrecognised value falls back to `info`. The
-  threshold is checked in the adapter, not on the pino instance, because pino children snapshot their
-  parent's level at creation.
+- **`LOG_LEVEL`** is applied FIRST in each boot path, an unrecognised value falling back to `info`; the
+  threshold is checked in the adapter, because a pino CHILD snapshots its parent's level at creation.
 - **Assert the evidence in tests** with kernel's `createRecordingLogger()`.
 - **A SECOND destination is a kernel `LogSink` installed with `setLogSink`** (today the opt-in
   OTLP log export), never a second logger. It gets the `child`-bound fields folded in and sits
-  behind the same level gate; `record` may not throw or block and `flush` may not reject, and
-  DRAINING is the facade's job (Node timer + shutdown flush ⇄ Worker per-invocation `waitUntil`).
+  behind the same level gate; `record` may not throw or block and `flush` may not reject, and the
+  facade DRAINS wherever the buffer's HOLDER can vanish: Node timer + shutdown flush ⇄ Worker
+  per-invocation `waitUntil` ⇄ each isolate-ending wait in a workflow wake, a failed `step.do` too.
 
 ## Operational EVENTS are counted, not just logged
 
@@ -923,11 +923,11 @@ recording an LLM call: [`llm-telemetry.md`](./backend/docs/llm-telemetry.md). Th
   `composeTraceSinks`, never a second recording path; a run's spans are a hierarchy built from DERIVED
   ids with extents folded from recorded stamps, and a span name is a bounded class.
 
-The deployment-level projections (`gate_outcomes`, `platform_run_days`) deliberately live in the MAIN
-store; their rewrite/watermark/derived-id rules:
-[`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md). Remote
-debugging reads (`/api/v1/debug/*`) obey one rule: a response's size is computable BEFORE the request;
-model: [`debug-api.md`](./backend/docs/debug-api.md).
+The deployment-level projections (`gate_outcomes`, `platform_run_days`, plus `spend_days`, the ONE with
+no retention: a TCO table that expires is a slower ledger) live in the MAIN store; their rewrite,
+watermark and derived-id rules: [`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md)
+and [`storage-and-retention.md`](./backend/docs/storage-and-retention.md). Remote debugging reads
+(`/api/v1/debug/*`) obey one rule: size is computable BEFORE the request: [`debug-api.md`](./backend/docs/debug-api.md).
 
 ## Board / service / repo-linkage model
 

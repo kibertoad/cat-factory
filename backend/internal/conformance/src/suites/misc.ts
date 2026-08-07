@@ -29,6 +29,7 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
     describe('recurring pipelines', () => {
       registerRecurringIntakeTests(harness)
       registerTrackerWritebackTests(harness)
+      registerBugTriageEndToEndTest(harness)
     })
 
     registerBugTriagePhaseTests(harness)
@@ -52,8 +53,7 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
 // parallelise across vitest workers.
 
 /**
- * Recurring schedules and the bug-intake reconciliation sweep they fire, through to the
- * built-in `pl_bug_triage` pipeline end to end.
+ * Recurring schedules and the bug-intake reconciliation sweep they fire.
  *
  * Registered from the suite above; split out purely to keep each function within the
  * per-function line budget. Every test is unchanged.
@@ -362,17 +362,27 @@ function registerRecurringIntakeTests(harness: ConformanceHarness): void {
     )
     expect(created.status).toBe(422)
   })
+}
 
+/**
+ * The whole built-in `pl_bug_triage` pipeline, end to end on a schedule.
+ *
+ * Registered beside {@link registerRecurringIntakeTests} rather than inside it: the two share a
+ * describe block and nothing else, and one end-to-end drive is what pushed that function over the
+ * per-function line budget. Split, not raised.
+ */
+function registerBugTriageEndToEndTest(harness: ConformanceHarness): void {
   // Phase H — the whole built-in `pl_bug_triage` pipeline end to end on a schedule: a fire
   // pulls one matching issue (bug-intake), investigates it (bug-investigator → clear ⇒ the
   // clarity gate auto-passes with no park), estimates it (task-estimator), reproduces it
   // (repro-test), fixes it (coder), reviews it (reviewer), tests it (tester-api, greenlights),
-  // and drives the conflicts/ci/merger tail to an auto-merge. This asserts the SEEDED
-  // definition (`availability: 'recurring'`, the exact step order) drives to completion
-  // identically on every runtime — not a hand-built pipeline. The investigator/repro results
-  // ride ONE lenient superset `customResult`: each structured kind reads only its own fields
-  // (both schemas strip the rest), so the single fake result satisfies both.
-  it('drives the built-in pl_bug_triage pipeline end to end: intake → investigate → repro → fix → merge', async () => {
+  // drives the conflicts/ci/merger tail to an auto-merge, and reclaims what it stood up
+  // (disposer). This asserts the SEEDED definition (`availability: 'recurring'`, the exact step
+  // order) drives to completion identically on every runtime — not a hand-built pipeline. The
+  // investigator/repro results ride ONE lenient superset `customResult`: each structured kind
+  // reads only its own fields (both schemas strip the rest), so the single fake result satisfies
+  // both.
+  it('drives the built-in pl_bug_triage pipeline end to end: intake → investigate → repro → fix → merge → dispose', async () => {
     const source = new FakeTaskSourceProvider('jira')
     source.set('99', {
       title: 'Checkout crashes on empty cart',
@@ -448,6 +458,15 @@ function registerRecurringIntakeTests(harness: ConformanceHarness): void {
     expect(step('coder')?.state).toBe('done')
     expect(step('reviewer')?.state).toBe('done')
     expect(step('merger')?.state).toBe('done')
+    // The terminal `disposer` runs AFTER the merge and settles the run. Two things are asserted
+    // because only together do they say the tail is sound: the step finished (a disposer never
+    // fails a run, so a broken one would show up as the run stopping rather than as a red step),
+    // and the merger's `done` SURVIVED a step running after it. The merger owns the block's
+    // terminal status independently of its position, and a regression there would silently
+    // finalize every triage run as `in_progress`. This deployment provisions no environments, so
+    // the step has nothing to reclaim and says so.
+    expect(step('disposer')?.state).toBe('done')
+    expect(step('disposer')?.output).toContain('nothing to reclaim')
     // The reused block was reseeded from the picked issue and finalized `done`.
     const block = await app.blockRepository().get(wsId, blockId)
     expect(block?.status).toBe('done')

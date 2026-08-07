@@ -1,7 +1,8 @@
 # Initiative: observability, logging & error-handling gap analysis
 
-**Status:** Phases 1, 1b, 2 + 4 landed; Phase 3 landed except 3.3; Phase 5 landed for 5.6–5.8;
-Phase 6 open (plus 1.2d, 3.3, 5.1–5.5)
+**Status:** Phases 1, 1b, 2 + 4 landed; Phase 3 landed except 3.3, whose span-PARENTAGE half
+landed separately with the run/step spans (see C1), leaving only the container-boundary
+`traceparent`; Phase 5 landed for 5.6–5.8; Phase 6 open (plus 1.2d, 3.3, 5.1–5.5)
 · **Owner:** core · **Started:** 2026-07-28
 **Audited at:** `main` @ `4b3bab4`. File:line references are against that commit and will drift;
 the anchoring file + symbol names are kept current: search by symbol, not line.
@@ -202,10 +203,21 @@ attribution by `(repoId, prNumber)` fails permanently for that record.
 ### C. Telemetry, tracing, metrics, health
 
 **C1: Tracing covers only LLM generations and container tool spans, as siblings. (P2)**
-_(The tool-span half is now more than a sibling: a call carries its ordinal and (behind the double
-gate) its arguments and result, and the same batch is PERSISTED as the `agent_tool_calls`
-trajectory rather than existing only where a trace sink happened to be wired. The parentage and
-end-to-end-trace halves below are still 3.3.)_
+_(The SIBLING half is FIXED; the coverage half below is what 3.3 still owns. A tool call now
+carries its ordinal and, behind the double gate, its arguments and result, and the same batch is
+PERSISTED as the `agent_tool_calls` trajectory rather than existing only where a trace sink
+happened to be wired. PARENTAGE landed with it: `LlmTraceSink` gained a third emit method,
+`recordRunSpans`, so a settled run emits a root span plus one step span per agent kind, and every
+generation and tool span names its step as parent. The parent ids are DERIVED (`deriveRunSpanId` /
+`deriveStepSpanId`, pure functions of ids every emitter already holds), which is what lets a
+generation recorded by the proxy on one isolate and a tool batch drained by the engine on another
+name the same parent without either having seen it, and a HELPER kind (a gate's `ci-fixer`, a
+Tester's fixer, a `fork-proposer`) hangs under its hosting kind rather than under the root. The
+HTTP boundary also READS an inbound W3C `traceparent` now (kernel `domain/trace-context.ts`) and
+stamps the caller's trace and span onto the log lines that request emits, with a run-derived trace
+winning where a line has both. So the two claims below that are no longer true are "two emit
+methods" and "tool spans carry no parent span id"; the FNV-hashed trace id stands, and so does
+every entry in the not-traced list.)_
 The `LlmTraceSink` port has exactly two emit methods; the OTel/Langfuse mappings export three
 mappers. Trace id is an FNV hash of `executionId`; tool spans carry no parent span id. **Not**
 traced: HTTP server spans on the Hono app, DB queries, pg-boss/CF-queue jobs, workflow steps,
@@ -636,11 +648,11 @@ behaviour changes.
 
 ### Phase 3 (Correlation & request visibility) **3.1 + 3.2 LANDED**
 
-| #   | Step                                                                                                                                                                                                                                                                                                          | Fixes | Sev | Status |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | --- | ------ |
-| 3.1 | Request middleware on the shared Hono app: mint/propagate `x-request-id`, log method/path/status/duration at `info` (4xx at `warn` with the `DomainError` code), bind a request-scoped child logger. Extend `errorHandler` to include the request id in error envelopes so a user-visible error is greppable. | A2    | P1  | ✅     |
-| 3.2 | Thread `executionId`/`workspaceId` into the container job body; the harness binds them into its `log.child` beside `jobId`. Give `ContainerAgentExecutor` a logger and log dispatch/poll transitions. Standardize `logger.child({workspaceId, executionId})` in the workflows/drivers.                        | A3    | P1  | ✅     |
-| 3.3 | Propagate W3C `traceparent` into the job body so harness tool spans nest under the run's trace; add real parent ids to the OTel/Langfuse mappings (change in `src/mapping.ts`, conformity-pinned). HTTP server spans can follow as a separate slice.                                                          | C1    | P2  |        |
+| #   | Step                                                                                                                                                                                                                                                                                                                                      | Fixes | Sev | Status |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | --- | ------ |
+| 3.1 | Request middleware on the shared Hono app: mint/propagate `x-request-id`, log method/path/status/duration at `info` (4xx at `warn` with the `DomainError` code), bind a request-scoped child logger. Extend `errorHandler` to include the request id in error envelopes so a user-visible error is greppable.                             | A2    | P1  | ✅     |
+| 3.2 | Thread `executionId`/`workspaceId` into the container job body; the harness binds them into its `log.child` beside `jobId`. Give `ContainerAgentExecutor` a logger and log dispatch/poll transitions. Standardize `logger.child({workspaceId, executionId})` in the workflows/drivers.                                                    | A3    | P1  | ✅     |
+| 3.3 | Propagate W3C `traceparent` across the CONTAINER boundary (into the job body), so the harness's own spans join the run's trace rather than being re-parented from outside it. HTTP server spans can follow as a separate slice. ~~Add real parent ids to the OTel/Langfuse mappings~~: done separately by the run/step span work, see C1. | C1    | P2  | ◐      |
 
 #### What Phase 3 (3.1 + 3.2) actually shipped
 
@@ -706,10 +718,13 @@ behaviour changes.
   (`LocalContainerRunnerTransport.runInline`) is minted with a synthetic `inline-<rand>` run id
   and its request shape carries no workspace/execution: correlating it is a change to
   `InlineContainerRequest` and its call sites, not to the harness.
-- **3.3 is deliberately still open, and it is not "pass one more id".** A real distributed trace
-  needs a span-id model the platform does not have yet (tool spans carry no parent span id today,
-  and the trace id is an FNV hash of `executionId`), plus a harness change, so it batches
-  naturally with 5.5 rather than paying a second image bump for the id alone.
+- **3.3 is deliberately still open, and it is not "pass one more id".** _(Written when the
+  platform had no span-id model at all. It has one now: the run/step spans of C1 give every
+  generation and tool span a derived parent, so the half this note called the blocker is done.
+  What remains is the CONTAINER boundary, and the reasoning below still holds for it.)_ A real
+  distributed trace needs a span-id model the platform does not have yet (tool spans carry no
+  parent span id today, and the trace id is an FNV hash of `executionId`), plus a harness change,
+  so it batches naturally with 5.5 rather than paying a second image bump for the id alone.
 
 ### Phase 4 (Operational metrics, health, alerting) **LANDED**
 

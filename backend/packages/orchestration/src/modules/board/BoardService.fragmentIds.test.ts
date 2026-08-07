@@ -1,4 +1,4 @@
-import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type {
   Block,
@@ -86,7 +86,7 @@ describe('BoardService fragment pinning at creation', () => {
         taskType: 'feature',
         fragmentIds: ['node.errors', 'react.hooks'],
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.fragmentIds).toEqual(['node.errors', 'react.hooks'])
   })
@@ -96,7 +96,7 @@ describe('BoardService fragment pinning at creation', () => {
       WS,
       'frame_svc',
       { title: 'Feature', taskType: 'feature' },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.fragmentIds).toBeUndefined()
   })
@@ -110,7 +110,7 @@ describe('BoardService fragment pinning at creation', () => {
         taskType: 'document',
         fragmentIds: ['style.anti-llmisms', 'doc.structure'],
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     // The default style ids are present exactly once (deduped) alongside the extra pick.
     expect(new Set(task.fragmentIds)).toEqual(
@@ -124,7 +124,7 @@ describe('BoardService fragment pinning at creation', () => {
       WS,
       'frame_svc',
       { title: 'Doc', taskType: 'document' },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.fragmentIds).toEqual([...DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS])
   })
@@ -135,7 +135,7 @@ describe('BoardService fragment pinning at creation', () => {
       WS,
       'frame_svc',
       { title: 'Review', taskType: 'review' },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.fragmentIds).toEqual(['org.review-checklist'])
   })
@@ -146,7 +146,7 @@ describe('BoardService fragment pinning at creation', () => {
       WS,
       'frame_svc',
       { title: 'Feature', taskType: 'feature' },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.fragmentIds).toEqual(['node.best-practices', 'org.feature-default'])
   })
@@ -159,7 +159,7 @@ describe('BoardService fragment pinning at creation', () => {
         title: 'Feature',
         taskType: 'feature',
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.fragmentIds).toEqual(['node.best-practices', 'node.performance'])
   })
@@ -173,7 +173,7 @@ describe('BoardService fragment pinning at creation', () => {
         taskType: 'feature',
         fragmentIds: ['react.hooks'],
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.fragmentIds).toEqual(['react.hooks'])
   })
@@ -187,7 +187,7 @@ describe('BoardService fragment pinning at creation', () => {
         taskType: 'feature',
         fragmentIds: [],
       },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(task.fragmentIds).toBeUndefined()
   })
@@ -220,7 +220,7 @@ describe('BoardService fragment pinning at creation', () => {
           title: 'Expose orders',
           taskType: 'org:introduce-api',
         },
-        UNATTRIBUTED_BLOCK_EDITOR,
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       )
       expect(task.fragmentIds).toEqual(['org.api-guidelines', 'org.api-auth-requirements'])
     })
@@ -230,7 +230,7 @@ describe('BoardService fragment pinning at creation', () => {
         WS,
         'frame_svc',
         { title: 'Expose orders', taskType: 'org:introduce-api' },
-        UNATTRIBUTED_BLOCK_EDITOR,
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       )
       expect(task.fragmentIds).toEqual([
         'node.best-practices',
@@ -250,7 +250,7 @@ describe('BoardService fragment pinning at creation', () => {
           taskType: 'org:introduce-api',
           fragmentIds: ['react.hooks'],
         },
-        UNATTRIBUTED_BLOCK_EDITOR,
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       )
       expect(task.fragmentIds).toEqual([
         'react.hooks',
@@ -267,7 +267,7 @@ describe('BoardService fragment pinning at creation', () => {
           title: 'Feature',
           taskType: 'feature',
         },
-        UNATTRIBUTED_BLOCK_EDITOR,
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       )
       expect(task.fragmentIds).toBeUndefined()
     })
@@ -282,7 +282,7 @@ describe('BoardService fragment pinning at creation', () => {
         WS,
         'frame_svc',
         { title: 'Expose orders', taskType: 'org:introduce-api' },
-        UNATTRIBUTED_BLOCK_EDITOR,
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       )
       expect(task.fragmentIds).toBeUndefined()
       const warning = lines.find((line) => line.level === 'warn')
@@ -299,7 +299,7 @@ describe('BoardService fragment pinning at creation', () => {
           title: 'Feature',
           taskType: 'feature',
         },
-        UNATTRIBUTED_BLOCK_EDITOR,
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       )
       expect(lines.filter((line) => line.level === 'warn')).toEqual([])
     })
@@ -323,7 +323,7 @@ describe('BoardService fragment pinning at creation', () => {
           title: 'Expose orders',
           taskType: 'org:no-standards',
         },
-        UNATTRIBUTED_BLOCK_EDITOR,
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       )
       expect(task.fragmentIds).toBeUndefined()
       expect(lines.filter((line) => line.level === 'warn')).toEqual([])

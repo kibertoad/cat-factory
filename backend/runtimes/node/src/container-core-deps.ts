@@ -168,6 +168,16 @@ export interface NodeCoreDepsBundle {
  * literal (later spreads still override earlier ones).
  */
 export function assembleNodeCoreDependencies(bundle: NodeCoreDepsBundle): CoreDependencies {
+  // ONE service behind both audit seams. It is built here rather than inline below because the
+  // write seam and the read seam are separate dependencies (a domain service may record but not
+  // paginate; the viewer's controller may paginate but not record), and they must be the same
+  // instance so a row appended through one is the row served by the other.
+  const audit = new AuditService({
+    auditEventRepository: bundle.repos.auditEventRepository,
+    idGenerator: bundle.idGenerator,
+    clock: bundle.clock,
+    logger,
+  })
   return {
     // The structured logger every domain service emits through. Wired at the TOP level (not
     // buried in one of the builders) because its Worker twin sits in the same position — the
@@ -179,12 +189,9 @@ export function assembleNodeCoreDependencies(bundle: NodeCoreDepsBundle): CoreDe
     // The third member of that obligation: where privileged actions are RECORDED for an account
     // admin. Same position, same reason — an un-wired audit log reads as "nobody changed
     // anything", which is the assurance it exists to give.
-    auditRecorder: new AuditService({
-      auditEventRepository: bundle.repos.auditEventRepository,
-      idGenerator: bundle.idGenerator,
-      clock: bundle.clock,
-      logger,
-    }),
+    auditRecorder: audit,
+    // The READ half, for the account-admin viewer. Same instance, different capability.
+    auditLogReader: audit,
     ...buildNodeStoreDeps(bundle),
     ...buildNodeServiceDeps(bundle),
   }
@@ -219,6 +226,8 @@ function selectNodeObservabilityDeps(args: {
     gateOutcomeRepository: repos.gateOutcomeRepository,
     // Cross-cutting usage analytics over `token_usage` + `agent_runs` for the Reports view.
     reportsRepository: repos.reportsRepository,
+    // The durable cost-attribution rollup the same view's long (TCO) windows read.
+    spendRollupRepository: repos.spendRollupRepository,
     // Unified provisioning event log (its own Postgres schema). Threads the recorder
     // into the env services and exposes the read service for the logs controller.
     provisioningLogRepository: repos.provisioningLogRepository,

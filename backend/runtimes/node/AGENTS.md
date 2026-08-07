@@ -75,7 +75,7 @@ constructor beside the option that takes it, plus the authoring types, the descr
 the `*_PIPELINE_ID` constants. A deployment's only cat-factory runtime dependency is this facade,
 because every `@cat-factory/*` package publishes at an EXACT version and reaching below the facade
 for a builder re-creates the two-physical-copies failure the registry seams exist to remove
-([ADR 0042](../../docs/adr/0042-facade-extension-surface.md)).
+([ADR 0044](../../docs/adr/0044-facade-extension-surface.md)).
 
 `test/registry-seams.spec.ts` owns the authoritative classification for ALL THREE facades and holds
 three separate rules: a seam is an option on `NodeContainerOptions`, an option on `StartOptions`

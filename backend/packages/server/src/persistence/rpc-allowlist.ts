@@ -179,9 +179,21 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // The `update` write (profile edit) + the identity/auth reads (`findByIdentity`/`findByEmail`/
   // `getIdentity`/`listIdentities`) stay off — they are the account-lifecycle / login surface, not
   // member display, and the identity reads carry the password secret.
+  //
+  // `sessionGeneration` joins them for a different reason: it is the per-request check that makes
+  // a stateless session revocable, so a mothership-mode node that could not reach it would go on
+  // honouring a bearer the mothership had already revoked — which is the exact failure the whole
+  // slice exists to close, reappearing on the one deployment shape where the user row is remote.
+  // Bound by `selfUser` rather than the looser co-membership `user` rule, because a node only ever
+  // verifies sessions it minted for the ONE mothership user it acts as (`MachinePayload.userId`);
+  // anything else is a node asking about somebody it has no session for. The BUMP stays
+  // mothership-internal (`admin`): reading whether your own access was withdrawn is not the same
+  // capability as withdrawing anyone's, and a node that could reach the write could log an
+  // account's users out at will.
   userRepository: {
     get: { scope: { kind: 'user', arg: 0 } },
     listByIds: { scope: { kind: 'userList', arg: 0 } },
+    sessionGeneration: { scope: { kind: 'selfUser', arg: 0 } },
   },
   // --- Board-load read surface --------------------------------------------------
   // The workspace-scoped reads a `GET /workspaces/:id` snapshot assembles. Each takes the
@@ -300,9 +312,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // (`resolveRiskPolicy` → the merger/requirements gate), reading the workspace default when
     // the task pins none. Workspace-scoped read on the run path.
     getDefault: { scope: { kind: 'workspace', arg: 0 } },
-    // `RiskPolicyService.list` lazily seeds the built-in default for a workspace that has
-    // none (a write triggered by the board-load read). Member-level (the preset CRUD is not
-    // admin-gated), workspace-scoped — the same policy as the block/pipeline mutations above.
+    // Board CREATION writes the built-in preset library, and `RiskPolicyService` repairs a board
+    // that predates that. Member-level (the preset CRUD is not admin-gated), workspace-scoped:
+    // the same policy as the block/pipeline mutations above.
     upsert: { scope: { kind: 'workspace', arg: 0 } },
     // The preset-library editor reads one preset and deletes it. Both take the workspaceId as
     // arg0 and are member-level (the preset CRUD is not admin-gated), completing the merge-preset
@@ -366,7 +378,8 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // gate) reads the workspace's default model preset for the dispatched agent kind.
     getDefault: { scope: { kind: 'workspace', arg: 0 } },
     // `ModelPresetService.list` lazily seeds the built-in defaults for a workspace that has none
-    // (a write the board-load read triggers), exactly like `riskPolicyRepository.upsert` above.
+    // (a write the board-load read triggers), the same member-level workspace-scoped write as
+    // `riskPolicyRepository.upsert` above.
     upsert: { scope: { kind: 'workspace', arg: 0 } },
     // The model-preset library editor's read-one + delete, the mirror of the merge-preset
     // management pair above. Member-level, workspace-scoped.
