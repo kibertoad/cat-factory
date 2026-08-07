@@ -501,7 +501,7 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
     push(
       'tool_retry_loop',
       'warning',
-      `${retryLoop.agentKind}'s '${retryLoop.tool}' call failed ${retryLoop.failures} of ${retryLoop.calls} time(s): the agent kept retrying one tool that mostly did not work. Read that loop in order with GET /debug/runs/:runId/tool-calls?order=trajectory&ok=false.`,
+      `${retryLoop.agentKind}'s '${retryLoop.tool}' call failed ${retryLoop.failures} of ${retryLoop.calls} time(s): the agent kept retrying one tool that mostly did not work. Read that loop in order with GET /debug/runs/:runId/tool-calls?order=trajectory&outcome=error.`,
       { count: retryLoop.failures, agentKind: retryLoop.agentKind },
     )
   }
