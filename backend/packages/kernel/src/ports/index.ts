@@ -534,6 +534,7 @@ export type {
   RunnerJobResult,
   RunnerJobStopOutcome,
   RunnerJobView,
+  RunnerObservedToolServer,
   RunnerReproductionPhase,
   RunnerReproductionReport,
   RunnerSliceReview,

@@ -60,6 +60,131 @@ export interface McpServerSpec {
 }
 
 /**
+ * What the agent's CLI reported about ONE wired tool server when it started up.
+ *
+ * This is the OBSERVED half of the run's tool-server record, and it answers a question the
+ * backend's own half structurally cannot: the dispatch record says why the platform WITHHELD a
+ * tool, while this says a server the platform wired failed to start anyway. A vendor endpoint
+ * that 500s, an `npx` package that no longer resolves, a credential the vendor has since revoked
+ * — every one of those leaves the prompt promising a tool the agent then cannot call, and before
+ * this the only evidence was the agent saying so in prose, if it noticed at all.
+ *
+ * OBSERVED, never decided: nothing here changes what the run does. The harness reports what the
+ * CLI said and the backend records it beside what it decided; no code path branches on it.
+ */
+export interface ObservedMcpServer {
+  /** The server id the CLI named — the same id the backend declared (`--strict-mcp-config`). */
+  id: string
+  status: ObservedMcpStatus
+  /**
+   * How many of the CLI's exposed tools belong to this server (`mcp__<id>__…`).
+   *
+   * ABSENT and `0` are different facts and both are worth having: absent means the CLI listed no
+   * tools at all, so this image observed nothing about the count, while `0` means the CLI listed
+   * its tools and this server contributed none — a server that connected and exposes nothing,
+   * which reads to the agent exactly like a server that was never wired. Never defaulted to 0.
+   */
+  toolCount?: number
+}
+
+/**
+ * The status vocabulary of {@link ObservedMcpServer}, normalised from the CLI's own word.
+ *
+ * A CLOSED list mapped from an OPEN one, which is why `unknown` is a member rather than a reason
+ * to drop the row. The CLI's status strings are a third party's vocabulary and it may add to them;
+ * a server whose status this image cannot name is still a server the CLI knows about, and the
+ * honest report is "it was there, this image could not read its state" rather than silence
+ * (which reads as a server the CLI never mentioned) or a guess at `ready` (which would report a
+ * dead tool as a live one, the precise failure the whole unavailability vocabulary exists to
+ * prevent).
+ */
+export type ObservedMcpStatus = 'ready' | 'failed' | 'needs_auth' | 'unknown'
+
+/**
+ * Map one status word from the CLI onto {@link ObservedMcpStatus}.
+ *
+ * The synonyms are grouped rather than listed one-to-one because the CLI has spelled the same
+ * two states more than one way across versions (`connected`/`ready`, `failed`/`error`), and an
+ * image that pinned the exact spelling would silently start reporting `unknown` for every server
+ * on a CLI upgrade — a regression that looks identical to a genuine outage.
+ */
+function normalizeMcpStatus(value: unknown): ObservedMcpStatus {
+  if (typeof value !== 'string') return 'unknown'
+  const status = value.trim().toLowerCase()
+  if (status === 'connected' || status === 'ready' || status === 'ok') return 'ready'
+  if (status === 'failed' || status === 'error') return 'failed'
+  // The vendor spells the OAuth-required state with a hyphen; the underscore form costs nothing
+  // to accept and is what a JSON-ish vocabulary tends to drift toward.
+  if (status === 'needs-auth' || status === 'needs_auth' || status === 'pending')
+    return 'needs_auth'
+  return 'unknown'
+}
+
+/**
+ * Read the claude-code CLI's startup report (`{"type":"system","subtype":"init"}`) into one
+ * {@link ObservedMcpServer} per server the CLI knows about.
+ *
+ * The CLI announces its resolved session ONCE, before the first model call: which MCP servers it
+ * loaded and with what status, and the flat list of tool names it will expose. Both halves are
+ * read here because neither answers the question alone — a `ready` server exposing no tools is as
+ * useless to the agent as a failed one, and a tool count with no status cannot say why.
+ *
+ * Returns `undefined` when the event names no servers at all, which keeps "this run wired none"
+ * and "this image observed none" from collapsing into an empty list on the backend's record.
+ * Pure, so the parsing is testable without a CLI: {@link runClaudeCode} feeds it the raw event.
+ */
+export function observeClaudeMcpInit(
+  event: Record<string, unknown>,
+): ObservedMcpServer[] | undefined {
+  if (event.type !== 'system' || event.subtype !== 'init') return undefined
+  const reported = event.mcp_servers
+  if (!Array.isArray(reported) || reported.length === 0) return undefined
+  // Counted from the CLI's own tool list rather than from a per-server field, because there is no
+  // per-server field: the CLI flattens every server's tools into one array namespaced by server
+  // id. A missing/non-array list leaves every count ABSENT rather than 0 — see `toolCount`.
+  const toolCounts = countToolsByServer(event.tools)
+  const observed: ObservedMcpServer[] = []
+  const used = new Set<string>()
+  for (const entry of reported) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const record = entry as Record<string, unknown>
+    const id = sanitizeServerId(record.name)
+    // An id this image cannot hold is dropped rather than reported under a mangled name: the
+    // whole row is only useful if it JOINS the backend's declaration, and `--strict-mcp-config`
+    // means every server the CLI loaded came from the config this harness wrote.
+    if (!id || used.has(id)) continue
+    used.add(id)
+    observed.push({
+      id,
+      status: normalizeMcpStatus(record.status),
+      ...(toolCounts ? { toolCount: toolCounts.get(id) ?? 0 } : {}),
+    })
+  }
+  return observed.length ? observed : undefined
+}
+
+/**
+ * Tally the CLI's flat tool list per server id (`mcp__<id>__<tool>`), or `undefined` when the
+ * event carried no list — the distinction {@link ObservedMcpServer.toolCount} preserves.
+ */
+function countToolsByServer(tools: unknown): Map<string, number> | undefined {
+  if (!Array.isArray(tools)) return undefined
+  const counts = new Map<string, number>()
+  for (const tool of tools) {
+    if (typeof tool !== 'string' || !tool.startsWith('mcp__')) continue
+    // `mcp__<id>__<tool>`: split on the FIRST `__` after the prefix only, since a tool name may
+    // itself contain `__` and the id may not (it is `[a-z0-9][a-z0-9_-]*`, matched below).
+    const rest = tool.slice('mcp__'.length)
+    const sep = rest.indexOf('__')
+    if (sep <= 0) continue
+    const id = rest.slice(0, sep)
+    if (!MCP_SERVER_ID_PATTERN.test(id)) continue
+    counts.set(id, (counts.get(id) ?? 0) + 1)
+  }
+  return counts
+}
+
+/**
  * The credential values carried by a run's tool servers, for {@link registerKnownSecrets}. An MCP
  * server that fails to start routinely echoes its own argv or request headers into stderr, and
  * that tail reaches the step's diagnostics — so these have to be scrubbed exactly like the leased

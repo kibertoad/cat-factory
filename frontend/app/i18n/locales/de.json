@@ -2007,6 +2007,16 @@
           "oauthNotConnected": "Verbinden Sie dieses Board im Infrastruktur-Fenster damit. Ein Deployment ohne ENCRYPTION_KEY hat keinen Ort für eine Berechtigung, das muss ein Betreiber also zuerst setzen.",
           "oauthTokenFailed": "Verbinden Sie es im Infrastruktur-Fenster neu, oder warten Sie die Störung des Anbieters ab.",
           "overBudget": "Kürzen Sie, was der Agent deklariert, damit ein Lauf alles mitführen kann."
+        },
+        "observed": {
+          "ready": "gestartet",
+          "readyTools": "{count} Tools",
+          "readyNoTools": "gestartet, keine Tools",
+          "failed": "Start fehlgeschlagen",
+          "needsAuth": "Autorisierung erforderlich",
+          "unknown": "Zustand unbekannt",
+          "notLoaded": "nie geladen",
+          "unattributed": "Die Agenten-CLI meldete einen Server, den dieser Schritt nicht eingebunden hat: {id}."
         }
       },
       "adherence": {

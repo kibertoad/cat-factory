@@ -1443,6 +1443,16 @@
           "oauthNotConnected": "Connectez ce tableau à ce serveur depuis la fenêtre Infrastructure. Un déploiement sans ENCRYPTION_KEY n’a nulle part où conserver une autorisation : un opérateur doit d’abord la définir.",
           "oauthTokenFailed": "Reconnectez-le depuis la fenêtre Infrastructure, ou attendez la fin de la panne du fournisseur.",
           "overBudget": "Réduisez ce que l’agent déclare, pour qu’une exécution puisse tout transporter."
+        },
+        "observed": {
+          "ready": "démarré",
+          "readyTools": "{count} outils",
+          "readyNoTools": "démarré, aucun outil",
+          "failed": "n'a pas démarré",
+          "needsAuth": "autorisation requise",
+          "unknown": "état non reconnu",
+          "notLoaded": "jamais chargé",
+          "unattributed": "La CLI d'agent a signalé un serveur que cette étape n'a pas branché : {id}."
         }
       },
       "adherence": {

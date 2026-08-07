@@ -332,6 +332,11 @@ export async function runAgentInWorkspace(
       // land rather than only in the terminal output. Only the subscription runners fan work out
       // across subagents, so this is the only path that can produce it.
       onSliceReviews: opts.onSliceReviews,
+      // What the CLI reported about the tool servers it loaded. Wired for BOTH subscription
+      // harnesses even though only claude-code's stream carries the report today: the hook is a
+      // pass-through, and a codex run that never calls it leaves the backend's record honestly
+      // absent rather than claiming every server it wired failed to start.
+      onToolServers: opts.onToolServers,
       // Stream this run's per-call telemetry to the job's live drain. The subscription
       // harnesses are the only producers of `callMetrics` (Pi's calls are metered by the LLM
       // proxy as they happen), so this is the only path that needs the hook.

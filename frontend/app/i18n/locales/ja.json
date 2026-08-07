@@ -1443,6 +1443,16 @@
           "oauthNotConnected": "インフラストラクチャ ウィンドウからこのボードを接続してください。ENCRYPTION_KEY のないデプロイには許可を保管する場所がないため、まず運用者がそれを設定する必要があります。",
           "oauthTokenFailed": "インフラストラクチャ ウィンドウから接続し直すか、提供元の障害が収まるのを待ってください。",
           "overBudget": "1 回の実行ですべて運べるよう、このエージェントの宣言を減らしてください。"
+        },
+        "observed": {
+          "ready": "起動済み",
+          "readyTools": "ツール {count} 個",
+          "readyNoTools": "起動済み、ツールなし",
+          "failed": "起動に失敗",
+          "needsAuth": "認可が必要",
+          "unknown": "状態を判別できません",
+          "notLoaded": "読み込まれませんでした",
+          "unattributed": "エージェント CLI が、このステップでは接続していないサーバーを報告しました: {id}。"
         }
       },
       "adherence": {
