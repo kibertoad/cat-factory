@@ -2035,7 +2035,7 @@ export const PUBLIC_TASK_SOURCE_DOCUMENT_SOURCE_VALUES = ['confluence', 'notion'
 export interface PublicTaskTicket {
   /** Length 1..500. */
   ref: string
-  source: 'jira' | 'github' | 'linear' | (string & {})
+  source: 'jira' | 'github' | 'linear' | 'gitlab' | (string & {})
 }
 
 export interface PublicTaskUploadedDocument {

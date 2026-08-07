@@ -4472,7 +4472,8 @@
                 "enum": [
                   "jira",
                   "github",
-                  "linear"
+                  "linear",
+                  "gitlab"
                 ],
                 "type": "string"
               },
