@@ -404,14 +404,60 @@ target + wire ALL its invalidation sites + tests" and should be a small PR.
     both re-introduce the cross-request I/O fault under concurrency. Workflows steps have no
     ExecutionContext: their coherency probes are awaited inline (fine), and detached
     refreshes fall back to `void work` (upstream guarantees the promise settles fulfilled).
+  - **Hoisting has a second consequence, and it is the sharper one: NO promise may cross an
+    invocation.** Adopting background work fixes the promises the loader starts and does not
+    await. It does nothing for the ones it DOES await and SHARES: layered-loader coalesces
+    concurrent same-key loads on a `runningLoads` map, and the coherency tracker coalesces
+    concurrent probes on an `inflight` field. Both live in the isolate-scoped bag, so with a
+    module-scope bag a second concurrent invocation joins the first's promise on every
+    same-key miss. Workerd answers that by DESTROYING the joining invocation ("Cannot perform
+    I/O on behalf of a different request"), at the runtime level, where the joining code
+    cannot catch it: the symptom is a request whose work silently never completes, not an
+    error. The fix is the `currentInvocation` seam: a miss loads for itself unless the
+    in-flight promise belongs to the SAME invocation, and the tracker joins a probe on the
+    same rule. Within one invocation coalescing is kept; where the runtime cannot name the
+    invocation (a Workflows step) nothing coalesces, because two loads that cannot be told
+    apart must be assumed to be different contexts. Node supplies nothing and is unchanged.
+    Because a miss then publishes outside the loader, that publish carries its own local
+    fence, so an invalidation landing mid-load discards the late write rather than
+    resurrecting the entry it dropped.
+    NOTE on evidence: this is the rule layered-loader's own `BackgroundWorkScheduler` docs
+    state, not something reproduced end to end here. The available workerd harness cannot
+    express two concurrent invocations: overlapping `runInDurableObject` calls fault on the
+    test's own cross-context promises, with or without the cache involved, so the harness
+    fails identically either way. What IS pinned, runtime-neutrally in
+    `@cat-factory/caching`'s suite plus a Worker-side wiring test, is the behaviour the seam
+    buys. A genuine end-to-end reproduction needs two concurrent `SELF.fetch` requests
+    through a route that performs a gated cached read.
+  - **The `'*'` epoch probe is opt-in per cache** (`cacheWideInvalidation`). The epoch shard
+    is ONE globally placed Durable Object, so probing it is a cross-colo round trip on the
+    read path; a cache with no `invalidateAll` call site can never move that counter, and the
+    pilot has none. Declared rather than inferred, and an undeclared `invalidateAll` on a
+    coherent cache THROWS, so adding a call site cannot silently under-invalidate peers.
   - **Read-your-write held without weakening conformance.** The write path's local drop
     plus the awaited bump means the same isolate reads fresh immediately; the probe window
     only bounds ANOTHER isolate's staleness (5s on the pilot). `defineCacheSuite` runs
     unchanged on the coherent profile.
+  - **A cached read is not a write BASE.** `WorkspaceSettingsService.update` used to take
+    its merge base from the cached `get` and then upsert the whole row, so any staleness
+    window silently reverted whatever a peer had committed inside it. It reads the base from
+    the repository now. The general rule for the next flip: a read-modify-write of a whole
+    row may not source its base from a bounded-staleness read, on any runtime.
+  - **The TTL of a coherent cache is sized for a FAILED bump, not for the happy path.** Bumps
+    fail open by design, so when one fails peers learn nothing until their entry expires and
+    the TTL, not the 5s window, is the real bound. The pilot row carries `allowInitiatorPat`,
+    `storeAgentContext` and the spend caps, so its coherent TTL is 60s rather than the Node
+    profile's five minutes.
+  - **Hoisting also lengthened the caches that were ALREADY enabled** on the isolate-safe
+    profile, whose numbers were chosen when the bag was rebuilt per invocation. `repoFiles`
+    and `fragmentDocumentBody` now widen their refresh window to cover the whole TTL there,
+    since the claim that keeps them enabled on the Worker is that their probe bounds
+    staleness. Any future flip must re-read the entry's numbers against the isolate lifetime.
   - **Watch before flipping fatter caches**: the probe is one awaited DO subrequest per
     group per window per isolate; `cache.coherency_probe` volume and the hit rate say
     whether the next candidate (`fragmentCatalog`, whose account-tier writes will exercise
-    the `'*'` path; `repoProjection`, which needs Worker read-path threading) pays.
+    the `'*'` path and which must therefore declare `cacheWideInvalidation`;
+    `repoProjection`, which needs Worker read-path threading) pays.
   - **Upstream notes for layered-loader live in
     `docs/internal/layered-loader-upstream-gaps.md`** (what this slice hand-rolled that
     wants a first-class home upstream).

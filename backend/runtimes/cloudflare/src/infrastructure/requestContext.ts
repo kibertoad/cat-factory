@@ -30,3 +30,17 @@ export function runWithExecutionContext<T>(ctx: ExecutionContext, fn: () => T): 
 export function currentExecutionContext(): ExecutionContext | undefined {
   return executionContextStorage.getStore()
 }
+
+/**
+ * The current invocation's IDENTITY, for `@cat-factory/caching`'s per-invocation load scoping.
+ *
+ * It is the same `ExecutionContext` object, read for a different reason: the caching layer
+ * never calls it, it only compares it, so that a cache miss can tell "a load already running
+ * for THIS invocation" (safe to await) from one running for a concurrent invocation in the
+ * same isolate (uncatchably fatal to await). A distinct name because the two uses have
+ * different failure modes and a future invocation token that is not the `ctx` would keep this
+ * one honest.
+ */
+export function currentInvocation(): object | undefined {
+  return executionContextStorage.getStore()
+}

@@ -34,6 +34,7 @@ import type {
 } from 'layered-loader/core'
 import { CACHE_EPOCH_GROUP, GroupGenerationTracker } from './generationCoherency.js'
 import type { CacheGenerationStore } from './generationCoherency.js'
+import { InvocationScopedLoads } from './invocationScopedLoads.js'
 
 /**
  * layered-loader logs its background failures through a pino-shaped `error(obj, msg?)`.
@@ -93,6 +94,19 @@ export interface GroupCacheProfile {
    * exists to prevent.
    */
   coherencyWindowMsecs?: number
+  /**
+   * Declares that this cache's owning service calls {@link GroupCacheHandle.invalidateAll}.
+   *
+   * Only meaningful together with `coherencyWindowMsecs`, and it costs something real: a
+   * cache-wide invalidation rides the reserved epoch counter, whose shard is ONE globally
+   * placed Durable Object, so declaring this puts a cross-colo probe on the cache's read path.
+   * A cache with no `invalidateAll` call site leaves it off and probes only its own group.
+   *
+   * Getting it wrong cannot go quiet: `invalidateAll` on a coherent cache that did NOT declare
+   * it THROWS, because dropping the entries locally while peers keep serving them for a full
+   * TTL is the failure this flag exists to prevent.
+   */
+  cacheWideInvalidation?: boolean
 }
 
 /** One profile entry per named cache in the kernel {@link AppCaches} bag. */
@@ -121,7 +135,15 @@ export interface AppCachesProfile {
 export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
   // One merged catalog per workspace; the key varies only when the workspace's
   // account changes, so a small per-group bound is plenty.
-  fragmentCatalog: { enabled: true, ttlInMsecs: 5 * 60_000, maxGroups: 500, maxItemsPerGroup: 4 },
+  fragmentCatalog: {
+    enabled: true,
+    ttlInMsecs: 5 * 60_000,
+    maxGroups: 500,
+    maxItemsPerGroup: 4,
+    // `FragmentLibraryService` drops the whole cache on an ACCOUNT-tier write (it spans every
+    // workspace in the account), so this cache needs the epoch counter wherever it runs coherent.
+    cacheWideInvalidation: true,
+  },
   // One repo-sourced skill catalog per account, keyed by account id (one entry per group).
   // Invalidation-driven (the skill-source sync drops the group after a change); no version
   // probe — a DB read as the probe would cost as much as the DB read as the load.
@@ -134,6 +156,8 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
     ttlInMsecs: 5 * 60_000,
     maxGroups: 500,
     maxItemsPerGroup: 1,
+    // Same account-tier blast radius as `fragmentCatalog`, which it mirrors.
+    cacheWideInvalidation: true,
   },
   // The live external body of a document-backed fragment, grouped by workspace and
   // keyed per document. Self-verifying: an entry entering the last minute of its TTL
@@ -243,7 +267,15 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
   // invalidation-driven, no version probe. A SHORT 60s TTL: it's the freshness backstop only (the
   // roster/access-mode/account-membership writes invalidate on commit), and it bounds how long a
   // just-revoked member keeps read access on the rare path an invalidation is missed.
-  workspaceAccess: { enabled: true, ttlInMsecs: 60_000, maxGroups: 2000, maxItemsPerGroup: 256 },
+  workspaceAccess: {
+    enabled: true,
+    ttlInMsecs: 60_000,
+    maxGroups: 2000,
+    maxItemsPerGroup: 256,
+    // An account-membership change alters access to potentially every board, so `AccountService`
+    // drops the whole cache rather than enumerating them.
+    cacheWideInvalidation: true,
+  },
   // The deployment's discovered SSO provider (metadata + JWKS), grouped AND keyed by issuer
   // URL — so ONE group with one entry, since a deployment configures one provider. An
   // external document we never write: coherence is the TTL plus the key-rotation refetch the
@@ -265,6 +297,15 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
  * lets sha-pinned reads keep a TTL on the Worker) — its staleness is bounded by the
  * probe, not indefinite. Only `fragmentCatalog`, which mirrors our own mutable D1
  * state, must pass through.
+ *
+ * Every ENABLED entry below is read against ONE FACT that the numbers on the Node profile were
+ * not chosen for: the Worker's bag is one per ISOLATE (`appCachesHost.ts`), so an entry lives
+ * its whole TTL across requests. It used to be rebuilt per invocation, which quietly capped
+ * every one of these at the length of a single wake. The two probe-backed slices therefore
+ * widen their refresh window to cover the full TTL here (see each entry); the two that have no
+ * probe keep their TTL as the entire bound, which their own numbers were already sized as:
+ * `linkedDocumentVersion` at 60s, and `ssoDiscovery` at 15 minutes of EXTERNAL state that
+ * additionally self-heals on an unknown `kid`.
  */
 export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   fragmentCatalog: { ...DEFAULT_APP_CACHES_PROFILE.fragmentCatalog, enabled: false },
@@ -276,7 +317,18 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
     ...DEFAULT_APP_CACHES_PROFILE.foundationalServiceCatalog,
     enabled: false,
   },
-  fragmentDocumentBody: { ...DEFAULT_APP_CACHES_PROFILE.fragmentDocumentBody },
+  fragmentDocumentBody: {
+    ...DEFAULT_APP_CACHES_PROFILE.fragmentDocumentBody,
+    // The refresh window covers the WHOLE TTL here, unlike the Node profile's last minute of
+    // five. The bag is one per ISOLATE, so an entry now lives its full TTL across requests
+    // rather than being rebuilt per wake as it was when these numbers were chosen; with a
+    // window of one minute, the first four served unprobed. Since the claim that keeps this
+    // cache enabled on the Worker at all is "a peer isolate's copy self-heals within the
+    // refresh window", the window has to BE the lifetime. The probe is the source's cheap
+    // version check, deduped per (group, key) while one is in flight, so a read pays at most
+    // one of them and never waits on it.
+    ttlLeftBeforeRefreshInMsecs: DEFAULT_APP_CACHES_PROFILE.fragmentDocumentBody.ttlInMsecs,
+  },
   // Stays ENABLED here for the same reason, one step further: the entry IS an external source's
   // version token, so it is neither our own mutable state nor in need of a probe to re-validate — a
   // peer isolate's copy self-heals when its 60s TTL lapses. Passing through instead would put a live
@@ -293,7 +345,15 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   // file self-heals within the refresh window without an invalidation bus — its staleness is
   // bounded by the probe, not indefinite. The same reasoning that keeps `fragmentDocumentBody`
   // on; only caches of our own mutable D1 state (`fragmentCatalog`/`repoProjection`) pass through.
-  repoFiles: { ...DEFAULT_APP_CACHES_PROFILE.repoFiles },
+  repoFiles: {
+    ...DEFAULT_APP_CACHES_PROFILE.repoFiles,
+    // Same reasoning as `fragmentDocumentBody` above, and this is the slice where it bites
+    // hardest: the entries are repo FILE CONTENT, so an unprobed window is a post-op reading
+    // pre-commit files that the per-invocation bag made impossible. The `headSha` probe is one
+    // cheap call per branch, so covering the whole TTL with it is what makes "bounded by the
+    // probe, not indefinite" true now that entries outlive the request that loaded them.
+    ttlLeftBeforeRefreshInMsecs: DEFAULT_APP_CACHES_PROFILE.repoFiles.ttlInMsecs,
+  },
   // Pass-through for the same reason: the account policy is our own mutable D1 state
   // with no cross-isolate invalidation bus on the Worker.
   accountModelPolicy: { ...DEFAULT_APP_CACHES_PROFILE.accountModelPolicy, enabled: false },
@@ -356,6 +416,15 @@ export const ISOLATE_COHERENT_APP_CACHES_PROFILE: AppCachesProfile = {
   workspaceSettings: {
     ...DEFAULT_APP_CACHES_PROFILE.workspaceSettings,
     coherencyWindowMsecs: 5_000,
+    // The TTL is SHORTER here than the 5 minutes the Node profile carries, and it is sized for
+    // a specific job: it is the backstop for a FAILED bump. The probe window bounds staleness
+    // at ~5s only while the directory is reachable; when a writer's bump fails the mechanism
+    // fails OPEN (the write already committed, so refusing it would be worse) and peers learn
+    // nothing until their entry expires, so the TTL, not the window, is the real bound in
+    // that case. This row carries `allowInitiatorPat`, `storeAgentContext` and the spend caps,
+    // where the failure mode is a revoked permission still being honoured, so the honest
+    // number is the one an operator would accept for a REVOCATION, not for a settings edit.
+    ttlInMsecs: 60_000,
   },
 }
 
@@ -405,6 +474,17 @@ export interface CreateAppCachesOptions {
    * there is scoped to the request that created it. The promise always settles fulfilled.
    */
   scheduleBackgroundWork?: BackgroundWorkScheduler
+  /**
+   * Supplied ONLY by an isolate runtime (the Worker): returns an object identifying the
+   * invocation currently being served, or `undefined` outside a bracketed entry point.
+   *
+   * Its presence switches every cache MISS off layered-loader's shared load path and onto the
+   * per-invocation one in {@link InvocationScopedLoads}, because the bag is one per ISOLATE
+   * and workerd destroys, uncatchably, any invocation that awaits a promise another one
+   * created. Absent (Node, where one process serves every request out of one I/O context) ⇒
+   * the loader's own coalescing is kept, unchanged.
+   */
+  currentInvocation?: () => object | undefined
 }
 
 /**
@@ -425,6 +505,8 @@ interface GroupCacheHandleDeps<T> {
   /** Present only for an enabled cache whose profile carries a `coherencyWindowMsecs`. */
   coherency?: { tracker: GroupGenerationTracker; windowMsecs: number }
   scheduleBackgroundWork?: BackgroundWorkScheduler
+  /** Present only on an isolate runtime; see {@link CreateAppCachesOptions.currentInvocation}. */
+  currentInvocation?: () => object | undefined
 }
 
 class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
@@ -432,6 +514,11 @@ class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
   /** Set only for an enabled cache whose profile carries a `coherencyWindowMsecs`. */
   private readonly coherency: GroupGenerationTracker | undefined
   private readonly metrics: OperationalMetrics
+  /** Set only on an isolate runtime; see {@link CreateAppCachesOptions.currentInvocation}. */
+  private readonly invocationLoads: InvocationScopedLoads<T> | undefined
+  private readonly enabled: boolean
+  /** See {@link GroupCacheProfile.cacheWideInvalidation}. */
+  private readonly cacheWideInvalidation: boolean
 
   constructor(
     private readonly name: string,
@@ -440,6 +527,11 @@ class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
   ) {
     const { notifications, logger, coherency, scheduleBackgroundWork } = deps
     this.metrics = deps.metrics ?? noopOperationalMetrics
+    this.enabled = profile.enabled
+    this.cacheWideInvalidation = profile.cacheWideInvalidation ?? false
+    this.invocationLoads = deps.currentInvocation
+      ? new InvocationScopedLoads<T>(deps.currentInvocation)
+      : undefined
     this.loader = new GroupLoader<T, GroupLoadParams<T>>({
       inMemoryCache: profile.enabled
         ? {
@@ -496,9 +588,17 @@ class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
     coherency?.tracker.register({
       cacheName: name,
       windowMsecs: coherency.windowMsecs,
-      applyRemoteInvalidationForGroup: (group) =>
-        this.loader.applyRemoteInvalidationForGroup(group),
-      applyRemoteInvalidation: () => this.loader.applyRemoteInvalidation(),
+      probesEpoch: this.cacheWideInvalidation,
+      applyRemoteInvalidationForGroup: (group) => {
+        // The invocation-scoped load path publishes outside the loader, so it needs the same
+        // news the loader's own fences get: a peer's invalidation must void an in-flight load.
+        this.invocationLoads?.noteInvalidation()
+        this.loader.applyRemoteInvalidationForGroup(group)
+      },
+      applyRemoteInvalidation: () => {
+        this.invocationLoads?.noteInvalidation()
+        this.loader.applyRemoteInvalidation()
+      },
     })
   }
 
@@ -519,6 +619,15 @@ class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
     // moved, so the loader read below never serves an entry a peer already invalidated more
     // than the window ago. Never rejects (probe failure fails closed inside the tracker).
     if (this.coherency) await this.coherency.ensureFresh(this.name, group)
+    if (this.invocationLoads) {
+      return this.getWithoutCrossInvocationJoin(
+        this.invocationLoads,
+        key,
+        group,
+        load,
+        isStillCurrent,
+      )
+    }
     let loaderRan = false
     const countedLoad = () => {
       loaderRan = true
@@ -532,6 +641,42 @@ class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
     return value
   }
 
+  /**
+   * The isolate-runtime read: the same two tiers as the loader's own `get`, but split so the
+   * MISS half never enters layered-loader's shared load path, whose in-flight map is the one
+   * piece of the isolate-scoped bag that would hand this invocation a promise created by
+   * another (see {@link InvocationScopedLoads}).
+   *
+   * The HIT half still goes through the loader, so an entry entering its refresh window keeps
+   * scheduling the preemptive reload / staleness probe exactly as before: that read only
+   * INSPECTS the in-flight map, it never awaits what it finds there.
+   */
+  private async getWithoutCrossInvocationJoin(
+    invocationLoads: InvocationScopedLoads<T>,
+    key: string,
+    group: string,
+    load: () => Promise<T>,
+    isStillCurrent?: (cached: T) => Promise<boolean>,
+  ): Promise<T> {
+    const params: GroupLoadParams<T> = { key, load, ...(isStillCurrent ? { isStillCurrent } : {}) }
+    // `undefined` is the miss; `null` is a legitimately cached resolved-but-empty value.
+    const cached = this.loader.getInMemoryOnly(params, group)
+    if (cached !== undefined) {
+      this.metrics.increment('cache.hit', { cache: this.name })
+      return cached as T
+    }
+    // NUL-separated, so no group/key pair can ever spell another pair's composite.
+    const composite = `${group}\u0000${key}`
+    const { value, loaded } = await invocationLoads.run(composite, load, (fresh) =>
+      // A pass-through cache has no in-memory tier to publish into: every read loads, which is
+      // what `enabled: false` means. Publishing would be a no-op through the loader's noop
+      // cache, but saying so here keeps the pass-through stance readable.
+      this.enabled ? this.loader.forceSetValueForGroup(key, fresh, group) : Promise.resolve(),
+    )
+    this.metrics.increment(loaded ? 'cache.miss' : 'cache.hit', { cache: this.name })
+    return value
+  }
+
   // Each invalidation bumps the generation directory AFTER the local invalidation resolves,
   // and the write path awaits both, so "invalidate right after the write commits" spans the
   // peers' view too. A single-key invalidation bumps its whole GROUP's counter: coarser than
@@ -541,16 +686,30 @@ class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
   // into a thrown request.
 
   async invalidate(key: string, group: string): Promise<void> {
+    this.invocationLoads?.noteInvalidation()
     await this.loader.invalidateCacheFor(key, group)
     await this.coherency?.noteLocalInvalidation(this.name, group)
   }
 
   async invalidateGroup(group: string): Promise<void> {
+    this.invocationLoads?.noteInvalidation()
     await this.loader.invalidateCacheForGroup(group)
     await this.coherency?.noteLocalInvalidation(this.name, group)
   }
 
   async invalidateAll(): Promise<void> {
+    if (this.coherency && !this.cacheWideInvalidation) {
+      // Refused rather than half-applied: without the declaration peers never probe the epoch
+      // counter, so this call would drop the entries on THIS instance while every other one
+      // kept serving them until their TTL, a coherency hole that looks like a working
+      // invalidation from the caller's side.
+      throw new Error(
+        `cache '${this.name}' called invalidateAll() but its profile does not set ` +
+          `cacheWideInvalidation, so peer instances never probe the epoch counter this would ` +
+          `bump. Set it on the profile entry (it turns the epoch probe on for this cache).`,
+      )
+    }
+    this.invocationLoads?.noteInvalidation()
     await this.loader.invalidateCache()
     await this.coherency?.noteLocalInvalidation(this.name, CACHE_EPOCH_GROUP)
   }
@@ -575,6 +734,9 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     ? new GroupGenerationTracker(options.generationStore, {
         ...(options.logger ? { logger: options.logger } : {}),
         ...(options.operationalMetrics ? { metrics: options.operationalMetrics } : {}),
+        // The probe is a Durable Object round trip, so its in-flight promise is subject to the
+        // same cross-invocation rule as a load: coalesce within one invocation, never across.
+        ...(options.currentInvocation ? { currentInvocation: options.currentInvocation } : {}),
       })
     : undefined
   const fragmentCatalog = buildGroupCache<ResolvedCatalogEntry[]>(
@@ -766,5 +928,6 @@ function buildGroupCache<T>(
     ...(options.scheduleBackgroundWork
       ? { scheduleBackgroundWork: options.scheduleBackgroundWork }
       : {}),
+    ...(options.currentInvocation ? { currentInvocation: options.currentInvocation } : {}),
   })
 }

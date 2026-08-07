@@ -43,6 +43,18 @@ export interface CoherentCacheRegistration {
   cacheName: string
   /** Probe cadence; a group snapshot older than this re-reads the directory before serving. */
   windowMsecs: number
+  /**
+   * Whether this cache ever invalidates CACHE-WIDE, and so needs the reserved epoch group
+   * probed beside its own.
+   *
+   * Declared per cache because the epoch shard is ONE globally-placed Durable Object: probing
+   * it is a cross-colo round trip awaited on the read path of every isolate, and a cache with
+   * no `invalidateAll` call site can never move that counter, so it would be a round trip that
+   * structurally cannot return news. Declared rather than inferred from call sites, and the
+   * handle REFUSES an undeclared `invalidateAll` rather than dropping entries locally while
+   * peers keep serving them.
+   */
+  probesEpoch: boolean
   /** layered-loader's local, fencing, non-publishing group invalidation. */
   applyRemoteInvalidationForGroup(group: string): void
   /** Its cache-wide form, for a moved epoch. */
@@ -54,14 +66,32 @@ interface GroupState {
   lastProbeAt: number | undefined
   /** Last generation this instance has seen or produced, per cache. */
   generations: Map<string, number>
-  /** Concurrent reads coalesce onto one in-flight probe per group. */
-  inflight: Promise<void> | undefined
+  /**
+   * Concurrent reads coalesce onto one in-flight probe per group, but ONLY within the
+   * invocation that started it: the probe is a Durable Object round trip, so on an isolate
+   * runtime its promise is exactly the kind another invocation may not await (see
+   * `invocationScopedLoads.ts` for the full reasoning and the failure mode).
+   */
+  inflight: { invocation: object | undefined; promise: Promise<void> } | undefined
 }
+
+/**
+ * The stand-in invocation for a runtime that has no such concept: one process serving every
+ * request out of one I/O context, so every probe belongs to the same "invocation" and
+ * coalescing behaves exactly as it did before the distinction existed.
+ */
+const SINGLE_INVOCATION: object = { runtime: 'single-context' }
 
 export interface GroupGenerationTrackerOptions {
   logger?: Logger
   metrics?: OperationalMetrics
   now?: () => number
+  /**
+   * Supplied ONLY by an isolate runtime; see `CreateAppCachesOptions.currentInvocation`. It
+   * decides which in-flight probes may be joined. Absent ⇒ every probe coalesces, which is
+   * correct wherever one I/O context serves everything.
+   */
+  currentInvocation?: () => object | undefined
   /**
    * LRU bound on per-group bookkeeping. Evicting a group loses its baselines, which the next
    * probe treats as "possibly missed a bump" and re-invalidates (an over-invalidation, never
@@ -96,6 +126,7 @@ export class GroupGenerationTracker {
   private readonly metrics: OperationalMetrics
   private readonly now: () => number
   private readonly maxTrackedGroups: number
+  private readonly currentInvocation: () => object | undefined
 
   constructor(
     private readonly store: CacheGenerationStore,
@@ -105,6 +136,7 @@ export class GroupGenerationTracker {
     this.metrics = options.metrics ?? noopOperationalMetrics
     this.now = options.now ?? Date.now
     this.maxTrackedGroups = options.maxTrackedGroups ?? 2000
+    this.currentInvocation = options.currentInvocation ?? (() => SINGLE_INVOCATION)
   }
 
   register(registration: CoherentCacheRegistration): void {
@@ -124,7 +156,7 @@ export class GroupGenerationTracker {
     if (this.isStale(groupState, registration.windowMsecs)) {
       probes.push(this.probe(groupState, group))
     }
-    if (this.isStale(this.epoch, registration.windowMsecs)) {
+    if (registration.probesEpoch && this.isStale(this.epoch, registration.windowMsecs)) {
       probes.push(this.probe(this.epoch, CACHE_EPOCH_GROUP))
     }
     if (probes.length > 0) await Promise.all(probes)
@@ -172,10 +204,19 @@ export class GroupGenerationTracker {
   }
 
   private probe(state: GroupState, group: string): Promise<void> {
-    state.inflight ??= this.runProbe(state, group).finally(() => {
-      state.inflight = undefined
+    const invocation = this.currentInvocation()
+    const inflight = state.inflight
+    // `undefined` never matches, not even itself: an invocation the runtime cannot name is one
+    // this probe cannot prove it shares an I/O context with, and joining wrongly is fatal where
+    // starting a second probe merely costs a round trip.
+    if (inflight && invocation !== undefined && inflight.invocation === invocation) {
+      return inflight.promise
+    }
+    const promise = this.runProbe(state, group).finally(() => {
+      if (state.inflight?.promise === promise) state.inflight = undefined
     })
-    return state.inflight
+    state.inflight = { invocation, promise }
+    return promise
   }
 
   private async runProbe(state: GroupState, group: string): Promise<void> {
@@ -183,7 +224,7 @@ export class GroupGenerationTracker {
     try {
       const fetched = await this.store.getGenerations(group)
       this.metrics.increment('cache.coherency_probe', { scope })
-      for (const registration of this.registrations.values()) {
+      for (const registration of this.affectedBy(scope)) {
         const generation = fetched[registration.cacheName] ?? 0
         // Counters are monotonic, so only a HIGHER generation is a peer's change: a lower one
         // can only be a store read racing this instance's own concurrent bump. An evicted or
@@ -203,7 +244,7 @@ export class GroupGenerationTracker {
       // Fail CLOSED: invalidate locally and leave the window stale, so reads load fresh (and
       // re-probe) until the directory answers again: pass-through performance, zero staleness.
       this.metrics.increment('cache.coherency_probe_failure', { scope })
-      for (const registration of this.registrations.values()) {
+      for (const registration of this.affectedBy(scope)) {
         this.applyInvalidation(registration, scope, group)
       }
       this.log?.warn('cache coherency probe failed; affected reads load fresh', {
@@ -212,6 +253,17 @@ export class GroupGenerationTracker {
         ...describeError(error),
       })
     }
+  }
+
+  /**
+   * The caches one probe speaks for. A GROUP probe speaks for every registered cache (they
+   * share the group's shard, which is what makes the batched read worth doing); an EPOCH probe
+   * speaks only for those that declared a cache-wide invalidation path, so a cache that opted
+   * out is neither invalidated by it nor has its baseline moved by it.
+   */
+  private affectedBy(scope: 'group' | 'epoch'): CoherentCacheRegistration[] {
+    const all = [...this.registrations.values()]
+    return scope === 'epoch' ? all.filter((registration) => registration.probesEpoch) : all
   }
 
   private applyInvalidation(

@@ -81,3 +81,42 @@ disabled, as this repo's isolate-safe profile configures) reports
 `cacheId: undefined` for its notification publishes, and a host adopting that work cannot
 attribute it. A loader-level id, independent of whether the in-memory tier exists, would
 fix the attribution and also give error handlers a stable name.
+
+## 6. In-flight load coalescing has no per-request scope on isolate runtimes
+
+`scheduleBackgroundWork` (16.1) solves the promises the loader starts and does not await.
+It leaves the ones it awaits and SHARES: `AbstractGroupCache.getAsyncOnlyResolved` returns
+an existing `runningLoads` entry to any caller asking for the same key, and `runningLoads`
+belongs to the loader.
+
+Those two facts do not compose on Cloudflare. The `BackgroundWorkScheduler` docs correctly
+require the loader to be built at isolate scope ("a loader rebuilt per request is a memo,
+not a cache"), but at isolate scope the loader outlives every request, so on a same-key
+miss request B is handed a promise created while serving request A. Workerd's answer is to
+DESTROY B with "Cannot perform I/O on behalf of a different request", raised at the runtime
+level where B's own `try`/`catch` cannot see it, so the symptom is a request whose work
+silently never completes rather than an error anyone can route.
+
+This repo works around it by not using the loader's load path on that runtime at all: a
+read serves from `getInMemoryOnly` and a miss loads out of band, coalesced against a
+host-supplied invocation identity and published with `forceSetValueForGroup` behind a
+locally-held fence (`backend/packages/caching/src/invocationScopedLoads.ts`). The fence is
+the part that most wants to be upstream: `forceSetValueForGroup` is not guarded by
+`backgroundWriteFences`, so an out-of-band publish has to re-implement the resurrection
+protection the loader already owns for its own load path.
+
+What would close it, roughly in order of preference:
+
+1. A `loadScope?: () => object | undefined` (or similar) on `CommonCacheConfig`, so
+   `runningLoads` is keyed by `(scope, key)` and cross-request joins simply cannot form.
+   The same scope would apply to any other shared in-flight state the library grows.
+2. Failing that, a documented `coalesceLoads: false`, which trades the dedup for safety and
+   at least keeps hosts on the library's own load path.
+3. Either way, a FENCED public set (`forceSetValueForGroup` honouring the background write
+   fences, or a variant that does), so a host that must publish out of band is not
+   re-implementing invalidation safety from outside.
+
+Worth noting for the docs regardless: the `BackgroundWorkScheduler` note explains the
+isolate-scope requirement and the `waitUntil` adoption, and a reader reasonably concludes
+that adopting background work is the whole edge-runtime story. The load-coalescing half is
+the sharper hazard and is currently unmentioned.

@@ -54,7 +54,12 @@ it only reaches the logger the Worker writes through while both imports resolve 
     directory (per-group generation counters); its Worker-side client, the module-scope
     app-cache bag (one per ISOLATE, profile picked by the `CACHE_GENERATIONS` binding) and
     the `ctx.waitUntil` adopter for loader background work live in `appCachesHost.ts` +
-    `requestContext.ts` (the ambient ExecutionContext every entry point brackets).
+    `requestContext.ts` (the ambient ExecutionContext every entry point brackets). That
+    ambient is read for TWO things, and the second is the trap: `currentExecutionContext`
+    adopts background work, and `currentInvocation` scopes the cache's IN-FLIGHT promises,
+    because a bag that outlives the invocation would otherwise let one request await a
+    promise another created, which workerd punishes by destroying the joining request
+    UNCATCHABLY. Anything else hoisted to module scope owes the same question.
 - `observability/`: the per-ISOLATE telemetry buffers and their flushes (`operationalFlush.ts`,
   `logExport.ts`, `platformMetrics.ts`, `cronSweep.ts`). Every entry point installs what its
   isolate needs and flushes it as a post-response `waitUntil`, because an isolate is discarded

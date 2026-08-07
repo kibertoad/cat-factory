@@ -62,10 +62,40 @@ invalidation already happened; peers heal at the TTL, and
 `cache.coherency_bump_failure` is the visible trace). `createAppCaches` refuses a
 profile that sets a window on an enabled cache with no `generationStore` wired.
 
-On isolate runtimes the loaders' detached background work (preemptive refreshes,
-probes) must be adopted by the current request: pass `scheduleBackgroundWork` and hand
-the promise to `ctx.waitUntil` (the Worker reads the ambient ExecutionContext off an
-AsyncLocalStorage; see `runtimes/cloudflare/src/infrastructure/appCachesHost.ts`).
+A coherent cache also declares whether it ever invalidates CACHE-WIDE, with
+`cacheWideInvalidation`. Only a cache that does needs the reserved `'*'` epoch counter
+probed beside its own group, and that shard is ONE globally placed Durable Object, so a
+cache with no `invalidateAll` call site would be paying a cross-colo round trip that
+structurally cannot return news. It is declared rather than inferred, and `invalidateAll`
+on a coherent cache that did not declare it THROWS: dropping the entries here while every
+peer keeps serving theirs to the TTL is exactly the hole the flag exists to close.
+
+## Isolate runtimes: nothing may cross an invocation
+
+Two rules, both from the same fact: on Cloudflare, I/O is scoped to the invocation that
+created it, and an invocation that touches another's I/O is **destroyed** with "Cannot
+perform I/O on behalf of a different request", at the runtime level, where no `catch` in
+the joining code can see it.
+
+- **Background work is adopted by the CURRENT invocation.** Pass `scheduleBackgroundWork`
+  and hand the promise to `ctx.waitUntil`, resolving the context at call time rather than
+  closing over one (the Worker reads the ambient ExecutionContext off an
+  AsyncLocalStorage; see `runtimes/cloudflare/src/infrastructure/appCachesHost.ts`).
+- **In-flight promises are never shared between invocations.** This is what
+  `currentInvocation` is for. The bag is one per ISOLATE, which is what makes its entries
+  caches rather than per-invocation memos, but it also puts layered-loader's in-flight
+  load map (and the coherency probe's) in reach of a second concurrent invocation on every
+  same-key miss. Supplying `currentInvocation` moves the MISS path onto per-invocation
+  loads: reads still serve from the isolate-scoped in-memory tier and a hit still schedules
+  its preemptive refresh, but a miss loads for itself rather than joining a promise it
+  cannot safely await. Within one invocation the coalescing is kept, and an invocation the
+  runtime cannot name (a Workflows step, which has no ExecutionContext) coalesces with
+  nothing, because two loads that cannot be told apart must be assumed to be different
+  contexts. Node supplies nothing here and keeps layered-loader's own load path unchanged.
+
+Because a miss now publishes outside the loader, that publish is fenced locally: an
+invalidation landing while a load is in flight discards the late write instead of
+resurrecting the entry it dropped (the caller still receives the value it loaded).
 
 `fragmentDocumentBody` is the first self-verifying cache that stays **enabled** on the
 Worker even without the directory: its entries are external Confluence/Notion/GitHub/…

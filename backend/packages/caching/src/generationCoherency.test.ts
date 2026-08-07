@@ -40,10 +40,13 @@ class FakeGenerationStore implements CacheGenerationStore {
   bumps = 0
   failReads = false
   failBumps = false
+  /** Which groups were probed, so a test can say WHICH shard a read did or did not touch. */
+  readonly readGroups: string[] = []
 
   async getGenerations(group: string): Promise<Record<string, number>> {
     if (this.failReads) throw new Error('directory down')
     this.reads += 1
+    this.readGroups.push(group)
     return Object.fromEntries(this.generations.get(group) ?? [])
   }
 
@@ -61,7 +64,11 @@ class FakeGenerationStore implements CacheGenerationStore {
   }
 }
 
-/** A coherent fragment-catalog entry; `windowMsecs: 0` means "probe on every read". */
+/**
+ * A coherent fragment-catalog entry; `windowMsecs: 0` means "probe on every read".
+ * `cacheWideInvalidation` matches the real profile: this is the cache whose account-tier writes
+ * call `invalidateAll`, which is what puts it on the reserved `'*'` epoch shard.
+ */
 function coherentProfile(windowMsecs: number): Partial<AppCachesProfile> {
   return {
     fragmentCatalog: {
@@ -70,6 +77,7 @@ function coherentProfile(windowMsecs: number): Partial<AppCachesProfile> {
       maxGroups: 10,
       maxItemsPerGroup: 4,
       coherencyWindowMsecs: windowMsecs,
+      cacheWideInvalidation: true,
     },
   }
 }
@@ -186,6 +194,47 @@ describe('generation coherency (pull invalidation across two bags)', () => {
     await reader.fragmentCatalog.get('k', 'ws1', load)
     await reader.fragmentCatalog.get('k', 'ws2', load)
     expect(readerLoads).toBe(4)
+  })
+
+  it('a cache that declares no cache-wide invalidation never probes the epoch shard', async () => {
+    // The epoch shard is ONE globally placed Durable Object, so a cache with no `invalidateAll`
+    // call site must not put a cross-colo round trip it can learn nothing from on its reads.
+    const store = new FakeGenerationStore()
+    const caches = createAppCaches({
+      profile: {
+        workspaceSettings: {
+          enabled: true,
+          ttlInMsecs: 60_000,
+          maxGroups: 10,
+          maxItemsPerGroup: 1,
+          coherencyWindowMsecs: 0,
+        },
+      },
+      generationStore: store,
+    })
+    await caches.workspaceSettings.get('ws1', 'ws1', async () => ({ settings: null }))
+    // Its own group only, where the two-round-trip sibling above also probed `'*'`.
+    expect(store.reads).toBe(1)
+    expect(store.readGroups).toEqual(['ws1'])
+  })
+
+  it('refuses invalidateAll on a coherent cache that did not declare it', async () => {
+    // Left to proceed it would drop this instance's entries while every peer kept serving
+    // theirs to the TTL: a coherency hole that reads as a working invalidation from here.
+    const store = new FakeGenerationStore()
+    const caches = createAppCaches({
+      profile: {
+        workspaceSettings: {
+          enabled: true,
+          ttlInMsecs: 60_000,
+          maxGroups: 10,
+          maxItemsPerGroup: 1,
+          coherencyWindowMsecs: 0,
+        },
+      },
+      generationStore: store,
+    })
+    await expect(caches.workspaceSettings.invalidateAll()).rejects.toThrow(/cacheWideInvalidation/)
   })
 
   it('fences a load already in flight when the invalidation arrives (16.1 behaviour)', async () => {

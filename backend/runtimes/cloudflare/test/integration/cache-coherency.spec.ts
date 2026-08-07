@@ -8,6 +8,7 @@ import {
   workerAppCaches,
 } from '../../src/infrastructure/appCachesHost'
 import type { Env } from '../../src/infrastructure/env'
+import { runWithExecutionContext } from '../../src/infrastructure/requestContext'
 
 /**
  * The Worker half of the pull-coherency mechanism, on real workerd: the
@@ -156,5 +157,66 @@ describe('workerAppCaches host', () => {
     await bag.workspaceSettings.get(group, group, load)
     await bag.workspaceSettings.get(group, group, load)
     expect(loads).toBe(2)
+  })
+  // The Worker-specific half of the cross-invocation rule (`invocationScopedLoads.ts`): the bag
+  // outlives every invocation, so a cache MISS may not join a load another invocation started:
+  // workerd destroys the joining invocation with "Cannot perform I/O on behalf of a different
+  // request", at the runtime level, where no `catch` can see it. What only this facade can pin
+  // is that the host actually supplies `currentInvocation`; the semantics it buys are pinned
+  // runtime-neutrally in `@cat-factory/caching`'s own suite.
+  it('does not coalesce two loads that belong to different invocations', async () => {
+    const bag = workerAppCaches(env)
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let loads = 0
+    const load = async () => {
+      loads += 1
+      await gate
+      return { settings: null }
+    }
+    // Outside any entry-point bracket there is no invocation to attribute a load to, and an
+    // invocation the runtime cannot name is one this read cannot prove it shares a context with.
+    const both = Promise.all([
+      bag.workspaceSettings.get('cachegen_split', 'cachegen_split', load),
+      bag.workspaceSettings.get('cachegen_split', 'cachegen_split', load),
+    ])
+    // Both reads clear their coherency probe and park in the load before the gate opens;
+    // releasing earlier would let the first finish and PUBLISH, turning the second into a hit
+    // and hiding whichever answer this test is after.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    release()
+    await both
+    expect(loads).toBe(2)
+  })
+
+  it('still coalesces two loads inside ONE bracketed invocation', async () => {
+    const bag = workerAppCaches(env)
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let loads = 0
+    const load = async () => {
+      loads += 1
+      await gate
+      return { settings: null }
+    }
+    const ctx = {
+      waitUntil: () => {},
+      passThroughOnException: () => {},
+    } as unknown as ExecutionContext
+    const both = runWithExecutionContext(ctx, () =>
+      Promise.all([
+        bag.workspaceSettings.get('cachegen_same', 'cachegen_same', load),
+        bag.workspaceSettings.get('cachegen_same', 'cachegen_same', load),
+      ]),
+    )
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    release()
+    await both
+    // Joining is safe here: both promises were created while serving the same invocation.
+    expect(loads).toBe(1)
   })
 })

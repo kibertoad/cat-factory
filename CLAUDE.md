@@ -355,9 +355,9 @@ Register a new entry on the interface, in `AppCachesProfile` plus both profiles,
 
 - **Invalidate on EVERY write** right after it commits. Invalidation, not the TTL, is the coherence story;
   a cached read with no invalidation on its write path is a bug.
-- **On the Worker, OUR OWN mutable state is pass-through (`enabled: false`) or GENERATION-PROBED
-  (`coherencyWindowMsecs` + the `CACHE_GENERATIONS` Durable Object directory, bumped by every
-  invalidation), never a bare TTL: only immutable or sha/version-probed entries keep one without it.
+- **On the Worker, our own mutable state is pass-through or GENERATION-PROBED** (`coherencyWindowMsecs`
+  + the `CACHE_GENERATIONS` DO directory), never a bare TTL. The bag is one per ISOLATE, so no
+  in-flight promise may cross invocations (workerd kills the joiner UNCATCHABLY): `currentInvocation`.
 - **Wrap a nullable value** (`{ value: T | null }`): layered-loader treats bare `null` as unresolved.
 
 ## Concurrency, idempotency, replay

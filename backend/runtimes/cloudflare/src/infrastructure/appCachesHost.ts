@@ -9,7 +9,7 @@ import { logger, operationalMetrics } from '@cat-factory/server'
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { CacheGenerationDirectory } from './durable-objects/CacheGenerationDirectory'
 import type { Env } from './env'
-import { currentExecutionContext } from './requestContext'
+import { currentExecutionContext, currentInvocation } from './requestContext'
 
 /**
  * The {@link CacheGenerationStore} the coherent profile probes and bumps: a thin fetch-RPC
@@ -90,6 +90,11 @@ export function workerAppCaches(env: Env): AppCaches {
     logger,
     operationalMetrics,
     scheduleBackgroundWork: workerBackgroundWorkScheduler,
+    // The bag outlives every invocation, so a cache MISS may not join a load another
+    // invocation started: workerd destroys the joining invocation with an UNCATCHABLE
+    // "Cannot perform I/O on behalf of a different request". Supplying this switches the
+    // miss path onto per-invocation loads (see `@cat-factory/caching`).
+    currentInvocation,
     ...(env.CACHE_GENERATIONS
       ? { generationStore: new DurableObjectCacheGenerationStore(env.CACHE_GENERATIONS) }
       : {}),
