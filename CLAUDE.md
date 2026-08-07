@@ -827,12 +827,12 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
   after the claim and the local write); the terminal edges are at-least-once with a `<runId>:<event>` dedupe
   id a receiver dedupes on, never on the body. [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).
 
-**PR verification report**: the ENGINE keeps a report of captured facts on EVERY pull request a run
-opened (own-service plus each peer repo's) as a managed marker-delimited section of the body
-(idempotent, no persisted state). Traps: it is an engine HOOK on step settlement composing from state
-already in memory (never a re-probe); a peer's copy WITHHOLDS the own-service-only sections, so the
-write-avoidance cache keys per TARGET or peers keep a stale report. Doc:
-[`pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
+**Run evidence reductions**: the ENGINE keeps a verification report of captured facts on EVERY pull request
+a run opened (marker-delimited body section, idempotent, no persisted state) and reduces the same evidence
+into the OUTCOME summary the SPA card renders and `/api/v1/runs/:runId/outcome` serves. Traps: composing is
+a settlement HOOK reading in-memory state, never a re-probe; a peer's copy WITHHOLDS the own-service-only
+sections, so the write-avoidance cache keys per TARGET; a rule BOTH reductions state (which testers count,
+regressions, coverage) lives in contracts' `run-evidence.ts`. Doc: [`pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
 
 **Environment disposal**: the `disposer` step reclaims what the run provisioned where its author placed
 it, and every teardown path re-probes afterwards. Trap: a teardown call returning is not the environment

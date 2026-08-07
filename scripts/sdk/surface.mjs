@@ -104,6 +104,7 @@ const SURFACE = {
 
   // ---- Run evidence (`read` scope; what a run PROVED, for a consumer that has to judge it) --
   getPublicRunReport: { group: 'evidence', method: 'getReport' },
+  getPublicRunOutcome: { group: 'evidence', method: 'getOutcome' },
   listPublicRunArtifacts: { group: 'evidence', method: 'listArtifacts' },
   getPublicArtifactBlob: { group: 'evidence', method: 'downloadArtifact' },
 
@@ -207,7 +208,7 @@ export const GROUP_DOCS = {
   debug:
     "A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs.",
   evidence:
-    "What a run proved: the engine's verification report and the artifacts it captured, bytes included.",
+    "What a run proved: the engine's verification report, the outcome summary behind it, and the artifacts it captured, bytes included.",
   keys: "The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted).",
 }
 

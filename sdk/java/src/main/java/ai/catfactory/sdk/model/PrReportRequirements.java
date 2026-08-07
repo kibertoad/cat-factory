@@ -19,6 +19,7 @@ import org.jspecify.annotations.Nullable;
  * @param regressions the {@code regressions} field.
  * @param status the {@code status} field.
  * @param total the {@code total} field.
+ * @param unmatchedVerdicts May be absent entirely.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PrReportRequirements(
@@ -37,7 +38,10 @@ public record PrReportRequirements(
 
     @JsonProperty("status") PrReportCiStatus status,
 
-    @JsonProperty("total") Double total
+    @JsonProperty("total") Double total,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("unmatchedVerdicts") @Nullable Double unmatchedVerdicts
 ) {
 
     /** A new builder for {@link PrReportRequirements}. */
@@ -60,6 +64,7 @@ public record PrReportRequirements(
         private @Nullable Double regressions;
         private @Nullable PrReportCiStatus status;
         private @Nullable Double total;
+        private @Nullable Double unmatchedVerdicts;
 
         /** Set {@code entries}. */
         public Builder entries(@Nullable List<PrReportRequirementsEntry> entries) {
@@ -109,9 +114,15 @@ public record PrReportRequirements(
             return this;
         }
 
+        /** Set {@code unmatchedVerdicts}. */
+        public Builder unmatchedVerdicts(@Nullable Double unmatchedVerdicts) {
+            this.unmatchedVerdicts = unmatchedVerdicts;
+            return this;
+        }
+
         /** Build the {@link PrReportRequirements}. */
         public PrReportRequirements build() {
-            return new PrReportRequirements(entries, met, notCovered, notMet, note, regressions, status, total);
+            return new PrReportRequirements(entries, met, notCovered, notMet, note, regressions, status, total, unmatchedVerdicts);
         }
     }
 }

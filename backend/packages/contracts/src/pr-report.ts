@@ -39,7 +39,7 @@ import { vcsProviderSchema } from './routes/auth.js'
  * (see the header), so a bump means "there is more here than there was", and a consumer written
  * against an older number keeps reading the fields it knows.
  */
-export const PR_VERIFICATION_REPORT_VERSION = 7
+export const PR_VERIFICATION_REPORT_VERSION = 8
 
 /**
  * How much of one captured command log the report carries, per command.
@@ -725,6 +725,20 @@ export const prReportRequirementsSchema = v.object({
   regressions: v.number(),
   /** Total requirements in the spec (`met + notMet + notCovered`). */
   total: v.number(),
+  /**
+   * Verdicts the tester returned against ids this service's `spec/` does not carry.
+   *
+   * The join is spec-anchored, so such a verdict has no row to land on and used to be dropped
+   * without trace: the section then reported fewer rulings than the tester made, and a reader
+   * comparing the two could only read the difference as a miscount. Non-zero says the spec moved
+   * on under the tester (the promotion post-op rewrites it on this very branch), or that the
+   * tester keyed its verdicts by something other than the spec's ids, two different things to
+   * go and fix, and neither of them is this table being wrong.
+   *
+   * Optional so a consumer written against version ≤ 7 keeps parsing; absent reads as 0, which
+   * is the value every report before this one would have carried.
+   */
+  unmatchedVerdicts: v.optional(v.number()),
 })
 export type PrReportRequirements = v.InferOutput<typeof prReportRequirementsSchema>
 

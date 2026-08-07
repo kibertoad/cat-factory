@@ -1,4 +1,5 @@
 import {
+  getPublicRunOutcomeContract,
   getPublicRunReportContract,
   listPublicRunArtifactsContract,
   type PublicRunArtifact,
@@ -14,8 +15,8 @@ import { blobResponseHeaders } from '../artifacts/imageArtifacts.js'
 import { loadScopedRun } from './decisions/scope.js'
 import { authorize, authorizeOrThrow, refuse } from './publicApiAuth.js'
 
-// The public run-EVIDENCE surface: a run's verification report, the binary artifacts it
-// captured, and those artifacts' bytes.
+// The public run-EVIDENCE surface: a run's verification report, its outcome summary, the binary
+// artifacts it captured, and those artifacts' bytes.
 //
 // All three were reachable only from a browser session, which made a consumer whose job is to
 // JUDGE a run (a trial harness deciding whether to accept a change, an evaluation pipeline
@@ -45,10 +46,12 @@ import { authorize, authorizeOrThrow, refuse } from './publicApiAuth.js'
 //     force a caller that already holds an id (handed to it by the list) to remember where it
 //     came from, and would let a mismatched pair form a request that looks well-typed and 404s
 //     for a reason the caller cannot see.
-//  4. **The report is the ENGINE's, composed not stored.** It is built on read from the run's
-//     persisted state by the same code that writes the pull-request section, so the two can
-//     never disagree. It costs the reads that composition costs; there is no snapshot to serve
-//     instead, and a stored one would go stale the moment a gate settled.
+//  4. **Both reductions are the ENGINE's, composed not stored.** Each is built on read from the
+//     run's persisted state: the report by the same code that writes the pull-request section, and
+//     the outcome summary by the same pure reduction the SPA's outcome card renders. So no reader
+//     of either can be told something the surface it was named after would deny. They cost the
+//     reads composition costs; there is no snapshot to serve instead, and a stored one would go
+//     stale the moment a gate settled.
 //  5. **Bytes leave through a hand-mounted route.** An image response is not JSON, so the blob
 //     endpoint cannot be a route contract; it is documented by hand in the OpenAPI generator and
 //     hand-written in each SDK transport, the same treatment the two SSE endpoints get.
@@ -122,6 +125,23 @@ export function publicEvidenceController(): Hono<AppEnv> {
     // outside they are the same thing: there is nothing to report on under that id.
     if (!report) throw runNotFound(runId)
     return c.json(report, 200)
+  })
+
+  // The run's OUTCOME summary: the same reduction the app's outcome card renders, for a consumer
+  // reporting what shipped to a person rather than auditing it. Composed from the same run
+  // evidence as the report above, through the same loader and the same coverage rules.
+  buildHonoRoute(app, getPublicRunOutcomeContract, async (c) => {
+    const gate = await authorize(c, 'read')
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const { workspaceId } = gate.auth
+    const runId = c.req.valid('param').runId
+    if (!(await loadScopedRun(c, workspaceId, runId))) throw runNotFound(runId)
+    const outcome = await c.get('container').executionService.composeRunOutcome(workspaceId, runId)
+    // Same 404 as the report's, for the same reason: from outside, "no such run this key may
+    // read" and "the run's task is gone" are one fact: there is nothing to summarise under
+    // that id.
+    if (!outcome) throw runNotFound(runId)
+    return c.json(outcome, 200)
   })
 
   // The run's captured artifacts (metadata). Unpaged: the capture path caps how many one run may
