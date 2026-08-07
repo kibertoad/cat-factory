@@ -15,6 +15,7 @@ import type {
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ciGate, conflictsGate, docQualityGate, postReleaseHealthGate } from './gates.js'
 import {
+  applyGateProviders,
   wireCiStatusProvider,
   wireDocQualityProvider,
   wireMergeabilityProvider,
@@ -48,6 +49,29 @@ describe('typed provider registry (the gate wiring seam)', () => {
   it('require throws on an unwired token (the guard replacing the old `!`)', () => {
     const token = defineProviderToken<unknown>('never-wired')
     expect(() => providerRegistry.require(token)).toThrow(/not wired/)
+  })
+
+  it('every built-in gate reports itself wired once its provider is, and not before', () => {
+    // Asserted for EVERY gate rather than for the two whose probes are exercised below, because
+    // `wired()` is read for both answers and each has its own failure: a gate stuck on false is
+    // a silent pass-through on a deployment that configured it, and a gate stuck on true reaches
+    // `requireProvider` inside its own `probe()` and throws mid-run instead of skipping. Derived
+    // from the registry, so a gate added to `registerBuiltinGates` is covered as soon as it exists.
+    const gates = gateRegistryWithBuiltins().factories()
+    expect(gates.length).toBeGreaterThan(0)
+    for (const { kind, factory } of gates) {
+      expect(factory(stubGateContext({}, providerRegistry)).wired(), kind).toBe(false)
+    }
+    applyGateProviders(providerRegistry, {
+      ciStatus: {} as never,
+      mergeability: {} as never,
+      releaseHealth: {} as never,
+      prReview: {} as never,
+      docQuality: {} as never,
+    })
+    for (const { kind, factory } of gates) {
+      expect(factory(stubGateContext({}, providerRegistry)).wired(), kind).toBe(true)
+    }
   })
 
   it('a gate reads its provider through ctx.requireProvider, not a module global', async () => {

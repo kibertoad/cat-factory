@@ -12,7 +12,13 @@ import type {
 import { DEFAULT_RISK_POLICY, defaultProviderRegistry, stubGateContext } from '@cat-factory/kernel'
 import type { DescriptorFieldValues } from '@cat-factory/contracts'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ciGate, conflictsGate, docQualityGate, postReleaseHealthGate } from './gates.js'
+import {
+  ciGate,
+  conflictsGate,
+  docQualityGate,
+  humanReviewGate,
+  postReleaseHealthGate,
+} from './gates.js'
 import {
   wireCiStatusProvider,
   wireDocQualityProvider,
@@ -92,6 +98,39 @@ describe('attempt budgets', () => {
     const gate = postReleaseHealthGate(stubGateContext({}, providerRegistry))
     expect(gate.attemptBudget?.(preset, config({}))).toBe(preset.releaseMaxAttempts)
     expect(gate.attemptBudget?.(preset, config({ maxAttempts: 4 }))).toBe(4)
+  })
+
+  it('gives human review an EFFECTIVELY UNBOUNDED budget, ignoring the preset', () => {
+    // A human review has no deadline: `pollExhaustion: 'rearm'` keeps the wait alive, and this
+    // is the other half of that. An absent budget is NOT the same statement: the engine reads
+    // it as "this gate declared nothing" and falls back to the preset's CI budget, which would
+    // auto-fail a run a reviewer simply had not got to yet.
+    const gate = humanReviewGate(stubGateContext({}, providerRegistry))
+    expect(gate.attemptBudget?.(preset, config({}))).toBe(Number.MAX_SAFE_INTEGER)
+    expect(gate.attemptBudget?.(preset, config({}))).toBeGreaterThan(preset.ciMaxAttempts)
+    // Not even a step-level cap narrows it: the step field would be a deadline on a person.
+    expect(gate.attemptBudget?.(preset, config({ maxAttempts: 3 }))).toBe(Number.MAX_SAFE_INTEGER)
+  })
+
+  it('carries the precheck summary VERBATIM into every gate’s helper prior output', () => {
+    // The summary is the only statement of WHY the helper was spun up (the failing checks, the
+    // conflicted files, the reviewer's words). A gate that answered `undefined` here would still
+    // dispatch its helper, onto a checkout with nothing to act on: the helper then invents a
+    // change or pushes none, and the gate re-probes as if the round had been a real attempt.
+    // Each is attributed to the GATE's own kind, not the helper's, because the text is the
+    // precheck's rather than a previous helper round's output.
+    const registry = gateRegistryWithBuiltins()
+    const declaring = registry
+      .factories()
+      .map(({ kind, factory }) => ({ kind, gate: factory(stubGateContext({}, providerRegistry)) }))
+      .filter(({ gate }) => gate.helperPriorOutput !== undefined)
+    expect(declaring.length).toBeGreaterThan(0)
+    for (const { kind, gate } of declaring) {
+      expect(gate.helperPriorOutput?.('the precheck said this'), kind).toEqual({
+        agentKind: kind,
+        output: 'the precheck said this',
+      })
+    }
   })
 
   it('names the gate in every pass-through output, so an unwired gate explains itself', () => {

@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   classifyHumanReview,
   isApproved,
+  outstandingConversation,
   outstandingThreads,
   renderReviewFeedbackForFixer,
 } from './review.logic.js'
@@ -228,6 +229,36 @@ describe('the grace window', () => {
     expect(threadLast.kind).toBe('wait')
   })
 
+  it('scans for the newest across a whole list, not just the last entry in it', () => {
+    // The provider returns threads in its own order, so the newest is routinely not the last
+    // one. A scan that took whichever entry it saw last would start the window from an OLD
+    // thread and churn the branch while the reviewer is still mid-series.
+    const threadsNewestFirst = classifyHumanReview(
+      snapshot({
+        unresolvedThreads: [
+          thread({ threadId: 't-new', latestCommentAt: NOW }),
+          thread({ threadId: 't-old', latestCommentAt: NOW - 60 * MIN }),
+        ],
+      }),
+      state(),
+      { graceMinutes: 10, now: NOW },
+    )
+    expect(threadsNewestFirst.kind).toBe('wait')
+
+    // The same for the comment side of the scan.
+    const commentsNewestFirst = classifyHumanReview(
+      snapshot({
+        comments: [
+          { id: 'c-new', author: 'bob', body: 'and this', createdAt: NOW, isBot: false },
+          { id: 'c-old', author: 'bob', body: 'earlier', createdAt: NOW - 60 * MIN, isBot: false },
+        ],
+      }),
+      state(),
+      { graceMinutes: 10, now: NOW },
+    )
+    expect(commentsNewestFirst.kind).toBe('wait')
+  })
+
   it('dispatches the moment the window is exactly spent', () => {
     const v = classifyHumanReview(
       snapshot({ unresolvedThreads: [thread({ latestCommentAt: NOW - 10 * MIN })] }),
@@ -264,6 +295,54 @@ describe('the grace window', () => {
   })
 })
 
+describe('outstandingConversation', () => {
+  const comment = (id: string, createdAt: number, over: Record<string, unknown> = {}) => ({
+    id,
+    author: 'bob',
+    body: id,
+    createdAt,
+    isBot: false,
+    ...over,
+  })
+
+  it('orders the merged plain comments and review summaries CHRONOLOGICALLY', () => {
+    // Two sources arrive as two separate lists, each in whatever order the provider returned
+    // them, and they are concatenated. The order is what the fixer reads as the conversation:
+    // unsorted, a reviewer's later correction ("actually, keep it") is presented above the
+    // instruction it retracts, and the agent acts on the retracted one.
+    const out = outstandingConversation(
+      snapshot({
+        comments: [comment('newest', NOW), comment('oldest', NOW - 60 * MIN)],
+        reviewSummaries: [comment('middle', NOW - 30 * MIN)],
+      }),
+      null,
+    )
+    expect(out.map((c) => c.id)).toEqual(['oldest', 'middle', 'newest'])
+  })
+
+  it('drops bots and anything at or before the addressed cursor, from BOTH sources', () => {
+    const out = outstandingConversation(
+      snapshot({
+        comments: [
+          comment('bot', NOW, { isBot: true }),
+          comment('at-cursor', NOW - 30 * MIN),
+          comment('after-cursor', NOW - 29 * MIN),
+        ],
+        reviewSummaries: [comment('summary-bot', NOW, { isBot: true })],
+      }),
+      NOW - 30 * MIN,
+    )
+    expect(out.map((c) => c.id)).toEqual(['after-cursor'])
+  })
+
+  it('treats an absent cursor as "nothing addressed yet"', () => {
+    const before = snapshot({ comments: [comment('c1', 1)] })
+    expect(outstandingConversation(before, null).map((c) => c.id)).toEqual(['c1'])
+    expect(outstandingConversation(before, undefined).map((c) => c.id)).toEqual(['c1'])
+    expect(outstandingConversation(snapshot({ comments: [comment('c0', 0)] }), null)).toEqual([])
+  })
+})
+
 describe('renderReviewFeedbackForFixer', () => {
   it('renders each thread with where it was left and each comment under its author', () => {
     const rendered = renderReviewFeedbackForFixer(
@@ -290,6 +369,17 @@ describe('renderReviewFeedbackForFixer', () => {
         '- bob: and please rebase',
       ].join('\n'),
     )
+  })
+
+  it('names a human author for an unattributed COMMENT too, not only a thread', () => {
+    // GitHub can return a comment with no author (a deleted account, a webhook-delivered body).
+    // Rendering `- : rebase please` reads to the fixer as a malformed line rather than as
+    // reviewer feedback, and the same fallback the thread branch uses is what stops it.
+    const rendered = renderReviewFeedbackForFixer(
+      [],
+      [{ id: 'c1', author: '', body: 'rebase please', createdAt: NOW, isBot: false }],
+    )
+    expect(rendered).toContain('- reviewer: rebase please')
   })
 
   it('omits a section entirely when that kind of feedback is absent', () => {
@@ -319,6 +409,20 @@ describe('humanReviewGate', () => {
 
   it('is a pass-through until a provider is wired', () => {
     expect(humanReviewGate(stubGateContext({}, providerRegistry)).wired()).toBe(false)
+  })
+
+  it('folds the reviewer’s feedback into the fixer’s prompt as human-review prior output', () => {
+    // The probe's failure summary IS the rendered feedback, and this is the only thing that
+    // carries it across to the helper. Returning nothing here is not a smaller prompt: the
+    // fixer is dispatched onto a PR with no statement of what a human asked for, so it invents
+    // a change or pushes nothing, and either way the reviewer's threads get resolved as
+    // "addressed". It is attributed to the human-review gate, not to the fixer, because the
+    // text is the REVIEWER's words rather than a previous helper round's output.
+    const gate = humanReviewGate(stubGateContext({}, providerRegistry))
+    expect(gate.helperPriorOutput?.('- bob: please rebase')).toEqual({
+      agentKind: 'human-review',
+      output: '- bob: please rebase',
+    })
   })
 
   it('maps dispatch to a fail probe and stashes the threads to resolve', async () => {
