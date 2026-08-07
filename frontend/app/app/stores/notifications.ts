@@ -22,11 +22,42 @@ export const useNotificationsStore = defineStore('notifications', () => {
     remove,
   } = useUpsertList<Notification>({ key: (n) => n.id, prepend: true })
 
-  /** Replace the cache from a server snapshot. */
-  function hydrate(notifications: Notification[]) {
-    open.value = [...notifications]
-      .filter((n) => n.status === 'open')
-      .sort((a, b) => b.createdAt - a.createdAt)
+  // Client-side monotonic guard against a stale full-snapshot `hydrate` CLOBBERING newer live
+  // state — the same hazard `useBoardStore` guards, on the delivery shape that has no second
+  // chance. A run raises its card as a targeted `notification` event; a full `refresh()` whose
+  // snapshot was READ before that card existed can resolve AFTER it, and a plain replace then
+  // drops the card with NO further event to restore it, so the inbox bell never appears (the
+  // pr-review e2e flake). Notifications carry no server revision, so each live write is stamped
+  // with a monotonic sequence and a refresh that captured its baseline BEFORE the fetch keeps
+  // every write newer than that baseline. It cuts both ways: a live-ADDED card the snapshot
+  // cannot know about is re-inserted, and a live-RESOLVED one the snapshot still calls open
+  // stays gone.
+  let liveSeq = 0
+  /** Last live write per id: the notification to keep, or `null` once it was resolved. */
+  const liveWrites = new Map<string, { seq: number; value: Notification | null }>()
+
+  /**
+   * Baseline for {@link hydrate}: capture this BEFORE a refresh's snapshot fetch and pass it
+   * back in, so a notification written live while the fetch was in flight survives the hydrate.
+   * Callers that don't pass a baseline get a plain full replace (initial load / board switch —
+   * no live-write race to guard).
+   */
+  function hydrateBaseline(): number {
+    return liveSeq
+  }
+
+  /** Replace the cache from a server snapshot, keeping live writes newer than `since`. */
+  function hydrate(notifications: Notification[], since = liveSeq) {
+    const newer = new Map<string, Notification | null>()
+    for (const [id, write] of liveWrites) {
+      // A write the snapshot already reflects is reconciled and can be forgotten, so the map
+      // stays bounded by what is genuinely in flight rather than by the session's history.
+      if (write.seq > since) newer.set(id, write.value)
+      else liveWrites.delete(id)
+    }
+    const merged = notifications.filter((n) => n.status === 'open' && !newer.has(n.id))
+    for (const value of newer.values()) if (value) merged.push(value)
+    open.value = merged.sort((a, b) => b.createdAt - a.createdAt)
   }
 
   /**
@@ -34,7 +65,9 @@ export const useNotificationsStore = defineStore('notifications', () => {
    * replaced in place; a resolved one (acted/dismissed) is removed from the inbox.
    */
   function upsert(notification: Notification) {
-    if (notification.status !== 'open') {
+    const isOpen = notification.status === 'open'
+    liveWrites.set(notification.id, { seq: ++liveSeq, value: isOpen ? notification : null })
+    if (!isOpen) {
       remove(notification.id)
       return
     }
@@ -76,5 +109,5 @@ export const useNotificationsStore = defineStore('notifications', () => {
     upsert(resolved)
   }
 
-  return { open, hydrate, upsert, byBlock, count, act, dismiss }
+  return { open, hydrate, hydrateBaseline, upsert, byBlock, count, act, dismiss }
 })

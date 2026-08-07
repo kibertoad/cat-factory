@@ -98,7 +98,17 @@ The backend does not localize, and this store is where that rule bites hardest, 
 kept for years: English prose written today could never be re-rendered for a reader in another
 locale, and unlike a wire shape a persisted one cannot be changed later.
 
-**Retention for it is not wired yet** (its own initiative slice), so the table is unbounded today.
+**Retention is wired**, on its own knob: `AUDIT_EVENT_RETENTION_DAYS`, default **730 days** — by
+far the longest window on this page, because the log answers a compliance question rather than an
+operational one, and a short window makes the honest answer "we deleted it". `0` disables the
+prune entirely, for a deployment that exports the log elsewhere. Its own knob rather than a shared
+one is the governance point above made concrete: nothing else lives in this store, so audit
+retention cannot be shortened as a side effect of tuning a telemetry window.
+
+The prune takes a cutoff and **nothing else** — no account, actor or action predicate — so the
+sweep can never be used to remove the record of one inconvenient thing, and it is the only DELETE
+that exists on the table. The boundary is strict (`at < cutoff`), pinned by conformance: an
+off-by-one there would silently shorten every deployment's window by a tick.
 
 ## How the retention sweep is wired
 

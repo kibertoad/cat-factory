@@ -414,6 +414,7 @@ export type {
   ModelPresetCacheValue,
   ResolvedFoundationalService,
   RiskPolicyCacheValue,
+  SessionGenerationCacheValue,
   WorkspaceAccessCacheValue,
   WorkspaceSettingsCacheValue,
 } from './caching.js'
@@ -587,6 +588,7 @@ export type {
   AuditEventRecord,
   AuditEventRepository,
   AuditEventView,
+  AuditLogReader,
   AuditRecorder,
 } from './audit.js'
 export { noopAuditRecorder } from './audit.js'

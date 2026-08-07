@@ -68,6 +68,39 @@ export interface BlockEditActor {
 export const UNATTRIBUTED_BLOCK_EDITOR: BlockEditActor = { role: null, managesPolicy: false }
 
 /**
+ * The editor's authority, resolvable in ANY workspace rather than fixed to the acting board.
+ *
+ * A {@link BlockEditActor} is one workspace's answer, and a board write does not always decide in
+ * the workspace it was addressed to. A board mounts services homed elsewhere, and every write on
+ * one lands at that HOME: the row is written there, its preset id resolves against THAT library,
+ * and a run on it is admitted through that board under the role the editor holds THERE. Passing a
+ * single pre-resolved actor made the guard compare one workspace's policies against another
+ * workspace's roles, which both under- and over-refuses (an admin of the acting board skipped the
+ * check on two homes where they are a plain member; a member of the acting board was refused on
+ * roles they do not hold anywhere the decision applies).
+ *
+ * So the entry point supplies the RESOLVER and the guard asks it per workspace it is deciding in.
+ * Implementations resolve the acting board for free (the auth gate already published it) and read
+ * any other through the same cached membership resolution.
+ *
+ * A workspace where the editor holds no access at all resolves to {@link UNATTRIBUTED_BLOCK_EDITOR}:
+ * they cannot start a run there, so no policy of that workspace can hold or drop anything of theirs.
+ */
+export interface BlockEditAuthority {
+  /** The authority this editor holds in `workspaceId`. */
+  in(workspaceId: string): Promise<BlockEditActor>
+}
+
+/**
+ * The authority of an editor no workspace tier is behind, in every workspace: engine paths, the
+ * board scan, an auth-disabled deployment. The {@link UNATTRIBUTED_BLOCK_EDITOR} reading, made
+ * total.
+ */
+export const UNATTRIBUTED_BLOCK_EDIT_AUTHORITY: BlockEditAuthority = {
+  in: () => Promise.resolve(UNATTRIBUTED_BLOCK_EDITOR),
+}
+
+/**
  * The half of a preset that speaks about WHO started the run. Both sides of a swap are supplied
  * already RESOLVED (a task that pins no preset is governed by the workspace default, so that is
  * what its side of the comparison must be), because the two callers resolve it differently: the
@@ -96,14 +129,35 @@ export type RiskPolicySelectionRefusal =
   | 'relaxes_role_class_rule'
 
 /**
- * Whether `actor` may re-point a task from the `from` policy to the `to` policy, or the reason
- * they may not.
+ * One side of a swap: the policy in force, and the authority the editor holds WHERE it is in force.
  *
- * Three ways to pass, and the first two are the reason this is inert on almost every workspace:
+ * The two travel together because neither means anything without the other. A preset's role layer
+ * is a statement about roles in the workspace that holds it, so reading it against a role the
+ * editor holds on some other board answers a question nobody asked. The ordinary same-workspace
+ * swap (a picker, a `riskPolicyId` patch) passes the same actor on both sides; a cross-home move
+ * passes two, because the editor is a different person to each workspace.
+ */
+export interface RiskPolicySelectionSide {
+  /** The role layer of the preset governing the task on this side, already resolved. */
+  policy: RolePolicyView
+  /** The authority the editor holds in the workspace this side's policy is in force in. */
+  actor: BlockEditActor
+}
+
+/**
+ * Whether the editor may re-point a task from the `from` side to the `to` side, or the reason they
+ * may not.
  *
- *  - The actor holds no workspace role, so no role-scoped restriction applies to them.
- *  - The actor manages the policy library, so a swap grants them nothing they could not author.
- *  - Neither preset's ROLE LAYER holds anything over this role that the other drops.
+ * Four ways to pass, and the first three are the reason this is inert on almost every workspace:
+ *
+ *  - The editor holds no role on the `from` side, so no role-scoped restriction held them there.
+ *  - The editor holds no role on the `to` side, so nothing there can be relaxed FOR THEM: with no
+ *    tier in that workspace they cannot admit a run under its policy at all. Absent is the
+ *    strictest reading, not the weakest, and reading it the other way turns "moved a task into a
+ *    service I am not a member of" into a refusal naming a sandbox nobody would have escaped.
+ *  - The editor manages the policy library on either side, so the swap grants them nothing they
+ *    could not author outright.
+ *  - Neither preset's ROLE LAYER holds anything over their role that the other drops.
  *
  * The arms run in the precedence the engine's own merge ladder applies (sandbox, then the
  * submission allowlist, then the class rules), so the reason a picker shows names the same
@@ -117,19 +171,23 @@ export type RiskPolicySelectionRefusal =
  * already applies before blaming a role for a refusal the base map made anyway.
  */
 export function refuseRiskPolicySelection(input: {
-  from: RolePolicyView
-  to: RolePolicyView
-  actor: BlockEditActor
+  from: RiskPolicySelectionSide
+  to: RiskPolicySelectionSide
 }): RiskPolicySelectionRefusal | null {
-  const { from, to, actor } = input
-  const role = actor.role
-  if (!role || actor.managesPolicy) return null
-  if (dryRunForcedForRole(from.dryRunRoles, role) && !dryRunForcedForRole(to.dryRunRoles, role)) {
+  const { from, to } = input
+  const heldRole = from.actor.role
+  const nextRole = to.actor.role
+  if (!heldRole || !nextRole) return null
+  if (from.actor.managesPolicy || to.actor.managesPolicy) return null
+  if (
+    dryRunForcedForRole(from.policy.dryRunRoles, heldRole) &&
+    !dryRunForcedForRole(to.policy.dryRunRoles, nextRole)
+  ) {
     return 'relaxes_role_sandbox'
   }
-  const heldAllowlist = submissionAllowlistForRole(from.submissionClassesByRole, role)
+  const heldAllowlist = submissionAllowlistForRole(from.policy.submissionClassesByRole, heldRole)
   if (heldAllowlist) {
-    const nextAllowlist = submissionAllowlistForRole(to.submissionClassesByRole, role)
+    const nextAllowlist = submissionAllowlistForRole(to.policy.submissionClassesByRole, nextRole)
     // An ABSENT allowlist on the far side is the widest policy the setting can express, so it
     // relaxes every held one — including the empty allowlist, where the two look alike in the
     // editor and mean opposite things. Otherwise it is the same subset test the arms above make:
@@ -141,16 +199,16 @@ export function refuseRiskPolicySelection(input: {
   }
   for (const changeClass of RULEABLE_CHANGE_CLASSES) {
     const held = resolveRoleScopedMergeClassRule({
-      rules: from.classRules,
-      byRole: from.classRulesByRole,
-      role,
+      rules: from.policy.classRules,
+      byRole: from.policy.classRulesByRole,
+      role: heldRole,
       changeClass,
     })
     if (!held.narrowedByRole) continue
     const next = resolveRoleScopedMergeClassRule({
-      rules: to.classRules,
-      byRole: to.classRulesByRole,
-      role,
+      rules: to.policy.classRules,
+      byRole: to.policy.classRulesByRole,
+      role: nextRole,
       changeClass,
     })
     if (mergeClassRuleRelaxes(held.effective, next.effective)) return 'relaxes_role_class_rule'

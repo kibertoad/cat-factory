@@ -457,6 +457,11 @@ function registerRbacMemberManagementTests(
         path: w('/documents/link'),
         body: { source: 'notion', externalId: 'nope', blockId: 'nope' },
       },
+      {
+        method: 'POST',
+        path: w('/documents/refresh'),
+        body: { source: 'notion', externalId: 'nope' },
+      },
     ]
     for (const req of authoring) {
       const res = await app.call(req.method, req.path, req.body, hc)

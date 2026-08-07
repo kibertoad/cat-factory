@@ -54,6 +54,13 @@ export const auditActionSchema = v.picklist([
   'account.invitation_revoked',
   /** An invitation was accepted, creating the membership it granted. */
   'account.invitation_accepted',
+  /**
+   * An admin ended every session a member currently held (offboarding, a lost device). Distinct
+   * from a role change: this withdraws AUTHENTICATION, not permissions, and the member keeps their
+   * roles. Self-serve "sign out everywhere" is deliberately NOT recorded as this action — nobody's
+   * admin performed it, and there is no account it belongs to.
+   */
+  'account.member_sessions_revoked',
   /** A member was added to one workspace (board-level roster, not the account roster). */
   'workspace.member_added',
   /** A workspace member's role was changed. */
@@ -131,6 +138,11 @@ export const AUDIT_ACTION_DETAIL_KEYS: Record<AuditAction, readonly string[]> = 
   'account.invitation_created': ['email', 'roles'],
   'account.invitation_revoked': ['email'],
   'account.invitation_accepted': ['email', 'roles', 'invitedBy'],
+  // No values: WHO revoked WHOSE sessions and WHEN is the whole fact, and all three are columns
+  // already. The new generation is deliberately not recorded — it is an internal counter, and a
+  // reader comparing two of them would be inferring how many revocations went unlogged rather
+  // than reading the rows that state them.
+  'account.member_sessions_revoked': [],
   'workspace.member_added': ['role'],
   'workspace.member_role_changed': ['previousRole', 'role'],
   'workspace.member_removed': ['role'],
@@ -201,3 +213,67 @@ export function readAuditAction(value: string): AuditAction | RetiredAuditValue 
 export function readAuditTargetType(value: string): AuditTargetType | RetiredAuditValue {
   return isAuditTargetType(value) ? value : { retired: value }
 }
+
+// ---------------------------------------------------------------------------
+// The WIRE shapes the viewer reads. Separate from the vocabulary above because a read must cope
+// with values a write cannot produce: a member retired since the row was written.
+// ---------------------------------------------------------------------------
+
+/** A persisted vocabulary member this build no longer declares, on the wire. */
+export const retiredAuditValueSchema = v.object({ retired: v.string() })
+
+/**
+ * The acting principal, as the three shapes it can take.
+ *
+ * A union rather than `{ kind, id }`, so the id's MEANING travels with it: `usr_*` resolves
+ * against the user roster and `pak_*` against the API-key list, and a viewer handed a bare id
+ * would have to guess which. `system` carries no id at all, which is what stops it being confused
+ * with a principal whose name merely failed to resolve.
+ */
+export const auditActorSchema = v.variant('kind', [
+  v.object({ kind: v.literal('user'), userId: v.string() }),
+  v.object({ kind: v.literal('apiKey'), apiKeyId: v.string() }),
+  v.object({ kind: v.literal('system') }),
+])
+
+/** One audit event as the viewer renders it. */
+export const auditEventViewSchema = v.object({
+  id: v.string(),
+  /** Epoch ms the action committed. */
+  at: v.number(),
+  /** The board it happened on, when the action was board-scoped. */
+  workspaceId: v.nullable(v.string()),
+  actor: auditActorSchema,
+  /**
+   * Unions with the retired shape for the reason stated on {@link RetiredAuditValue}: the row
+   * outlives the vocabulary it was written against, and a viewer mapping actions to copy through
+   * an exhaustive `Record` would otherwise splice `undefined` into an admin's screen.
+   */
+  action: v.union([auditActionSchema, retiredAuditValueSchema]),
+  targetType: v.union([auditTargetTypeSchema, retiredAuditValueSchema]),
+  targetId: v.string(),
+  /** Machine-readable values, interpolated into translated copy. See {@link AUDIT_ACTION_DETAIL_KEYS}. */
+  details: v.record(v.string(), v.nullable(v.union([v.string(), v.number(), v.boolean()]))),
+  /**
+   * Display name for the ACTOR, resolved server-side, or null.
+   *
+   * Null is a real and expected answer, not a failure: an audit log outlives the people in it, and
+   * "the user who did this no longer exists" is exactly the kind of thing it is kept to record. The
+   * viewer renders the id in that case rather than an empty space, so a row never reads as though
+   * nobody performed it.
+   */
+  actorName: v.nullable(v.string()),
+  /** Display name for the TARGET when it is a user, resolved server-side, or null. As above. */
+  targetName: v.nullable(v.string()),
+})
+export type AuditEventWire = v.InferOutput<typeof auditEventViewSchema>
+
+/** One page of an account's audit log, newest first. */
+export const auditEventPageSchema = v.object({
+  events: v.array(auditEventViewSchema),
+  /**
+   * Opaque cursor for the next (older) page, or null at the end. Keyset, never an offset: the
+   * log grows while it is being read, and an offset would re-serve or skip rows at every boundary.
+   */
+  nextCursor: v.nullable(v.string()),
+})

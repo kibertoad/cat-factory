@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
 import type { AccountRole } from '~/types/domain'
 import type { InvitationStatus } from '@cat-factory/contracts'
+import AccountAuditLog from '~/components/layout/AccountAuditLog.vue'
 import AccountDeploymentSettings from '~/components/layout/AccountDeploymentSettings.vue'
 import AccountModelPolicySettings from '~/components/layout/AccountModelPolicySettings.vue'
 import AccountPlatformAlertSettings from '~/components/layout/AccountPlatformAlertSettings.vue'
@@ -16,6 +17,7 @@ import SecretInput from '~/components/common/SecretInput.vue'
 const props = defineProps<{ accountId: string }>()
 
 const accounts = useAccountsStore()
+const uiMode = useUiModeStore()
 const auth = useAuthStore()
 const toast = useToast()
 const { t, te } = useI18n()
@@ -63,6 +65,20 @@ async function updateMemberRoles(userId: string, roles: AccountRole[]) {
     await accounts.setMemberRoles(props.accountId, userId, roles.length ? roles : ['developer'])
   } catch (e) {
     notifyError(t('layout.accountTeam.errors.updateRoles'), e)
+  }
+}
+
+/**
+ * End every session a member holds. Their roles are untouched, so nothing in the roster changes —
+ * which is why the confirmation names the person: there is no visible after-state to check.
+ */
+async function revokeSessions(userId: string, label: string) {
+  if (!(await confirmAction('revoke', label))) return
+  try {
+    await accounts.revokeMemberSessions(props.accountId, userId)
+    toast.add({ title: t('layout.accountTeam.members.sessionsRevoked'), icon: 'i-lucide-check' })
+  } catch (e) {
+    notifyError(t('layout.accountTeam.errors.revokeSessions'), e)
   }
 }
 
@@ -232,6 +248,20 @@ async function disconnectEmail() {
           <span v-else class="text-xs uppercase tracking-wide text-slate-400">
             {{ m.roles.join(', ') }}
           </span>
+          <!-- Offboarding: end every session this member holds, leaving their membership and
+               roles alone. Confirmed, because it is not undoable from here (the person simply
+               signs in again) and because it is the sort of thing a mis-click should not do. -->
+          <UButton
+            v-if="isAdmin"
+            size="xs"
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-log-out"
+            :title="t('layout.accountTeam.members.revokeSessions')"
+            :aria-label="t('layout.accountTeam.members.revokeSessions')"
+            data-testid="revoke-member-sessions"
+            @click="revokeSessions(m.userId, m.name || m.email || m.userId)"
+          />
         </li>
         <li v-if="accounts.members.length === 0" class="text-slate-500">
           {{ t('layout.accountTeam.members.empty') }}
@@ -354,6 +384,15 @@ async function disconnectEmail() {
          so matters most. -->
     <section v-if="isAdmin">
       <AccountRunCredentialSettings :account-id="accountId" />
+    </section>
+
+    <!-- The account audit log (admin-only, ADVANCED tier). Advanced rather than basic because
+         reading who changed what is a governance task, not part of the everyday delivery loop —
+         and unlike an override field there is no default it hides, so hiding it withholds nothing
+         a basic-tier user would otherwise be acting on. The backend gates it too; this only
+         decides whether the surface exists. -->
+    <section v-if="isAdmin && uiMode.isAdvanced">
+      <AccountAuditLog :account-id="accountId" />
     </section>
   </div>
 </template>

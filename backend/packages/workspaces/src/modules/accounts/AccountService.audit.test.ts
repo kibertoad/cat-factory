@@ -42,6 +42,8 @@ function makeService(
     memberships?: Membership[]
     /** Omit the recorder entirely, to prove the service runs unaudited. */
     unaudited?: boolean
+    /** Omit the session-revocation callback, to prove the service refuses rather than pretends. */
+    noRevoker?: boolean
   } = {},
 ) {
   const account: AccountRecord = {
@@ -76,14 +78,23 @@ function makeService(
     }),
   } as unknown as MembershipRepository
   const audit = recorder()
+  const revoked: string[] = []
   const deps: AccountServiceDependencies = {
     accountRepository,
     membershipRepository,
     idGenerator: { next: (p: string) => `${p}_1` },
     clock: { now: () => 1_000 },
     ...(overrides.unaudited ? {} : { audit: audit.recorder }),
+    ...(overrides.noRevoker
+      ? {}
+      : {
+          revokeUserSessions: (userId: string) => {
+            revoked.push(userId)
+            return Promise.resolve(1)
+          },
+        }),
   }
-  return { service: new AccountService(deps), events: audit.events, account }
+  return { service: new AccountService(deps), events: audit.events, account, revoked }
 }
 
 describe('AccountService audit events', () => {
@@ -171,6 +182,91 @@ describe('AccountService audit events', () => {
     })
 
     await expect(service.addMember('acc-1', 'usr-plain', 'usr-new')).rejects.toThrow()
+    expect(events).toEqual([])
+  })
+
+  it('revokes a member’s sessions and records who did it to whom', async () => {
+    const { service, events, revoked } = makeService({
+      memberships: [
+        { accountId: 'acc-1', userId: 'usr-admin', roles: ['admin'], createdAt: 1 },
+        { accountId: 'acc-1', userId: 'usr-target', roles: ['developer'], createdAt: 1 },
+      ],
+    })
+
+    await service.revokeMemberSessions('acc-1', 'usr-admin', 'usr-target')
+
+    expect(revoked).toEqual(['usr-target'])
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      accountId: 'acc-1',
+      actor: { kind: 'user', userId: 'usr-admin' },
+      action: 'account.member_sessions_revoked',
+      targetType: 'user',
+      targetId: 'usr-target',
+      // No values: who revoked whose sessions and when is the whole fact, and all three are
+      // columns. The recorder above asserts the detail keys match the vocabulary, so an empty
+      // set here is checked rather than merely written.
+      details: {},
+    })
+  })
+
+  it('leaves the member’s roles alone — revocation withdraws AUTHENTICATION, not permission', async () => {
+    // The distinction the whole route exists for: signing somebody out must not quietly demote
+    // them, and a role change must not quietly sign them out.
+    const { service, revoked } = makeService({
+      memberships: [
+        { accountId: 'acc-1', userId: 'usr-admin', roles: ['admin'], createdAt: 1 },
+        { accountId: 'acc-1', userId: 'usr-target', roles: ['developer'], createdAt: 1 },
+      ],
+    })
+
+    await service.revokeMemberSessions('acc-1', 'usr-admin', 'usr-target')
+    expect(await service.rolesFor('acc-1', 'usr-target')).toEqual(['developer'])
+
+    // …and the converse: a role change revokes nothing.
+    await service.setMemberRoles('acc-1', 'usr-admin', 'usr-target', ['product'])
+    expect(revoked).toEqual(['usr-target'])
+  })
+
+  it('refuses to revoke sessions of somebody who is not a member of this account', async () => {
+    // Without this an admin of ANY account could end the sessions of ANY user on the deployment
+    // by guessing an id. It must also not record an event for a revocation that did not happen.
+    const { service, events, revoked } = makeService({
+      memberships: [{ accountId: 'acc-1', userId: 'usr-admin', roles: ['admin'], createdAt: 1 }],
+    })
+
+    await expect(
+      service.revokeMemberSessions('acc-1', 'usr-admin', 'usr-outsider'),
+    ).rejects.toThrow()
+    expect(revoked).toEqual([])
+    expect(events).toEqual([])
+  })
+
+  it('refuses a non-admin caller, revoking nothing', async () => {
+    const { service, events, revoked } = makeService({
+      memberships: [
+        { accountId: 'acc-1', userId: 'usr-plain', roles: ['developer'], createdAt: 1 },
+        { accountId: 'acc-1', userId: 'usr-target', roles: ['developer'], createdAt: 1 },
+      ],
+    })
+
+    await expect(service.revokeMemberSessions('acc-1', 'usr-plain', 'usr-target')).rejects.toThrow()
+    expect(revoked).toEqual([])
+    expect(events).toEqual([])
+  })
+
+  it('REFUSES rather than reporting success when no revoker is wired', async () => {
+    // The one place a missing optional dependency must not degrade quietly: an offboarding tool
+    // that returned 204 having withdrawn nothing tells an operator the opposite of the truth.
+    const { service, events } = makeService({
+      noRevoker: true,
+      memberships: [
+        { accountId: 'acc-1', userId: 'usr-admin', roles: ['admin'], createdAt: 1 },
+        { accountId: 'acc-1', userId: 'usr-target', roles: ['developer'], createdAt: 1 },
+      ],
+    })
+
+    await expect(service.revokeMemberSessions('acc-1', 'usr-admin', 'usr-target')).rejects.toThrow()
     expect(events).toEqual([])
   })
 

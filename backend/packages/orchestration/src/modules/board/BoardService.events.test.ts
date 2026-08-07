@@ -1,4 +1,4 @@
-import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block, BoardChange } from '@cat-factory/kernel'
 import { boardChangeSubject } from '@cat-factory/kernel'
@@ -108,7 +108,7 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
       ACTING,
       'blk_shared',
       { title: 'Renamed live' },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     const e = emits.find((x) => x.reason === 'block-updated')
     expect(e).toBeDefined()
@@ -122,7 +122,7 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
       ACTING,
       'frame_shared',
       { title: 'New shared task' },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     const e = emits.find((x) => x.reason === 'block-added')
     expect(e).toBeDefined()
@@ -136,7 +136,7 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
       ACTING,
       'blk_shared',
       { title: 'Renamed live' },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       'cid-upd',
     )
     const e = emits.find((x) => x.reason === 'block-updated')
@@ -166,6 +166,7 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
       ACTING,
       'blk_shared',
       { parentId: 'frame_dest', position: { x: 1, y: 2 } },
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       'cid-xyz',
     )
     const e = emits.find((x) => x.reason === 'block-reparented')
@@ -259,14 +260,14 @@ describe('BoardService targeted vs coarse board changes', () => {
       WS,
       'frame_1',
       { title: 'New task' },
-      UNATTRIBUTED_BLOCK_EDITOR,
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
     )
     expect(emits.at(-1)?.carried?.id).toBe(created.id)
   })
 
   it('carries the edited block on updateBlock', async () => {
     const { service, emits } = build([task('blk_1', 'frame_1')])
-    await service.updateBlock(WS, 'blk_1', { title: 'Renamed' }, UNATTRIBUTED_BLOCK_EDITOR)
+    await service.updateBlock(WS, 'blk_1', { title: 'Renamed' }, UNATTRIBUTED_BLOCK_EDIT_AUTHORITY)
     const e = emits.find((x) => x.reason === 'block-updated')
     // The block as it is AFTER the write: carrying the pre-write object would push subscribers
     // the value the edit replaced, which is worse than not carrying one at all.
@@ -292,7 +293,12 @@ describe('BoardService targeted vs coarse board changes', () => {
 
   it('does NOT carry a block for a reparent', async () => {
     const { service, emits } = build([frame('frame_1'), frame('frame_2'), task('blk_1', 'frame_1')])
-    await service.reparent(WS, 'blk_1', { parentId: 'frame_2', position: { x: 1, y: 2 } })
+    await service.reparent(
+      WS,
+      'blk_1',
+      { parentId: 'frame_2', position: { x: 1, y: 2 } },
+      UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+    )
     const e = emits.find((x) => x.reason === 'block-reparented')
     expect(e).toBeDefined()
     expect(e?.carried).toBeNull()

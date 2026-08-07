@@ -13,10 +13,14 @@ import { type Logger, type OtelConfig, logger, operationalMetrics } from '@cat-f
 // events and silently zero everything the request and queue paths did, which is precisely the
 // "an absent number reads as a zero" failure this initiative exists to remove.
 //
-// So every entry point flushes what its own isolate accumulated, as a `waitUntil` after the
-// response. That is only correct because the counters export as DELTAS: N isolates each
-// reporting their own slice sum correctly in the backend, where N isolates each reporting a
-// cumulative total would not. The CRON path flushes through `SweepTick.settled()` rather than
+// So each of the three HANDLERS (`fetch` / `scheduled` / `queue`) flushes what its own isolate
+// accumulated, as a `waitUntil` after the response. Only those three, so a counter recorded
+// inside a Workflow entrypoint or a Durable Object is never exported at all. The LOG export next
+// door has closed the workflow half of that gap (`workflows/logExport.ts` brackets each wake, a
+// shape a trailing `waitUntil` cannot give it); the counters have no counterpart yet, so a
+// wake's metrics still die with its isolate. Flushing per handler is only correct because the
+// counters export as DELTAS: N isolates each reporting their own slice sum correctly in the
+// backend, where N isolates each reporting a cumulative total would not. The CRON path flushes through `SweepTick.settled()` rather than
 // immediately — its passes run on `waitUntil` and record after the handler returns, so a flush
 // that did not wait for them drained an empty collector and orphaned their counters in an
 // isolate no later tick was guaranteed to reach.

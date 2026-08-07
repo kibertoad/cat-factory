@@ -1,8 +1,9 @@
 // The Drizzle/Postgres spend LEDGER. Split out of `telemetry.ts` along the boundary the
 // architecture already draws: `token_usage` is the one store in that file that only LOOKS like
-// telemetry. It is the org's BUDGET SAFEGUARD, durable rather than 3-day, read by the spend gate
-// before every agent step and by the forecast sweep behind the proactive budget alerts, and it is
-// the one repository in the group that is remotely callable in mothership mode. Keeping it in a
+// telemetry. It is the org's BUDGET SAFEGUARD, kept for a budget year rather than a debugging
+// window, read by the spend gate before every agent step and by the forecast sweep behind the
+// proactive budget alerts, and it is the one repository in the group that is remotely callable in
+// mothership mode. Keeping it in a
 // sibling module (re-exported from the barrel, so every importer sees the same surface) makes
 // that grouping visible in the file layout and keeps the telemetry module under its size budget.
 // Same pattern as `db/schema/tracker.ts`.

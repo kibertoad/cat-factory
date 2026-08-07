@@ -493,7 +493,8 @@ export interface ExecutionServiceDependencies {
   pullRequestMerger?: PullRequestMerger
   /**
    * Optional: resolves a task's merge threshold preset (auto-merge ceilings + the
-   * CI-fixer attempt budget). Absent → the built-in {@link DEFAULT_RISK_POLICY}.
+   * CI-fixer attempt budget). Absent → the built-in `FALLBACK_RISK_POLICY`, which auto-merges
+   * nothing: an engine with no preset library configured lands no pull request on its own.
    */
   riskPolicyRepository?: RiskPolicyRepository
   /**

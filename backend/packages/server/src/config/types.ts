@@ -355,8 +355,9 @@ export interface RetentionConfig {
   rateLimitMs: number
   commitMs: number
   /**
-   * LLM observability sink (full per-call prompt/response). Heavy, and only useful
-   * for recent debugging, so it is pruned aggressively (default 3 days).
+   * LLM observability sink (full per-call prompt/response). Heavy, so the window trades disk
+   * against how far back a post-mortem can reach; default 14 days, because most investigations
+   * start after the run they are about has stopped being recent.
    */
   llmCallMetricsMs: number
   /**
@@ -387,6 +388,24 @@ export interface RetentionConfig {
    * 0 disables.
    */
   runDaysMs: number
+  /**
+   * The account AUDIT LOG (`audit_events`). By far the LONGEST window here (default ~2 years),
+   * and deliberately so: every other table on this list answers an operational question about
+   * recent activity, while this one answers a compliance question about the past. An org adopting
+   * the platform is asked "who changed that, and when" about things that happened long after
+   * anyone stopped watching, and a short window would make the honest answer "we deleted it".
+   *
+   * It is nonetheless BOUNDED rather than infinite, because the log is the one table that grows
+   * monotonically with run volume and D1's ceiling is 10 GB per database (the arithmetic is in
+   * `backend/docs/storage-and-retention.md`). A deployment with a longer legal obligation raises
+   * the knob; 0 disables the prune entirely, which is the right setting for a deployment that
+   * exports the log elsewhere and wants nothing dropped locally.
+   *
+   * It has its OWN knob rather than sharing one, which is the governance half of keeping the log
+   * in its own store: audit retention cannot be shortened as a side effect of tuning something
+   * else, because no other table lives behind this name.
+   */
+  auditEventsMs: number
 }
 
 export interface FragmentLibraryConfig {

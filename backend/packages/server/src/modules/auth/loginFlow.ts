@@ -1,7 +1,8 @@
 import type { Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
-import { ConflictError, NotFoundError } from '@cat-factory/kernel'
+import { ConflictError, NotFoundError, UnauthorizedError } from '@cat-factory/kernel'
 import type { UserRecord } from '@cat-factory/kernel'
+import { verifySession } from '../../auth/middleware.js'
 import {
   HmacSigner,
   type SessionPayload,
@@ -115,14 +116,88 @@ export function sessionUser(user: UserRecord, login: string): SessionUser {
  * Mint a user SESSION token, returning the signed token and the exact `exp` it committed to so a
  * caller can report the real expiry without a second clock read. Shared by every login path AND
  * the local-mode mothership-connect controller, so the session claim shape lives in one place.
+ *
+ * `generation` is the user's session generation, stamped into the token so revocation can
+ * invalidate it later. It is a REQUIRED parameter rather than something resolved in here, because
+ * this function takes a `SessionUser` (a display surface) and has no store to read: making each
+ * login path supply it is what forces every one of them to have looked. A mint that stamped a
+ * default would issue a token the revocation check could never refuse.
  */
 export async function mintSession(
   cfg: AuthConfig,
   user: SessionUser,
+  generation: number,
 ): Promise<{ token: string; exp: number }> {
   const exp = Date.now() + cfg.sessionTtlMs
-  const session: SessionPayload = { ...user, aud: TOKEN_AUDIENCE.session, exp }
+  const session: SessionPayload = { ...user, aud: TOKEN_AUDIENCE.session, exp, gen: generation }
   return { token: await new HmacSigner(cfg.sessionSecret).sign(session), exp }
+}
+
+/**
+ * The generation to stamp into a session being minted for a user who was just resolved (or
+ * created) by a login flow.
+ *
+ * Reads PAST the cache (`refreshSessionGeneration`), which is the one difference from the
+ * accessor `verifySession` uses on the request path. Verification tolerates a bounded stale
+ * window on purpose; a mint cannot, because what it reads is stamped into a bearer that outlives
+ * the cache entry. A generation read one bump behind on a replica that missed the invalidation
+ * issues a token every replica refuses for its whole TTL, and the refusal spreads rather than
+ * heals as the caches that still agreed with it expire — a sign-in loop no waiting fixes. The
+ * refresh also repopulates this replica, so the token it just minted verifies here.
+ *
+ * A user the store cannot find falls back to `0`: the login path has this instant established
+ * that the user exists, so a null here is a read racing a create rather than an absent person,
+ * and `0` is the generation a fresh row carries. Getting it wrong costs one re-login, never an
+ * unrevocable token — a stamped generation BELOW the row's is refused, never admitted.
+ */
+export async function sessionGenerationFor<E extends AppEnv>(
+  c: Context<E>,
+  userId: string,
+): Promise<number> {
+  return (await c.get('container').userService.refreshSessionGeneration(userId)) ?? 0
+}
+
+/**
+ * The caller's own session on a route mounted under a PUBLIC prefix, or a 401.
+ *
+ * `requireUser` (the `http/guards.ts` accessor every other controller reaches for) is WRONG here
+ * and reads as right, which is why this exists rather than being inlined. It narrows
+ * `c.get('user')`, and the only thing that ever sets that is `requireAuth` — which
+ * `mountAuthGate` deliberately does not run under `/auth`, because the login round-trips
+ * themselves must be reachable unauthenticated. A `requireUser` on an `/auth` route is therefore
+ * not a guard at all: it is an unconditional 401 that no test of the happy path can distinguish
+ * from a missing token.
+ *
+ * So the session is verified HERE, on the route, the same way `/auth/me` does it, and any future
+ * authenticated `/auth` route reaches for this instead of re-deriving the trap.
+ */
+export async function requireSessionUser<E extends AppEnv>(
+  c: Context<E>,
+  message: string,
+): Promise<SessionPayload> {
+  const user = await verifySession(c)
+  if (!user) throw new UnauthorizedError(message)
+  return user
+}
+
+/**
+ * A verified session payload back down to the display surface a mint takes.
+ *
+ * Projected FIELD BY FIELD rather than spread or hand-picked at the call site. A spread would
+ * carry the OLD token's `aud`/`exp`/`gen` into the new session's claim object (harmless only
+ * because the mint happens to overwrite all three, which is not a property to depend on), and
+ * hand-picking is how `email` — optional on {@link SessionUser}, so its omission typechecks —
+ * was silently dropped from a re-minted token, leaving `/auth/me` reporting a null address and
+ * invitation matching unable to find the person.
+ */
+export function sessionUserFrom(payload: SessionPayload): SessionUser {
+  return {
+    id: payload.id,
+    login: payload.login,
+    name: payload.name,
+    avatarUrl: payload.avatarUrl,
+    email: payload.email,
+  }
 }
 
 /** Whether an email's domain is on the self-signup allowlist. */

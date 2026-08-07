@@ -1,5 +1,6 @@
 import type {
   AgentContextSnapshotRepository,
+  AuditEventRepository,
   AgentSearchQueryRepository,
   AgentToolCallRepository,
   ResolveBinaryArtifactStore,
@@ -96,6 +97,10 @@ export interface RetentionRepos {
     PlatformMetricsRepository,
     'rollupRunDays' | 'deleteRunDaysOlderThan'
   >
+  // The account audit log (its own `audit` Postgres schema), pruned to the longest window of the
+  // lot. Wired unconditionally, exactly as on the Worker: this is the one table here that would
+  // otherwise grow for years unbounded.
+  auditEventRepository: Pick<AuditEventRepository, 'deleteOlderThan'>
   // The durable cost-attribution rollup. This pass only WRITES it: `spend_days` has no
   // prune, here or on the Worker, and no `deleteOlderThan` on its port to call. A TCO table
   // that expires is just a slower ledger.
@@ -120,6 +125,7 @@ export interface RetentionResult {
   notifications: number
   gateOutcomes: number
   runDays: number
+  auditEvents: number
   /** Daily buckets (re)written by this pass's rollup: a WRITE, not rows reclaimed. */
   runDaysRolledUp: number
   /** Durable cost-attribution buckets (re)written by this pass: a WRITE, never a prune. */
@@ -244,6 +250,11 @@ export async function sweepRetention(
     ),
     runDays: await pass.prune('platform_run_days', retention.runDaysMs, now, (c) =>
       repos.platformMetricsRepository.deleteRunDaysOlderThan(c),
+    ),
+    // The audit log, in its own schema. Last because it is the only pass whose window is measured
+    // in years: the others reclaim on most ticks, this one usually reclaims nothing.
+    auditEvents: await pass.prune('audit_events', retention.auditEventsMs, now, (c) =>
+      repos.auditEventRepository.deleteOlderThan(c),
     ),
     failedTables: pass.failed,
   }

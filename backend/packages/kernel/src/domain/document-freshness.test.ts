@@ -19,15 +19,15 @@ describe('freshnessHeaderLines', () => {
 
   it('states the revision a confirmed document was built against', () => {
     expect(
-      freshnessHeaderLines({ status: 'confirmed', version: '2317456', reimported: false }),
+      freshnessHeaderLines({ status: 'confirmed', version: '2317456', change: 'unchanged' }),
     ).toBe('Revision: 2317456\n')
   })
 
   it('states the same revision whether or not the check had to re-import', () => {
     // Both mean "the agent is reading the live revision". The distinction is for operators reading
     // logs, not for the agent reading the file, so it must not change the rendered claim.
-    expect(freshnessHeaderLines({ status: 'confirmed', version: 'v9', reimported: true })).toBe(
-      freshnessHeaderLines({ status: 'confirmed', version: 'v9', reimported: false }),
+    expect(freshnessHeaderLines({ status: 'confirmed', version: 'v9', change: 'reimported' })).toBe(
+      freshnessHeaderLines({ status: 'confirmed', version: 'v9', change: 'unchanged' }),
     )
   })
 
@@ -57,6 +57,6 @@ describe('freshnessHeaderLines', () => {
   it('never claims a revision it does not have', () => {
     // A confirmed verdict with an empty token would render `Revision: ` — a header that reads as a
     // revision the reader failed to see rather than as one that was never known.
-    expect(freshnessHeaderLines({ status: 'confirmed', version: '', reimported: false })).toBe('')
+    expect(freshnessHeaderLines({ status: 'confirmed', version: '', change: 'unchanged' })).toBe('')
   })
 })

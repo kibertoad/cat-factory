@@ -1,7 +1,7 @@
 # Initiative: enterprise SSO sign-in
 
-**Status:** generic OIDC LANDED (slices 1-4) · SAML, group→role mapping and revocation open ·
-**Owner:** core · **Started:** 2026-08-04
+**Status:** generic OIDC LANDED (slices 1-4), OFFBOARDING REVOCATION LANDED (slice 6) · SAML and
+group→role mapping open · **Owner:** core · **Started:** 2026-08-04
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -62,7 +62,7 @@ credentials, and its people sign in with it. Optionally, group claims map onto w
 | 4   | SPA sign-in button + the "which methods are configured" projection it reads                               | ✅ done    | this |
 | 4b  | Group / email-domain ADMISSION narrowings, checked on every sign-in                                       | ✅ done    | this |
 | 5   | Group-claim → workspace-role mapping (opt-in), applied on each sign-in                                    | ⬜ blocked |      |
-| 6   | Offboarding: revoke live sessions when a sign-in is refused or a role is withdrawn                        | ⬜ todo    |      |
+| 6   | Offboarding: revoke live sessions when a sign-in is refused                                               | ✅ done    | this |
 | 7   | SAML 2.0 SP, for a provider with no OIDC surface (classic Shibboleth)                                     | ⬜ todo    |      |
 | 8   | A deployment-OPERATOR configuration surface, if env-only proves too coarse                                | ⬜ todo    |      |
 
@@ -109,31 +109,38 @@ These bind anything that touches the SSO path. The ones the landed slices PROVED
   IS the allowlist — that is the capability the feature exists to deliver. Do not "harden" this into
   a fail-closed list; the narrowings (`AUTH_SSO_REQUIRED_GROUPS`,
   `AUTH_SSO_ALLOWED_EMAIL_DOMAINS`) are how an org that needs less than its whole directory says so.
-- **The session-revocation dependency is REAL, and it is the reason slice 6 exists.** SSO's whole
+- **(proved) The session-revocation dependency was REAL, and slice 6 closed it.** SSO's whole
   offboarding promise is "we disabled them in the IdP and they lost access", and a stateless HMAC
-  session does not deliver that on its own: the bearer stays valid until it expires, whatever the
-  directory now says. Group membership IS re-read on every sign-in, so a removed user cannot get a
-  NEW session; slice 6 is about the one they already hold.
+  session did not deliver that on its own. Group membership was already re-read on every sign-in,
+  so a removed user could not get a NEW session; what was missing was the one they already held.
 
-### What the revocation half actually costs (measured, not estimated)
+### How the revocation half landed (and what it cost)
 
-The paired tracker's slice 5 says "fold the generation check into the user/principal resolution the
-request already performs". Reading the code, **there is no such resolution to fold into**:
-`requireAuth` → `verifySession` verifies the HMAC and reads the claims, and never touches the user
-row. That is what makes the current design fast and what makes revocation cost something.
+Both trackers' slices shipped together, as they said they should. Shape and rationale:
+[`auth.md` → Session revocation](../../backend/docs/auth.md#session-revocation); the design
+decisions are recorded under "What slices 4-7 settled" in the
+[paired tracker](./audit-log-and-session-revocation.md).
 
-So the check is not free, and the honest options are:
+The two options were a cached generation read or short session TTLs plus a bump. **The cached read
+won**, because a bounded revocation WINDOW is the one property an offboarding story cannot
+advertise: "we disabled them and they lost access, within the hour" is not the claim an org is
+buying. The Worker's isolate-safe profile passes the entry through, so that facade pays a real
+per-request D1 read — accepted deliberately, and recorded here rather than discovered in
+production, exactly as this section asked.
 
-- **A cached generation read through `AppCaches`**, invalidated on bump. Cheap per request after
-  the first, and the invalidation is the coherence story. On the Worker the isolate-safe profile
-  passes through for our own mutable state, so this reads live there, which is a real per-request
-  D1 read on the hot path, and the slice must state whether that is acceptable rather than
-  discovering it in production.
-- **Short session TTLs plus a bump**, accepting a bounded window instead of instant revocation.
-  Weaker, but it adds no read at all and may be the right trade for the first slice.
+What this slice does in the SSO leg specifically: when `judgeSsoAdmission` refuses a returning
+user, their existing sessions are revoked as well as the new one withheld. Keyed on the same
+`iss#sub` subject as sign-in and never the email, so a departed employee whose address was
+reassigned cannot cost the new holder their sessions. Best-effort, because the refusal has already
+succeeded and a store failure must not turn a correct denial into a 500 that reads as broken SSO
+configuration; `sessionsRevoked` on the `sso.refused` log line separates "refused and cut their
+sessions" from "refused and they still hold a live bearer".
 
-Either way it is a per-runtime decision with a user-row column behind it (D1 migration ⇄ Drizzle +
-`pnpm db:generate`), not a one-line middleware change. Size it accordingly.
+**A role WITHDRAWAL deliberately does not revoke**, though the original checklist line said it
+should. The RBAC gate re-reads roles on the next request and the token carries none, so a
+downgrade needs no revocation; bumping the generation would sign a person out of every board
+because their role on one was adjusted. That makes slice 5 here (group → workspace role) fully
+independent of this one rather than blocked behind it.
 
 ### Slice 5 (group → workspace role) is BLOCKED on a target-workspace design, not on plumbing
 

@@ -7,9 +7,11 @@ import {
   getAccountSettingsContract,
   getEmailConnectionContract,
   listAccountMembersContract,
+  listAuditEventsContract,
   listAccountsContract,
   listInvitationsContract,
   revokeInvitationContract,
+  revokeMemberSessionsContract,
   setMemberRolesContract,
   testEmailContract,
   updateAccountContract,
@@ -41,6 +43,16 @@ export function accountsApi({ send }: ApiContext) {
 
     setMemberRoles: (accountId: string, userId: string, roles: AccountRole[]) =>
       send(setMemberRolesContract, { pathParams: { accountId, userId }, body: { roles } }),
+
+    // End every session a member holds, without touching their membership or roles: the
+    // offboarding lever for a departure or a lost device. Admin-only (enforced server-side).
+    revokeMemberSessions: (accountId: string, userId: string) =>
+      send(revokeMemberSessionsContract, { pathParams: { accountId, userId } }),
+
+    // One page of the account's audit log, newest first. `cursor` is opaque and comes straight
+    // back from a previous page; the server clamps `limit`.
+    listAuditEvents: (accountId: string, query: { cursor?: string; limit?: number } = {}) =>
+      send(listAuditEventsContract, { pathParams: { accountId }, queryParams: query }),
 
     // Invitations: invite teammates by email into an org account.
     listInvitations: (accountId: string) =>

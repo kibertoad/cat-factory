@@ -118,6 +118,7 @@ export const PLATFORM_RESERVED_ENV_PREFIXES: readonly string[] = [
 export const PLATFORM_RESERVED_ENV_KEYS: readonly string[] = [
   'ANTHROPIC_API_KEY',
   'APP_BASE_URL',
+  'AUDIT_EVENT_RETENTION_DAYS',
   'DATABASE_URL',
   'DEEPSEEK_API_KEY',
   'ENCRYPTION_KEY',
