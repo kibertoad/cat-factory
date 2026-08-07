@@ -4223,6 +4223,25 @@
       "imported": "Se importó \"{title}\"",
       "importFailed": "Error al importar"
     },
+    "freshness": {
+      "updated": "Actualizado el {when}",
+      "refresh": "Buscar cambios",
+      "change": {
+        "unchanged": "Coincide con la fuente",
+        "reimported": "Se ha traído la versión más reciente",
+        "revision_only": "La fuente ha cambiado, pero esta copia sigue igual"
+      },
+      "checkedAt": "Comprobado el {when}",
+      "revision": "Revisión {version}",
+      "notApplicable": "Esta instalación no tiene lector para esa fuente, así que no hay nada con lo que comparar.",
+      "gap": {
+        "not_connected": "Sin comprobar: este espacio de trabajo ya no está conectado a la fuente.",
+        "credentials_unreadable": "Sin comprobar: esta instalación no puede leer las credenciales de la fuente.",
+        "unversioned": "Sin comprobar: la fuente no publica ninguna revisión con la que comparar.",
+        "source_unreachable": "Sin comprobar: no se ha podido contactar con la fuente."
+      },
+      "refreshFailed": "No se han podido buscar cambios"
+    },
     "connect": {
       "title": "Conectar fuente",
       "sourceFallback": "Fuente",

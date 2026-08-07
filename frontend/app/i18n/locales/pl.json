@@ -4223,6 +4223,25 @@
       "imported": "Zaimportowano „{title}”",
       "importFailed": "Import nie powiódł się"
     },
+    "freshness": {
+      "updated": "Zaktualizowano {when}",
+      "refresh": "Sprawdź zmiany",
+      "change": {
+        "unchanged": "Zgodny ze źródłem",
+        "reimported": "Pobrano nowszą wersję",
+        "revision_only": "Źródło się zmieniło, ale ta kopia pozostaje bez zmian"
+      },
+      "checkedAt": "Sprawdzono {when}",
+      "revision": "Wersja {version}",
+      "notApplicable": "Ta instalacja nie ma czytnika dla tego źródła, więc nie ma z czym porównać.",
+      "gap": {
+        "not_connected": "Nie sprawdzono: ta przestrzeń robocza nie jest już połączona ze źródłem.",
+        "credentials_unreadable": "Nie sprawdzono: ta instalacja nie może odczytać poświadczeń źródła.",
+        "unversioned": "Nie sprawdzono: źródło nie udostępnia wersji do porównania.",
+        "source_unreachable": "Nie sprawdzono: nie udało się połączyć ze źródłem."
+      },
+      "refreshFailed": "Nie udało się sprawdzić zmian"
+    },
     "connect": {
       "title": "Połącz źródło",
       "sourceFallback": "Źródło",

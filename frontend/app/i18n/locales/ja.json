@@ -4223,6 +4223,25 @@
       "imported": "\"{title}\" をインポートしました",
       "importFailed": "インポートに失敗しました"
     },
+    "freshness": {
+      "updated": "{when} に更新",
+      "refresh": "変更を確認",
+      "change": {
+        "unchanged": "ソースと一致しています",
+        "reimported": "新しい版を取り込みました",
+        "revision_only": "ソースは更新されましたが、この写しは変わっていません"
+      },
+      "checkedAt": "{when} に確認",
+      "revision": "リビジョン {version}",
+      "notApplicable": "このデプロイにはそのソースのリーダーがないため、照合できるものがありません。",
+      "gap": {
+        "not_connected": "未確認: このワークスペースはソースに接続されていません。",
+        "credentials_unreadable": "未確認: このデプロイはソースの認証情報を読み取れません。",
+        "unversioned": "未確認: ソースは照合できるリビジョンを公開していません。",
+        "source_unreachable": "未確認: ソースに接続できませんでした。"
+      },
+      "refreshFailed": "変更を確認できませんでした"
+    },
     "connect": {
       "title": "ソースを接続",
       "sourceFallback": "ソース",

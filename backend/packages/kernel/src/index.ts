@@ -603,6 +603,7 @@ export {
 // that states it in the materialised context file. See `domain/document-freshness.ts`.
 export {
   type DocumentFreshness,
+  type DocumentFreshnessChange,
   type DocumentFreshnessGap,
   freshnessHeaderLines,
 } from './domain/document-freshness.js'

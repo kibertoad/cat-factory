@@ -4360,6 +4360,25 @@
       "imported": "Imported \"{title}\"",
       "importFailed": "Import failed"
     },
+    "freshness": {
+      "updated": "Updated {when}",
+      "refresh": "Check for changes",
+      "change": {
+        "unchanged": "Matches the source",
+        "reimported": "Pulled the newer version",
+        "revision_only": "The source moved on, but this copy is unchanged"
+      },
+      "checkedAt": "Checked {when}",
+      "revision": "Revision {version}",
+      "notApplicable": "This deployment has no reader for that source, so there is nothing to check against.",
+      "gap": {
+        "not_connected": "Not checked: this workspace is no longer connected to the source.",
+        "credentials_unreadable": "Not checked: this deployment cannot read the source credentials.",
+        "unversioned": "Not checked: the source publishes no revision to compare against.",
+        "source_unreachable": "Not checked: the source could not be reached."
+      },
+      "refreshFailed": "Could not check for changes"
+    },
     "connect": {
       "title": "Connect source",
       "sourceFallback": "Source",
