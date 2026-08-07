@@ -1,5 +1,5 @@
 -- Two queryable projections behind the operator dashboard
--- (docs/initiatives/platform-operator-observability.md, slices 4b and 7).
+-- (backend/docs/adr/0048-platform-operator-observability.md, slices 4b and 7).
 --
 -- `gate_outcomes`: one flat row per SETTLED polling gate. The live gate state (`attempts`,
 -- `attemptLog`, the escalation phase) lives inside the per-run `detail` JSON blob as

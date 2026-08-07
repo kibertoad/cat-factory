@@ -25,7 +25,7 @@ import type { ResultViewContribution } from './slots'
 
 /**
  * The first-party result-view registry (slice 2 of the modular-vue adoption —
- * docs/initiatives/modular-vue-adoption.md).
+ * backend/docs/adr/0049-modular-vue-adoption.md).
  *
  * Every built-in dedicated result window is contributed as a `ComponentEntry`
  * to the `resultViews` slot instead of living in a hardcoded `Record` in

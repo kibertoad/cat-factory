@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Shared footer chrome for a modular-vue journey step (slice 3 of the modular-vue
-// adoption — docs/initiatives/modular-vue-adoption.md). Renders the Back control
+// adoption — backend/docs/adr/0049-modular-vue-adoption.md). Renders the Back control
 // (wired to the host-provided `goBack`, present only when the current entry
 // declared `allowBack` and there's a prior step) plus a `primary` slot for the
 // step's own advance affordance, so gating stays local to each step.

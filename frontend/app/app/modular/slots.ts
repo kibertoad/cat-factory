@@ -10,7 +10,7 @@ import type { WorkspaceMetadataFieldDefinition } from './workspace-metadata'
  * The layer's aggregated slot map — the single home for every slot key the
  * first-party modules (and consumer deployments) contribute to. Grows one key
  * per converted seam as the modular-vue adoption proceeds
- * (docs/initiatives/modular-vue-adoption.md):
+ * (backend/docs/adr/0049-modular-vue-adoption.md):
  *
  *  - `nav` (slice 1) — the nav/command catalog, rendered by the three shells.
  *  - `resultViews` (slice 2) — the id → dedicated result-window registry

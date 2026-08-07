@@ -8,7 +8,7 @@ import type { AppSlots } from '~/modular/slots'
 
 /**
  * modular-vue registry for the `@cat-factory/app` layer (slice 0 of the
- * modular-vue adoption — docs/initiatives/modular-vue-adoption.md).
+ * modular-vue adoption — backend/docs/adr/0049-modular-vue-adoption.md).
  *
  * This is the frontend analogue of the backend's public registries
  * (`registerAgentKind`, `registerGate`): a single registry into which the layer

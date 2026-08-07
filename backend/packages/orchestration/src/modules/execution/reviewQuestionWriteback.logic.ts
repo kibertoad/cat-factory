@@ -8,7 +8,7 @@ import type {
 import type { ReviewCommon } from '../review/IterativeReviewService.js'
 
 // Pure decision + payload assembly for the headless clarification loop's question writeback
-// (slice 2a of `docs/initiatives/headless-clarification-loop.md`). The side-effecting half —
+// (slice 2a of `backend/docs/adr/0047-headless-clarification-loop.md`). The side-effecting half —
 // the workspace setting, the linked-issue lookup, the idempotency marker and the actual
 // comment — lives in the `IssueWritebackProvider`; what belongs HERE is the engine's own
 // half of the gate: whether this park is one a headless caller can only learn about through

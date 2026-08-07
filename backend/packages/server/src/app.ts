@@ -225,7 +225,7 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', publicApiController())
   // The public PARKED-DECISION surface (`/api/v1/runs/:runId/decisions/*`): the answerer that lets
   // a headless run include the clarification loop at all. Same in-controller key auth, gated on
-  // the `decide` rung of the scope ladder. See docs/initiatives/headless-clarification-loop.md.
+  // the `decide` rung of the scope ladder. See backend/docs/adr/0047-headless-clarification-loop.md.
   app.route('/', publicDecisionController())
   // The public REMOTE DEBUGGING surface (`/api/v1/debug/*`): read-scoped, keyset-paginated reads
   // over a run's telemetry + provisioning log, sized so an LLM can walk them within a context

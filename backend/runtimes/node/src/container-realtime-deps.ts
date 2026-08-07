@@ -250,7 +250,7 @@ export function buildNodeRealtimeDeps(input: NodeRealtimeDepsInput) {
     ...(slackDeps.notificationChannel ? [slackDeps.notificationChannel] : []),
     // The outbound webhook is what a HEADLESS caller relies on: it has no in-app inbox and no
     // browser WebSocket, so a parked run would otherwise reach it only by polling (see
-    // docs/initiatives/headless-clarification-loop.md). Symmetric with the Worker.
+    // backend/docs/adr/0047-headless-clarification-loop.md). Symmetric with the Worker.
     //
     // It belongs in the EXTERNAL set by the definition above — it is not the in-app push, and its
     // signing secret is sealed with the deployment key. That placement is what makes it work under

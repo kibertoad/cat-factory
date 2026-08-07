@@ -13,7 +13,7 @@
 # in lockstep with the `vue` range in frontend/app/package.json.
 # The floor is 3.5.40: `@modular-vue/*` peer-requires `vue@^3.5.40`, so the whole
 # family moves up together to keep the single-singleton invariant while satisfying
-# the modular-vue adoption (docs/initiatives/modular-vue-adoption.md).
+# the modular-vue adoption (backend/docs/adr/0049-modular-vue-adoption.md).
 # vue-router is likewise pinned to one version. Nuxt 4.5.0 wants `vue-router@^5.2.0`
 # while `@nuxtjs/i18n` still resolves `^5.1.0`, so without this the SPA bundles two
 # copies of vue-router. The `@modular-vue/*` packages peer-require `vue-router@^5.0.0`,

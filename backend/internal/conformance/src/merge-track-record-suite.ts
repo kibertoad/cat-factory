@@ -12,7 +12,7 @@ import type {
 import { describe, expect, it } from 'vitest'
 import type { ConformanceApp, ConformanceHarness } from './harness.js'
 
-// Cross-runtime parity for the MERGE TRACK RECORD (docs/initiatives/merge-track-record.md):
+// Cross-runtime parity for the MERGE TRACK RECORD (backend/docs/adr/0046-merge-track-record.md):
 // the deterministic change classification, the per-class auto-merge rules on a merge preset, the
 // persisted record of each merge decision, the reviewer-effort tag, and the per-class SQL rollups.
 //
