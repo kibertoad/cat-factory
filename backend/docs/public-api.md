@@ -503,6 +503,10 @@ what the catalog shows is exactly what creation accepts):
   `details.reason: 'task_type_fields_invalid'`, and a `problems` list naming **every** failure at
   once rather than the first.
 - A field hidden by its own `showWhen` condition is neither required nor stored.
+- A field may carry a `section`, the caption the deployment groups it under (`1.20.0`). It is
+  PRESENTATION: nothing about validation, storage or the prompt fold reads it, so a client that
+  ignores it sends exactly the same bag. Render it if you are drawing a form; the fields of one
+  section are always declared consecutively.
 - A type the deployment does NOT register (a node whose build predates the registration) has no
   descriptor to check against; its values are carried through verbatim, exactly as the app's own
   internal door does.

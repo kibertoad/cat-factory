@@ -15,6 +15,7 @@
 // itself gated on `integrations.manage` for documents, whose ATTACH writes are member-tier while
 // storing the credential is not.
 import type { PendingContext } from '~/composables/useContextLinking'
+import { connectableSources } from '~/utils/sourcePicker'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 
@@ -48,15 +49,16 @@ const issuesConnected = computed(() => tasks.available && tasks.anyOffered)
 // connected via the App, so they never appear here); for issues, every configured tracker not yet
 // available. The connect modals are the same ones the Integrations hub opens.
 //
-// The document half is additionally empty for anyone without `integrations.manage`: connecting
-// stores a workspace credential and stays admin-tier, while attaching a document moved to the
-// member tier, so a member falls through to the disabled Attach button instead of a connect
-// action that opens a modal, takes a token and 403s.
+// The document half goes through the shared `connectableSources`, the ONE answer to "which document
+// sources could I connect", which the picker's own add tier reads too: as three near-copies these
+// disagreed about whether an unavailable integration counted.
 const { canManageIntegrations } = useWorkspaceAccess()
 const connectableDocSources = computed(() =>
-  documents.available && canManageIntegrations.value
-    ? documents.sources.filter((s) => !documents.isConnected(s.source))
-    : [],
+  connectableSources(documents.sources, {
+    isConnected: documents.isConnected,
+    canConnect: canManageIntegrations.value,
+    available: documents.available,
+  }),
 )
 const connectableIssueSources = computed(() =>
   tasks.available ? tasks.sources.filter((s) => !s.available) : [],

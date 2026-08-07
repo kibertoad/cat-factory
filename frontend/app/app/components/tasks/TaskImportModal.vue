@@ -1,20 +1,26 @@
 <script setup lang="ts">
-// Create a board task from a connected tracker's issue. Pick a container (service
-// frame or module), then use the inline picker below to find an issue (search by
-// title, pick an already-imported one, or paste a URL/key) — choosing one opens the
+// Create a board task from a connected tracker's issue. Use the inline picker to find an issue
+// (search by title, pick an already-imported one, or paste a URL/key): choosing one opens the
 // prefilled add-task form (title seeded, issue staged as linked context) where the
 // user confirms the pipeline / presets before it's created. This is the same picker
 // the add-task form uses for "context issues", so the two behave identically. A
 // pasted parent/epic reference can instead be spawned as a whole linked task group.
+//
+// Where the task lands depends on how the modal was opened, and `useContainerTargets` is the shared
+// answer (`<BugHuntModal>` is the same question from the same frame header). From a service frame's
+// own "create task from issue" button that frame settles the SERVICE, so the modal states it rather
+// than asking; a frame with modules still asks frame-or-which-module, scoped to that frame, because
+// the button never answered that half. Opened standalone (the command bar / the Integrations hub)
+// there is no frame behind it and every container on the board is a candidate.
 import type { TaskSourceKind } from '~/types/domain'
 import type { PendingContext } from '~/composables/useContextLinking'
+import { type AddSourceLabels, addChoicesOf, buildSourceChoices } from '~/utils/sourcePicker'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
 const tasks = useTasksStore()
-const board = useBoardStore()
 const toast = useToast()
 
 const open = computed({
@@ -32,37 +38,42 @@ const source = ref<TaskSourceKind | undefined>(undefined)
 const ref_ = ref('')
 const importing = ref(false)
 
-// When opened from a service frame the modal is the "create a task from an issue"
-// surface; opened standalone it's the general tracker-issue browser/importer.
-const title = computed(() =>
-  ui.taskImport?.containerId ? t('tasks.import.titleCreate') : t('tasks.import.titleBrowse'),
-)
-
 const descriptor = computed(() => (source.value ? tasks.descriptorFor(source.value) : undefined))
 
-// The container (service frame or module) a new task is created in.
-const containerId = ref<string | undefined>(undefined)
+/**
+ * The trackers the "nothing connected yet" state offers, worded per add action off the shared
+ * builder rather than re-deciding `available ? enable : connect` here. `enable` is connected but
+ * toggled off for this workspace, so the user is never told to connect what they already have.
+ */
+const ADD_LABEL: AddSourceLabels<'connect' | 'enable'> = {
+  connect: (label) => t('tasks.import.connectSource', { label }),
+  enable: (label) => t('tasks.import.enableSource', { label }),
+}
+const addableSources = computed(() => addChoicesOf(buildSourceChoices(tasks.sources, source.value)))
 
-// Containers a new task can be created in: every service frame and module on the
-// board. Modules are labelled with their parent frame so the choice is unambiguous.
-const containerItems = computed(() =>
-  board.blocks
-    .filter((b) => b.level === 'frame' || b.level === 'module')
-    .map((b) => ({
-      label:
-        b.level === 'module'
-          ? `${board.getBlock(b.parentId ?? '')?.title ?? '?'} › ${b.title}`
-          : b.title,
-      value: b.id,
-    })),
+// Where the new task lands. `pinned` is re-resolved through the board on every read, so a frame
+// deleted while the modal sat open widens back to the whole board AND drops the selection that
+// pointed at it (`useContainerTargets`).
+const {
+  pinned: pinnedContainer,
+  items: containerItems,
+  containerId,
+  stated: containerStated,
+  reset: resetContainer,
+} = useContainerTargets(() => ui.taskImport?.containerId)
+
+// Which surface this is. Derived from the RESOLVED frame rather than the id the modal was opened
+// with, so the title cannot claim the frame-scoped surface while the body renders the standalone
+// browser: they answer "was this opened from a frame" from one source.
+const title = computed(() =>
+  pinnedContainer.value ? t('tasks.import.titleCreate') : t('tasks.import.titleBrowse'),
 )
+
 watch(open, (isOpen) => {
   if (isOpen) {
     ref_.value = ''
     source.value = ui.taskImport?.source ?? tasks.offeredSources[0]?.source ?? undefined
-    // Opened from a service frame → preselect it as the create-in target; otherwise
-    // fall back to the first container on the board.
-    containerId.value = ui.taskImport?.containerId ?? containerItems.value[0]?.value
+    resetContainer()
     tasks.loadTasks().catch(() => {})
   }
 })
@@ -125,18 +136,14 @@ async function doSpawnEpic() {
         <p class="text-sm text-slate-400">{{ t('tasks.import.connectFirst') }}</p>
         <div class="flex justify-center gap-2">
           <UButton
-            v-for="s in tasks.sources"
-            :key="s.source"
+            v-for="choice in addableSources"
+            :key="choice.source"
             color="primary"
             variant="soft"
-            :icon="s.icon"
-            @click="ui.openTaskConnect(s.source)"
+            :icon="choice.icon"
+            @click="ui.openTaskConnect(choice.source)"
           >
-            {{
-              s.available
-                ? t('tasks.import.enableSource', { label: s.label })
-                : t('tasks.import.connectSource', { label: s.label })
-            }}
+            {{ ADD_LABEL[choice.action](choice.label) }}
           </UButton>
         </div>
       </div>
@@ -148,8 +155,17 @@ async function doSpawnEpic() {
 
       <!-- Main form -->
       <div v-else class="space-y-4">
-        <!-- Where the new task lands (preselected when opened from a service frame). -->
-        <UFormField :label="t('tasks.import.createTasksIn')">
+        <!-- Where the new task lands. Stated when there is one legal target (opened from a service
+             frame that has no modules); otherwise a real choice, scoped to that frame when the
+             modal was opened from one. -->
+        <p v-if="containerStated" class="text-xs text-slate-400">
+          <i18n-t keypath="tasks.import.creatingIn" tag="span" scope="global">
+            <template #container>
+              <span class="font-medium text-slate-200">{{ pinnedContainer!.title }}</span>
+            </template>
+          </i18n-t>
+        </p>
+        <UFormField v-else :label="t('tasks.import.createTasksIn')">
           <USelect
             v-model="containerId"
             :items="containerItems"
@@ -160,7 +176,7 @@ async function doSpawnEpic() {
 
         <!-- Find an issue and create a task from it. Same picker the add-task form
              uses for context issues: search by title, pick an already-imported one,
-             or paste a URL/key — choosing one opens the prefilled add-task form. The
+             or paste a URL/key, and choosing one opens the prefilled add-task form. The
              search is scoped to the chosen container's repo (so a GitHub search stays
              in that service's repo and a pasted URL / bare number resolves there). -->
         <UFormField v-if="containerId" :label="t('tasks.import.searchIssues')">

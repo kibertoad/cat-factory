@@ -3,7 +3,9 @@ import * as v from 'valibot'
 import {
   DESCRIPTOR_FIELD_VALUE_MAX,
   descriptorFieldDefaults,
+  descriptorFieldSections,
   descriptorFieldValuesSchema,
+  duplicatedDescriptorSectionCaptions,
   isDescriptorFieldVisible,
   renderDescriptorFieldValue,
   sanitizeDescriptorFields,
@@ -11,6 +13,7 @@ import {
   withDescriptorFieldDefaults,
   type DescriptorField,
 } from './form-fields.js'
+import { initiativePresetFieldSchema } from './initiative-preset.js'
 import { taskTypeFieldDescriptorSchema } from './task-types.js'
 import { taskTypeFieldsSchema } from './primitives.js'
 
@@ -282,5 +285,219 @@ describe('descriptor defaults', () => {
     const fields = [field({ key: 'entity' }), field({ key: 'notes', type: 'textarea' })]
     expect(withDescriptorFieldDefaults(fields, { entity: 'Order' })).toEqual({ entity: 'Order' })
     expect(withDescriptorFieldDefaults([], {})).toEqual({})
+  })
+})
+
+// `section` groups a long form into captioned runs. Presentation only: nothing below asserts a
+// change to what is validated, frozen or folded into a prompt, because there is none. What IS a rule
+// is which fields a caption spans, and it is stated once here because two readers depend on it: the
+// renderer, and the boot check that refuses a declaration this reduction cannot render honestly.
+describe('descriptor form sections', () => {
+  const keysOf = (fields: readonly DescriptorField[]) => fields.map((f) => f.key)
+
+  it('cuts consecutive runs of one caption, in declaration order', () => {
+    const sections = descriptorFieldSections(
+      [
+        field({ key: 'entity' }),
+        field({ key: 'style', section: 'Shape' }),
+        field({ key: 'verb', section: 'Shape' }),
+        field({ key: 'dir', type: 'path', section: 'Placement' }),
+      ],
+      {},
+    )
+    expect(sections.map((s) => [s.section, keysOf(s.fields)])).toEqual([
+      [undefined, ['entity']],
+      ['Shape', ['style', 'verb']],
+      ['Placement', ['dir']],
+    ])
+  })
+
+  it('renders a form declaring no section as ONE uncaptioned run', () => {
+    // The shape every existing descriptor has: the flat column, unchanged, and reached through the
+    // same call rather than a branch in the renderer.
+    const fields = [field({ key: 'entity' }), field({ key: 'notes', type: 'textarea' })]
+    expect(descriptorFieldSections(fields, {})).toEqual([{ fields }])
+    expect(descriptorFieldSections([], {})).toEqual([])
+  })
+
+  it('drops a section whose every field is hidden, caption included', () => {
+    // A caption over nothing reads as a form that failed to load its own controls. Visibility is
+    // applied BEFORE the runs are cut, so the empty run never exists rather than being emitted.
+    const fields = [
+      field({ key: 'style', type: 'select', options: [{ value: 'http', label: 'HTTP' }] }),
+      field({ key: 'verb', section: 'HTTP', showWhen: { key: 'style', equals: 'http' } }),
+      field({ key: 'path', section: 'HTTP', showWhen: { key: 'style', equals: 'http' } }),
+    ]
+    expect(descriptorFieldSections(fields, {}).map((s) => s.section)).toEqual([undefined])
+    expect(descriptorFieldSections(fields, { style: 'http' }).map((s) => s.section)).toEqual([
+      undefined,
+      'HTTP',
+    ])
+  })
+
+  it('does not let a HIDDEN field between two of a section split its caption in half', () => {
+    const sections = descriptorFieldSections(
+      [
+        field({ key: 'verb', section: 'Shape' }),
+        field({ key: 'note', showWhen: { key: 'advanced', equals: true } }),
+        field({ key: 'style', section: 'Shape' }),
+      ],
+      {},
+    )
+    expect(sections.map((s) => [s.section, keysOf(s.fields)])).toEqual([
+      ['Shape', ['verb', 'style']],
+    ])
+  })
+
+  it('folds two spellings of one caption together, rendering the first', () => {
+    // The same fold the task-type picker's category rows use, for the same reason: two spellings of
+    // one section would otherwise render as near-identical headings sitting beside each other.
+    const sections = descriptorFieldSections(
+      [
+        field({ key: 'a', section: 'API surface' }),
+        field({ key: 'b', section: 'api  Surface' }),
+        // A whitespace-only caption is no section at all: the schema bounds it, but a CODE
+        // registration is never parsed, so it must read as ungrouped rather than render an empty
+        // heading.
+        field({ key: 'c', section: '   ' }),
+      ],
+      {},
+    )
+    expect(sections.map((s) => [s.section, keysOf(s.fields)])).toEqual([
+      ['API surface', ['a', 'b']],
+      [undefined, ['c']],
+    ])
+  })
+
+  it('names a section a filled form can be made to caption twice, which has no honest rendering', () => {
+    // Reported to BOOT rather than repaired here: the reduction preserves declaration order, so the
+    // caption renders twice; merging the runs would move a field away from where its author wrote
+    // it. Both are knowable from the registration.
+    expect(
+      duplicatedDescriptorSectionCaptions([
+        field({ key: 'a', section: 'Shape' }),
+        field({ key: 'b', section: 'Placement' }),
+        field({ key: 'c', section: 'shape' }),
+      ]),
+    ).toEqual(['Shape'])
+    // Broken apart by an UNSECTIONED field, which is the same fault: two captions, one section.
+    expect(
+      duplicatedDescriptorSectionCaptions([
+        field({ key: 'a', section: 'Shape' }),
+        field({ key: 'b' }),
+        field({ key: 'c', section: 'Shape' }),
+      ]),
+    ).toEqual(['Shape'])
+  })
+
+  it('says nothing about a contiguous declaration, however the runs interleave with ungrouped ones', () => {
+    // Ungrouped fields are not a section, so a form may open and close with them freely; only a
+    // NAMED caption has to be declared in one place.
+    expect(
+      duplicatedDescriptorSectionCaptions([
+        field({ key: 'a' }),
+        field({ key: 'b', section: 'Shape' }),
+        field({ key: 'c', section: 'Shape' }),
+        field({ key: 'd' }),
+        field({ key: 'e', section: 'Placement' }),
+        field({ key: 'f' }),
+      ]),
+    ).toEqual([])
+    expect(duplicatedDescriptorSectionCaptions([])).toEqual([])
+  })
+
+  // The criterion is REACHABILITY, not contiguity in the declared list, because the reduction this
+  // check mirrors applies visibility BEFORE cutting the runs. Getting this wrong is not a missed
+  // report: the check is an ERROR, so a false one fails the deployment's boot over a form that
+  // renders correctly in every state a user can reach.
+  it('accepts a section interleaved only with a MUTUALLY EXCLUSIVE branch', () => {
+    // How a branching form is actually written: each branch's fields sit beside the picker they
+    // qualify, so the two branches interleave. `Command` shows in exactly the state the two
+    // `Endpoint` fields do not, so one caption prints in both reachable states.
+    const branching = [
+      field({
+        key: 'kind',
+        type: 'select',
+        options: [
+          { value: 'http', label: 'HTTP' },
+          { value: 'cli', label: 'CLI' },
+        ],
+      }),
+      field({ key: 'method', section: 'Endpoint', showWhen: { key: 'kind', equals: 'http' } }),
+      field({ key: 'argv', section: 'Command', showWhen: { key: 'kind', equals: 'cli' } }),
+      field({ key: 'timeout', section: 'Endpoint', showWhen: { key: 'kind', equals: 'http' } }),
+    ]
+    expect(duplicatedDescriptorSectionCaptions(branching)).toEqual([])
+    // Which is exactly what the renderer does with it, in both states the picker can be in.
+    for (const kind of ['http', 'cli']) {
+      const captions = descriptorFieldSections(branching, { kind }).map((s) => s.section)
+      expect(captions.filter((caption) => caption !== undefined)).toHaveLength(1)
+    }
+  })
+
+  it('still names a split whose intervening field CAN show beside both halves', () => {
+    // The same shape as above except the intervening field is reachable together with the section's
+    // two halves, so there is a state that prints `Endpoint` twice. An `includes` on the same key
+    // does not contradict an `includes`, and a condition on a DIFFERENT key never contradicts.
+    const both = [
+      field({ key: 'kind', type: 'select', options: [{ value: 'http', label: 'HTTP' }] }),
+      field({ key: 'method', section: 'Endpoint', showWhen: { key: 'kind', equals: 'http' } }),
+      field({ key: 'note', showWhen: { key: 'verbose', equals: true } }),
+      field({ key: 'timeout', section: 'Endpoint', showWhen: { key: 'kind', equals: 'http' } }),
+    ]
+    expect(duplicatedDescriptorSectionCaptions(both)).toEqual(['Endpoint'])
+    expect(
+      descriptorFieldSections(both, { kind: 'http', verbose: true }).map((s) => s.section),
+    ).toEqual([undefined, 'Endpoint', undefined, 'Endpoint'])
+
+    // A predicate-less condition states nothing and reads as always-visible (the shared evaluator's
+    // rule), so it cannot be the thing that makes a split unreachable.
+    expect(
+      duplicatedDescriptorSectionCaptions([
+        field({ key: 'a', section: 'Shape', showWhen: { key: 'kind' } }),
+        field({ key: 'b', showWhen: { key: 'kind' } }),
+        field({ key: 'c', section: 'Shape' }),
+      ]),
+    ).toEqual(['Shape'])
+  })
+
+  it('accepts a section whose two halves can never show together', () => {
+    // Nothing prints twice when only one half is ever on screen, whichever way the halves are
+    // gated: the splitter being reachable is not enough on its own.
+    expect(
+      duplicatedDescriptorSectionCaptions([
+        field({ key: 'a', section: 'Shape', showWhen: { key: 'kind', equals: 'http' } }),
+        field({ key: 'b', section: 'Placement' }),
+        field({ key: 'c', section: 'Shape', showWhen: { key: 'kind', equals: 'cli' } }),
+      ]),
+    ).toEqual([])
+    // `equals` wants a scalar under the key and `includes` wants an array, so they contradict too.
+    expect(
+      duplicatedDescriptorSectionCaptions([
+        field({ key: 'a', section: 'Shape', showWhen: { key: 'ops', equals: 'create' } }),
+        field({ key: 'b', section: 'Placement' }),
+        field({ key: 'c', section: 'Shape', showWhen: { key: 'ops', includes: 'create' } }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('reports each offending caption once, in first-offence order', () => {
+    expect(
+      duplicatedDescriptorSectionCaptions([
+        field({ key: 'a', section: 'Placement' }),
+        field({ key: 'b', section: 'Shape' }),
+        field({ key: 'c', section: 'placement' }),
+        field({ key: 'd', section: 'shape' }),
+        field({ key: 'e', section: 'Placement' }),
+      ]),
+    ).toEqual(['Placement', 'Shape'])
+  })
+
+  it('bounds a caption on the wire, and admits one on both declaring surfaces', () => {
+    for (const schema of [taskTypeFieldDescriptorSchema, initiativePresetFieldSchema]) {
+      expect(v.parse(schema, { key: 'k', label: 'K', section: 'Shape' }).section).toBe('Shape')
+      expect(() => v.parse(schema, { key: 'k', label: 'K', section: '' })).toThrow()
+      expect(() => v.parse(schema, { key: 'k', label: 'K', section: 'x'.repeat(121) })).toThrow()
+    }
   })
 })

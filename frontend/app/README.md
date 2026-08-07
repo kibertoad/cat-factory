@@ -112,12 +112,27 @@ When the backend declares the fields and the SPA only collects them, render them
 surfaces use it: an initiative preset's create form and a reusable operation's per-case form on a
 custom task type (`AddTaskModal`). Adding a third is a `:fields` binding, not a component.
 
+**Grouping is the descriptor's own, through `descriptorFieldSections`**, not a wrapper each surface
+builds: consecutive fields sharing a `section` render under one caption, and the reduction applies
+`showWhen` first, so a section whose every field is hidden renders no caption. Never re-group or
+re-order the fields at a call site, or a form renders in an order its author never wrote.
+
+**A captioned run is rendered FLAT, never as a per-run wrapper element** (`descriptorFormRows`
+carries each run's caption on the field that opens it). Run membership is derived state that shifts
+as `showWhen` reveals fields, while a field's identity does not: nesting the fields inside a wrapper
+re-parents them when a boundary moves, and Vue can only do that by unmounting and remounting. The
+remounted input is typically the one being TYPED INTO, because typing into the trigger is what moved
+the boundary, so it loses focus, caret and IME composition mid-keystroke. Keep every field a sibling
+keyed by `field.key` and the diff MOVES it instead. The same trap as keying any list by index, with a
+worse symptom: `descriptorFields.spec.ts` pins that a reveal preserves every field key.
+
 Four rules travel with it. **Validate with the shared `validateDescriptorFields`** so the submit
 button reflects exactly what the server will refuse, and **submit the shared
 `sanitizeDescriptorFields` result** so a stale answer on a since-hidden `showWhen` field never
-reaches the wire. **The labels are deployment-authored English rendered verbatim**: only the chrome
-around them (a path-invalid message, section captions) is i18n, so no descriptor string enters a
-locale catalog. And **the value-bag rules live in `utils/descriptorFields.ts`, not in the SFC**
+reaches the wire. **Every string a descriptor carries is deployment-authored English rendered
+verbatim**, labels, help, option captions and the `section` grouping captions alike: only the
+platform's own chrome around them (the path-invalid message) is i18n, so no descriptor string enters
+a locale catalog. And **the value-bag rules live in `utils/descriptorFields.ts`, not in the SFC**
 (`defaultDescriptorValues` for the initial values, `setDescriptorValue` / `setDescriptorCheckbox` /
 `toggleDescriptorGroupValue` for one edit): what an edit freezes on an entity is what a unit test
 must be able to reach, and a rule inside a component is only reachable by mounting one.

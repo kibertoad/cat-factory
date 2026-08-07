@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { DescriptorField } from '~/types/domain'
 import {
   defaultDescriptorValues,
+  descriptorFormRows,
   descriptorGroupValue,
   setDescriptorCheckbox,
   setDescriptorValue,
@@ -122,5 +123,72 @@ describe('toggleDescriptorGroupValue', () => {
     expect(toggleDescriptorGroupValue({ ops: 'create' }, 'ops', 'list', true)).toEqual({
       ops: ['list'],
     })
+  })
+})
+
+// The layout half of `section` grouping. What a caption SPANS is the shared contracts rule (tested
+// there); what these assert is the property that rule's rendering has to preserve, and the reason the
+// rows are flat at all: a field's identity survives a boundary move, so the keyed diff MOVES the
+// live input instead of remounting it.
+describe('descriptorFormRows', () => {
+  const keysOf = (rows: ReturnType<typeof descriptorFormRows>) => rows.map((r) => r.field.key)
+
+  it('carries each run caption on the field that OPENS it, once', () => {
+    const rows = descriptorFormRows(
+      [
+        field({ key: 'entity' }),
+        field({ key: 'style', section: 'Shape' }),
+        field({ key: 'verb', section: 'Shape' }),
+        field({ key: 'dir', type: 'path', section: 'Placement' }),
+      ],
+      {},
+    )
+    expect(rows.map((r) => [r.field.key, r.caption, r.startsGroup])).toEqual([
+      ['entity', undefined, false],
+      ['style', 'Shape', true],
+      ['verb', undefined, false],
+      ['dir', 'Placement', true],
+    ])
+  })
+
+  it('renders a sectionless form as the flat column, with no caption and no group gap', () => {
+    const rows = descriptorFormRows([field({ key: 'entity' }), field({ key: 'notes' })], {})
+    expect(rows.map((r) => [r.caption, r.startsGroup])).toEqual([
+      [undefined, false],
+      [undefined, false],
+    ])
+    expect(descriptorFormRows([], {})).toEqual([])
+  })
+
+  it('keeps a field key STABLE when a reveal moves it into another run', () => {
+    // The regression this shape exists for. `note` is unsectioned and gated, so revealing it splits
+    // the `Shape` run in two and re-captions `style`. Boot refuses THIS declaration (the split is
+    // reachable), and the renderer still has to be total over it, because a wire descriptor can
+    // arrive from a node whose build predates the refusal. Every field key present before is still
+    // present after, so Vue's keyed diff moves those nodes rather than unmounting them: typing into
+    // `advanced` (the trigger) cannot destroy the input being typed into.
+    const fields = [
+      field({ key: 'advanced', type: 'checkbox' }),
+      field({ key: 'verb', section: 'Shape' }),
+      field({ key: 'note', showWhen: { key: 'advanced', equals: true } }),
+      field({ key: 'style', section: 'Shape' }),
+    ]
+    expect(keysOf(descriptorFormRows(fields, {}))).toEqual(['advanced', 'verb', 'style'])
+
+    const revealed = descriptorFormRows(fields, { advanced: true })
+    expect(keysOf(revealed)).toEqual(['advanced', 'verb', 'note', 'style'])
+    // The caption moved (the second run needs its own) while the field identities did not.
+    expect(revealed.map((r) => r.caption)).toEqual([undefined, 'Shape', undefined, 'Shape'])
+  })
+
+  it('marks a later UNCAPTIONED run as opening a group too, so the gap is not caption-only', () => {
+    const rows = descriptorFormRows(
+      [field({ key: 'verb', section: 'Shape' }), field({ key: 'notes' })],
+      {},
+    )
+    expect(rows.map((r) => [r.field.key, r.startsGroup])).toEqual([
+      ['verb', false],
+      ['notes', true],
+    ])
   })
 })
