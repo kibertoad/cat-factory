@@ -6985,7 +6985,7 @@
           },
           "commandBar": {
             "title": "La paleta de comandos",
-            "body": "La forma más rápida de llegar a cualquier acción: ábrela y empieza a escribir. Desde ahí puedes reiniciar este tutorial en cualquier momento."
+            "body": "La forma más rápida de llegar a cualquier acción: ábrela y empieza a escribir. Para reiniciar este tutorial en cualquier momento, elige ahí \"@:{'nav.tutorials'}\"."
           },
           "toolbar": {
             "title": "Controles del tablero",

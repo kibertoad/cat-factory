@@ -329,6 +329,28 @@ async function focusCard(cause: TutorialAdvanceCause) {
 }
 
 /**
+ * A press on the card must not move focus to it, or tooltip text stops being selectable
+ * exactly on the steps that point INTO an open modal.
+ *
+ * The card is click-focusable (`tabindex="-1"`, for {@link focusCard}), so pressing its text
+ * would focus it. While a modal is open that focus move leaves the modal's focus trap, the
+ * trap yanks focus straight back, and Chromium abandons the selection the press was starting
+ * (`selectstart` never fires): the one text a user reliably tries to copy, the sample repo
+ * slug in the add-service tour, could not be selected. `preventDefault` on the press is not
+ * a fix, because cancelling pointerdown or mousedown cancels the selection itself. Instead
+ * the card stops being focusable for just the duration of the gesture: focus then never
+ * moves, the trap stays silent, and selection proceeds. Restored on the next tick, so
+ * `focusCard` (tour start, Next/Back) still lands. The card's own buttons are unaffected:
+ * they are focusable in their own right.
+ */
+function onCardPointerDown() {
+  const el = cardEl.value
+  if (!el) return
+  el.removeAttribute('tabindex')
+  window.setTimeout(() => el.setAttribute('tabindex', '-1'), 0)
+}
+
+/**
  * Move the cursor forward. The cause is REQUIRED rather than defaulted: it decides whether
  * focus moves, and a new call site inheriting a default silently is exactly how a
  * `target-click` advance came to steal focus from the modal it had just opened.
@@ -520,11 +542,13 @@ onUnmounted(() => {
            this card would close the user's half-filled form instead of pressing a button). -->
       <!-- `tabindex="-1"` so `focusCard()` can put focus here when the tour starts and on every
            Next/Back — without it a keyboard user has to tab the whole page to reach Next, since
-           this is teleported to the end of `body`. No `aria-modal`: a coach mark is NOT modal,
-           and half the catalog asks the user to operate the real control behind it. No
-           `aria-describedby` on the body either: the live region above already reads the body
-           as part of a complete announcement, and pointing at it here would have every focus
-           move read it a second time. -->
+           this is teleported to the end of `body`. (A pointer press lifts the attribute for the
+           duration of the gesture, see `onCardPointerDown`, or pressing the text would focus
+           the card and an open modal's focus trap would cancel the selection being started.)
+           No `aria-modal`: a coach mark is NOT modal, and half the catalog asks the user to
+           operate the real control behind it. No `aria-describedby` on the body either: the
+           live region above already reads the body as part of a complete announcement, and
+           pointing at it here would have every focus move read it a second time. -->
       <div
         ref="cardEl"
         role="dialog"
@@ -533,7 +557,7 @@ onUnmounted(() => {
         class="pointer-events-auto fixed z-[70] w-80 max-w-[calc(100vw-16px)] rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
         :style="{ top: `${layout.top}px`, left: `${layout.left}px` }"
         data-testid="tutorial-tooltip"
-        @pointerdown.stop
+        @pointerdown.stop="onCardPointerDown"
       >
         <div class="mb-1 flex items-start justify-between gap-3">
           <h3 class="text-sm font-semibold text-slate-100">{{ t(step.titleKey) }}</h3>

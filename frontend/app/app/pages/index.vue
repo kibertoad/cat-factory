@@ -408,6 +408,10 @@ watch(
          model + no runner pool + no storage). The wrapper is `pointer-events-none`; each banner
          re-enables pointer events on its own card, so the empty strip never intercepts clicks on
          the board chrome underneath.
+         Anchored `top-16`, BELOW the centered BoardToolbar (`top-3` + its pill height), not at
+         `top-0`: these are standing advisories that can sit for weeks, and at `top-0` the column
+         drew over the toolbar (z-40 vs z-20), hiding the zoom/fit controls, which also left the
+         board-basics tour highlighting a control buried under the banner.
          - AI-readiness (no usable model source, or default preset uses unavailable models).
          - Infrastructure provider (env/runner-pool wired but missing mandatory config).
          - Infra-setup (this deployment needs an executor / test env / storage the operator hasn't
@@ -417,7 +421,7 @@ watch(
            so it yields to the prompts about things that are outright broken. -->
     <div
       v-if="workspace.ready && !needsGitHubInstall && !githubProbePending"
-      class="pointer-events-none absolute inset-x-0 top-0 z-40 flex flex-col items-center gap-2 px-4 pt-4"
+      class="pointer-events-none absolute inset-x-0 top-16 z-40 flex flex-col items-center gap-2 px-4"
     >
       <AiProvidersBanner />
       <ProviderConfigBanner />
