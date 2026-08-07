@@ -510,6 +510,16 @@ export interface CoreDependencies {
    */
   spendRollupRepository?: SpendRollupRepository
   /**
+   * How long the `token_usage` ledger is retained (`TOKEN_USAGE_RETENTION_DAYS`, in ms). Not a
+   * knob any service applies itself: the retention sweep owns the prune. It is here because a
+   * board DELETE has to fold the board's un-rolled spend into {@link spendRollupRepository}
+   * before the cascade takes the ledger rows, and how far back that fold walks is bounded by how
+   * far back the ledger still holds anything. Wiring the same number both places is what keeps a
+   * board's final fold covering exactly the days a sweep pass would have. 0 or absent ⇒ the
+   * ledger is never pruned and the fold falls back to its own backfill floor.
+   */
+  tokenUsageRetentionMs?: number
+  /**
    * Whether the LLM observability sink persists the full prompt body with each metric.
    * Defaults to true; set false (via `LLM_RECORD_PROMPTS=false`) to keep the numeric
    * telemetry while storing the complete prompts empty. Only meaningful when

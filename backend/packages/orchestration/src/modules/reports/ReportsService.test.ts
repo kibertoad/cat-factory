@@ -44,6 +44,7 @@ function fakes() {
   }
   const spendRollupRepository: SpendRollupRepository = {
     rollupSpendDays: async () => 0,
+    rollupWorkspaceSpendDays: async () => 0,
     spendRollupWatermark: async () => NOW - DAY,
     spendByDimension: async (_scope, dimension) => {
       asked.rollup.push(dimension)

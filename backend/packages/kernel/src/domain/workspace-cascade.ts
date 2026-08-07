@@ -137,6 +137,13 @@ export type WorkspaceScopedTable = (typeof WORKSPACE_SCOPED_TABLES)[number]
  * only. The rewrite is bounded to workspaces that still exist for exactly that reason, so a
  * table added here has to answer the same question: what re-derives it, and can that
  * re-derivation still see the board?
+ *
+ * That bound leaves the mirror-image question, and the delete answers it rather than the sweep:
+ * the board's spend since the last completed rollup day was never folded at all, and its ledger
+ * rows are in the list above, so they would go before any pass could see them. `token_usage` is
+ * therefore not simply cascaded here — `WorkspaceService.delete` runs one final per-workspace
+ * fold (`SpendRollupRepository.rollupWorkspaceSpendDays`) BEFORE this cascade runs, so what the
+ * table keeps of a deleted board ends where the board did.
  */
 export const WORKSPACE_CASCADE_SPECIAL_TABLES = [
   'workspace_services',

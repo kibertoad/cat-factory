@@ -115,6 +115,7 @@ describe('WorkspaceService.delete — binary-artifact purge', () => {
   })
 
   it('does not let a blob-backend outage wedge the board delete', async () => {
+    // (the spend fold is unwired here, so this logger holds only the purge line)
     const store = {
       deleteByWorkspace: () => Promise.reject(new Error('R2 down')),
     } as unknown as BinaryArtifactStore
@@ -126,5 +127,102 @@ describe('WorkspaceService.delete — binary-artifact purge', () => {
     // The swallowed failure is surfaced (not silent) so the residual leak is visible.
     expect(logger.lines.filter((l) => l.level === 'info')).toHaveLength(1)
     expect(logger.lines[0]?.fields).toMatchObject({ workspaceId: WS.id })
+  })
+})
+
+// The board's LAST fold into the durable cost rollup. `spend_days` deliberately survives a board
+// delete, but the sweep that fills it only reaches boards that still exist, so everything the
+// board spent since the last completed rollup day was never folded and its `token_usage` rows go
+// with the cascade. Nothing else in the system gets another chance at them.
+
+const DAY = 24 * 60 * 60_000
+const NOW = 1_000 * DAY
+const LEDGER_MS = 395 * DAY
+
+function spendFoldDeps(
+  rollup: {
+    watermark?: number | null
+    fold?: (workspaceId: string, from: number, to: number) => Promise<number>
+  },
+  order?: string[],
+) {
+  const folds: Array<{ workspaceId: string; from: number; to: number }> = []
+  const deleteSpy = vi.fn(() => {
+    order?.push('cascade')
+    return Promise.resolve()
+  })
+  const logger = createRecordingLogger()
+  const service = new WorkspaceService({
+    workspaceRepository: fakeWorkspaceRepository(deleteSpy),
+    blockRepository: {} as never,
+    pipelineRepository: {} as never,
+    executionRepository: {} as never,
+    idGenerator: { next: () => 'x' },
+    clock: { now: () => NOW },
+    spendRollupRepository: {
+      spendRollupWatermark: () => Promise.resolve(rollup.watermark ?? null),
+      rollupWorkspaceSpendDays: (workspaceId, from, to) => {
+        order?.push('fold')
+        folds.push({ workspaceId, from, to })
+        return rollup.fold?.(workspaceId, from, to) ?? Promise.resolve(1)
+      },
+    },
+    tokenUsageRetentionMs: LEDGER_MS,
+    logger,
+  })
+  return { service, deleteSpy, logger, folds }
+}
+
+describe('WorkspaceService.delete — final durable spend fold', () => {
+  it('folds the board’s un-rolled days BEFORE the cascade takes the ledger rows', async () => {
+    // Ordering is the whole property. Afterwards `token_usage` is gone and the fold reads
+    // nothing, so the same call would freeze an empty board rather than its last few days.
+    const order: string[] = []
+    const { service, folds } = spendFoldDeps({ watermark: NOW - 10 * DAY }, order)
+    await service.delete(WS.id)
+    expect(order).toEqual(['fold', 'cascade'])
+    expect(folds).toEqual([{ workspaceId: WS.id, from: NOW - 10 * DAY, to: NOW }])
+  })
+
+  it('walks a wide catch-up in chunks rather than leaving a remainder behind', async () => {
+    // A sweep pass caps its window and picks the rest up next time. This board has no next
+    // time, so every day back to the resume point has to be covered before the delete lands.
+    const { service, folds } = spendFoldDeps({ watermark: NOW - 70 * DAY })
+    await service.delete(WS.id)
+    expect(folds.length).toBeGreaterThan(1)
+    expect(folds[0]?.from).toBe(NOW - 70 * DAY)
+    expect(folds.at(-1)?.to).toBe(NOW)
+    for (const [i, fold] of folds.slice(1).entries()) expect(fold.from).toBe(folds[i]?.to)
+  })
+
+  it('names the days the ledger no longer holds, which nothing downstream can restate', async () => {
+    const { service, logger } = spendFoldDeps({ watermark: NOW - 3 * LEDGER_MS })
+    await service.delete(WS.id)
+    const warn = logger.lines.find((l) => l.level === 'warn')
+    expect(warn?.fields).toMatchObject({
+      workspaceId: WS.id,
+      table: 'spend_days',
+      skippedFrom: NOW - 3 * LEDGER_MS,
+      skippedTo: NOW - LEDGER_MS,
+    })
+  })
+
+  it('does not let a sick rollup wedge the delete, and says what it dropped', async () => {
+    // The trade this posture makes: refusing the delete would keep the spend foldable for a
+    // retry, but it would also render a reporting outage as a board that cannot be deleted. So
+    // the delete proceeds and the loss is NAMED, because it is unrecoverable a moment later.
+    const { service, deleteSpy, logger } = spendFoldDeps({
+      watermark: NOW - DAY,
+      fold: () => Promise.reject(new Error('statement timeout')),
+    })
+    await expect(service.delete(WS.id)).resolves.toBeUndefined()
+    expect(deleteSpy).toHaveBeenCalledWith(WS.id, [])
+    expect(logger.lines.some((l) => l.level === 'warn' && /spend fold/.test(l.msg))).toBe(true)
+  })
+
+  it('deletes the board unchanged when the rollup is not wired', async () => {
+    const { service, deleteSpy } = baseDeps(undefined)
+    await service.delete(WS.id)
+    expect(deleteSpy).toHaveBeenCalledWith(WS.id, [])
   })
 })

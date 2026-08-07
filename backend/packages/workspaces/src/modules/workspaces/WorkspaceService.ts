@@ -1,9 +1,12 @@
 import type { CreateWorkspaceInput } from '@cat-factory/contracts'
 import {
   applyMountLayout,
+  finalSpendFoldPlan,
+  noopLogger,
   registerServiceForFrame,
   requireWorkspace,
   retiredPipelines,
+  runBestEffort,
   seedBlocks,
   seedRiskPolicies,
   seedModelPresets,
@@ -30,6 +33,7 @@ import type {
   ResolveBinaryArtifactStore,
   ServiceRehome,
   ServiceRepository,
+  SpendRollupRepository,
   WorkspaceAccessCacheValue,
   WorkspaceMemberRepository,
   WorkspaceMountRepository,
@@ -85,6 +89,26 @@ export interface WorkspaceServiceDependencies {
    * runs through this port at the service layer before the cascade.
    */
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /**
+   * The durable cost-attribution rollup (`spend_days`). When wired, a board delete folds the
+   * board's UN-ROLLED days into it before the cascade takes `token_usage` away, which is the
+   * only moment that spend can still be attributed: the table is deliberately outside the
+   * cascade, but the sweep that fills it only reaches boards that still exist, so everything
+   * since the last completed rollup day would otherwise go with the ledger rows that produced
+   * it. Optional — absent (tests / a facade with no reports wiring) ⇒ the delete skips the fold.
+   */
+  spendRollupRepository?: Pick<
+    SpendRollupRepository,
+    'rollupWorkspaceSpendDays' | 'spendRollupWatermark'
+  >
+  /**
+   * How long `token_usage` is retained (`TOKEN_USAGE_RETENTION_DAYS`), which bounds how far back
+   * that final fold walks: past the ledger's own retention there is nothing left to fold. 0 or
+   * absent means the ledger is never pruned, and the fold falls back to its backfill floor. It
+   * is the SAME number the retention sweep derives its catch-up horizon from, so a board's last
+   * fold covers exactly the days a sweep would have.
+   */
+  tokenUsageRetentionMs?: number
   /** Optional structural logger for best-effort diagnostics (e.g. a swallowed artifact purge). */
   logger?: Logger
   /**
@@ -115,6 +139,11 @@ export class WorkspaceService {
   private readonly pipelineRegistry?: PipelineRegistry
   private readonly workspaceAccessCache?: GroupCacheHandle<WorkspaceAccessCacheValue>
   private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  private readonly spendRollupRepository?: Pick<
+    SpendRollupRepository,
+    'rollupWorkspaceSpendDays' | 'spendRollupWatermark'
+  >
+  private readonly tokenUsageRetentionMs: number
   private readonly logger?: Logger
   private readonly getEnvironmentHandlerSeeder?: () => EnvironmentHandlerSeeder | undefined
   private readonly getSharedStackSeeder?: () => SharedStackSeeder | undefined
@@ -132,6 +161,8 @@ export class WorkspaceService {
     pipelineRegistry,
     workspaceAccessCache,
     resolveBinaryArtifactStore,
+    spendRollupRepository,
+    tokenUsageRetentionMs,
     logger,
     getEnvironmentHandlerSeeder,
     getSharedStackSeeder,
@@ -148,6 +179,8 @@ export class WorkspaceService {
     this.workspaceMemberRepository = workspaceMemberRepository
     this.workspaceAccessCache = workspaceAccessCache
     this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
+    this.spendRollupRepository = spendRollupRepository
+    this.tokenUsageRetentionMs = tokenUsageRetentionMs ?? 0
     this.logger = logger
     this.getEnvironmentHandlerSeeder = getEnvironmentHandlerSeeder
     this.getSharedStackSeeder = getSharedStackSeeder
@@ -482,6 +515,14 @@ export class WorkspaceService {
     // in `listVisible`, no retention sweep will revisit those rows — reclaim is then out-of-band,
     // so the failure is LOGGED (not silent) rather than promising an auto-retry that can't happen.
     await this.purgeBinaryArtifacts(id)
+    // Freeze the board's remaining spend into the durable cost rollup while the rows it is
+    // folded from are still here. `spend_days` deliberately survives a board delete, but the
+    // sweep that fills it only reaches boards that still exist, so without this the board's
+    // spend since the last completed rollup day goes with the `token_usage` rows in the cascade
+    // below — permanently, and skewing the numbers most for the boards an operator deleted
+    // BECAUSE they were expensive. Runs before the cascade for the same reason the artifact
+    // purge does: afterwards there is nothing left to read.
+    await this.foldFinalSpend(id)
     // Re-home the SHARED services this board homes: a service another board still mounts must NOT
     // be destroyed just because its home board is deleted (both teams lose the shared subtree).
     // Resolve, per homed service, whether a surviving board mounts it and hand the cascade a
@@ -513,6 +554,58 @@ export class WorkspaceService {
         { workspaceId: id, err: error instanceof Error ? error.message : String(error) },
       )
     }
+  }
+
+  /**
+   * The last durable fold a board ever gets, run inside its delete. Walks from where the sweep
+   * would have resumed (its own watermark, corrected by the trailing lookback) up to now, in
+   * chunks, because unlike a sweep pass there is no next one: whatever this does not cover is
+   * gone with the cascade rather than deferred.
+   *
+   * BEST-EFFORT, and that posture is a judgement rather than a default. Refusing the delete on a
+   * failed fold would keep the board, its ledger and the un-folded days intact for a retry, which
+   * is the outcome that loses nothing; it would also render a reporting outage as a board the
+   * user cannot delete. The delete wins that trade, so the loss is NAMED instead, because it is
+   * unrecoverable the moment the cascade takes the ledger rows.
+   */
+  private async foldFinalSpend(id: string): Promise<void> {
+    const rollup = this.spendRollupRepository
+    if (!rollup) return
+    // Normalised here rather than gated on: an unwired logger is a reason for the fold to run
+    // quietly, never a reason to skip preserving the spend.
+    const logger = this.logger ?? noopLogger
+    await runBestEffort(
+      logger,
+      'workspace-delete final spend fold',
+      async () => {
+        const now = this.clock.now()
+        const { spans, skipped } = finalSpendFoldPlan(
+          await rollup.spendRollupWatermark(),
+          now,
+          this.tokenUsageRetentionMs,
+        )
+        if (skipped) {
+          // Days past the ledger's own retention: already unfoldable before this delete, and
+          // the only notice they ever get, since nothing downstream can restate a gap.
+          logger.warn(
+            'workspace-delete could not fold spend the ledger no longer holds; ' +
+              'that attribution is permanently absent',
+            {
+              workspaceId: id,
+              table: 'spend_days',
+              skippedFrom: skipped.from,
+              skippedTo: skipped.to,
+            },
+          )
+        }
+        // Sequentially, not in parallel: the spans share a table and each is one rewrite
+        // transaction, so overlapping them buys nothing and contends on the same rows.
+        for (const span of spans) {
+          await rollup.rollupWorkspaceSpendDays(id, span.from, span.to)
+        }
+      },
+      { workspaceId: id },
+    )
   }
 
   /**
