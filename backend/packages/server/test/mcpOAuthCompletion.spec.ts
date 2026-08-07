@@ -71,7 +71,7 @@ function build(options: {
     },
     accountService: { rolesFor: async () => ['member'] },
     // `verifySession` checks the bearer's generation against the user row on every request.
-    userService: { sessionGeneration: async () => 0 },
+    userService: { sessionGeneration: async () => 0, refreshSessionGeneration: async () => 0 },
     mcpOAuth: {
       readAuthorizationRequest: async (state: string | null) =>
         state && options.request === undefined

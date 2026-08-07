@@ -371,9 +371,9 @@ that should reach this deployment, checked in that order:
    operator wrote, and releasing the claim is their fix.
 
 Group memberships are read on **every** sign-in, so removing someone from a group
-blocks their next login. As with every other method, a session already minted lapses
-at its own expiry rather than being revoked (see the session-revocation note above),
-which is the gap between "disabled in the IdP" and "locked out here".
+blocks their next login, and their existing sessions are ended too (see
+[Session revocation](#session-revocation) below, including why a refusal caused by a
+claim that simply never arrived is deliberately not treated as an offboarding).
 
 ### GitHub: login + org allowlists
 
@@ -453,13 +453,31 @@ Three things advance it:
   authentication only: membership and roles are untouched, because the RBAC gate
   re-reads those on the next request and a role change needs no revocation. It is
   recorded in the account audit log as `account.member_sessions_revoked`.
-- **An SSO sign-in the directory now refuses.** When `judgeSsoAdmission` denies a
-  returning user, their live sessions are revoked as well as the new one withheld.
-  This is what makes the offboarding promise real: re-reading group membership on
-  sign-in only stops a NEW session, and the bearer they already hold would
-  otherwise stay valid until it expired. Best-effort and logged, never allowed to
-  turn a correct refusal into a 500 (`sessionsRevoked` on the `sso.refused` line
-  says whether there was a session to end).
+- **An SSO sign-in the directory now refuses**, and only when the directory is what
+  refused it. This is what makes the offboarding promise real: re-reading group
+  membership on sign-in only stops a NEW session, and the bearer they already hold
+  would otherwise stay valid until it expired. Best-effort and logged, never
+  allowed to turn a correct refusal into a 500 (`sessionsRevoked` on the
+  `sso.refused` line reports which of the four outcomes occurred).
+
+**A refusal only revokes when it is EVIDENCE of something.** `judgeSsoAdmission`
+returns not just which rule refused but what the refusal is evidence of
+(`SsoRefusalEvidence`), and the two are not the same question:
+
+- `directory` — a claim the IdP DID release positively excludes them: groups were
+  released and none match, or a verified email was released whose domain is not
+  allowed. That is the directory saying they no longer belong here, and it revokes.
+- `indeterminate` — the claim the rule needed never arrived. A user removed from
+  every group, a dropped `groups` scope, a renamed `groupsClaim` and a provider
+  that stopped marking `email` verified all produce exactly this, and nothing can
+  tell them apart. The login is still refused (fail closed is unchanged); the
+  revocation is withheld.
+
+The distinction is not fastidiousness: acting on the second as if it were the first
+turns a configuration regression into a deployment-wide forced sign-out. On the
+release where a scope goes missing, every returning employee is refused, and
+revoking on each of those refusals would cut every live session in the deployment,
+the admin who has to fix the configuration included.
 
 The check costs one read per authenticated request, served through the
 `userSessionGeneration` app cache: a 60-second TTL on Node/local with invalidation
@@ -468,6 +486,16 @@ invalidation bus (a cached entry there would go on admitting a bearer a peer
 isolate had already revoked). In mothership mode a node resolves it from the
 mothership over the persistence RPC, so revoking a user centrally also stops their
 laptop honouring the session it minted for them.
+
+**A MINT reads past that cache** (`UserService.refreshSessionGeneration`, which
+every login path reaches through `sessionGenerationFor`), and this is the one place
+the bounded stale window is not acceptable. Verification gates a single request and
+the next one re-asks; a mint stamps the value into a bearer that outlives the cache
+entry, so a generation read one bump behind on a replica that missed the
+invalidation issues a token every replica refuses for a full TTL — and the refusal
+SPREADS rather than heals, as the caches that still agreed with it expire. The
+refresh also repopulates the reading replica, so the token it just minted verifies
+there rather than being refused by its own issuer.
 
 Three refusals are deliberate, and each closes a hole the obvious implementation
 leaves open. A token carrying **no generation claim** is refused rather than

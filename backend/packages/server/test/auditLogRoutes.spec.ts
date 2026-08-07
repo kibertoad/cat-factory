@@ -1,4 +1,5 @@
 import { listAuditEventsContract, revokeMemberSessionsContract } from '@cat-factory/contracts'
+import { ForbiddenError } from '@cat-factory/kernel'
 import type { AuditEventPage, AuditEventView } from '@cat-factory/kernel'
 import { requestByContract } from '@toad-contracts/hono'
 import { Hono } from 'hono'
@@ -217,6 +218,27 @@ describe('GET /accounts/:accountId/audit-events', () => {
 
     expect(res.status).toBe(500)
     expect(listByAccount).not.toHaveBeenCalled()
+  })
+
+  it('refuses a non-admin with the ADMIN refusal even when no audit store is wired', async () => {
+    // The ordering of the two guards, which no other case can see: every non-admin case above
+    // has the reader wired, so the 503 branch never gets a chance to answer first.
+    //
+    // Reversed, the pair is a working oracle for an outsider: 503 means this deployment wired an
+    // audit store, anything else means it did not. That is the deployment's shape leaking to a
+    // caller with no admission to the account, and the repo's rule is that a refusal never
+    // reveals wiring — so authorization is settled before capability is even consulted.
+    const { app } = makeApp({
+      noReader: true,
+      requireAdmin: () => Promise.reject(new ForbiddenError('Admin access required')),
+    })
+
+    const res = await requestByContract(app, listAuditEventsContract, {
+      pathParams: { accountId: 'acc_1' },
+      queryParams: {},
+    })
+
+    expect(res.status).toBe(403)
   })
 })
 

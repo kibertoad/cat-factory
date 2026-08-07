@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { apiErrorEnvelope } from '~/composables/api/errors'
-import { isRetiredAuditValue } from '@cat-factory/contracts'
-import type { AuditAction, AuditEventWire } from '@cat-factory/contracts'
+import type { AuditEventWire } from '@cat-factory/contracts'
+import { actorLabel, describeEvent } from './AccountAuditLog.logic'
 
 // The account audit log: who did what, when, for the privileged actions an account admin is
 // answerable for. Read-only by construction — the store exposes no mutation and the backend has
@@ -11,85 +11,14 @@ import type { AuditAction, AuditEventWire } from '@cat-factory/contracts'
 // The whole design rests on one rule: the backend records machine-readable FIELDS and never
 // prose, because a row is persisted and English written today could never be re-rendered for a
 // reader in another locale years later. So every sentence here is composed from a translated key
-// plus the row's `details`, and the `Record` below is exhaustive over the contract's action
-// picklist — a new action fails this component's typecheck until it has copy in every locale.
+// plus the row's `details`. The composition itself lives in `AccountAuditLog.logic.ts`, where
+// the two cases a happy-path render never reaches (a retired action, an unreadable `details`
+// blob) can be asserted without mounting anything.
 const props = defineProps<{ accountId: string }>()
 
 const accounts = useAccountsStore()
 const toast = useToast()
 const { t } = useI18n()
-
-/**
- * Action → message key. EXHAUSTIVE over the contract union on purpose: the alternative is a
- * lookup that returns `undefined` for an action somebody added on the backend, which renders a
- * raw `account.member_roles_changed` at an operator instead of failing the build.
- */
-const ACTION_KEYS: Record<AuditAction, string> = {
-  'account.member_added': 'layout.auditLog.actions.accountMemberAdded',
-  'account.member_roles_changed': 'layout.auditLog.actions.accountMemberRolesChanged',
-  'account.budget_changed': 'layout.auditLog.actions.accountBudgetChanged',
-  'account.settings_changed': 'layout.auditLog.actions.accountSettingsChanged',
-  'account.invitation_created': 'layout.auditLog.actions.accountInvitationCreated',
-  'account.invitation_revoked': 'layout.auditLog.actions.accountInvitationRevoked',
-  'account.invitation_accepted': 'layout.auditLog.actions.accountInvitationAccepted',
-  'account.member_sessions_revoked': 'layout.auditLog.actions.accountMemberSessionsRevoked',
-  'workspace.member_added': 'layout.auditLog.actions.workspaceMemberAdded',
-  'workspace.member_role_changed': 'layout.auditLog.actions.workspaceMemberRoleChanged',
-  'workspace.member_removed': 'layout.auditLog.actions.workspaceMemberRemoved',
-  'workspace.access_mode_changed': 'layout.auditLog.actions.workspaceAccessModeChanged',
-}
-
-/**
- * The sentence for one row.
- *
- * A RETIRED action (one this build no longer declares, in a row written before it was retired)
- * is named as itself rather than dropped or guessed onto a current member. Nothing here can know
- * what it meant, and a missing row is the one failure an audit log must not have — so it renders
- * as "unrecognised action: <value>" and keeps its actor, target and timestamp.
- */
-function describe(event: AuditEventWire): string {
-  if (isRetiredAuditValue(event.action)) {
-    return t('layout.auditLog.retiredAction', { action: event.action.retired })
-  }
-  return t(ACTION_KEYS[event.action], {
-    target: targetLabel(event),
-    // Every detail slot the vocabulary declares, defaulted so a row whose `details` blob was
-    // unreadable (the backend returns an empty set rather than losing the row) still renders a
-    // sentence rather than the literal `{roles}` placeholder.
-    ...detailParams(event),
-  })
-}
-
-/** The row's detail fields as interpolation params, with a placeholder for an absent value. */
-function detailParams(event: AuditEventWire): Record<string, string> {
-  const params: Record<string, string> = {}
-  for (const [key, value] of Object.entries(event.details)) {
-    params[key] = value === null || value === '' ? t('layout.auditLog.values.none') : String(value)
-  }
-  return params
-}
-
-/** Who the action was performed ON: the resolved name, else the raw id. */
-function targetLabel(event: AuditEventWire): string {
-  return event.targetName ?? event.targetId
-}
-
-/**
- * Who performed it.
- *
- * The three principal kinds render differently on purpose. A user shows their name (or their id,
- * when the person is gone — which is precisely the kind of thing the log is kept to record); an
- * API key shows the key, never the person who minted it, so a leaked key is distinguishable from
- * them; and `system` says the engine acted, which is a different fact from a user we failed to
- * resolve and must never look the same.
- */
-function actorLabel(event: AuditEventWire): string {
-  if (event.actor.kind === 'system') return t('layout.auditLog.actors.system')
-  if (event.actor.kind === 'apiKey') {
-    return t('layout.auditLog.actors.apiKey', { id: event.actor.apiKeyId })
-  }
-  return event.actorName ?? event.actor.userId
-}
 
 const events = computed(() => accounts.auditEvents)
 const hasMore = computed(() => accounts.auditCursor !== null)
@@ -130,6 +59,29 @@ watch(
     if (id) void load()
   },
 )
+/**
+ * Something elsewhere in the app wrote a row this feed does not have yet (today: an admin forcing
+ * a member's sessions to end, whose only lasting trace IS that row).
+ *
+ * The reload lands here rather than in the writer for two reasons that are one reason: this
+ * component is the only place that knows the feed is being shown, and it is the only place that
+ * renders a failed read as a failed read. A writer that awaited the refresh itself would report
+ * its own success or failure by whether an unrelated GET succeeded.
+ */
+watch(
+  () => accounts.auditStale,
+  (stale) => {
+    if (stale) void load()
+  },
+)
+
+/**
+ * The composition helpers, bound to this component's i18n instance. They take `t` as a parameter
+ * so the logic module stays pure and testable without an i18n runtime; binding here keeps the
+ * template free of the plumbing.
+ */
+const describe = (event: AuditEventWire) => describeEvent(event, t)
+const actor = (event: AuditEventWire) => actorLabel(event, t)
 
 /** Absolute local time: an audit reader is answering "when exactly", never "how long ago". */
 function timestamp(at: number): string {
@@ -173,7 +125,7 @@ function timestamp(at: number): string {
         class="rounded border border-slate-800 bg-slate-900/40 px-3 py-2"
       >
         <div class="flex flex-wrap items-baseline gap-x-2">
-          <span class="font-medium text-white">{{ actorLabel(event) }}</span>
+          <span class="font-medium text-white">{{ actor(event) }}</span>
           <span class="text-slate-300">{{ describe(event) }}</span>
         </div>
         <div class="mt-1 text-xs text-slate-500">{{ timestamp(event.at) }}</div>

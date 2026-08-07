@@ -124,11 +124,31 @@ export const useAccountsStore = defineStore(
     const auditLoading = ref(false)
 
     /**
+     * The audit feed has fallen behind something this session did. Set by the writers below and
+     * cleared by whoever reloads; the audit viewer watches it.
+     *
+     * A flag rather than a reload, because reloading here is what conflated two outcomes: the
+     * revocation and the feed refresh are separate calls that fail separately, and awaiting the
+     * second inside the first reported a revocation that HAD succeeded as "could not sign the
+     * member out" whenever the read failed after it. It also fired on surfaces with no audit
+     * panel rendered (basic mode, and any account whose deployment wires no audit store), paying
+     * for a read nothing was going to show and turning its 503 into an error about the write.
+     *
+     * The viewer owns the reload instead, which is where it belongs: it already distinguishes a
+     * failed page from an empty one, and a refresh failure now renders in that slot rather than
+     * as a false report about the revocation.
+     */
+    const auditStale = ref(false)
+
+    /**
      * Load the newest page, replacing whatever was held. Used on open and on refresh, so a reader
      * is never shown a feed spliced from two different moments.
      */
     async function loadAuditEvents(accountId: string) {
       auditLoading.value = true
+      // Cleared on ATTEMPT, not on success. A failed reload is reported by the viewer's own error
+      // slot, and leaving the flag set would re-trigger the watch that just failed.
+      auditStale.value = false
       try {
         const page = await api.listAuditEvents(accountId)
         auditEvents.value = page.events
@@ -153,12 +173,12 @@ export const useAccountsStore = defineStore(
 
     /**
      * End every session a member holds. Their membership and roles are untouched, so the roster
-     * needs no patching — what changed is not visible in it, which is exactly why the audit feed
-     * is reloaded instead: the revocation's only lasting trace is the row it wrote.
+     * needs no patching — what changed is not visible in it, which is why the audit feed is
+     * marked stale instead: the revocation's only lasting trace is the row it wrote.
      */
     async function revokeMemberSessions(accountId: string, userId: string) {
       await api.revokeMemberSessions(accountId, userId)
-      await loadAuditEvents(accountId)
+      auditStale.value = true
     }
 
     // ---- email sender connection -----------------------------------------
@@ -195,6 +215,7 @@ export const useAccountsStore = defineStore(
       auditEvents,
       auditCursor,
       auditLoading,
+      auditStale,
       emailConnection,
       emailConfigured,
       load,

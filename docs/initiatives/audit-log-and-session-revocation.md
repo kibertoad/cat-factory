@@ -230,6 +230,16 @@ revocation via a per-user session-generation check.
   a full TTL. `UserService.revokeSessions` owns both steps, which is why `AccountService` takes it
   as a bound callback rather than reaching for the repository itself.
 
+- **A MINT reads past the cache; the per-request CHECK reads through it.** The bounded stale window
+  the cache exists for is right for verification (it gates one request, and the next re-asks) and
+  wrong for a mint, whose value is stamped into a bearer that outlives the entry. A login landing
+  on a replica that missed the invalidation would stamp the pre-bump number and issue a token every
+  replica refuses for a full TTL — and the refusal SPREADS rather than heals, as the caches that
+  still agreed with it expire, so the user is in a sign-in loop no waiting fixes. Hence two methods:
+  `sessionGeneration` (cached) and `refreshSessionGeneration` (invalidate, then read through, so the
+  cache is left holding the authoritative value and the minting replica does not refuse its own
+  freshly issued token).
+
 - **A role DOWNGRADE deliberately does NOT revoke**, despite the original checklist wording. The
   RBAC gate re-reads roles on the next request (through its own cache, invalidated on the write),
   so nothing about a downgrade survives in the token — it carries no roles. Bumping the generation
@@ -244,7 +254,21 @@ revocation via a per-user session-generation check.
   succeeded by then, so a store failure must not turn a correct denial into a 500 that reads as a
   broken SSO configuration. `sessionsRevoked` on the `sso.refused` line separates "refused them and
   cut their sessions" from "refused them and they still hold a live bearer" — different security
-  outcomes, and only the first is the offboarding this feature claims.
+  outcomes, and only the first is the offboarding this feature claims. Four outcomes rather than a
+  boolean (`revoked` / `no_account` / `failed` / `withheld`): a revocation that THREW and a person
+  who never had an account here are opposite facts about whether somebody is still holding a live
+  bearer, and only one of them needs an operator to go and revoke by hand.
+
+- **Only a refusal the DIRECTORY evidenced revokes.** `judgeSsoAdmission` returns what its refusal
+  is evidence of (`SsoRefusalEvidence`) alongside which rule fired, because the reason code cannot
+  answer it: `group_required` is the directory excluding somebody when groups WERE released and
+  none matched, and merely a claim that never arrived when none were. The second is equally
+  consistent with a dropped `groups` scope, a renamed `groupsClaim` and a userinfo endpoint that
+  stopped answering — and treating it as an offboarding turns one configuration regression into a
+  deployment-wide forced sign-out, since every returning employee is refused on that release and
+  every refusal would cut all of their sessions, the admin who has to fix it included. The login is
+  still refused either way; only the irreversible half is withheld. The judge decides this rather
+  than the route, because the route would have to know which claims the judge looked at.
 
 - **Self-serve "sign out everywhere" is deliberately NOT audited.** The account audit log records
   what an account ADMIN is answerable for; a person acting on their own sessions belongs to no

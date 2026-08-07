@@ -37,7 +37,9 @@ import {
   UnavailableError,
   UnauthorizedError,
 } from '@cat-factory/kernel'
-import { requireCapability, requireUser } from '../../http/guards.js'
+// No `requireUser` here, deliberately: it narrows `c.get('user')`, which nothing sets under the
+// PUBLIC `/auth` prefix. `requireSessionUser` (loginFlow.ts) is this controller's equivalent.
+import { requireCapability } from '../../http/guards.js'
 // The mechanics every redirecting login provider shares — the cookie-bound CSRF state, the
 // allow-listed post-login redirect, the session mint, the invite handling. Extracted when
 // enterprise SSO landed so there is exactly ONE implementation of each (see loginFlow.ts).
@@ -49,9 +51,11 @@ import {
   emailDomainAllowed,
   emailMatchesInvite,
   mintSession,
+  requireSessionUser,
   sessionGenerationFor,
   peekInvite,
   sessionUser,
+  sessionUserFrom,
   withToken,
 } from './loginFlow.js'
 import { registerSsoRoutes } from './ssoRoutes.js'
@@ -811,17 +815,15 @@ function registerSessionRoutes(app: Hono<AppEnv>): void {
   // session to keep). A replacement token is minted from the NEW generation and returned, so the
   // browser that asked stays signed in without a trip back through the identity provider.
   buildHonoRoute(app, revokeMySessionsContract, async (c) => {
-    const user = requireUser(c, 'Sign in to manage your sessions')
+    // `requireSessionUser`, NOT `requireUser`: this controller is mounted under `/auth`, a PUBLIC
+    // prefix, so the gate that populates `c.get('user')` never runs here. See its doc comment.
+    const user = await requireSessionUser(c, 'Sign in to manage your sessions')
     const generation = await c.get('container').userService.revokeSessions(user.id)
     // Deliberately NOT audited. The account audit log records what an account ADMIN is
     // answerable for, and this is a person acting on their own sessions: there is no account it
     // belongs to (a user may be in several, or none but their own), and filing it under a guess
     // would be exactly the misattribution the log's actor model exists to prevent.
-    const { token, exp } = await mintSession(
-      authConfig(c),
-      { id: user.id, login: user.login, name: user.name, avatarUrl: user.avatarUrl },
-      generation,
-    )
+    const { token, exp } = await mintSession(authConfig(c), sessionUserFrom(user), generation)
     return c.json({ token, exp }, 200)
   })
 }

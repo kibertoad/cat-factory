@@ -48,6 +48,13 @@ write with nothing to enumerate. An SSO sign-in the directory refuses now cuts t
 as well as withholding a new one; an admin can do the same for a member who has left or lost a
 laptop (recorded in the audit log, naturally); and anyone can sign themselves out everywhere.
 
+An SSO refusal only ends existing sessions when the DIRECTORY is what refused. A refusal caused by
+a claim that never arrived (a dropped `groups` scope, a renamed claim name, a provider that stopped
+marking an address verified) still blocks the login, but withholds the revocation: those refusals
+are indistinguishable from "removed from every group", and they fire for everybody at once, so
+treating them as offboardings would turn one configuration regression into a deployment-wide forced
+sign-out.
+
 Two decisions worth knowing. A role change deliberately does NOT revoke: the RBAC gate re-reads
 roles on the next request and the token carries none, so coupling them would sign a person out of
 every board because their role on one was adjusted. And the check is a NEW read on a path that

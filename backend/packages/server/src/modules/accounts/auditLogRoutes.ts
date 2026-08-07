@@ -25,6 +25,14 @@ export function registerAuditLogRoutes(app: Hono<AppEnv>): void {
   buildHonoRoute(app, listAuditEventsContract, async (c) => {
     const user = requireUser(c, 'Sign in to read the audit log')
     const container = c.get('container')
+    const { accountId } = c.req.valid('param')
+    // AUTHORIZATION BEFORE WIRING, in that order and not the reverse. The 503 below names a
+    // capability this deployment has or has not configured, so answering it to a caller who is
+    // not an admin of this account tells an outsider something about how the deployment is built
+    // — the "a refusal never reveals wiring" rule, which is why the admin gate runs ahead of it
+    // everywhere else too. Reversed, the two refusals are a working oracle: 503 means the store
+    // is wired, 403/404 means it is not.
+    await container.accountService.requireAdmin(accountId, user.id)
     // A facade with no audit store refuses with a 503 naming the capability. It must NOT answer
     // with an empty page: "nothing has happened in this account" and "this deployment records
     // nothing" are opposite facts, and the first is the assurance the log exists to give.
@@ -32,8 +40,6 @@ export function registerAuditLogRoutes(app: Hono<AppEnv>): void {
       container.auditLogReader,
       'The audit log is not configured on this deployment',
     )
-    const { accountId } = c.req.valid('param')
-    await container.accountService.requireAdmin(accountId, user.id)
     const query = c.req.valid('query')
     // The read PROPAGATES a store failure (the reader port says so): an admin shown an empty page
     // because the store was unreachable has been told the reverse of the truth.

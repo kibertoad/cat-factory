@@ -107,6 +107,27 @@ export class UserService {
   }
 
   /**
+   * The user's session generation, read PAST the cache and leaving the cache holding what was
+   * read. For the one class of caller whose answer outlives the entry: a token MINT.
+   *
+   * {@link sessionGeneration} above tolerates a bounded stale window by design, because it gates
+   * ONE request and the next one re-asks. A mint does not: the value is stamped into a bearer
+   * that lives for a session TTL, so a generation read one bump behind produces a token every
+   * replica refuses forever, and waiting makes it worse rather than better — the caches that
+   * still agreed with it expire. The stale-read cost is a permanently dead token and a sign-in
+   * loop, not a stale answer, which is why the two reads are separate methods rather than one.
+   *
+   * Both halves matter. Reading past the cache gets the authoritative value; REPOPULATING with
+   * it is what stops this replica's own verification from refusing the token it has just issued.
+   * A peer replica that missed the bump still refuses until its TTL lapses, which is the same
+   * backstop window every cache here carries and, unlike the stale mint, self-heals.
+   */
+  async refreshSessionGeneration(userId: string): Promise<number | null> {
+    await this.deps.sessionGenerationCache?.invalidate(userId, userId)
+    return this.sessionGeneration(userId)
+  }
+
+  /**
    * Invalidate every session token the user currently holds, returning the new generation.
    *
    * Two steps in a fixed order: the store first, the cached read second. Reversing them would

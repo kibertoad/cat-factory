@@ -194,6 +194,7 @@ function harness(opts: HarnessOptions = {}) {
       // The session mint reads the user's generation, and an admission REFUSAL revokes the
       // sessions of a user it can still find (the offboarding half of the SSO story).
       sessionGeneration: async () => 0,
+      refreshSessionGeneration: async () => 0,
       findByIdentity: async (provider: string, subject: string) => {
         lookedUp.push({ provider, subject })
         return opts.knownUserId ? { id: opts.knownUserId } : null
@@ -575,6 +576,54 @@ describe('GET /auth/sso/callback — offboarding revocation', () => {
 
     expect(fragment(res).sso_error).toBeUndefined()
     expect(h.revoked).toEqual([])
+  })
+
+  it('WITHHOLDS revocation when the IdP released no groups at all', async () => {
+    // The regression this guards is a deployment-wide forced sign-out. A dropped `groups` scope
+    // (or a renamed `groupsClaim`) refuses EVERY returning employee with `group_required`, and
+    // revoking on each of those refusals would end every live session in the deployment — the
+    // admin who has to fix the configuration included. An empty claim is a claim we did not
+    // receive, not a directory that excluded somebody, so the login is refused and the
+    // irreversible half withheld.
+    const h = harness({
+      sso: ssoConfig({ requiredGroups: ['engineering'] }),
+      claims: { groups: [] },
+      knownUserId: 'usr_departed',
+    })
+    const { res } = await roundTrip(h)
+
+    expect(fragment(res).sso_error).toBe('group_required')
+    expect(h.revoked).toEqual([])
+  })
+
+  it('WITHHOLDS revocation when a domain gate has no email to evaluate', async () => {
+    // Same shape on the other gate: an IdP that stops releasing (or stops verifying) `email`
+    // refuses everybody against a configured domain allowlist, and says nothing about any of
+    // them.
+    const h = harness({
+      sso: ssoConfig({ allowedEmailDomains: ['acme.com'] }),
+      claims: { email: undefined, email_verified: undefined },
+      knownUserId: 'usr_departed',
+    })
+    const { res } = await roundTrip(h)
+
+    expect(fragment(res).sso_error).toBe('email_required')
+    expect(h.revoked).toEqual([])
+  })
+
+  it('still revokes on a domain refusal the directory DID evidence', async () => {
+    // The withholding above must not become "never revoke on a domain gate": a verified address
+    // that arrived and is outside the allowlist is the directory excluding this person, which is
+    // the offboarding signal.
+    const h = harness({
+      sso: ssoConfig({ allowedEmailDomains: ['acme.com'] }),
+      claims: { email: 'ada@departed.example', email_verified: true },
+      knownUserId: 'usr_departed',
+    })
+    const { res } = await roundTrip(h)
+
+    expect(fragment(res).sso_error).toBe('domain_not_allowed')
+    expect(h.revoked).toEqual(['usr_departed'])
   })
 })
 

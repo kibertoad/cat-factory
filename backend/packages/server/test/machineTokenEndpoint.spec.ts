@@ -86,7 +86,7 @@ function makeApp(
     },
     config: { auth: { sessionSecret: SECRET, machineTokenTtlMs: 60_000 } },
     // `verifySession` checks the bearer's generation against the user row on every request.
-    userService: { sessionGeneration: async () => 0 },
+    userService: { sessionGeneration: async () => 0, refreshSessionGeneration: async () => 0 },
     ...(machineNodes ? { machineNodeRepository: machineNodes } : {}),
   } as unknown as ServerContainer
   const app = new Hono<AppEnv>()

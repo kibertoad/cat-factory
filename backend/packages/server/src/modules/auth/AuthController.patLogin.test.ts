@@ -59,6 +59,7 @@ function container(overrides: Partial<ServerContainer>): Partial<ServerContainer
       findOrCreateByIdentity: async () => ({ id: 'usr_1', name: 'Octo Cat', email: null }),
       // Every session mint stamps the user's current generation.
       sessionGeneration: async () => 0,
+      refreshSessionGeneration: async () => 0,
     } as unknown as ServerContainer['userService'],
     accountService: {
       ensurePersonalAccount: async () => undefined,
