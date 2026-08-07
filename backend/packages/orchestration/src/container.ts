@@ -1,5 +1,5 @@
 import type {} from '@cat-factory/kernel'
-import type { AppCaches, Logger, OperationalMetrics } from '@cat-factory/kernel'
+import type { AppCaches, AuditLogReader, Logger, OperationalMetrics } from '@cat-factory/kernel'
 import { ModuleRegistry } from './container/module-registry.js'
 import {
   createSlackModule,
@@ -409,6 +409,13 @@ export interface CoreSpine {
    */
   operationalMetrics: OperationalMetrics
   /**
+   * The account audit log's READ seam, for the admin viewer's controller (the WRITE seam is
+   * injected into the domain services that record through it and is deliberately not reachable
+   * here). Absent when the facade wired no audit store, which the viewer route reports as a 503
+   * naming the missing capability rather than as an empty log.
+   */
+  auditLogReader?: AuditLogReader
+  /**
    * Counts in-app tutorial funnel events. On the SPINE rather than in the optional set, and
    * unconditional, for the same reason `operationalMetrics` is required: an un-wired counter
    * reports a permanent zero, which reads as "nobody takes the tutorial" instead of as "nobody
@@ -809,6 +816,9 @@ export function createCore(injected: CoreDependencies): Core {
     // per-invocation flush need the SAME collector the services count into, and reaching it
     // off the container is what guarantees it is the same one.
     operationalMetrics,
+    // The audit log's READ seam, straight off the injected bag: the viewer's controller resolves
+    // it here, while the WRITE seam goes only to the services that record through it.
+    auditLogReader: dependencies.auditLogReader,
     tutorialTelemetry,
     workspaceService,
     accountService,

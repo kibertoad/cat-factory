@@ -372,6 +372,35 @@ export const revokeMachineNodeContract = defineApiContract({
   responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
 })
 
+// ---------------------------------------------------------------------------
+// SESSION REVOCATION. Sessions are stateless signed tokens, so "log out" was a client-side drop
+// and a leaked bearer stayed good until it expired. Each user row now carries a generation that
+// every token is stamped with, and advancing it invalidates the lot in one write.
+//
+// This is the SELF-SERVE half ("sign out everywhere"), deliberately a POST with no body and no
+// target: a user may only ever revoke their OWN sessions here. The admin-forced half is an
+// account-scoped route beside the member roster, because withdrawing somebody else's access is an
+// account-admin action and belongs where the audit log can name the account it happened in.
+//
+// The caller's CURRENT token is revoked too, and that is the point of "all devices" rather than a
+// carve-out: a user reaching for this has usually lost a device and cannot say which session is
+// the one to keep. The response hands back a freshly minted token so the browser that asked stays
+// signed in without a round-trip through the identity provider.
+export const revokeMySessionsContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/sessions/revoke-all',
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: {
+    200: v.object({
+      /** A replacement session for the caller, stamped with the new generation. */
+      token: v.string(),
+      /** Absolute expiry (epoch ms) of the replacement session. */
+      exp: v.number(),
+    }),
+    ...errorResponses,
+  },
+})
+
 // Local-mode ONLY: hand the local node a mothership SESSION token (captured by the SPA from
 // the mothership OAuth redirect fragment). The node forwards it to the mothership's
 // `/auth/machine-token`, caches the returned opaque machine token in its local store, and

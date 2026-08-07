@@ -115,14 +115,39 @@ export function sessionUser(user: UserRecord, login: string): SessionUser {
  * Mint a user SESSION token, returning the signed token and the exact `exp` it committed to so a
  * caller can report the real expiry without a second clock read. Shared by every login path AND
  * the local-mode mothership-connect controller, so the session claim shape lives in one place.
+ *
+ * `generation` is the user's session generation, stamped into the token so revocation can
+ * invalidate it later. It is a REQUIRED parameter rather than something resolved in here, because
+ * this function takes a `SessionUser` (a display surface) and has no store to read: making each
+ * login path supply it is what forces every one of them to have looked. A mint that stamped a
+ * default would issue a token the revocation check could never refuse.
  */
 export async function mintSession(
   cfg: AuthConfig,
   user: SessionUser,
+  generation: number,
 ): Promise<{ token: string; exp: number }> {
   const exp = Date.now() + cfg.sessionTtlMs
-  const session: SessionPayload = { ...user, aud: TOKEN_AUDIENCE.session, exp }
+  const session: SessionPayload = { ...user, aud: TOKEN_AUDIENCE.session, exp, gen: generation }
   return { token: await new HmacSigner(cfg.sessionSecret).sign(session), exp }
+}
+
+/**
+ * The generation to stamp into a session being minted for a user who was just resolved (or
+ * created) by a login flow.
+ *
+ * Reads through the SAME cached accessor `verifySession` uses, so a mint and the verification of
+ * what it minted can never disagree about the current value. A user the store cannot find falls
+ * back to `0`: the login path has this instant established that the user exists, so a null here is
+ * a read racing a create rather than an absent person, and `0` is the generation a fresh row
+ * carries. Getting it wrong costs one re-login, never an unrevocable token — a stamped generation
+ * BELOW the row's is refused, never admitted.
+ */
+export async function sessionGenerationFor<E extends AppEnv>(
+  c: Context<E>,
+  userId: string,
+): Promise<number> {
+  return (await c.get('container').userService.sessionGeneration(userId)) ?? 0
 }
 
 /** Whether an email's domain is on the self-signup allowlist. */

@@ -331,6 +331,28 @@ export interface AppCaches {
    */
   workspaceAccess: GroupCacheHandle<WorkspaceAccessCacheValue>
   /**
+   * A user's SESSION GENERATION, grouped AND keyed by user id (one entry per group), read on
+   * EVERY authenticated request so a revoked bearer stops being accepted.
+   *
+   * This entry exists because the check it serves is a NEW read, not a fold into an existing one.
+   * Session verification was pure HMAC arithmetic and touched no store at all: `requireAuth`
+   * publishes the user straight off the token claims, and the workspace gate reads MEMBERSHIP
+   * rows, never the user row. So making a stateless token revocable costs a per-request lookup,
+   * and this is where that cost is paid down.
+   *
+   * Wrapped ({@link SessionGenerationCacheValue}) so an ABSENT user (`null`) caches as a value
+   * rather than reading as unresolved — that is the negative case that matters, since a deleted
+   * user's still-unexpired bearer would otherwise re-query the store on every request it makes.
+   *
+   * Coherence is invalidation-driven, exactly like `workspaceAccess`: every generation bump drops
+   * the key right after the write commits, and the TTL is only the backstop for a bump that
+   * happened somewhere without a bus. Pass-through on the Worker's isolate-safe profile, and the
+   * reason transfers verbatim: our own mutable state with no cross-isolate invalidation bus, so a
+   * TTL'd entry would go on admitting a bearer a peer isolate had already revoked. The Worker
+   * therefore resolves it live, as it already does for workspace access.
+   */
+  userSessionGeneration: GroupCacheHandle<SessionGenerationCacheValue>
+  /**
    * The deployment's discovered enterprise SSO provider — its
    * `/.well-known/openid-configuration` metadata plus the JWKS its ID tokens verify against,
    * grouped AND keyed by the configured issuer URL. Read twice per SSO sign-in (once to build
@@ -393,6 +415,20 @@ export interface ModelPresetCacheValue {
  */
 export interface WorkspaceAccessCacheValue {
   access: WorkspaceAccess | null
+}
+
+/**
+ * Cache-friendly wrapper for a user's session generation. `generation` is `null` for a user the
+ * store has no row for, which caches as a value like every other negative case here (layered-loader
+ * treats a bare `null` as unresolved).
+ *
+ * Wrapping matters more than usual on this slice, because the unwrapped values are two NUMBERS and
+ * an absence, and the absence is the one that must be authoritative: a deleted user holding an
+ * unexpired bearer would otherwise re-read the store on every request they make, which is exactly
+ * the hot path this cache exists to keep off it.
+ */
+export interface SessionGenerationCacheValue {
+  generation: number | null
 }
 
 /**

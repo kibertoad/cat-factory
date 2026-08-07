@@ -25,6 +25,7 @@ function fakeRepos(): {
     notifications: number | null
     gateOutcomes: number | null
     runDays: number | null
+    auditEvents: number | null
     rollup: [number, number] | null
   }
 } {
@@ -40,6 +41,7 @@ function fakeRepos(): {
     notifications: null as number | null,
     gateOutcomes: null as number | null,
     runDays: null as number | null,
+    auditEvents: null as number | null,
     /** The [from, to) window the rollup pass recomputed. */
     rollup: null as [number, number] | null,
   }
@@ -132,6 +134,12 @@ function fakeRepos(): {
           return 1
         },
       },
+      auditEventRepository: {
+        deleteOlderThan: async (c) => {
+          cutoffs.auditEvents = c
+          return 2
+        },
+      },
     },
   }
 }
@@ -146,6 +154,7 @@ function policy(overrides: Partial<RetentionConfig> = {}): RetentionConfig {
     notificationsMs: 90 * DAY,
     gateOutcomesMs: 90 * DAY,
     runDaysMs: 400 * DAY,
+    auditEventsMs: 730 * DAY,
     ...overrides,
   }
 }
@@ -167,6 +176,10 @@ describe('sweepRetention', () => {
     expect(cutoffs.notifications).toBe(now - 90 * DAY)
     expect(cutoffs.gateOutcomes).toBe(now - 90 * DAY)
     expect(cutoffs.runDays).toBe(now - 400 * DAY)
+    // The longest window of the lot, and the one with its own env knob: audit retention answers a
+    // compliance question, so it must never be shortened as a side effect of tuning a telemetry
+    // window.
+    expect(cutoffs.auditEvents).toBe(now - 730 * DAY)
     // The rollup recomputes a short trailing lookback, so a missed pass self-heals instead of
     // leaving a day permanently half-counted.
     expect(cutoffs.rollup).toEqual([now - 3 * DAY, now])
@@ -187,6 +200,7 @@ describe('sweepRetention', () => {
       notifications: 9,
       gateOutcomes: 2,
       runDays: 1,
+      auditEvents: 2,
       runDaysRolledUp: 11,
       failedTables: [],
     })
@@ -218,6 +232,7 @@ describe('sweepRetention', () => {
       notifications: 9,
       gateOutcomes: 2,
       runDays: 1,
+      auditEvents: 2,
       // The rollup is a WRITE, not a prune: disabling a RETENTION window says "never delete",
       // never "stop materialising", so it still runs.
       runDaysRolledUp: 11,

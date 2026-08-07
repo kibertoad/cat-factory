@@ -2188,7 +2188,9 @@
       },
       "members": {
         "title": "Membri",
-        "empty": "Ancora nessun membro."
+        "empty": "Ancora nessun membro.",
+        "revokeSessions": "Disconnetti da tutti i dispositivi",
+        "sessionsRevoked": "Disconnesso da tutti i dispositivi"
       },
       "invite": {
         "title": "Invita un collega",
@@ -2227,7 +2229,8 @@
         "sendInvite": "Impossibile inviare l'invito",
         "revokeInvite": "Impossibile revocare l'invito",
         "connectEmail": "Impossibile connettere il mittente email",
-        "disconnectEmail": "Impossibile disconnettere il mittente email"
+        "disconnectEmail": "Impossibile disconnettere il mittente email",
+        "revokeSessions": "Impossibile disconnettere il membro"
       },
       "emailNoun": "invio di email"
     },
@@ -2637,6 +2640,39 @@
     },
     "accountFoundational": {
       "intro": "Le capacità condivise che questa organizzazione già gestisce - archiviazione file, notifiche, audit - con i loro contratti API. Ogni bacheca le eredita, e a un architetto viene detto di utilizzarle invece di proporre di ricostruirle. Anche i servizi che questa distribuzione registra nel codice vengono ereditati qui, e possono essere sovrascritti per id o esclusi qui sotto."
+    },
+    "auditLog": {
+      "title": "Registro di controllo",
+      "description": "Chi ha modificato cosa in questo account, e quando. Le voci vengono solo aggiunte e non possono essere modificate né eliminate.",
+      "empty": "Per questo account non è ancora stato registrato nulla.",
+      "loadMore": "Carica voci precedenti",
+      "refresh": "Aggiorna",
+      "retiredAction": "ha eseguito un’azione che questa versione non riconosce più ({action})",
+      "actors": {
+        "system": "Il sistema",
+        "apiKey": "Chiave API {id}"
+      },
+      "values": {
+        "none": "nessuno"
+      },
+      "actions": {
+        "accountMemberAdded": "ha aggiunto {target} all’account come {roles}",
+        "accountMemberRolesChanged": "ha cambiato i ruoli di {target} da {previousRoles} a {roles}",
+        "accountBudgetChanged": "ha impostato il limite di spesa mensile a {limit}",
+        "accountSettingsChanged": "ha impostato il provider cloud predefinito su {defaultCloudProvider}",
+        "accountInvitationCreated": "ha invitato {email} come {roles}",
+        "accountInvitationRevoked": "ha revocato l’invito per {email}",
+        "accountInvitationAccepted": "ha accettato l’invito per {email} come {roles}",
+        "accountMemberSessionsRevoked": "ha disconnesso {target} da tutti i dispositivi",
+        "workspaceMemberAdded": "ha aggiunto {target} a una board come {role}",
+        "workspaceMemberRoleChanged": "ha cambiato il ruolo su board di {target} da {previousRole} a {role}",
+        "workspaceMemberRemoved": "ha rimosso {target} da una board (era {role})",
+        "workspaceAccessModeChanged": "ha impostato l’accesso alla board su {accessMode}"
+      },
+      "errors": {
+        "load": "Impossibile caricare il registro di controllo.",
+        "loadMore": "Impossibile caricare le voci precedenti"
+      }
     }
   },
   "board": {

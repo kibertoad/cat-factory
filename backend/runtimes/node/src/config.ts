@@ -643,6 +643,12 @@ function buildRetentionConfig(env: NodeJS.ProcessEnv): AppConfig['retention'] {
       env.PLATFORM_RUN_DAY_RETENTION_DAYS,
       400,
     ),
+    // The account audit log: the LONGEST window of the lot (~2 years) and its own knob, because
+    // it answers a compliance question rather than an operational one — "who changed that" is
+    // asked long after anybody stopped watching, and a short window makes the honest answer
+    // "we deleted it". Bounded rather than infinite because it is the one table that grows
+    // monotonically with run volume; 0 disables the prune for a deployment that exports it.
+    auditEventsMs: retentionMs('AUDIT_EVENT_RETENTION_DAYS', env.AUDIT_EVENT_RETENTION_DAYS, 730),
   }
 }
 

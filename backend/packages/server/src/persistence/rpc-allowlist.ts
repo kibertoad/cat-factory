@@ -179,9 +179,21 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // The `update` write (profile edit) + the identity/auth reads (`findByIdentity`/`findByEmail`/
   // `getIdentity`/`listIdentities`) stay off — they are the account-lifecycle / login surface, not
   // member display, and the identity reads carry the password secret.
+  //
+  // `sessionGeneration` joins them for a different reason: it is the per-request check that makes
+  // a stateless session revocable, so a mothership-mode node that could not reach it would go on
+  // honouring a bearer the mothership had already revoked — which is the exact failure the whole
+  // slice exists to close, reappearing on the one deployment shape where the user row is remote.
+  // Bound by `selfUser` rather than the looser co-membership `user` rule, because a node only ever
+  // verifies sessions it minted for the ONE mothership user it acts as (`MachinePayload.userId`);
+  // anything else is a node asking about somebody it has no session for. The BUMP stays
+  // mothership-internal (`admin`): reading whether your own access was withdrawn is not the same
+  // capability as withdrawing anyone's, and a node that could reach the write could log an
+  // account's users out at will.
   userRepository: {
     get: { scope: { kind: 'user', arg: 0 } },
     listByIds: { scope: { kind: 'userList', arg: 0 } },
+    sessionGeneration: { scope: { kind: 'selfUser', arg: 0 } },
   },
   // --- Board-load read surface --------------------------------------------------
   // The workspace-scoped reads a `GET /workspaces/:id` snapshot assembles. Each takes the

@@ -11,6 +11,7 @@ import { D1LlmCallMetricRepository } from '../../src/infrastructure/repositories
 import { D1GateOutcomeRepository } from '../../src/infrastructure/repositories/D1GateOutcomeRepository'
 import { D1MachineNodeRepository } from '../../src/infrastructure/repositories/D1MachineNodeRepository'
 import { D1NotificationRepository } from '../../src/infrastructure/repositories/D1NotificationRepository'
+import { D1AuditEventRepository } from '../../src/infrastructure/repositories/D1AuditEventRepository'
 import { D1PlatformMetricsRepository } from '../../src/infrastructure/repositories/D1PlatformMetricsRepository'
 import { D1RateLimitRepository } from '../../src/infrastructure/repositories/D1RateLimitRepository'
 import { D1SubscriptionQuotaCycleRepository } from '../../src/infrastructure/repositories/D1SubscriptionQuotaCycleRepository'
@@ -35,6 +36,7 @@ const POLICY = {
   notificationsMs: 90 * DAY,
   gateOutcomesMs: 90 * DAY,
   runDaysMs: 400 * DAY,
+  auditEventsMs: 730 * DAY,
 }
 
 function deps() {
@@ -63,6 +65,8 @@ function deps() {
     // Both operator-observability projections live in the main DB beside `agent_runs`.
     gateOutcomeRepository: new D1GateOutcomeRepository({ db }),
     platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
+    // The account audit log lives in its OWN database (AUDIT_DB), not the main one.
+    auditEventRepository: new D1AuditEventRepository({ db: env.AUDIT_DB }),
     clock,
     policy: POLICY,
   }
@@ -265,6 +269,7 @@ describe('storage retention sweep', () => {
         notificationsMs: 0,
         gateOutcomesMs: 0,
         runDaysMs: 0,
+        auditEventsMs: 0,
       },
     })
 
@@ -289,6 +294,7 @@ describe('storage retention sweep', () => {
       notifications: 0,
       gateOutcomes: 0,
       runDays: 0,
+      auditEvents: 0,
       // The rollup is a WRITE with every window disabled around it, so it still runs: a
       // disabled RETENTION window means "never delete", not "stop materialising".
       runDaysRolledUp: expect.any(Number),

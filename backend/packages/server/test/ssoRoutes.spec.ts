@@ -151,11 +151,18 @@ function nonceForCode(code: string): string | undefined {
 
 interface HarnessOptions extends IdpOptions {
   sso?: SsoConfig | null
+  /** The user id an existing `oidc` identity resolves to; absent ⇒ nobody has signed in with it. */
+  knownUserId?: string
+  /** Make the revocation throw, to prove a correct refusal still lands. */
+  revokeFails?: boolean
 }
 
 function harness(opts: HarnessOptions = {}) {
   const idp = fakeIdp(opts)
   const created: { provider: string; subject: string; profile: unknown }[] = []
+  // What the OFFBOARDING path did: which identity it looked up, and whose sessions it ended.
+  const lookedUp: { provider: string; subject: string }[] = []
+  const revoked: string[] = []
   const container = {
     config: {
       auth: {
@@ -184,6 +191,18 @@ function harness(opts: HarnessOptions = {}) {
       },
     },
     userService: {
+      // The session mint reads the user's generation, and an admission REFUSAL revokes the
+      // sessions of a user it can still find (the offboarding half of the SSO story).
+      sessionGeneration: async () => 0,
+      findByIdentity: async (provider: string, subject: string) => {
+        lookedUp.push({ provider, subject })
+        return opts.knownUserId ? { id: opts.knownUserId } : null
+      },
+      revokeSessions: async (userId: string) => {
+        if (opts.revokeFails) throw new Error('audit store down')
+        revoked.push(userId)
+        return 1
+      },
       findOrCreateByIdentity: async (provider: string, subject: string, profile: unknown) => {
         created.push({ provider, subject, profile })
         return {
@@ -206,7 +225,7 @@ function harness(opts: HarnessOptions = {}) {
   })
   app.route('/auth', authController())
 
-  return { app, container, created, idp }
+  return { app, container, created, idp, lookedUp, revoked }
 }
 
 /** The `cf_sso_state` cookie a login response set, in `name=value` form for the callback. */
@@ -488,6 +507,74 @@ describe('GET /auth/sso/callback', () => {
     } finally {
       globalThis.fetch = realFetch
     }
+  })
+})
+
+// The offboarding half: a refusal is not only "no new session", it ENDS the ones the person is
+// already holding. Re-reading the directory on sign-in never could do that on its own, which is
+// the entire reason SSO needed a revocation slice.
+describe('GET /auth/sso/callback — offboarding revocation', () => {
+  const refused = () =>
+    harness({
+      sso: ssoConfig({ requiredGroups: ['engineering'] }),
+      claims: { groups: ['marketing'] },
+      knownUserId: 'usr_departed',
+    })
+
+  it('ends the live sessions of a returning user the directory now refuses', async () => {
+    const h = refused()
+    const { res } = await roundTrip(h)
+
+    expect(fragment(res).sso_error).toBe('group_required')
+    expect(h.revoked).toEqual(['usr_departed'])
+  })
+
+  it('looks the person up by ISSUER#SUB, never by email', async () => {
+    // Emails are reassigned inside orgs. Keying the revocation on one would end the sessions of
+    // whoever inherited a departed employee's address.
+    const h = refused()
+    await roundTrip(h)
+
+    expect(h.lookedUp).toEqual([{ provider: 'oidc', subject: `${ISSUER}#okta-user-1` }])
+  })
+
+  it('revokes nothing for somebody who never signed in here', async () => {
+    // The ordinary case for an outsider hitting the login: there is no account, so there is
+    // nothing to end — not a failure.
+    const h = harness({
+      sso: ssoConfig({ requiredGroups: ['engineering'] }),
+      claims: { groups: ['marketing'] },
+    })
+    const { res } = await roundTrip(h)
+
+    expect(fragment(res).sso_error).toBe('group_required')
+    expect(h.revoked).toEqual([])
+  })
+
+  it('still refuses cleanly when the revocation itself fails', async () => {
+    // The refusal has already succeeded by this point. A store failure must cost the revocation
+    // (warned, best-effort) and never turn a correct denial into a 500 an operator would read as
+    // a broken SSO configuration.
+    const h = harness({
+      sso: ssoConfig({ requiredGroups: ['engineering'] }),
+      claims: { groups: ['marketing'] },
+      knownUserId: 'usr_departed',
+      revokeFails: true,
+    })
+    const { res } = await roundTrip(h)
+
+    expect(res.status).toBe(302)
+    expect(fragment(res).sso_error).toBe('group_required')
+  })
+
+  it('revokes nothing when the sign-in is ADMITTED', async () => {
+    // The mint path must not run the offboarding branch: a person signing in successfully would
+    // otherwise invalidate the session being minted for them.
+    const h = harness({ knownUserId: 'usr_1' })
+    const { res } = await roundTrip(h)
+
+    expect(fragment(res).sso_error).toBeUndefined()
+    expect(h.revoked).toEqual([])
   })
 })
 

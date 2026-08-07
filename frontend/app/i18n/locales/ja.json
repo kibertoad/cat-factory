@@ -1998,7 +1998,9 @@
       },
       "members": {
         "title": "メンバー",
-        "empty": "まだメンバーがいません。"
+        "empty": "まだメンバーがいません。",
+        "revokeSessions": "すべての端末からサインアウト",
+        "sessionsRevoked": "すべての端末からサインアウトしました"
       },
       "invite": {
         "title": "メンバーを招待",
@@ -2037,7 +2039,8 @@
         "sendInvite": "招待を送信できませんでした",
         "revokeInvite": "招待を取り消せませんでした",
         "connectEmail": "メール送信者を接続できませんでした",
-        "disconnectEmail": "メール送信者を切断できませんでした"
+        "disconnectEmail": "メール送信者を切断できませんでした",
+        "revokeSessions": "メンバーをサインアウトできませんでした"
       },
       "emailNoun": "メール送信"
     },
@@ -2447,6 +2450,39 @@
     },
     "accountFoundational": {
       "intro": "この組織がすでに運用している共通機能 - ファイルストレージ、通知、監査 - とその API コントラクト。すべてのボードがこれらを継承し、アーキテクトには作り直しを提案せず利用するよう指示されます。 このデプロイがコードで登録したサービスもここに継承され、ID で上書きするか、下で除外できます。"
+    },
+    "auditLog": {
+      "title": "監査ログ",
+      "description": "このアカウントで誰が何をいつ変更したかの記録です。追記のみで、編集も削除もできません。",
+      "empty": "このアカウントにはまだ記録がありません。",
+      "loadMore": "以前の記録を読み込む",
+      "refresh": "更新",
+      "retiredAction": "このバージョンでは認識されない操作を実行しました（{action}）",
+      "actors": {
+        "system": "システム",
+        "apiKey": "API キー {id}"
+      },
+      "values": {
+        "none": "なし"
+      },
+      "actions": {
+        "accountMemberAdded": "{target} を {roles} としてアカウントに追加しました",
+        "accountMemberRolesChanged": "{target} のロールを {previousRoles} から {roles} に変更しました",
+        "accountBudgetChanged": "月間支出上限を {limit} に設定しました",
+        "accountSettingsChanged": "既定のクラウドプロバイダーを {defaultCloudProvider} に設定しました",
+        "accountInvitationCreated": "{email} を {roles} として招待しました",
+        "accountInvitationRevoked": "{email} への招待を取り消しました",
+        "accountInvitationAccepted": "{email} への招待を {roles} として承諾しました",
+        "accountMemberSessionsRevoked": "{target} をすべての端末からサインアウトさせました",
+        "workspaceMemberAdded": "{target} を {role} としてボードに追加しました",
+        "workspaceMemberRoleChanged": "{target} のボードロールを {previousRole} から {role} に変更しました",
+        "workspaceMemberRemoved": "{target} をボードから削除しました（{role} でした）",
+        "workspaceAccessModeChanged": "ボードのアクセス範囲を {accessMode} に設定しました"
+      },
+      "errors": {
+        "load": "監査ログを読み込めませんでした。",
+        "loadMore": "以前の記録を読み込めませんでした"
+      }
     }
   },
   "settings": {

@@ -1,9 +1,11 @@
 import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import type {
   Clock,
+  GroupCacheHandle,
   IdGenerator,
   IdentityProvider,
   PasswordHasher,
+  SessionGenerationCacheValue,
   UserIdentityRecord,
   UserRecord,
   UserRepository,
@@ -22,6 +24,12 @@ export interface UserServiceDependencies {
   passwordHasher: PasswordHasher
   idGenerator: IdGenerator
   clock: Clock
+  /**
+   * The session-generation slice of the app cache, grouped AND keyed by user id. Optional so the
+   * service stays unit-testable standalone (absent ⇒ every read goes to the store), which is also
+   * the shape the Worker's isolate-safe profile produces at runtime: a pass-through handle.
+   */
+  sessionGenerationCache?: GroupCacheHandle<SessionGenerationCacheValue>
 }
 
 /** Profile details captured from an external identity provider. */
@@ -63,9 +71,62 @@ export class UserService {
     return this.deps.userRepository.findByIdentity(provider, subject)
   }
 
+  /**
+   * Bulk-load users by id, for a surface that has to name several people at once (the audit
+   * viewer's actor/target enrichment). ONE query rather than a point-read per row — a page of 50
+   * events would otherwise be 100 reads, which is the N+1 the repository ban exists for.
+   *
+   * Order is not guaranteed and the result may be SHORTER than the input: an id whose user no
+   * longer exists is simply absent, which callers render as the unresolved id rather than as a
+   * missing row.
+   */
+  listByIds(ids: string[]): Promise<UserRecord[]> {
+    return this.deps.userRepository.listByIds(ids)
+  }
+
   /** Every linked login identity for a user (the account-settings "connected logins"). */
   listIdentities(userId: string): Promise<UserIdentityRecord[]> {
     return this.deps.userRepository.listIdentities(userId)
+  }
+
+  /**
+   * The user's current session generation, or null when no such user exists — read through the
+   * app cache, because session verification runs it on EVERY authenticated request.
+   *
+   * It deliberately does NOT swallow a store failure. Returning null (or a fabricated `0`) on an
+   * unreachable store would answer a security question with a guess: null reads as "no such user"
+   * and would sign everybody out, while a fabricated match would keep admitting bearers whose
+   * revocation nobody can currently confirm. Propagating means an outage is reported as an outage
+   * (a 500 the operator can act on), which is the honest disposition for a check whose whole job is
+   * to be authoritative.
+   */
+  async sessionGeneration(userId: string): Promise<number | null> {
+    const load = () => this.loadSessionGeneration(userId)
+    if (!this.deps.sessionGenerationCache) return (await load()).generation
+    return (await this.deps.sessionGenerationCache.get(userId, userId, load)).generation
+  }
+
+  /**
+   * Invalidate every session token the user currently holds, returning the new generation.
+   *
+   * Two steps in a fixed order: the store first, the cached read second. Reversing them would
+   * open a window in which a concurrent request re-populated the cache from the OLD row and went
+   * on admitting the bearer that was just revoked — for a full TTL, on the deployment shape where
+   * this cache is enabled. The invalidation is awaited for the same reason the audit append is:
+   * an un-awaited promise is dropped when a Worker isolate freezes after the response.
+   *
+   * Throws (from the repository) when the user does not exist, rather than reporting a revocation
+   * that withdrew nothing.
+   */
+  async revokeSessions(userId: string): Promise<number> {
+    const generation = await this.deps.userRepository.bumpSessionGeneration(userId)
+    await this.deps.sessionGenerationCache?.invalidate(userId, userId)
+    return generation
+  }
+
+  /** The uncached read, wrapped for the cache (a bare `null` reads as unresolved). */
+  private async loadSessionGeneration(userId: string): Promise<SessionGenerationCacheValue> {
+    return { generation: await this.deps.userRepository.sessionGeneration(userId) }
   }
 
   /**

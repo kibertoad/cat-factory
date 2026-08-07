@@ -560,6 +560,17 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
   // per-workspace to resolve: Bedrock is reached with the deployment's own AWS credentials.
   // `bedrockModelsCapability` also requires a registered registry that can serve the route.
   const bedrockModels = bedrockModelsCapability(env)
+  // ONE service behind both audit seams (the Node twin does the same, in the same position).
+  // Separate dependencies because the capabilities differ — a domain service records, the viewer's
+  // controller paginates — but the SAME instance, so what one appends is what the other serves.
+  const audit = new AuditService({
+    // The dedicated AUDIT_DB, not `db`: the log is retained for years and must not compete
+    // with live transactional state for the 10 GB per-database ceiling.
+    auditEventRepository: new D1AuditEventRepository({ db: requireAuditDb(env) }),
+    idGenerator,
+    clock,
+    logger,
+  })
 
   return {
     // The structured logger every domain service emits through. Must be wired on BOTH facades
@@ -573,14 +584,9 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // The third member of that obligation: where privileged actions are RECORDED for an account
     // admin. Same position, same reason — an un-wired audit log reads as "nobody changed
     // anything", which is the assurance it exists to give.
-    auditRecorder: new AuditService({
-      // The dedicated AUDIT_DB, not `db`: the log is retained for years and must not compete
-      // with live transactional state for the 10 GB per-database ceiling.
-      auditEventRepository: new D1AuditEventRepository({ db: requireAuditDb(env) }),
-      idGenerator,
-      clock,
-      logger,
-    }),
+    auditRecorder: audit,
+    // The READ half, for the account-admin viewer. Same instance, different capability.
+    auditLogReader: audit,
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,

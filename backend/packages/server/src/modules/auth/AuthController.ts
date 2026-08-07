@@ -12,6 +12,7 @@ import {
   mintMachineTokenContract,
   passwordLoginContract,
   revokeMachineNodeContract,
+  revokeMySessionsContract,
   patLoginContract,
   peekInvitationContract,
   resetPasswordContract,
@@ -36,7 +37,7 @@ import {
   UnavailableError,
   UnauthorizedError,
 } from '@cat-factory/kernel'
-import { requireCapability } from '../../http/guards.js'
+import { requireCapability, requireUser } from '../../http/guards.js'
 // The mechanics every redirecting login provider shares — the cookie-bound CSRF state, the
 // allow-listed post-login redirect, the session mint, the invite handling. Extracted when
 // enterprise SSO landed so there is exactly ONE implementation of each (see loginFlow.ts).
@@ -48,6 +49,7 @@ import {
   emailDomainAllowed,
   emailMatchesInvite,
   mintSession,
+  sessionGenerationFor,
   peekInvite,
   sessionUser,
   withToken,
@@ -274,7 +276,11 @@ function registerOAuthRoutes(app: Hono<AppEnv>): void {
       name: user.name,
     })
     if (state.invite) await acceptInvite(c, state.invite, user.id, user.email)
-    const { token } = await mintSession(cfg, sessionUser(user, identity.login))
+    const { token } = await mintSession(
+      cfg,
+      sessionUser(user, identity.login),
+      await sessionGenerationFor(c, user.id),
+    )
     return c.redirect(withToken(state.redirect, token))
   })
 
@@ -330,7 +336,11 @@ function registerOAuthRoutes(app: Hono<AppEnv>): void {
       name: user.name,
     })
     if (state.invite) await acceptInvite(c, state.invite, user.id, user.email)
-    const { token } = await mintSession(cfg, sessionUser(user, identity.email || user.id))
+    const { token } = await mintSession(
+      cfg,
+      sessionUser(user, identity.email || user.id),
+      await sessionGenerationFor(c, user.id),
+    )
     return c.redirect(withToken(state.redirect, token))
   })
 }
@@ -377,7 +387,11 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
       name: user.name,
     })
     if (body.invite) await acceptInvite(c, body.invite, user.id, user.email)
-    const { token } = await mintSession(cfg, sessionUser(user, user.email || user.id))
+    const { token } = await mintSession(
+      cfg,
+      sessionUser(user, user.email || user.id),
+      await sessionGenerationFor(c, user.id),
+    )
     return c.json({ token, user: sessionUser(user, user.email || user.id) }, 201)
   })
 
@@ -390,7 +404,11 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
     if (!user) {
       throw new UnauthorizedError('Invalid email or password')
     }
-    const { token } = await mintSession(cfg, sessionUser(user, user.email || user.id))
+    const { token } = await mintSession(
+      cfg,
+      sessionUser(user, user.email || user.id),
+      await sessionGenerationFor(c, user.id),
+    )
     return c.json({ token, user: sessionUser(user, user.email || user.id) }, 200)
   })
 
@@ -484,7 +502,11 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
       name: user.name,
     })
     const session = sessionUser(user, identity.login)
-    const { token: sessionToken } = await mintSession(cfg, session)
+    const { token: sessionToken } = await mintSession(
+      cfg,
+      session,
+      await sessionGenerationFor(c, user.id),
+    )
     return c.json({ token: sessionToken, user: session }, 200)
   })
 }
@@ -778,6 +800,28 @@ function registerSessionRoutes(app: Hono<AppEnv>): void {
     )
   })
 
-  // Stateless sessions: logout is a client-side token drop. Provided for symmetry.
+  // Logout is a client-side token drop: it ends THIS browser's session by forgetting the token,
+  // which is all a single sign-out needs and costs no write. Ending sessions the caller cannot
+  // reach is `revokeMySessionsContract` below.
   buildHonoRoute(app, logoutContract, (c) => c.body(null, 204))
+
+  // "Sign out everywhere": advance the caller's own session generation, which invalidates every
+  // token minted for them — including the one that made this request, which is the point rather
+  // than an oversight (somebody reaching for this has usually lost a device and cannot say which
+  // session to keep). A replacement token is minted from the NEW generation and returned, so the
+  // browser that asked stays signed in without a trip back through the identity provider.
+  buildHonoRoute(app, revokeMySessionsContract, async (c) => {
+    const user = requireUser(c, 'Sign in to manage your sessions')
+    const generation = await c.get('container').userService.revokeSessions(user.id)
+    // Deliberately NOT audited. The account audit log records what an account ADMIN is
+    // answerable for, and this is a person acting on their own sessions: there is no account it
+    // belongs to (a user may be in several, or none but their own), and filing it under a guess
+    // would be exactly the misattribution the log's actor model exists to prevent.
+    const { token, exp } = await mintSession(
+      authConfig(c),
+      { id: user.id, login: user.login, name: user.name, avatarUrl: user.avatarUrl },
+      generation,
+    )
+    return c.json({ token, exp }, 200)
+  })
 }

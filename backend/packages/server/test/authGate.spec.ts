@@ -20,6 +20,11 @@ interface FakeOpts {
   accessRowOf?: (id: string) => Promise<WorkspaceAccessRow | undefined>
   rolesFor?: (accountId: string, userId: string) => Promise<AccountRole[]>
   memberRoleOf?: (workspaceId: string, userId: string) => Promise<WorkspaceRole | null>
+  /**
+   * The user's stored session generation, or null for a user the store cannot find. Defaults to
+   * `0`, which is what a freshly created row carries and what {@link sessionToken} stamps.
+   */
+  sessionGeneration?: (userId: string) => Promise<number | null>
 }
 
 function makeApp(opts: FakeOpts = {}) {
@@ -36,6 +41,8 @@ function makeApp(opts: FakeOpts = {}) {
       memberRoleOf: opts.memberRoleOf ?? (async () => null),
     },
     accountService: { rolesFor: opts.rolesFor ?? (async () => []) },
+    // The session-revocation check `verifySession` now runs on every authenticated request.
+    userService: { sessionGeneration: opts.sessionGeneration ?? (async () => 0) },
     // Pass-through `workspaceAccess` slice (the Worker's isolate-safe shape): `get` just runs the
     // loader, so the gate resolves live every request and these unit assertions stay cache-agnostic.
     caches: {
@@ -73,7 +80,7 @@ function makeApp(opts: FakeOpts = {}) {
     )
 }
 
-async function sessionToken(id: string): Promise<string> {
+async function sessionToken(id: string, generation = 0): Promise<string> {
   const payload: SessionPayload = {
     id,
     login: 'octocat',
@@ -81,8 +88,26 @@ async function sessionToken(id: string): Promise<string> {
     avatarUrl: null,
     aud: TOKEN_AUDIENCE.session,
     exp: Date.now() + 3_600_000,
+    gen: generation,
   }
   return new HmacSigner(SECRET).sign(payload)
+}
+
+/**
+ * A token that is cryptographically perfect but carries NO generation claim — what every session
+ * minted before revocation existed looks like. Built by signing an untyped payload, because the
+ * typed one cannot express the omission, which is the point: the type stops a MINT from forgetting
+ * the claim, and this proves the VERIFIER still refuses one that did.
+ */
+function generationlessToken(id: string): Promise<string> {
+  return new HmacSigner(SECRET).sign({
+    id,
+    login: 'octocat',
+    name: null,
+    avatarUrl: null,
+    aud: TOKEN_AUDIENCE.session,
+    exp: Date.now() + 3_600_000,
+  })
 }
 
 const legacy = (ownerUserId: string | null): WorkspaceAccessRow => ({
@@ -235,5 +260,61 @@ describe('mountAuthGate — viewer write floor', () => {
       memberRoleOf: async () => 'member',
     })
     expect((await call('PATCH', '/workspaces/ws_x', await sessionToken('usr_1'))).status).toBe(200)
+  })
+})
+
+// The revocation check itself: a session token is only accepted while its `gen` claim still
+// matches the user's stored generation. These drive the gate rather than `verifySession` directly,
+// because what matters is that a revoked bearer is refused where authorization is decided.
+describe('mountAuthGate — session revocation', () => {
+  const gated = (sessionGeneration: FakeOpts['sessionGeneration']) =>
+    makeApp({
+      sessionGeneration,
+      accessRowOf: async () => scoped('account'),
+      rolesFor: async () => ['developer'],
+    })
+
+  it('admits a token whose generation still matches the stored one', async () => {
+    const call = gated(async () => 3)
+    expect((await call('GET', '/workspaces/ws_x', await sessionToken('usr_1', 3))).status).toBe(200)
+  })
+
+  it('refuses a token minted before a revocation bumped the generation', async () => {
+    // The offboarding case: the row moved on, the bearer did not.
+    const call = gated(async () => 4)
+    expect((await call('GET', '/workspaces/ws_x', await sessionToken('usr_1', 3))).status).toBe(401)
+  })
+
+  it('refuses a generation ABOVE the stored one, not only a stale one', async () => {
+    // No mint this deployment performs can produce this, so it means the row went backwards (a
+    // restore) or the token was signed under a secret we should not be trusting. Admitting it
+    // would let a rolled-back database re-admit every session it had already revoked.
+    const call = gated(async () => 1)
+    expect((await call('GET', '/workspaces/ws_x', await sessionToken('usr_1', 9))).status).toBe(401)
+  })
+
+  it('refuses a token carrying no generation claim at all', async () => {
+    // Every session minted before the column existed looks like this. Treating an absent claim as
+    // "current" would be a permanent bypass of the whole mechanism.
+    const call = gated(async () => 0)
+    expect((await call('GET', '/workspaces/ws_x', await generationlessToken('usr_1'))).status).toBe(
+      401,
+    )
+  })
+
+  it('refuses a bearer whose user no longer exists', async () => {
+    // A deleted user's unexpired token would otherwise go on authenticating: there is no row to
+    // bump, so only the null answer can refuse it.
+    const call = gated(async () => null)
+    expect((await call('GET', '/workspaces/ws_x', await sessionToken('usr_gone', 0))).status).toBe(
+      401,
+    )
+  })
+
+  it('surfaces a store failure as a 500, never as a fleet-wide 401', async () => {
+    // An outage and a revoked session are opposite facts. Reporting the first as "your credentials
+    // are wrong" would send every user to a login that cannot work either.
+    const call = gated(() => Promise.reject(new Error('store down')))
+    expect((await call('GET', '/workspaces/ws_x', await sessionToken('usr_1'))).status).toBe(500)
   })
 })

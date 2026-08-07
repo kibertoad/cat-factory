@@ -8,7 +8,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import type { Hono } from 'hono'
 import type { Context } from 'hono'
 import { deleteCookie, getCookie } from 'hono/cookie'
-import { UnavailableError, oidcIdentitySubject } from '@cat-factory/kernel'
+import { UnavailableError, oidcIdentitySubject, runBestEffort } from '@cat-factory/kernel'
 import type { Logger } from '@cat-factory/kernel'
 import {
   OidcClient,
@@ -37,6 +37,7 @@ import {
   peekInvite,
   pickPostLoginRedirect,
   resolveRedirect,
+  sessionGenerationFor,
   sessionUser,
   setRoundTripCookie,
   withToken,
@@ -207,13 +208,67 @@ export function registerSsoRoutes(app: Hono<AppEnv>): void {
 
     const admission = judgeSsoAdmission(identity, sso)
     if (!admission.allowed) {
-      requestLogger(c).info('sso.refused', { reason: admission.reason, login: identity.login })
+      // A refusal is the OFFBOARDING signal, not merely a failed login: the directory that used to
+      // admit this person no longer does. Re-reading the groups on sign-in already stops them
+      // getting a NEW session; this ends the ones they are already holding, which is the half a
+      // stateless token cannot do on its own and the reason SSO's offboarding promise needed a
+      // revocation slice at all.
+      const revoked = await revokeRefusedSessions(c, issuer, identity.sub)
+      requestLogger(c).info('sso.refused', {
+        reason: admission.reason,
+        login: identity.login,
+        // Recorded because "we refused them and they still hold a live bearer" and "we refused
+        // them and cut their sessions" are different security outcomes, and only the second is
+        // the offboarding this feature claims. `false` is the ordinary case for someone who never
+        // had an account here.
+        sessionsRevoked: revoked,
+      })
       return c.redirect(refuse(trip.redirect, admission.reason))
     }
 
     const token = await establishSession(c, cfg, identity, issuer, trip)
     return c.redirect(withToken(trip.redirect, token))
   })
+}
+
+/**
+ * End every live session of a user the directory has just refused, reporting whether there was
+ * one to end.
+ *
+ * Keyed on the SAME `iss#sub` subject the sign-in path uses, never the email: a departed employee
+ * whose address was reassigned must not have the new holder's sessions revoked, and the email is
+ * display data precisely because it moves.
+ *
+ * BEST-EFFORT, and this is the one place in the flow where that is right. The refusal itself has
+ * already succeeded — the person is not getting a session — so a store failure here must not turn
+ * a correct denial into a 500 that reads to an operator as a broken SSO configuration. It is
+ * WARNED rather than swallowed, because a revocation that silently did not happen is exactly the
+ * gap this closes, and `runBestEffort` is what keeps the report attached to the cause.
+ */
+async function revokeRefusedSessions<E extends AppEnv>(
+  c: Context<E>,
+  issuer: string,
+  sub: string,
+): Promise<boolean> {
+  const container = c.get('container')
+  let revoked = false
+  await runBestEffort(
+    requestLogger(c),
+    'sso.revoke_refused_sessions',
+    async () => {
+      const user = await container.userService.findByIdentity(
+        'oidc',
+        oidcIdentitySubject(issuer, sub),
+      )
+      // No user means nobody ever signed in with this identity, so there is nothing to revoke —
+      // the ordinary case for an outsider hitting the login, not a failure.
+      if (!user) return
+      await container.userService.revokeSessions(user.id)
+      revoked = true
+    },
+    { issuer },
+  )
+  return revoked
 }
 
 /**
@@ -305,7 +360,11 @@ async function establishSession<E extends AppEnv>(
       await acceptInvite(c, trip.invite, user.id, user.email)
     }
   }
-  const { token } = await mintSession(cfg, sessionUser(user, identity.login))
+  const { token } = await mintSession(
+    cfg,
+    sessionUser(user, identity.login),
+    await sessionGenerationFor(c, user.id),
+  )
   logSignIn(requestLogger(c), user.id, identity, issuer)
   return token
 }
