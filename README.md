@@ -252,7 +252,11 @@ transports are hand-written. Beside them, `sdk/mcp` is a **Model Context Protoco
 same surface: the published operations projected as MCP tools from that same spec, over the
 TypeScript client, so an MCP host can drive a workspace directly (the two SSE endpoints aside, a
 tool call having no channel to stream over). It serves both the `cat-factory-mcp` stdio binary and
-the backend's hosted `POST /api/v1/mcp`, mounted from this same package. Design notes, the
+the backend's hosted `POST /api/v1/mcp`, mounted from this same package. `sdk/gatekeeper` is a
+third projection from the same generator: a **policy-annotated operation table** (per-operation
+key-scope floors, mutation and transport metadata, invoke thunks over the TypeScript client) for
+credential-holding front-ends such as a Cloudflare OS Gatekeeper; see the
+[initiative tracker](./docs/initiatives/cloudflare-os-gatekeeper.md). Design notes, the
 Java/Kotlin story and the release process: [`sdk/README.md`](./sdk/README.md).
 
 | Path                                 | Package                                   | Registry                                    |
@@ -262,6 +266,7 @@ Java/Kotlin story and the release process: [`sdk/README.md`](./sdk/README.md).
 | [`sdk/go`](./sdk/go)                 | `github.com/kibertoad/cat-factory/sdk/go` | the Go module proxy (a `sdk/go/vX.Y.Z` tag) |
 | [`sdk/java`](./sdk/java)             | `ai.catfactory:cat-factory-sdk`           | Maven Central (serves **Java and Kotlin**)  |
 | [`sdk/mcp`](./sdk/mcp)               | `@cat-factory/mcp-server`                 | npm (versioned by changesets)               |
+| [`sdk/gatekeeper`](./sdk/gatekeeper) | `@cat-factory/gatekeeper-bindings`        | npm (versioned by changesets)               |
 
 **AWS-stack packages** (opt-in): three independent, capability-scoped AWS integrations, each
 registering into its own seam and sharing no dependencies, so a deployment pulls in only what it

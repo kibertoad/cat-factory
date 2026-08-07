@@ -476,8 +476,8 @@ GitLab deployments.
 ## Public-API SDK clients: generated from the spec, never hand-edited
 
 Four official clients for `/api/v1` live under `sdk/` (TypeScript, Python, Go, and Java, which also
-serves Kotlin), plus `sdk/mcp`, an MCP facade projecting the same operations as tools over the
-TypeScript client. The chain is **contracts → `docs/openapi.json` → `sdk/*`** with no hand-editing at
+serves Kotlin), plus two projections over the TypeScript client: `sdk/mcp` (the operations as MCP
+tools) and `sdk/gatekeeper` (a policy table of per-operation scope floors, from the contracts' `minScope`). The chain is **contracts → `docs/openapi.json` → `sdk/*`** with no hand-editing at
 any link: `pnpm gen:sdk` renders the committed spec, and `pnpm check:sdk` fails CI on drift and version
 skew. Design, the shared client invariants, and the Java/Kotlin trade: [`sdk/README.md`](./sdk/README.md).
 Two rules bite from outside that tree:

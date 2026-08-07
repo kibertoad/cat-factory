@@ -2,7 +2,7 @@ import { defineApiContract } from '@toad-contracts/valibot'
 import { prVerificationReportSchema } from '../pr-report.js'
 import { publicRunArtifactListSchema } from '../public-evidence.js'
 import { runOutcomeSchema } from '../run-outcome.js'
-import { errorResponses, singleStringParam } from './_shared.js'
+import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 
 // ---------------------------------------------------------------------------
 // Route contracts for the public run-EVIDENCE surface: absolute `/api/v1` paths,
@@ -30,12 +30,15 @@ const runIdParams = singleStringParam('runId')
  * A consumer that scraped the fenced JSON block out of a PR body can read it here instead, and
  * gets it for the runs that never opened a pull request at all.
  */
-export const getPublicRunReportContract = defineApiContract({
-  method: 'get',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/report`,
-  responsesByStatusCode: { 200: prVerificationReportSchema, ...errorResponses },
-})
+export const getPublicRunReportContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/report`,
+    responsesByStatusCode: { 200: prVerificationReportSchema, ...errorResponses },
+  }),
+)
 
 /**
  * The run's OUTCOME summary: what it changed and what backs that up, for a reader who will not
@@ -51,17 +54,23 @@ export const getPublicRunReportContract = defineApiContract({
  * Deliberately not derived from the report on the wire: the report is BOUNDED to what fits in a
  * pull-request body, and a tally taken off its capped tables would be quietly wrong.
  */
-export const getPublicRunOutcomeContract = defineApiContract({
-  method: 'get',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/outcome`,
-  responsesByStatusCode: { 200: runOutcomeSchema, ...errorResponses },
-})
+export const getPublicRunOutcomeContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/outcome`,
+    responsesByStatusCode: { 200: runOutcomeSchema, ...errorResponses },
+  }),
+)
 
 /** The binary artifacts the run captured (metadata; the bytes are a second, per-artifact fetch). */
-export const listPublicRunArtifactsContract = defineApiContract({
-  method: 'get',
-  requestPathParamsSchema: runIdParams,
-  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/artifacts`,
-  responsesByStatusCode: { 200: publicRunArtifactListSchema, ...errorResponses },
-})
+export const listPublicRunArtifactsContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: runIdParams,
+    pathResolver: ({ runId }) => `/api/v1/runs/${runId}/artifacts`,
+    responsesByStatusCode: { 200: publicRunArtifactListSchema, ...errorResponses },
+  }),
+)

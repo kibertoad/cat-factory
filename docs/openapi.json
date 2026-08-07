@@ -4810,7 +4810,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.22.0"
+    "version": "1.23.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -4878,7 +4878,8 @@
         "summary": "Download an artifact's bytes",
         "tags": [
           "Evidence"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/debug/agent-context/{snapshotId}": {
@@ -5196,7 +5197,8 @@
         "summary": "Get one agent-context snapshot",
         "tags": [
           "Debug"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/debug/llm-calls/{callId}": {
@@ -5689,7 +5691,8 @@
         "summary": "Get one LLM call",
         "tags": [
           "Debug"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/debug/runs": {
@@ -5970,7 +5973,8 @@
         "summary": "List the workspace's runs",
         "tags": [
           "Debug"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/debug/runs/{runId}": {
@@ -7080,7 +7084,8 @@
         "summary": "Get a run's diagnostic map",
         "tags": [
           "Debug"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/debug/runs/{runId}/agent-context": {
@@ -7243,7 +7248,8 @@
         "summary": "List a run's agent-context dispatches",
         "tags": [
           "Debug"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/debug/runs/{runId}/llm-calls": {
@@ -7810,7 +7816,8 @@
         "summary": "List a run's LLM calls",
         "tags": [
           "Debug"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/debug/runs/{runId}/logs": {
@@ -8017,7 +8024,8 @@
         "summary": "List a run's infrastructure log",
         "tags": [
           "Debug"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/debug/runs/{runId}/search-queries": {
@@ -8159,7 +8167,8 @@
         "summary": "List a run's web searches",
         "tags": [
           "Debug"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/debug/runs/{runId}/tool-calls": {
@@ -8358,7 +8367,8 @@
         "summary": "List a run's tool calls",
         "tags": [
           "Debug"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/jobs": {
@@ -8468,7 +8478,8 @@
         "summary": "List the workspace's jobs",
         "tags": [
           "Jobs"
-        ]
+        ],
+        "x-min-scope": "read"
       },
       "post": {
         "description": "Start a public, inline pipeline headlessly against a supplied brief. Returns a job id to poll or stream. Nothing is pushed to GitHub.",
@@ -8518,7 +8529,8 @@
         "summary": "Start a headless job",
         "tags": [
           "Jobs"
-        ]
+        ],
+        "x-min-scope": "write"
       }
     },
     "/api/v1/jobs/{id}": {
@@ -8570,7 +8582,8 @@
         "summary": "Get a job",
         "tags": [
           "Jobs"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/jobs/{id}/cancel": {
@@ -8622,7 +8635,8 @@
         "summary": "Cancel a job",
         "tags": [
           "Jobs"
-        ]
+        ],
+        "x-min-scope": "write"
       }
     },
     "/api/v1/jobs/{id}/events": {
@@ -8664,7 +8678,8 @@
         "summary": "Stream a job (SSE)",
         "tags": [
           "Jobs"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/keys": {
@@ -8706,7 +8721,8 @@
         "summary": "List the workspace's API keys",
         "tags": [
           "Keys"
-        ]
+        ],
+        "x-min-scope": "admin"
       },
       "post": {
         "description": "Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE, so store it now: it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.",
@@ -8756,7 +8772,8 @@
         "summary": "Provision an API key",
         "tags": [
           "Keys"
-        ]
+        ],
+        "x-min-scope": "admin"
       }
     },
     "/api/v1/keys/{keyId}": {
@@ -8801,7 +8818,8 @@
         "summary": "Revoke an API key",
         "tags": [
           "Keys"
-        ]
+        ],
+        "x-min-scope": "admin"
       }
     },
     "/api/v1/me": {
@@ -8843,7 +8861,8 @@
         "summary": "Describe the calling key",
         "tags": [
           "Identity"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/notification-webhook": {
@@ -8878,7 +8897,8 @@
         "summary": "Remove the outbound webhook",
         "tags": [
           "Webhook"
-        ]
+        ],
+        "x-min-scope": "admin"
       },
       "get": {
         "description": "The endpoint this workspace delivers notifications, run-lifecycle events and platform-health alerts to, or `{ \"webhook\": null }` when none is registered. The signing secret is never returned; `hasSecret` reports only whether one is set.",
@@ -8918,7 +8938,8 @@
         "summary": "Read the workspace's outbound webhook",
         "tags": [
           "Webhook"
-        ]
+        ],
+        "x-min-scope": "admin"
       },
       "put": {
         "description": "Register the HTTPS endpoint deliveries are POSTed to, or update the one already registered. Every omitted field keeps its stored value, so subscribing to run events is a one-field call that re-sends neither the URL nor the secret. `url` is required only on the first call, when there is nothing registered to keep; omitting it otherwise leaves the endpoint alone. Supplying `secret` rotates the signing secret; omitting it keeps the current one. The endpoint must be `https:` and publicly routable unless the deployment widened its allow-list.",
@@ -8968,7 +8989,8 @@
         "summary": "Register or update the outbound webhook",
         "tags": [
           "Webhook"
-        ]
+        ],
+        "x-min-scope": "admin"
       }
     },
     "/api/v1/notifications": {
@@ -9010,7 +9032,8 @@
         "summary": "List the workspace's open notifications",
         "tags": [
           "Notifications"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/notifications/{id}/act": {
@@ -9062,7 +9085,8 @@
         "summary": "Act on a notification",
         "tags": [
           "Notifications"
-        ]
+        ],
+        "x-min-scope": "admin"
       }
     },
     "/api/v1/notifications/{id}/dismiss": {
@@ -9114,7 +9138,8 @@
         "summary": "Dismiss a notification",
         "tags": [
           "Notifications"
-        ]
+        ],
+        "x-min-scope": "write"
       }
     },
     "/api/v1/pipelines": {
@@ -9156,7 +9181,8 @@
         "summary": "List the workspace's pipelines",
         "tags": [
           "Pipelines"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/runs/{runId}/artifacts": {
@@ -9208,7 +9234,8 @@
         "summary": "List a run's captured artifacts",
         "tags": [
           "Evidence"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/runs/{runId}/decisions": {
@@ -9260,7 +9287,8 @@
         "summary": "List a run's parked decisions",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/runs/{runId}/decisions/approvals/{approvalId}/approve": {
@@ -9330,7 +9358,8 @@
         "summary": "Approve a parked step",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/approvals/{approvalId}/reject": {
@@ -9400,7 +9429,8 @@
         "summary": "Reject a parked step",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/approvals/{approvalId}/request-changes": {
@@ -9470,7 +9500,8 @@
         "summary": "Request changes on a parked step",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/approvals/{approvalId}/resolve-exceeded": {
@@ -9540,7 +9571,8 @@
         "summary": "Resolve a companion gate at its rework cap",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/brainstorm/{stage}/incorporate": {
@@ -9610,7 +9642,8 @@
         "summary": "Incorporate brainstorm picks",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/brainstorm/{stage}/options/{itemId}": {
@@ -9688,7 +9721,8 @@
         "summary": "Dismiss or reopen a brainstorm option",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/brainstorm/{stage}/options/{itemId}/reply": {
@@ -9766,7 +9800,8 @@
         "summary": "Respond to a brainstorm option",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/brainstorm/{stage}/proceed": {
@@ -9826,7 +9861,8 @@
         "summary": "Proceed past a brainstorm",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/brainstorm/{stage}/re-review": {
@@ -9886,7 +9922,8 @@
         "summary": "Re-run a brainstorm pass",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/brainstorm/{stage}/resolve-exceeded": {
@@ -9956,7 +9993,8 @@
         "summary": "Resolve a brainstorm at its iteration cap",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/clarity/findings/{itemId}": {
@@ -10026,7 +10064,8 @@
         "summary": "Dismiss or reopen a clarity finding",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/clarity/findings/{itemId}/reply": {
@@ -10096,7 +10135,8 @@
         "summary": "Answer a clarity (bug-triage) finding",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/clarity/incorporate": {
@@ -10158,7 +10198,8 @@
         "summary": "Incorporate clarity answers",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/clarity/proceed": {
@@ -10210,7 +10251,8 @@
         "summary": "Proceed past the clarity review",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/clarity/re-review": {
@@ -10262,7 +10304,8 @@
         "summary": "Re-triage the clarified report",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/clarity/resolve-exceeded": {
@@ -10324,7 +10367,8 @@
         "summary": "Resolve a clarity review at its iteration cap",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/answer": {
@@ -10394,7 +10438,8 @@
         "summary": "Answer a follow-up question",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/dismiss": {
@@ -10454,7 +10499,8 @@
         "summary": "Dismiss a follow-up item",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/file": {
@@ -10514,7 +10560,8 @@
         "summary": "File a follow-up item as an issue",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/send-back": {
@@ -10574,7 +10621,8 @@
         "summary": "Send a follow-up item back to the Coder",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/fork/choose": {
@@ -10636,7 +10684,8 @@
         "summary": "Choose an implementation approach",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/human-test/confirm": {
@@ -10688,7 +10737,8 @@
         "summary": "Confirm a human-test gate",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/human-test/request-fix": {
@@ -10750,7 +10800,8 @@
         "summary": "Request a fix from a human-test gate",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/input-gate/resolve": {
@@ -10812,7 +10863,8 @@
         "summary": "Resolve a run parked on the task's input check",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/interview/answer": {
@@ -10874,7 +10926,8 @@
         "summary": "Answer an interview question",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/interview/continue": {
@@ -10926,7 +10979,8 @@
         "summary": "Continue a parked interview",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/interview/proceed": {
@@ -10978,7 +11032,8 @@
         "summary": "Proceed past a parked interview",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/judge/resolve": {
@@ -11064,7 +11119,8 @@
         "summary": "Resolve a parked judge verdict",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/challenge": {
@@ -11134,7 +11190,8 @@
         "summary": "Challenge a PR review finding",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/dismiss": {
@@ -11194,7 +11251,8 @@
         "summary": "Dismiss a PR review finding",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/pr-review/resolve": {
@@ -11256,7 +11314,8 @@
         "summary": "Resolve a parked PR deep review",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/questions/{decisionId}/answer": {
@@ -11326,7 +11385,8 @@
         "summary": "Answer an agent-raised decision",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/requirements/findings/{itemId}": {
@@ -11396,7 +11456,8 @@
         "summary": "Dismiss or reopen a finding",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/requirements/findings/{itemId}/reply": {
@@ -11466,7 +11527,8 @@
         "summary": "Answer a review finding",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/requirements/incorporate": {
@@ -11528,7 +11590,8 @@
         "summary": "Incorporate the answers",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/requirements/proceed": {
@@ -11580,7 +11643,8 @@
         "summary": "Proceed with the current requirements",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/requirements/re-review": {
@@ -11632,7 +11696,8 @@
         "summary": "Re-review the incorporated document",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/requirements/resolve-exceeded": {
@@ -11694,7 +11759,8 @@
         "summary": "Resolve a review at its iteration cap",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/visual-confirmation/approve": {
@@ -11746,7 +11812,8 @@
         "summary": "Approve a visual-confirmation gate",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/decisions/visual-confirmation/request-fix": {
@@ -11808,7 +11875,8 @@
         "summary": "Request a fix from a visual-confirmation gate",
         "tags": [
           "Decisions"
-        ]
+        ],
+        "x-min-scope": "decide"
       }
     },
     "/api/v1/runs/{runId}/outcome": {
@@ -12365,7 +12433,8 @@
         "summary": "Get a run's outcome summary",
         "tags": [
           "Evidence"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/runs/{runId}/report": {
@@ -12417,7 +12486,8 @@
         "summary": "Get a run's verification report",
         "tags": [
           "Evidence"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/services": {
@@ -12459,7 +12529,8 @@
         "summary": "List the workspace's services",
         "tags": [
           "Services"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/services/{serviceId}/tasks": {
@@ -12548,7 +12619,8 @@
         "summary": "List a service's tasks",
         "tags": [
           "Tasks"
-        ]
+        ],
+        "x-min-scope": "read"
       },
       "post": {
         "description": "Create a task inside a service frame the key’s workspace owns. The task starts in the `planned` state; start it with the start endpoint. Optionally file it FROM a tracker ticket, and/or attach the requirements documents it is to be built against (named in a connected document source, or uploaded inline): the only way to get spec-sized input onto a repository-touching run.",
@@ -12608,7 +12680,8 @@
         "summary": "Create a task under a service",
         "tags": [
           "Tasks"
-        ]
+        ],
+        "x-min-scope": "write"
       }
     },
     "/api/v1/task-types": {
@@ -12811,7 +12884,8 @@
         "summary": "List the task types this workspace may create",
         "tags": [
           "Task types"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/tasks/{taskId}": {
@@ -12856,7 +12930,8 @@
         "summary": "Delete a task",
         "tags": [
           "Tasks"
-        ]
+        ],
+        "x-min-scope": "admin"
       },
       "get": {
         "description": "Read a task’s current lifecycle status, run progress, run id, and PR URL (once one exists).",
@@ -12906,7 +12981,8 @@
         "summary": "Get a task's status",
         "tags": [
           "Tasks"
-        ]
+        ],
+        "x-min-scope": "read"
       },
       "patch": {
         "description": "Edit a task’s human-authored fields (title/description) before it runs. Both fields are optional.",
@@ -12966,7 +13042,8 @@
         "summary": "Edit a task's title/description",
         "tags": [
           "Tasks"
-        ]
+        ],
+        "x-min-scope": "write"
       }
     },
     "/api/v1/tasks/{taskId}/events": {
@@ -13008,7 +13085,8 @@
         "summary": "Stream a task run (SSE)",
         "tags": [
           "Tasks"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/tasks/{taskId}/retry": {
@@ -13060,7 +13138,8 @@
         "summary": "Retry a task's failed run",
         "tags": [
           "Tasks"
-        ]
+        ],
+        "x-min-scope": "write"
       }
     },
     "/api/v1/tasks/{taskId}/run": {
@@ -13112,7 +13191,8 @@
         "summary": "Get a task's run (rich projection)",
         "tags": [
           "Tasks"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/tasks/{taskId}/start": {
@@ -13174,7 +13254,8 @@
         "summary": "Start (run) a task",
         "tags": [
           "Tasks"
-        ]
+        ],
+        "x-min-scope": "write"
       }
     },
     "/api/v1/tasks/{taskId}/stop": {
@@ -13226,7 +13307,8 @@
         "summary": "Stop a task's run",
         "tags": [
           "Tasks"
-        ]
+        ],
+        "x-min-scope": "write"
       }
     },
     "/api/v1/usage": {
@@ -13268,7 +13350,8 @@
         "summary": "Read the workspace's usage for the current period",
         "tags": [
           "Usage"
-        ]
+        ],
+        "x-min-scope": "read"
       }
     }
   },
@@ -13334,5 +13417,11 @@
       "description": "The workspace’s one outbound endpoint: register it to receive notifications, run-lifecycle events and platform-health alerts by push instead of polling. Requires an `admin`-scope key; the signing secret is write-only.",
       "name": "Webhook"
     }
+  ],
+  "x-public-api-scopes": [
+    "read",
+    "write",
+    "decide",
+    "admin"
   ]
 }
