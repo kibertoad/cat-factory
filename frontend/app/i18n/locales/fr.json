@@ -430,7 +430,8 @@
       "accessDenied": {
         "title": "Autorisation refusée",
         "hint": "Vous n'avez pas accès au dépôt sur lequel repose ce service."
-      }
+      },
+      "startFromDesignTitle": "Partir d'une maquette"
     },
     "decisionBadge": {
       "decisionNeeded": "Décision requise",
@@ -502,7 +503,11 @@
     "attachIssueDisabledConnect": "Connectez d’abord un suivi de tickets (Intégrations)",
     "attachIssueDisabledEnable": "Activez d’abord l’intégration du suivi de tickets",
     "importsOnAdd": "importé à l’ajout",
-    "unreadable": "Récupération impossible : {error}"
+    "unreadable": "Récupération impossible : {error}",
+    "pastedLink": {
+      "offer": "Cette description renvoie à une page {source}. L’attacher comme contexte ?",
+      "attach": "Attacher"
+    }
   },
   "errors": {
     "generic": {
@@ -2032,6 +2037,18 @@
         "keysValidation": "Saisissez l’id de clé d’accès et le secret S3",
         "saved": "Stockage de contenu enregistré",
         "saveFailed": "Impossible d’enregistrer le stockage de contenu"
+      },
+      "figma": {
+        "title": "Application Figma (OAuth)",
+        "description": "Active le parcours « Se connecter avec Figma ». Sans lui, les espaces de travail peuvent toujours connecter Figma en collant un jeton d'accès personnel.",
+        "clientId": "Identifiant client",
+        "clientSecret": "Secret client",
+        "redirectUrl": "URL de redirection",
+        "validation": "Saisissez l'identifiant client, le secret et l'URL de redirection",
+        "saved": "OAuth Figma enregistré",
+        "saveFailed": "Impossible d'enregistrer l'OAuth Figma",
+        "cleared": "OAuth Figma effacé",
+        "clearFailed": "Impossible d'effacer l'OAuth Figma"
       }
     },
     "accountFragments": {
@@ -4307,13 +4324,19 @@
     "connect": {
       "title": "Connecter une source",
       "sourceFallback": "Source",
-      "intro": "Connectez {source} pour importer des exigences, des RFC et des PRD, puis générer la structure du tableau ou les joindre aux tâches comme contexte pour les agents.",
+      "intro": "Connecte {source} pour amener ses pages et ses maquettes sur ce tableau : importe-les, déplie-les en structure de tableau, ou attache-les à une tâche comme contexte pour les agents.",
       "disconnect": "Déconnecter",
       "connect": "Connecter",
       "update": "Mettre à jour la connexion",
       "connected": "{source} connecté",
       "disconnected": "{source} déconnecté",
-      "connectFailed": "Connexion impossible"
+      "connectFailed": "Connexion impossible",
+      "oauth": {
+        "action": "Se connecter avec {source}",
+        "scopes": "Les autorisations demandées seront : {scopes}",
+        "fallback": "Vous préférez un jeton ? Utilisez plutôt les champs ci-dessous.",
+        "failed": "Impossible de lancer la connexion à {source}"
+      }
     },
     "spawn": {
       "title": "Aperçu de la structure",
@@ -4328,7 +4351,15 @@
       "summary": "{frames} · {modules} · {tasks}",
       "frameCount": "{count} cadre | {count} cadres",
       "moduleCount": "{count} module | {count} modules",
-      "taskCount": "{count} tâche | {count} tâches"
+      "taskCount": "{count} tâche | {count} tâches",
+      "reusedCount": "{count} module réutilisé | {count} modules réutilisés",
+      "intoService": "dans le service choisi",
+      "target": {
+        "label": "Ajouter au service",
+        "help": "Une maquette décrit des écrans, pas une architecture : le plan propose donc du travail à l'intérieur d'un service qui existe déjà.",
+        "placeholder": "Choisir un service",
+        "required": "Choisissez le service auquel appartient cette maquette."
+      }
     },
     "taskDocs": {
       "heading": "Documents de contexte",
@@ -4361,6 +4392,20 @@
       "remove": "Retirer",
       "linkFailed": "Impossible de mettre à jour le lien du document",
       "loadFailed": "Impossible de charger les modèles de documents"
+    },
+    "startFromDesign": {
+      "title": "Partir d'une maquette",
+      "intro": "Collez le lien vers un frame ou un fichier entier. Il est attaché à la nouvelle tâche, et l'agent en lit la mise en page, les textes, les composants et les tokens.",
+      "noSource": "Aucune source de design n'est connectée. Un administrateur peut connecter Figma ou Zeplin depuis les intégrations.",
+      "linkLabel": "Lien de maquette",
+      "linkPlaceholder": "https://www.figma.com/design/…?node-id=1-2",
+      "checking": "Vérification du lien…",
+      "trimmed": "Réduit à la forme prise en charge de ce lien.",
+      "widened": "Le frame {scope} n'a pas pu être lu : c'est le fichier entier qui est attaché.",
+      "unchecked": "Le lien n'a pas pu être vérifié pour l'instant. Il sera récupéré à la création de la tâche.",
+      "uncheckedAmbiguous": "Le lien n'a pas pu être vérifié, et plusieurs sources de design sont connectées : impossible de savoir de laquelle il vient. Réessayez.",
+      "rejected": "Aucune source de design connectée ne reconnaît ce lien.",
+      "continue": "Continuer"
     }
   },
   "tasks": {
@@ -6970,7 +7015,8 @@
       "library": "La bibliothèque de fragments de contexte activée sur ce déploiement",
       "failedRun": "Une exécution en échec",
       "infrastructure": "Un backend d’exécution connecté à cet espace de travail",
-      "advancedTier": "Le mode d’interface avancé"
+      "advancedTier": "Le mode d’interface avancé",
+      "designSource": "Une source de design connectée"
     },
     "overlay": {
       "next": "Suivant",
@@ -7348,6 +7394,36 @@
           "finish": {
             "title": "Les étapes de conception lisent ceci",
             "body": "Une conception qui déclare lesquels elle utilise reçoit leurs contrats complets à l’étape suivante. Celle qui ne déclare rien ne reçoit rien : tenir ceci à jour est ce qui fait que cela marche."
+          }
+        }
+      },
+      "startFromDesign": {
+        "title": "Partir d'une maquette",
+        "description": "Transformez un frame de maquette en tâche qu'un agent peut réaliser.",
+        "steps": {
+          "intro": {
+            "title": "Travailler depuis la maquette",
+            "body": "Quand le travail commence dans un outil de design, le frame est le brief. Cette visite en attache un à une nouvelle tâche."
+          },
+          "open": {
+            "title": "Partir d'une maquette",
+            "body": "Chaque cadre de service porte ce bouton dès qu'une source de design est connectée."
+          },
+          "paste": {
+            "title": "Collez le lien",
+            "body": "Copiez dans votre outil de design le lien vers un frame ou un fichier entier, et collez-le ici."
+          },
+          "resolved": {
+            "title": "Vérifiez ce qui a été attaché",
+            "body": "Le lien est réduit à sa forme prise en charge. Si le frame lui-même n'a pas pu être lu, c'est le fichier entier qui est attaché, et c'est dit ici."
+          },
+          "continue": {
+            "title": "Passez à la tâche",
+            "body": "La maquette est prête sur la nouvelle tâche. Décrivez le résultat attendu et créez-la."
+          },
+          "finish": {
+            "title": "Prêt à lancer",
+            "body": "L'agent lit la mise en page, les textes, les composants et les tokens de la maquette, et chaque exécution la revérifie auprès de la source."
           }
         }
       }

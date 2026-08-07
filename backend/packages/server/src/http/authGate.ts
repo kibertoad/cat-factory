@@ -28,11 +28,22 @@ import { loadWorkspaceAccess } from './workspaceAccess.js'
 //               (a tracker delivery has no installation id to resolve one from) but is NOT what
 //               authorises it — the secret is; see `TaskWebhookController`.
 //   /slack    — Slack OAuth callback; the `state` is HMAC-signed + short-lived.
+//   /tasks    — Linear OAuth callback; same shape, same HMAC-signed `state`.
+//   /documents— document-source OAuth callback (ONE receiver for every OAuth-capable source, the
+//               source riding the signed `state`); same shape again.
 //   /internal — mothership-mode machine API; authenticated by an audience-pinned machine
 //               token verified inside the controller, not by the session gate.
 //   /api      — the public external API; authenticated by an in-controller public-API key
 //               (`Authorization: Bearer cf_live_…`), not the session gate.
-const PUBLIC_PREFIXES = [
+//
+// EXPORTED because it is one half of an invariant the app cannot state on its own: every
+// provider-facing receiver in `PROVIDER_CALLBACK_CONTROLLERS` mounts at a prefix that MUST appear
+// here. A vendor's browser redirect carries no `Authorization` header and a webhook delivery no
+// session, so a receiver missing from this list is not merely gated — it is unreachable, failing
+// as a 401 (or a 503 where auth is unconfigured) raised before the handler whose own signature
+// check is the real authentication ever runs. `publicPrefixes.test.ts` pins the two lists
+// together, because both times this was got wrong the receiver read correctly at its own mount.
+export const PUBLIC_PREFIXES = [
   '/health',
   '/auth',
   '/v1',
@@ -40,6 +51,8 @@ const PUBLIC_PREFIXES = [
   '/vcs',
   '/webhooks',
   '/slack',
+  '/tasks',
+  '/documents',
   '/internal',
   '/api',
 ]

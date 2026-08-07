@@ -430,7 +430,8 @@
       "accessDenied": {
         "title": "Brak uprawnień",
         "hint": "Nie masz dostępu do repozytorium powiązanego z tą usługą."
-      }
+      },
+      "startFromDesignTitle": "Zacznij od projektu"
     },
     "decisionBadge": {
       "decisionNeeded": "Wymagana decyzja",
@@ -502,7 +503,11 @@
     "attachIssueDisabledConnect": "Najpierw połącz system zgłoszeń (Integracje)",
     "attachIssueDisabledEnable": "Najpierw włącz integrację systemu zgłoszeń",
     "importsOnAdd": "importowane przy dodaniu",
-    "unreadable": "Nie udało się pobrać: {error}"
+    "unreadable": "Nie udało się pobrać: {error}",
+    "pastedLink": {
+      "offer": "Ten opis zawiera odnośnik do strony {source}. Dołączyć ją jako kontekst?",
+      "attach": "Dołącz"
+    }
   },
   "errors": {
     "generic": {
@@ -2032,6 +2037,18 @@
         "keysValidation": "Wprowadź identyfikator klucza dostępu i sekret S3",
         "saved": "Zapisano przechowywanie treści",
         "saveFailed": "Nie udało się zapisać przechowywania treści"
+      },
+      "figma": {
+        "title": "Aplikacja Figma (OAuth)",
+        "description": "Włącza przepływ „Połącz przez Figmę”. Bez niego przestrzenie robocze nadal mogą połączyć Figmę, wklejając osobisty token dostępu.",
+        "clientId": "Identyfikator klienta",
+        "clientSecret": "Sekret klienta",
+        "redirectUrl": "Adres przekierowania",
+        "validation": "Podaj identyfikator klienta, sekret i adres przekierowania",
+        "saved": "Zapisano OAuth Figmy",
+        "saveFailed": "Nie udało się zapisać OAuth Figmy",
+        "cleared": "Usunięto OAuth Figmy",
+        "clearFailed": "Nie udało się usunąć OAuth Figmy"
       }
     },
     "accountFragments": {
@@ -4307,13 +4324,19 @@
     "connect": {
       "title": "Połącz źródło",
       "sourceFallback": "Źródło",
-      "intro": "Połącz {source}, aby importować wymagania, dokumenty RFC i PRD, a następnie utworzyć strukturę tablicy lub dołączyć je do zadań jako kontekst dla agentów.",
+      "intro": "Połącz {source}, aby przenieść jego strony i projekty na tę tablicę: zaimportuj je, rozwiń w strukturę tablicy albo dołącz do zadania jako kontekst dla agentów.",
       "disconnect": "Rozłącz",
       "connect": "Połącz",
       "update": "Zaktualizuj połączenie",
       "connected": "Połączono {source}",
       "disconnected": "Rozłączono {source}",
-      "connectFailed": "Nie udało się połączyć"
+      "connectFailed": "Nie udało się połączyć",
+      "oauth": {
+        "action": "Połącz przez {source}",
+        "scopes": "Zostaniesz poproszony o uprawnienia: {scopes}",
+        "fallback": "Wolisz token? Skorzystaj z pól poniżej.",
+        "failed": "Nie udało się rozpocząć logowania do {source}"
+      }
     },
     "spawn": {
       "title": "Podgląd struktury",
@@ -4328,7 +4351,15 @@
       "summary": "{frames} · {modules} · {tasks}",
       "frameCount": "{count} ramka | {count} ramki | {count} ramek",
       "moduleCount": "{count} moduł | {count} moduły | {count} modułów",
-      "taskCount": "{count} zadanie | {count} zadania | {count} zadań"
+      "taskCount": "{count} zadanie | {count} zadania | {count} zadań",
+      "reusedCount": "ponownie użyto {count} modułu | ponownie użyto {count} modułów | ponownie użyto {count} modułów",
+      "intoService": "wewnątrz wybranej usługi",
+      "target": {
+        "label": "Dodaj do usługi",
+        "help": "Projekt opisuje ekrany, a nie architekturę, więc plan proponuje pracę wewnątrz usługi, która już istnieje.",
+        "placeholder": "Wybierz usługę",
+        "required": "Wybierz usługę, do której należy ten projekt."
+      }
     },
     "taskDocs": {
       "heading": "Dokumenty kontekstowe",
@@ -4361,6 +4392,20 @@
       "remove": "Usuń",
       "linkFailed": "Nie udało się zaktualizować powiązania dokumentu",
       "loadFailed": "Nie udało się wczytać szablonów dokumentów"
+    },
+    "startFromDesign": {
+      "title": "Zacznij od projektu",
+      "intro": "Wklej link do ramki lub całego pliku. Zostanie dołączony do nowego zadania, a agent odczyta układ, teksty, komponenty i tokeny.",
+      "noSource": "Nie podłączono jeszcze żadnego źródła projektów. Administrator może połączyć Figmę lub Zeplin w integracjach.",
+      "linkLabel": "Link do projektu",
+      "linkPlaceholder": "https://www.figma.com/design/…?node-id=1-2",
+      "checking": "Sprawdzanie linku…",
+      "trimmed": "Skrócono do obsługiwanej postaci tego linku.",
+      "widened": "Nie udało się odczytać ramki {scope}, więc dołączony jest cały plik.",
+      "unchecked": "Linku nie udało się teraz sprawdzić. Zostanie pobrany przy tworzeniu zadania.",
+      "uncheckedAmbiguous": "Linku nie udało się sprawdzić, a podłączone jest więcej niż jedno źródło projektów, więc nie wiadomo, do którego należy. Spróbuj ponownie.",
+      "rejected": "Żadne podłączone źródło projektów nie rozpoznaje tego linku.",
+      "continue": "Dalej"
     }
   },
   "tasks": {
@@ -6970,7 +7015,8 @@
       "library": "Włączona w tym wdrożeniu biblioteka fragmentów kontekstu",
       "failedRun": "Nieudane uruchomienie",
       "infrastructure": "Backend wykonawczy podłączony do tego workspace’u",
-      "advancedTier": "Zaawansowany tryb interfejsu"
+      "advancedTier": "Zaawansowany tryb interfejsu",
+      "designSource": "Podłączone źródło projektów"
     },
     "overlay": {
       "next": "Dalej",
@@ -7348,6 +7394,36 @@
           "finish": {
             "title": "Kroki projektowe to czytają",
             "body": "Projekt, który zadeklaruje, które z nich używa, dostaje w następnym kroku ich pełne kontrakty. Taki, który nie deklaruje nic, nie dostaje nic: utrzymywanie tego na bieżąco jest warunkiem, żeby to działało."
+          }
+        }
+      },
+      "startFromDesign": {
+        "title": "Zacznij od projektu",
+        "description": "Zamień ramkę projektu w zadanie, które agent może zrealizować.",
+        "steps": {
+          "intro": {
+            "title": "Praca od projektu",
+            "body": "Gdy praca zaczyna się w narzędziu projektowym, ramka jest briefem. Ten przewodnik dołącza ją do nowego zadania."
+          },
+          "open": {
+            "title": "Zacznij od projektu",
+            "body": "Każda ramka usługi ma ten przycisk, gdy tylko podłączone jest źródło projektów."
+          },
+          "paste": {
+            "title": "Wklej link",
+            "body": "Skopiuj w narzędziu projektowym link do ramki lub całego pliku i wklej go tutaj."
+          },
+          "resolved": {
+            "title": "Sprawdź, co dołączono",
+            "body": "Link zostaje skrócony do obsługiwanej postaci. Jeśli samej ramki nie dało się odczytać, dołączany jest cały plik i jest to tutaj napisane."
+          },
+          "continue": {
+            "title": "Przejdź do zadania",
+            "body": "Projekt czeka przy nowym zadaniu. Opisz oczekiwany rezultat i utwórz je."
+          },
+          "finish": {
+            "title": "Gotowe do uruchomienia",
+            "body": "Agent czyta układ, teksty, komponenty i tokeny projektu, a każdy przebieg porównuje je na nowo ze źródłem."
           }
         }
       }

@@ -33,6 +33,7 @@ const GATES: NavGates = {
   canManageSettings: true,
   githubAvailable: true,
   libraryAvailable: true,
+  designSourceConnected: true,
   infrastructureAvailable: true,
   accountsEnabled: true,
   isAccountAdmin: true,

@@ -39,9 +39,14 @@ watch(
 
 const slack = reactive({ clientId: '', clientSecret: '', redirectUrl: '' })
 const linear = reactive({ clientId: '', clientSecret: '', redirectUrl: '' })
+// The deployment's registered Figma app, which is what turns "Connect with Figma" on for every
+// board in the account. Without it the Figma document source still connects, by personal access
+// token — which is the step this exists to spare a designer.
+const figma = reactive({ clientId: '', clientSecret: '', redirectUrl: '' })
 const web = reactive({ braveApiKey: '', searxngUrl: '', searxngApiKey: '' })
 const savingSlack = ref(false)
 const savingLinear = ref(false)
+const savingFigma = ref(false)
 const savingWeb = ref(false)
 
 const summary = computed(() => store.view?.summary ?? null)
@@ -289,6 +294,62 @@ async function clearLinear() {
   }
 }
 
+async function saveFigma() {
+  if (!figma.clientId.trim() || !figma.clientSecret.trim() || !figma.redirectUrl.trim()) {
+    toast.add({ title: t('layout.accountDeployment.figma.validation'), color: 'error' })
+    return
+  }
+  savingFigma.value = true
+  try {
+    await store.save(props.accountId, {
+      secrets: {
+        figmaOAuth: {
+          clientId: figma.clientId.trim(),
+          clientSecret: figma.clientSecret.trim(),
+          redirectUrl: figma.redirectUrl.trim(),
+        },
+      },
+    })
+    figma.clientId = ''
+    figma.clientSecret = ''
+    figma.redirectUrl = ''
+    toast.add({
+      title: t('layout.accountDeployment.figma.saved'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
+  } catch (e) {
+    toast.add({
+      title: t('layout.accountDeployment.figma.saveFailed'),
+      description: e instanceof Error ? e.message : String(e),
+      color: 'error',
+    })
+  } finally {
+    savingFigma.value = false
+  }
+}
+
+async function clearFigma() {
+  if (!(await confirmAction('clear', 'Figma'))) return
+  savingFigma.value = true
+  try {
+    await store.save(props.accountId, { secrets: { figmaOAuth: null } })
+    toast.add({
+      title: t('layout.accountDeployment.figma.cleared'),
+      icon: 'i-lucide-check',
+      color: 'success',
+    })
+  } catch (e) {
+    toast.add({
+      title: t('layout.accountDeployment.figma.clearFailed'),
+      description: e instanceof Error ? e.message : String(e),
+      color: 'error',
+    })
+  } finally {
+    savingFigma.value = false
+  }
+}
+
 async function saveWeb() {
   const brave = web.braveApiKey.trim()
   const searxng = web.searxngUrl.trim()
@@ -473,6 +534,67 @@ async function clearWeb() {
           size="xs"
           :loading="savingLinear"
           @click="clearLinear"
+        >
+          {{ t('layout.accountDeployment.clear') }}
+        </UButton>
+      </div>
+    </section>
+
+    <!-- Figma app OAuth (the document source's designer-doable connect) -->
+    <section class="space-y-2 border-t border-slate-800 pt-6">
+      <div class="flex items-center gap-2">
+        <h4 class="text-sm font-semibold text-slate-200">
+          {{ t('layout.accountDeployment.figma.title') }}
+        </h4>
+        <UBadge
+          :color="summary?.figmaOAuthConfigured ? 'success' : 'neutral'"
+          variant="subtle"
+          size="xs"
+        >
+          {{
+            summary?.figmaOAuthConfigured
+              ? t('layout.accountDeployment.configured')
+              : t('layout.accountDeployment.notSet')
+          }}
+        </UBadge>
+      </div>
+      <p class="text-[11px] text-slate-400">
+        {{ t('layout.accountDeployment.figma.description') }}
+      </p>
+      <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <UInput
+          v-model="figma.clientId"
+          :placeholder="t('layout.accountDeployment.figma.clientId')"
+          size="sm"
+        />
+        <SecretInput
+          v-model="figma.clientSecret"
+          :placeholder="t('layout.accountDeployment.figma.clientSecret')"
+          size="sm"
+        />
+        <UInput
+          v-model="figma.redirectUrl"
+          :placeholder="t('layout.accountDeployment.figma.redirectUrl')"
+          size="sm"
+        />
+      </div>
+      <div class="flex gap-2">
+        <UButton
+          color="primary"
+          size="xs"
+          icon="i-lucide-save"
+          :loading="savingFigma"
+          @click="saveFigma"
+        >
+          {{ t('common.save') }}
+        </UButton>
+        <UButton
+          v-if="summary?.figmaOAuthConfigured"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          :loading="savingFigma"
+          @click="clearFigma"
         >
           {{ t('layout.accountDeployment.clear') }}
         </UButton>

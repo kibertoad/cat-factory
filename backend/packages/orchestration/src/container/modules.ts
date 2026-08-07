@@ -26,6 +26,7 @@ import {
   BugIntakeService,
   BugHuntService,
   DocumentConnectionService,
+  DocumentSourceOAuthService,
   DocumentContentResolverService,
   DocumentImportService,
   DocumentLinkService,
@@ -276,11 +277,33 @@ export function createDocumentsModule(
   }
 
   const registry = new MapDocumentSourceRegistry(documentSourceProviders)
+  // Built BEFORE the connection service, which renews through it: the dependency runs one way,
+  // so neither needs a setter. A deployment with no account settings wired resolves no client,
+  // which is reported as "OAuth is not offered here" rather than as a broken button.
+  const oauthService = new DocumentSourceOAuthService({
+    registry,
+    resolveClient: async (workspaceId, source) => {
+      // The registered app is per VENDOR (it lives in that vendor's developer console against a
+      // redirect URL it holds), so the mapping from source to secret group is named here rather
+      // than derived. A second OAuth-capable source adds its own group and one more arm; there
+      // is deliberately no default, so an unmapped source is "not offered" and never a silent
+      // reuse of another vendor's client.
+      if (source !== 'figma' || !deps.accountSettings) return undefined
+      const accountKey = (await deps.workspaceRepository.accountOf(workspaceId)) ?? workspaceId
+      return (await deps.accountSettings.resolve(accountKey)).figmaOAuth
+    },
+    clock: deps.clock,
+    logger: deps.logger,
+  })
   const connectionService = new DocumentConnectionService({
     documentConnectionStore,
     registry,
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
+    oauthRenewer: oauthService,
+    // Where persisting a renewed OAuth grant reports when it cannot land: a best-effort write, so
+    // without this its failures are invisible and the renewal silently repeats every dispatch.
+    logger: deps.logger,
     // Connecting or disconnecting a source invalidates every freshness verdict it authorised, and
     // a manual re-import invalidates that one document's: the TTL bounds how long a run dispatches
     // against an unnoticed edit, but only invalidation keeps a verdict from outliving the write
@@ -324,6 +347,7 @@ export function createDocumentsModule(
   })
   return {
     connectionService,
+    oauthService,
     importService,
     plannerService,
     linkService,

@@ -150,6 +150,22 @@ export const linearOAuthSecretSchema = v.object({
 export type LinearOAuthSecret = v.InferOutput<typeof linearOAuthSecretSchema>
 
 /**
+ * Figma app OAuth credentials (the account's registered Figma app), which turn "connect Figma"
+ * into a designer-doable step instead of "go and mint a personal access token".
+ *
+ * Named per vendor, like the two above, because an OAuth client IS per vendor: it is registered
+ * in Figma's own developer console against a redirect URL Figma holds. The source-agnostic half
+ * of this feature is the provider's `oauth` declaration and the one flow that runs it; only the
+ * client the deployment registered is Figma-shaped.
+ */
+export const figmaOAuthSecretSchema = v.object({
+  clientId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  clientSecret: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  redirectUrl: v.pipe(v.string(), v.trim(), v.url()),
+})
+export type FigmaOAuthSecret = v.InferOutput<typeof figmaOAuthSecretSchema>
+
+/**
  * Web-search upstream keys. Brave wins when its key is set, else SearXNG (url +
  * optional key). Both optional so an account can use either.
  */
@@ -171,6 +187,7 @@ export type S3CredentialsSecret = v.InferOutput<typeof s3CredentialsSecretSchema
 export const accountSettingsSecretsSchema = v.object({
   slackOAuth: v.optional(slackOAuthSecretSchema),
   linearOAuth: v.optional(linearOAuthSecretSchema),
+  figmaOAuth: v.optional(figmaOAuthSecretSchema),
   webSearch: v.optional(webSearchSecretSchema),
   s3: v.optional(s3CredentialsSecretSchema),
 })
@@ -193,6 +210,7 @@ export const updateAccountSettingsSchema = v.object({
     v.object({
       slackOAuth: v.optional(v.nullable(slackOAuthSecretSchema)),
       linearOAuth: v.optional(v.nullable(linearOAuthSecretSchema)),
+      figmaOAuth: v.optional(v.nullable(figmaOAuthSecretSchema)),
       webSearch: v.optional(v.nullable(webSearchSecretSchema)),
       s3: v.optional(v.nullable(s3CredentialsSecretSchema)),
     }),
@@ -217,6 +235,7 @@ export type ContentStorageSummary = v.InferOutput<typeof contentStorageSummarySc
 export const accountSettingsSummarySchema = v.object({
   slackOAuthConfigured: v.boolean(),
   linearOAuthConfigured: v.boolean(),
+  figmaOAuthConfigured: v.boolean(),
   webSearch: v.nullable(v.picklist(['brave', 'searxng'])),
   contentStorage: contentStorageSummarySchema,
 })
@@ -255,6 +274,7 @@ export function accountSettingsSummary(
   return {
     slackOAuthConfigured: Boolean(secrets.slackOAuth),
     linearOAuthConfigured: Boolean(secrets.linearOAuth),
+    figmaOAuthConfigured: Boolean(secrets.figmaOAuth),
     webSearch,
     contentStorage: {
       backend: cs?.backend ?? null,

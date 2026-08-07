@@ -1,5 +1,6 @@
 import {
   describeError,
+  documentOAuthAccessToken,
   ValidationError,
   type DocumentContent,
   type DocumentCredentials,
@@ -7,13 +8,14 @@ import {
   type NormalizedConnection,
 } from '@cat-factory/kernel'
 import { renderDesignContext } from './design.logic.js'
-import { FIGMA_API_HOST, FIGMA_DESCRIPTOR } from './figma.logic.js'
+import { FIGMA_API_HOST, FIGMA_DESCRIPTOR, FIGMA_OAUTH } from './figma.logic.js'
 import * as figmaLogic from './figma.logic.js'
 import { DocumentHttpError, createHostPinnedFetch, readCappedText } from './http.js'
 
-// FigmaProvider: the document-source provider for Figma. It authenticates with a
-// per-workspace personal access token (the `X-Figma-Token` header), fetches a
-// file or a specific frame/node via the REST API, and renders the layout tree,
+// FigmaProvider: the document-source provider for Figma. It authenticates with
+// whichever credential the workspace connected — a personal access token (the
+// `X-Figma-Token` header) or an OAuth grant the platform holds (a `Bearer` token) —
+// fetches a file or a specific frame/node via the REST API, and renders the layout tree,
 // text, components-used and (Enterprise-gated) design tokens to the Markdown the
 // planner + `.cat-context/` materialisation consume. All Figma-specific *pure*
 // logic (ref parsing, the fixed-host SSRF guard, JSON → Markdown) lives in
@@ -165,6 +167,7 @@ function describeFetchCause(error: unknown): string {
 export class FigmaProvider implements DocumentSourceProvider {
   readonly kind = 'figma' as const
   readonly descriptor = FIGMA_DESCRIPTOR
+  readonly oauth = FIGMA_OAUTH
 
   normalizeConnection(input: DocumentCredentials): NormalizedConnection {
     const apiToken = input.apiToken?.trim()
@@ -463,9 +466,18 @@ export class FigmaProvider implements DocumentSourceProvider {
     }
   }
 
+  /**
+   * Figma names its two credentials in two different headers, so which one the bag carries
+   * decides the header rather than adding a second client. An OAuth grant wins when both are
+   * present: it is the credential the platform can RENEW, and a stale PAT left behind by an
+   * earlier connect must not quietly outrank the grant a person has just made.
+   */
   private headers(credentials: DocumentCredentials): Record<string, string> {
+    const accessToken = documentOAuthAccessToken(credentials)
     return {
-      'x-figma-token': credentials.apiToken ?? '',
+      ...(accessToken
+        ? { authorization: `Bearer ${accessToken}` }
+        : { 'x-figma-token': credentials.apiToken ?? '' }),
       accept: 'application/json',
       'user-agent': USER_AGENT,
     }
