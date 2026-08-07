@@ -1767,6 +1767,11 @@
     "retry": "Spróbuj ponownie",
     "error": "Nie udało się wczytać raportów.",
     "period": "Od {from} do {to}",
+    "rollup": {
+      "none": "Trwałe zestawienie kosztów nie wyprodukowało jeszcze niczego, więc to okno jest puste z braku danych, a nie z braku wydatków.",
+      "stale": "Trwałe zestawienie kosztów sięga tylko do {date}. To, co po tej dacie, to brakujące dane, a nie tani tydzień.",
+      "current": "Z trwałego zestawienia kosztów, kompletnego do {date}. Przypisanie do repozytorium, zgłoszenia i uruchomienia jest tym zapisanym w chwili poniesienia kosztu."
+    },
     "unattributed": "Nieprzypisane",
     "window": {
       "oneDay": "Ostatnie 24 godziny",
@@ -1809,6 +1814,7 @@
       "byAgentKind": "Koszty według typu agenta",
       "byRepo": "Koszty według repozytorium",
       "byTicket": "Koszty według zgłoszenia",
+      "byRun": "Koszty według uruchomienia",
       "heading": "Koszty",
       "empty": "W tym okresie nie zarejestrowano użycia.",
       "calls": "{count} wywołanie | {count} wywołania | {count} wywołań",

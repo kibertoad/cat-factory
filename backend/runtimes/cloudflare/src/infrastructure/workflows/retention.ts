@@ -14,11 +14,16 @@ import type {
   PipelineScheduleRepository,
   ProvisioningLogRepository,
   RateLimitRepository,
+  SpendRollupRepository,
   SubscriptionQuotaCycleRepository,
   TokenUsageRepository,
   Logger,
 } from '@cat-factory/kernel'
-import { RUN_DAY_ROLLUP_LOOKBACK_MS, createRetentionPass } from '@cat-factory/orchestration'
+import {
+  RUN_DAY_ROLLUP_LOOKBACK_MS,
+  createRetentionPass,
+  spendRollupWindow,
+} from '@cat-factory/orchestration'
 
 /** Recurring-pipeline run history is kept ~1 week (the inspector's window). */
 const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
@@ -104,6 +109,12 @@ export interface RetentionDeps {
    * pass self-heals) and prunes it to `runDaysMs`.
    */
   platformMetricsRepository: PlatformMetricsRepository
+  /**
+   * The durable cost-attribution rollup. This pass only WRITES it: `spend_days` has no prune,
+   * here or on Node, and no `deleteOlderThan` on its port to call. A TCO table that expires is
+   * just a slower ledger.
+   */
+  spendRollupRepository: SpendRollupRepository
   clock: Clock
   policy: RetentionPolicy
   /** Names the table behind each isolated prune failure. Absent ⇒ the failures are silent. */
@@ -130,6 +141,8 @@ export interface RetentionResult {
   runDays: number
   /** Daily buckets (re)written by this pass's rollup: a WRITE, not rows reclaimed. */
   runDaysRolledUp: number
+  /** Durable cost-attribution buckets (re)written by this pass: a WRITE, never a prune. */
+  spendDaysRolledUp: number
   /**
    * The tables whose prune threw this pass. EMPTY on a clean pass. Reported separately from
    * the counts because a failed prune and an empty table both reclaim 0 rows, and only one of
@@ -166,6 +179,7 @@ export async function sweepRetention({
   notificationRepository,
   gateOutcomeRepository,
   platformMetricsRepository,
+  spendRollupRepository,
   clock,
   policy,
   logger,
@@ -173,6 +187,16 @@ export async function sweepRetention({
   const now = clock.now()
   const pass = createRetentionPass(logger)
   return {
+    // FIRST, and before the ledger prune below: the durable rollup folds `token_usage`, so a
+    // pass that pruned first would drop spend that had never been rolled up. It resumes from
+    // its own watermark rather than a fixed lookback, because a day missed here is missing
+    // from the only durable record of it, permanently, and this facade sweeps once a day, so
+    // a couple of skipped crons is a real gap. See `spendRollupWindow`.
+    spendDaysRolledUp: await pass.materialize('spend_days', async () => {
+      const watermark = await spendRollupRepository.spendRollupWatermark()
+      const { from, to } = spendRollupWindow(watermark, now)
+      return spendRollupRepository.rollupSpendDays(from, to)
+    }),
     tokenUsage: await pass.prune('token_usage', policy.tokenUsageMs, now, (c) =>
       tokenUsageRepository.deleteOlderThan(c),
     ),

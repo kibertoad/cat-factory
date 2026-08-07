@@ -1767,6 +1767,11 @@
     "retry": "Reintentar",
     "error": "No se pudieron cargar los informes.",
     "period": "Del {from} al {to}",
+    "rollup": {
+      "none": "La agregación de costes duradera aún no ha producido nada, así que esta ventana está vacía por falta de datos, no por falta de gasto.",
+      "stale": "La agregación de costes duradera solo llega hasta {date}. Lo posterior son datos que faltan, no una semana barata.",
+      "current": "De la agregación de costes duradera, completa hasta {date}. La atribución a repositorio, tique y ejecución es la que se registró cuando se produjo el gasto."
+    },
     "unattributed": "Sin atribuir",
     "window": {
       "oneDay": "Últimas 24 horas",
@@ -1809,6 +1814,7 @@
       "byAgentKind": "Gasto por tipo de agente",
       "byRepo": "Gasto por repositorio",
       "byTicket": "Gasto por tique",
+      "byRun": "Gasto por ejecución",
       "heading": "Gasto",
       "empty": "No se registró uso en este periodo.",
       "calls": "{count} llamada | {count} llamadas",

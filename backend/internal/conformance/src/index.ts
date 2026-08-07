@@ -91,6 +91,7 @@ export {
   type ReportsSeedRun,
   type ReportsSeedUsage,
 } from './reports-suite.js'
+export { defineSpendRollupSuite, type SpendRollupSeed } from './spend-rollup-suite.js'
 export { defineUserRepoAccessSuite } from './user-repo-access-suite.js'
 export { defineEnvironmentHandlersSuite } from './environment-handlers-suite.js'
 export { defineEnvironmentTestSuite } from './environment-test-suite.js'

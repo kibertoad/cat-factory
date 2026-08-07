@@ -297,7 +297,11 @@ export {
 } from './modules/observability/platformMetricsSweep.js'
 export {
   RUN_DAY_ROLLUP_LOOKBACK_MS,
+  SPEND_DAY_ROLLUP_BACKFILL_MS,
+  SPEND_DAY_ROLLUP_LOOKBACK_MS,
+  SPEND_DAY_ROLLUP_MAX_SPAN_MS,
   createRetentionPass,
+  spendRollupWindow,
   type RetentionPass,
 } from './modules/observability/retentionPass.js'
 export {

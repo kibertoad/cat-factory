@@ -1865,6 +1865,11 @@
     "retry": "Retry",
     "error": "Reports could not be loaded.",
     "period": "{from} to {to}",
+    "rollup": {
+      "none": "The durable cost rollup has produced nothing yet, so this window is empty for lack of data, not for lack of spend.",
+      "stale": "The durable cost rollup only reaches {date}. Anything after that is missing data, not a cheap week.",
+      "current": "From the durable cost rollup, complete through {date}. Repository, ticket and run attribution here is the one recorded when the spend happened."
+    },
     "unattributed": "Unattributed",
     "window": {
       "oneDay": "Last 24 hours",
@@ -1907,6 +1912,7 @@
       "byAgentKind": "Spend by agent kind",
       "byRepo": "Spend by repository",
       "byTicket": "Spend by ticket",
+      "byRun": "Spend by run",
       "heading": "Spend",
       "empty": "No recorded usage in this window.",
       "calls": "{count} call | {count} calls",

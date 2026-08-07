@@ -34,6 +34,8 @@
  *   this board's own mounts of services homed elsewhere).
  * - `services` — account-scoped (no `workspace_id`; keyed by frame block), re-homed
  *   or reclaimed by the bespoke shared-service handling that must precede `blocks`.
+ * - `spend_days`: the durable cost-attribution rollup, deliberately NOT reclaimed at all
+ *   (see {@link WORKSPACE_CASCADE_SPECIAL_TABLES}).
  * - `binary_artifacts` — its rows are only half the story: the backing blob BYTES
  *   (R2 / S3 / filesystem) must be deleted through the `BinaryBlobBackend` port at
  *   the service layer, not by bare SQL. Deleting the metadata row here would strand
@@ -112,9 +114,23 @@ export const WORKSPACE_SCOPED_TABLES = [
 export type WorkspaceScopedTable = (typeof WORKSPACE_SCOPED_TABLES)[number]
 
 /**
- * Tables that carry a `workspace_id` column but are NOT in {@link WORKSPACE_SCOPED_TABLES}
- * because they are reclaimed by bespoke handling (or deferred to the blob purge). The
+ * Tables that carry a `workspace_id` column but are NOT in {@link WORKSPACE_SCOPED_TABLES}:
+ * either reclaimed by bespoke handling (deferred to the blob purge, or to the two-variant
+ * mount handling) or, in one case, deliberately not reclaimed at all. The
  * cascade-completeness test uses this to distinguish "deliberately special" from "silently
  * forgotten": a new `workspace_id` table must be added to the list above or acknowledged here.
+ *
+ * `spend_days` is the one that is KEPT. It is the account's durable cost record, and money
+ * already spent is an account-level fact that a board deletion does not undo: reclaiming it
+ * would shrink last quarter's TCO retroactively, which is the exact failure the rollup exists
+ * to prevent, and it would do so silently. Same reasoning that keeps `audit_events` out of the
+ * cascade (a board being deleted is itself worth having a record of), differing only in that
+ * this table lives in the main store, so it has to be named here rather than excluded by
+ * living in another database. The frozen labels it carries (board name, block title, repo
+ * name) therefore outlive the board.
  */
-export const WORKSPACE_CASCADE_SPECIAL_TABLES = ['workspace_services', 'binary_artifacts'] as const
+export const WORKSPACE_CASCADE_SPECIAL_TABLES = [
+  'workspace_services',
+  'binary_artifacts',
+  'spend_days',
+] as const

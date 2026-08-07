@@ -26,6 +26,9 @@ function fakeRepos(): {
     gateOutcomes: number | null
     runDays: number | null
     rollup: [number, number] | null
+    spendRollup: [number, number] | null
+    /** Every pass in the order it ran, so ordering constraints can be asserted. */
+    order: string[]
   }
 } {
   const cutoffs = {
@@ -42,6 +45,9 @@ function fakeRepos(): {
     runDays: null as number | null,
     /** The [from, to) window the rollup pass recomputed. */
     rollup: null as [number, number] | null,
+    /** The [from, to) window the durable spend rollup materialised. */
+    spendRollup: null as [number, number] | null,
+    order: [] as string[],
   }
   return {
     cutoffs,
@@ -49,6 +55,7 @@ function fakeRepos(): {
       tokenUsageRepository: {
         deleteOlderThan: async (c) => {
           cutoffs.tokenUsage = c
+          cutoffs.order.push('token_usage')
           return 3
         },
       },
@@ -132,6 +139,16 @@ function fakeRepos(): {
           return 1
         },
       },
+      // The durable cost-attribution rollup: a watermark read plus a materialise, and no
+      // prune to fake, since the port has none.
+      spendRollupRepository: {
+        spendRollupWatermark: async () => null,
+        rollupSpendDays: async (from, to) => {
+          cutoffs.spendRollup = [from, to]
+          cutoffs.order.push('spend_days')
+          return 13
+        },
+      },
     },
   }
 }
@@ -188,8 +205,39 @@ describe('sweepRetention', () => {
       gateOutcomes: 2,
       runDays: 1,
       runDaysRolledUp: 11,
+      spendDaysRolledUp: 13,
       failedTables: [],
     })
+  })
+
+  it('materialises the durable spend rollup BEFORE pruning the ledger it folds', async () => {
+    // Ordering is the correctness property, not a style preference: the rollup reads
+    // `token_usage`, so a pass that pruned first would drop spend that had never been rolled
+    // up, and `spend_days` is the only durable record of it.
+    const { repos, cutoffs } = fakeRepos()
+    await sweepRetention(repos, policy(), now)
+
+    expect(cutoffs.order.indexOf('spend_days')).toBeLessThan(cutoffs.order.indexOf('token_usage'))
+  })
+
+  it('resumes the durable spend rollup from the sweep watermark, not a fixed lookback', async () => {
+    // A day this rollup misses is missing from the only durable record of it, permanently, so
+    // it walks forward from where the last pass stopped rather than recomputing a fixed
+    // trailing window like the run rollup does.
+    const { repos, cutoffs } = fakeRepos()
+    repos.spendRollupRepository.spendRollupWatermark = async () => now - 10 * DAY
+    await sweepRetention(repos, policy(), now)
+
+    expect(cutoffs.spendRollup).toEqual([now - 10 * DAY, now])
+  })
+
+  it('backfills the durable spend rollup on a deployment that has never run one', async () => {
+    // 90 days, the longest report window it serves: starting at "today" would under-report
+    // that window for a quarter while looking complete, and the per-pass span caps the query.
+    const { repos, cutoffs } = fakeRepos()
+    await sweepRetention(repos, policy(), now)
+
+    expect(cutoffs.spendRollup).toEqual([now - 90 * DAY, now - 60 * DAY])
   })
 
   it('treats a non-positive window as disabled — no delete, zero reclaimed', async () => {
@@ -218,9 +266,11 @@ describe('sweepRetention', () => {
       notifications: 9,
       gateOutcomes: 2,
       runDays: 1,
-      // The rollup is a WRITE, not a prune: disabling a RETENTION window says "never delete",
-      // never "stop materialising", so it still runs.
+      // The rollups are WRITES, not prunes: disabling a RETENTION window says "never delete",
+      // never "stop materialising", so they still run. `spend_days` has no window to disable
+      // in the first place.
       runDaysRolledUp: 11,
+      spendDaysRolledUp: 13,
       failedTables: [],
     })
   })

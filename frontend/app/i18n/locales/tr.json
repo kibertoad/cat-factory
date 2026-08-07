@@ -1767,6 +1767,11 @@
     "retry": "Yeniden dene",
     "error": "Raporlar yüklenemedi.",
     "period": "{from} – {to}",
+    "rollup": {
+      "none": "Kalıcı maliyet toplaması henüz hiçbir şey üretmedi; bu pencere harcama olmadığı için değil, veri olmadığı için boş.",
+      "stale": "Kalıcı maliyet toplaması yalnızca {date} tarihine kadar geliyor. Sonrası ucuz geçen bir hafta değil, eksik veri.",
+      "current": "Kalıcı maliyet toplamasından; {date} tarihine kadar eksiksiz. Buradaki depo, bilet ve çalıştırma ataması, harcama yapıldığı anda kaydedilenidir."
+    },
     "unattributed": "Atanmamış",
     "window": {
       "oneDay": "Son 24 saat",
@@ -1809,6 +1814,7 @@
       "byAgentKind": "Ajan türüne göre harcama",
       "byRepo": "Depoya göre harcama",
       "byTicket": "Bilete göre harcama",
+      "byRun": "Çalıştırmaya göre harcama",
       "heading": "Harcama",
       "empty": "Bu dönemde kayıtlı kullanım yok.",
       "calls": "{count} çağrı | {count} çağrı",

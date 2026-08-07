@@ -93,3 +93,54 @@ export function createRetentionPass(logger?: Logger): RetentionPass {
  * history. Shared by both facades so the two cannot drift on how much they heal.
  */
 export const RUN_DAY_ROLLUP_LOOKBACK_MS = 3 * 24 * 60 * 60_000
+
+/** How far back a steady-state spend-rollup pass recomputes, for the reason above. */
+export const SPEND_DAY_ROLLUP_LOOKBACK_MS = 3 * 24 * 60 * 60_000
+
+/**
+ * The most a SINGLE spend-rollup pass will aggregate. The catch-up walk below can ask for an
+ * arbitrarily wide window (a deployment that has never rolled up, a sweep down for a week),
+ * and one unbounded `GROUP BY` over a busy deployment's whole ledger is how a cron pass turns
+ * into a row-limit error on D1 or a long-running query on Postgres, which would then fail on
+ * every subsequent pass too, since the window only widens.
+ */
+export const SPEND_DAY_ROLLUP_MAX_SPAN_MS = 30 * 24 * 60 * 60_000
+
+/**
+ * How far back the FIRST pass on a deployment reaches. The rollup serves the 90-day report
+ * window, so a rollup that started at "today" would under-report that window for a quarter
+ * while looking complete: the ledger holds the data, and the reader has no way to see that
+ * the newer store simply had not been asked yet. Older history than this is deliberately not
+ * backfilled: `rolledUpThrough` states where the durable record begins.
+ */
+export const SPEND_DAY_ROLLUP_BACKFILL_MS = 90 * 24 * 60 * 60_000
+
+/**
+ * The window one spend-rollup pass should materialise, given what the last pass covered.
+ *
+ * Unlike the run rollup, which recomputes a fixed trailing lookback, this one walks FORWARD
+ * from the sweep's own watermark. The difference is that a gap here is permanent: nothing
+ * else retains the attribution the rollup is folding, so a day the sweep skipped while it was
+ * down is a day whose TCO history is simply missing, forever. Resuming from the watermark
+ * turns "the sweep was down for a week" into a few catch-up passes instead.
+ *
+ * Pure so both facades share it (and so the walk is unit-testable without a database): the
+ * caller reads the watermark, calls this, and materialises the result.
+ */
+export function spendRollupWindow(
+  throughDay: number | null,
+  now: number,
+): { from: number; to: number } {
+  // A `null` watermark is "no pass has ever completed", not "start from now": see the
+  // backfill constant. Once there IS one, the steady-state lookback still applies on top of
+  // it, so a day that was still accruing when it was covered gets recomputed rather than
+  // frozen half-counted.
+  const resume =
+    throughDay == null
+      ? now - SPEND_DAY_ROLLUP_BACKFILL_MS
+      : Math.min(throughDay, now - SPEND_DAY_ROLLUP_LOOKBACK_MS)
+  // Never walk backwards past the backfill horizon, whatever a skewed or hand-edited
+  // watermark claims, and never aggregate more than one pass's worth in one query.
+  const from = Math.max(resume, now - SPEND_DAY_ROLLUP_BACKFILL_MS)
+  return { from, to: Math.min(now, from + SPEND_DAY_ROLLUP_MAX_SPAN_MS) }
+}
