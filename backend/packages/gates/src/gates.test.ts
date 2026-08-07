@@ -9,7 +9,16 @@ import type {
   GateHelperJobResult,
   ProviderRegistry,
 } from '@cat-factory/kernel'
-import { DEFAULT_RISK_POLICY, defaultProviderRegistry, stubGateContext } from '@cat-factory/kernel'
+import {
+  CI_AGENT_KIND,
+  CONFLICTS_AGENT_KIND,
+  DEFAULT_RISK_POLICY,
+  DOC_QUALITY_AGENT_KIND,
+  HUMAN_REVIEW_AGENT_KIND,
+  POST_RELEASE_HEALTH_AGENT_KIND,
+  defaultProviderRegistry,
+  stubGateContext,
+} from '@cat-factory/kernel'
 import type { DescriptorFieldValues } from '@cat-factory/contracts'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -66,6 +75,28 @@ function recordingContext(overrides: Parameters<typeof stubGateContext>[0] = {})
   return { ctx, raised }
 }
 
+/**
+ * How each built-in gate's helper learns why it was spun up. A gate hands that over through
+ * exactly one of two seams — `gatherHelperPriorOutputs` (evidence gathered at dispatch, which
+ * `GateHelperDispatcher` prefers) or `helperPriorOutput` (the precheck summary, passed straight
+ * through) — or through neither, which is defensible only where the condition is already legible
+ * in the checkout the helper is dispatched onto.
+ *
+ * A new gate has to land here before its test passes, which is the point: what its helper is told
+ * is a decision, and the absent case is the one that fails silently.
+ */
+const HELPER_BRIEFING: Record<string, 'summary' | 'gathered' | 'none'> = {
+  [CI_AGENT_KIND]: 'summary',
+  [DOC_QUALITY_AGENT_KIND]: 'summary',
+  [HUMAN_REVIEW_AGENT_KIND]: 'summary',
+  // The on-call agent investigates rather than fixes, so it needs the full release-health
+  // evidence bundle gathered at dispatch, not the one-line precheck summary.
+  [POST_RELEASE_HEALTH_AGENT_KIND]: 'gathered',
+  // The conflict IS the checkout: the resolver opens it on merge markers, pointed at the
+  // conflicted repo via `conflictTarget`. A prior-output line would restate what it can see.
+  [CONFLICTS_AGENT_KIND]: 'none',
+}
+
 describe('attempt budgets', () => {
   const preset = DEFAULT_RISK_POLICY
 
@@ -112,25 +143,39 @@ describe('attempt budgets', () => {
     expect(gate.attemptBudget?.(preset, config({ maxAttempts: 3 }))).toBe(Number.MAX_SAFE_INTEGER)
   })
 
-  it('carries the precheck summary VERBATIM into every gate’s helper prior output', () => {
-    // The summary is the only statement of WHY the helper was spun up (the failing checks, the
-    // conflicted files, the reviewer's words). A gate that answered `undefined` here would still
-    // dispatch its helper, onto a checkout with nothing to act on: the helper then invents a
-    // change or pushes none, and the gate re-probes as if the round had been a real attempt.
-    // Each is attributed to the GATE's own kind, not the helper's, because the text is the
-    // precheck's rather than a previous helper round's output.
+  it('briefs every gate’s helper on WHY it was spun up, or states why it needs no briefing', () => {
+    // The briefing is the only statement of why the helper was spun up (the failing checks, the
+    // conflicted files, the reviewer's words). A gate that hands over nothing still dispatches
+    // its helper, onto a checkout with nothing to act on: the helper then invents a change or
+    // pushes none, and the gate re-probes as if the round had been a real attempt.
+    //
+    // The expected seam is STATED in HELPER_BRIEFING rather than read back off the declarations,
+    // because a guard that filters the registry down to the gates already declaring one is true
+    // by construction: drop the declaration and the gate simply leaves the filtered set.
     const registry = gateRegistryWithBuiltins()
-    const declaring = registry
-      .factories()
-      .map(({ kind, factory }) => ({ kind, gate: factory(stubGateContext({}, providerRegistry)) }))
-      .filter(({ gate }) => gate.helperPriorOutput !== undefined)
-    expect(declaring.length).toBeGreaterThan(0)
-    for (const { kind, gate } of declaring) {
-      expect(gate.helperPriorOutput?.('the precheck said this'), kind).toEqual({
-        agentKind: kind,
-        output: 'the precheck said this',
-      })
+    const classified = new Set<string>()
+    for (const { kind, factory } of registry.factories()) {
+      const gate = factory(stubGateContext({}, providerRegistry))
+      const seam = HELPER_BRIEFING[kind]
+      expect(seam, `${kind} is not classified in HELPER_BRIEFING`).toBeDefined()
+      classified.add(kind)
+      if (seam === 'summary') {
+        // Attributed to the GATE's own kind, not the helper's, because the text is the
+        // precheck's rather than a previous helper round's output.
+        expect(gate.helperPriorOutput?.('the precheck said this'), kind).toEqual({
+          agentKind: kind,
+          output: 'the precheck said this',
+        })
+      } else if (seam === 'gathered') {
+        expect(gate.gatherHelperPriorOutputs, kind).toBeTypeOf('function')
+      } else {
+        expect(gate.helperPriorOutput, kind).toBeUndefined()
+        expect(gate.gatherHelperPriorOutputs, kind).toBeUndefined()
+      }
     }
+    // Every classified kind is a gate that still exists, so a stale entry cannot go on excusing
+    // a gate that was renamed away from the declaration it was written against.
+    expect([...classified].sort()).toEqual(Object.keys(HELPER_BRIEFING).sort())
   })
 
   it('names the gate in every pass-through output, so an unwired gate explains itself', () => {

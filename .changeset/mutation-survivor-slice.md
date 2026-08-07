@@ -22,6 +22,16 @@ yet), the prior-output that carries the reviewer's words across to the fixer, an
 scans in `review.logic` (the merged conversation the fixer reads, and the newest-feedback scan the
 grace window measures from, which was only ever exercised with one entry per list).
 
+Two of the new guards state what they check instead of reading it back off the code, which is the
+difference between a guard and a tautology. The helper-briefing guard classifies every built-in
+gate as briefing its helper through the gathered-evidence seam, the precheck-summary seam, or
+neither (only `conflicts`, whose resolver opens on the merge markers themselves), so dropping a
+declaration fails the gate's row rather than quietly removing it from a filtered set, and a new
+gate has to decide before it passes. The outstanding-conversation cursor guard now seeds both the
+plain comments and the review summaries with a bot, an at-cursor and an after-cursor entry: with a
+bot alone on the summaries leg, a cursor applied to the comments only stays green while the
+review-fixer is re-dispatched forever on an already-addressed `CHANGES_REQUESTED` summary.
+
 Left alone deliberately: the four `reason` string literals on the human-review verdicts, and the
 `>=`-for-`>` mutants in the newest-feedback scan. The first are operator-facing prose, and pinning
 them verbatim is the re-pinned-unread test the conventions warn about. The second are equivalent

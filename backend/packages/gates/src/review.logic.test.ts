@@ -321,6 +321,11 @@ describe('outstandingConversation', () => {
   })
 
   it('drops bots and anything at or before the addressed cursor, from BOTH sources', () => {
+    // BOTH predicates have to bite on BOTH legs, so each leg carries a bot, an at-cursor and an
+    // after-cursor entry. Seeding the summaries with a bot alone would leave the cursor
+    // unexercised there: a cursor applied to the plain comments only would keep this green
+    // while re-dispatching the review-fixer forever on a CHANGES_REQUESTED summary whose
+    // instructions a previous round had already addressed.
     const out = outstandingConversation(
       snapshot({
         comments: [
@@ -328,11 +333,15 @@ describe('outstandingConversation', () => {
           comment('at-cursor', NOW - 30 * MIN),
           comment('after-cursor', NOW - 29 * MIN),
         ],
-        reviewSummaries: [comment('summary-bot', NOW, { isBot: true })],
+        reviewSummaries: [
+          comment('summary-bot', NOW, { isBot: true }),
+          comment('summary-at-cursor', NOW - 30 * MIN),
+          comment('summary-after-cursor', NOW - 28 * MIN),
+        ],
       }),
       NOW - 30 * MIN,
     )
-    expect(out.map((c) => c.id)).toEqual(['after-cursor'])
+    expect(out.map((c) => c.id)).toEqual(['after-cursor', 'summary-after-cursor'])
   })
 
   it('treats an absent cursor as "nothing addressed yet"', () => {
