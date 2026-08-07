@@ -1,5 +1,14 @@
 # @cat-factory/prompt-fragments
 
+## 1.0.20
+
+### Patch Changes
+
+- Updated dependencies [6c6dd0c]
+- Updated dependencies [70745b6]
+  - @cat-factory/kernel@0.270.0
+  - @cat-factory/contracts@0.272.0
+
 ## 1.0.19
 
 ### Patch Changes
