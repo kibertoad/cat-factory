@@ -47,6 +47,29 @@ export function shouldFocusCard(cause: TutorialAdvanceCause): boolean {
 }
 
 /**
+ * Has focus actually LEFT the coach mark, as opposed to moving between its own controls?
+ *
+ * The card's `tabindex` is not a standing attribute (see `focusCard` in the component): it
+ * exists only while the card holds focus, because the same attribute that lets `focusCard`
+ * put focus here also makes the card CLICK-focusable, and a press that moves focus onto the
+ * card is what kills text selection on the steps pointing into an open modal. So the card
+ * drops the attribute the moment focus leaves, and this is the "leaves" test.
+ *
+ * Tabbing from the card onto its own Next button is NOT leaving: dropping the attribute
+ * there would make the card click-focusable again while the user is still inside it, which
+ * is the precise state the attribute is meant to be absent in.
+ *
+ * A `relatedTarget` of `null` (focus fell to `<body>`, as it does when the pressed control
+ * unmounts) counts as leaving. That is the honest reading: nothing inside the card holds
+ * focus any more.
+ */
+export function focusLeftCard(card: Node | null, relatedTarget: EventTarget | null): boolean {
+  if (!card) return true
+  if (!(relatedTarget instanceof Node)) return true
+  return !card.contains(relatedTarget)
+}
+
+/**
  * What a `data-testid` may look like. Every one of the ~470 test ids in this layer is
  * lowercase kebab-case, and the e2e suite's convention keeps it that way, so this rejects
  * nothing real — which is what makes it usable as a GUARD rather than as escaping.

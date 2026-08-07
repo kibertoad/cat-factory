@@ -6994,7 +6994,7 @@
           },
           "commandBar": {
             "title": "La palette dei comandi",
-            "body": "Il modo più rapido per raggiungere qualsiasi azione: aprila e inizia a digitare. Da lì puoi riavviare questo tutorial in qualsiasi momento."
+            "body": "Il modo più rapido per raggiungere qualsiasi azione: aprila e inizia a digitare. Per riavviare questo tutorial in qualsiasi momento, scegli lì \"@:{'nav.tutorials'}\"."
           },
           "toolbar": {
             "title": "Controlli della board",

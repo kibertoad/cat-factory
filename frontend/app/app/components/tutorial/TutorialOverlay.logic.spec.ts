@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   boardNodeIdFor,
+  focusLeftCard,
   isSafeTargetId,
   isTargetClickAdvance,
   resolveSkip,
@@ -206,5 +207,43 @@ describe('shouldFocusCard', () => {
     // step is typically the one telling the user to type in it. Pulling focus back onto the
     // coach mark puts their caret on a tooltip instead of the form the tour just pointed at.
     expect(shouldFocusCard('target-click')).toBe(false)
+  })
+})
+
+describe('focusLeftCard', () => {
+  const card = () => {
+    const el = document.createElement('div')
+    const next = document.createElement('button')
+    el.appendChild(next)
+    document.body.appendChild(el)
+    return { el, next }
+  }
+
+  it('keeps the card focusable while focus is still inside it', () => {
+    // Tabbing from the card onto its own Next button must NOT drop `tabindex`: the card would
+    // become click-focusable again while the user is still in it, which is the exact state the
+    // attribute exists to avoid.
+    const { el, next } = card()
+    expect(focusLeftCard(el, next)).toBe(false)
+    expect(focusLeftCard(el, el)).toBe(false)
+  })
+
+  it('treats focus moving to anything outside the card as having left', () => {
+    const { el } = card()
+    const outside = document.createElement('input')
+    document.body.appendChild(outside)
+    expect(focusLeftCard(el, outside)).toBe(true)
+  })
+
+  it('treats focus falling to nothing as having left', () => {
+    // The `relatedTarget: null` case is not an edge: it is what happens when the pressed
+    // control unmounts under the press, which Back at step 1 does every time.
+    const { el } = card()
+    expect(focusLeftCard(el, null)).toBe(true)
+  })
+
+  it('reports left when there is no card', () => {
+    // An unmounted card holds no focus, so the flag must not be left standing.
+    expect(focusLeftCard(null, null)).toBe(true)
   })
 })

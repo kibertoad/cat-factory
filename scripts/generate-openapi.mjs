@@ -131,18 +131,27 @@ const API_PREFIX = '/api/v1'
 // `requirements.unmatchedVerdicts`. Two diffs claiming one number is a lie a consumer pinning
 // the version would act on, so re-read this line after any merge rather than trusting that the
 // VERSION auto-merged clean.
-// 1.24.0, not 1.22.0: a step's `toolServers` on `GET /api/v1/debug/runs/:runId` gains an optional
+// 1.24.0, not 1.23.0: `PATCH /api/v1/tasks/:taskId` accepts `fields`, the task's per-type bag,
+// merged over what the task already carries. Additive (a new optional request field; a caller that
+// never sends one is unaffected), and it is what makes the pre-dispatch input gate's findings
+// FIXABLE headlessly: four of its seven codes name a field of that bag, and until now the surface
+// named a remedy it did not offer. This branch first claimed 1.23.0, which main then published for
+// `x-min-scope` while the branch was in flight: the collision surfaced as a conflict on this
+// comment block only because each version step writes its own paragraph here, never as one on the
+// VERSION line, which auto-merges clean to a number main has already used.
+// 1.25.0, not 1.22.0: a step's `toolServers` on `GET /api/v1/debug/runs/:runId` gains an optional
 // `observed`, the agent CLI's own account of the servers it managed to load beside the `wired` /
 // `unavailable` account of what the platform decided. Additive: a consumer written against 1.21.0
 // reads both existing lists unchanged, and an ABSENT `observed` is not an empty one: it means no
 // observation was made (a harness whose CLI publishes no such report, an older runner image, an
 // unmapped runner pool), which is a distinction a consumer has to keep or it will report working
-// servers as dead. Written against 1.21.0, which is the number the `toolServers` record itself
-// took; 1.22.0 (the run outcome endpoint) and 1.23.0 (`x-min-scope`) both landed on main while
-// this branch was in flight, exactly as the note at the top of this block describes, and both were
-// found by re-reading this line after the merge rather than by trusting that the VERSION
-// auto-merged clean.
-const API_VERSION = '1.24.0'
+// servers as dead. FOURTH number this one addition has held. It was written against 1.21.0, the
+// number the `toolServers` record itself took; 1.22.0 (the run outcome endpoint) and 1.23.0
+// (`x-min-scope`) landed on main while the branch was in flight, and 1.24.0 above landed on the
+// merge that produced THIS paragraph, having auto-merged the VERSION line to the number this
+// branch had already written there. Every one of the four was found by re-reading this line after
+// a merge, which is the only thing that catches it.
+const API_VERSION = '1.25.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -322,9 +331,9 @@ const OPERATION_DOCS = {
   },
   updatePublicTask: {
     tag: 'Tasks',
-    summary: "Edit a task's title/description",
+    summary: "Edit a task's inputs",
     description:
-      'Edit a task’s human-authored fields (title/description) before it runs. Both fields are optional.',
+      'Edit a task’s human-authored inputs before it runs: its title, its description, and `fields`, the per-case values for its own task type (checked against the descriptors `GET /api/v1/task-types` serves). All are optional. `fields` is MERGED over what the task already carries — a key you send is written, a key you omit keeps its stored value — because this API does not serve the bag back. This is what makes an input the pre-dispatch gate refused repairable: supply the value it named, then recheck the parked run.',
   },
   stopPublicTask: {
     tag: 'Tasks',

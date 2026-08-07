@@ -59,10 +59,10 @@ onBeforeUnmount(clearTimer)
 
 <template>
   <Transition name="fade">
-    <div
-      v-if="reconnecting || offline"
-      class="pointer-events-none absolute inset-x-0 top-0 z-50 flex justify-center px-4 pt-2"
-    >
+    <!-- Positioning/stacking is owned by `BoardTopOverlays`; this renders only the pill, which
+         re-enables pointer events on itself (the row around it stays click-through, since it is
+         far wider than the pill it centres). -->
+    <div v-if="reconnecting || offline" class="pointer-events-none flex w-full justify-center">
       <div
         v-if="reconnecting"
         class="pointer-events-auto flex items-center gap-2 rounded-full border border-amber-500/60 bg-amber-950/90 px-3 py-1.5 text-xs text-amber-100 shadow-lg backdrop-blur"

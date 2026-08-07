@@ -6994,7 +6994,7 @@
           },
           "commandBar": {
             "title": "La palette de commandes",
-            "body": "Le moyen le plus rapide d'atteindre n'importe quelle action : ouvrez-la et commencez à taper. Vous pouvez y relancer ce tutoriel à tout moment."
+            "body": "Le moyen le plus rapide d'atteindre n'importe quelle action : ouvrez-la et commencez à taper. Pour relancer ce tutoriel à tout moment, choisissez-y « @:{'nav.tutorials'} »."
           },
           "toolbar": {
             "title": "Contrôles du tableau",
