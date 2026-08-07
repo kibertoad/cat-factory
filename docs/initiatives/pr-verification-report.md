@@ -242,6 +242,7 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
 | 12  | **Phase 2 follow-up**; retire the narrow deep-link replay once global-search slice 4 lands                                                                                                               | ⬜ blocked |      |
 | 13  | **Phase 2**; test environment lifecycle PROOF: dated up/down timeline from the provisioning log, tester-evidence attribution + links, computed verdict, teardown republish                               | 🟩 done    | this |
 | 14  | **Phase 2**; machine reachability: the report names the run's auditable TRAJECTORY and serves itself live over `/api/v1`                                                                                 | 🟩 done    | this |
+| 15  | **Phase 2**; context sources: which linked documents the run's agents read and at which revision, owned by the Figma initiative's Track C ([`figma-design-support.md`](./figma-design-support.md))       | 🟩 done    | this |
 
 ### Phase-2 notes (slices 9 + 10, as landed)
 

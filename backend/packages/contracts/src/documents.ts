@@ -255,6 +255,33 @@ export const documentFreshnessSchema = v.variant('status', [
 export type DocumentFreshness = v.InferOutput<typeof documentFreshnessSchema>
 
 /**
+ * One linked document a DISPATCH put in front of an agent, and the freshness verdict that
+ * dispatch reached about it.
+ *
+ * The verdict is computed per dispatch and rendered into the agent's context, where it does its
+ * job and then vanishes with the container. So "which revision did this run build against" was
+ * answerable only while the run was still live, and only by re-probing the source — which by then
+ * answers about the CURRENT revision, not the one the agent read. A design under active iteration
+ * is exactly where that question gets asked, and exactly where re-probing gives the wrong answer.
+ *
+ * Recorded on the step for the same reason `toolServers` and `skillVersions` are: it is what the
+ * dispatch resolved and no later reader can re-derive. The BODY is deliberately not here — it is
+ * large, it is already in the documents table, and what is unrecoverable is the pairing of a
+ * document with the revision this step read.
+ *
+ * `freshness` absent means the deployment ran no check at all (no refresher wired), which is not
+ * the same as {@link DocumentFreshness}'s `unconfirmed`: nobody asked, versus asked and could not
+ * tell. Only the second is a warning about the copy.
+ */
+export const stepContextDocumentSchema = v.object({
+  title: v.string(),
+  url: v.string(),
+  origin: documentOriginSchema,
+  freshness: v.optional(documentFreshnessSchema),
+})
+export type StepContextDocument = v.InferOutput<typeof stepContextDocumentSchema>
+
+/**
  * The role a workspace+`DocKind`-scoped document link plays for the forward document-authoring
  * track (WS1 items 2–4). A `template` link's parsed sections REPLACE the built-in skeleton for
  * that kind (singular per kind — linking a new one replaces the prior override); `exemplar`

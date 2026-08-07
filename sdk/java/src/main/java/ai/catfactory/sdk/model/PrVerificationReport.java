@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code PrVerificationReport} wire model.
  * @param ci the {@code ci} field.
+ * @param context the {@code context} field.
  * @param environments the {@code environments} field.
  * @param generatedAt the {@code generatedAt} field.
  * @param judges the {@code judges} field.
@@ -29,6 +30,8 @@ import org.jspecify.annotations.Nullable;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PrVerificationReport(
     @JsonProperty("ci") PrReportCi ci,
+
+    @JsonProperty("context") PrVerificationReportContext context,
 
     @JsonProperty("environments") PrReportEnvironments environments,
 
@@ -71,6 +74,7 @@ public record PrVerificationReport(
      */
     public static final class Builder {
         private @Nullable PrReportCi ci;
+        private @Nullable PrVerificationReportContext context;
         private @Nullable PrReportEnvironments environments;
         private @Nullable Double generatedAt;
         private @Nullable PrReportJudges judges;
@@ -88,6 +92,12 @@ public record PrVerificationReport(
         /** Set {@code ci}. */
         public Builder ci(@Nullable PrReportCi ci) {
             this.ci = ci;
+            return this;
+        }
+
+        /** Set {@code context}. */
+        public Builder context(@Nullable PrVerificationReportContext context) {
+            this.context = context;
             return this;
         }
 
@@ -171,7 +181,7 @@ public record PrVerificationReport(
 
         /** Build the {@link PrVerificationReport}. */
         public PrVerificationReport build() {
-            return new PrVerificationReport(ci, environments, generatedAt, judges, merge, observability, reproduction, requirements, run, scope, tests, truncations, validation, version);
+            return new PrVerificationReport(ci, context, environments, generatedAt, judges, merge, observability, reproduction, requirements, run, scope, tests, truncations, validation, version);
         }
     }
 }

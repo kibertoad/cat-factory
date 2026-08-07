@@ -53,8 +53,8 @@ Two fidelity holes in what the agent reads:
 
 ### 3. Context is frozen at import time
 
-**Closed on the RUN path by Track C slice 1 and on the SPA by slice 2**; what remains is naming
-the revision a FINISHED run built against (the split-out item below).
+**Closed**: on the RUN path by Track C slice 1, on the SPA by slice 2, and on the RECORD by
+slice 3, which is what makes the revision a finished run built against answerable afterwards.
 
 `probeVersion` was implemented on every provider and had exactly one caller: the fragment-library
 body cache (`FragmentLibraryService.resolveDocumentBody`). Nothing on the run path re-probed or
@@ -288,15 +288,29 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
       `DocumentSourceKind` rather than the wide origin: a 200 carrying `not-applicable` would
       leave a caller unable to tell "this document has no source" from "the check ran and found
       nothing to compare", which is the distinction the whole vocabulary exists to keep.
-- [ ] **Name the revision a run BUILT against.** The verdict is computed per dispatch and
-      rendered into the agent's context, and nothing persists it, so "this run built from the old
-      rev" is unanswerable once the run is over. It needs a per-step record at dispatch (the
-      `recordDispatchAttribution` archetype: the poll path rebuilds the handle from the step
-      alone and cannot re-derive what dispatch resolved), folded onto the outcome surface and the
-      PR verification report, which composes only from state already in memory and may not
-      re-probe. Split out of the slice above because the persistence question is the whole job
-      and answering it badly (re-probing at compose time) would make the report disagree with the
-      run it describes.
+- [x] **Name the revision a run BUILT against.** (PR pending)
+      `step.contextDocuments` records each linked document a dispatch put in front of its agent
+      with the verdict that dispatch reached, written through the `StepObservations` seam that
+      already gates `selectedFragmentIds` and `validationConfigUnreadable`. That seam, not a new
+      call at each dispatch site, is what made the record correct: `buildContext` has two callers
+      that resolve a full context and start NO job (the over-budget exemption probe, and a
+      re-attach to a job a replayed dispatch already started), and a source that recovered between
+      the shipped dispatch and the replay would otherwise overwrite the revision the agent actually
+      read with the one it never saw.
+      **A moved revision is derived, not recorded.** The last verdict is what a row carries, since
+      that is the state the run ended on, and it alone says the run ended CURRENT while saying
+      nothing about the coder step that finished before the designer's edit. So both readers
+      compute `movedDuringRun` from the distinct revisions the run's own steps recorded, and state
+      it beside the revision rather than folded into it. The PR report's new `Context sources`
+      section leads with that call-out for the same reason the requirement table leads with its
+      regression count: it changes how every section below it reads.
+      Absent and empty are NOT split here, deliberately, against the usual rule: a step that read
+      no document and a task that linked none are the same fact ("nothing was read"), and most
+      tasks link nothing, so an empty array on every step of every run would be weight that states
+      nothing. What absent must not be confused with is a document read with NO verdict, and that
+      one is a present entry with no `freshness`: nobody asked, versus asked and could not tell.
+      The report shape steps to `PR_VERIFICATION_REPORT_VERSION` 8 and the API to 1.22.0, both
+      additive.
 
 ### Track D: pixels
 

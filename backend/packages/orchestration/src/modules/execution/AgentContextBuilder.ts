@@ -73,6 +73,7 @@ import { resolveRunSkills } from './run-skills.js'
 import {
   linkedContextWithDesignFlag,
   mergeInjectedContextFiles,
+  priorOutputsFor,
   priorPrReviewContextFor,
 } from './builder-context-files.js'
 import { type FoundationalServiceResolver } from './run-foundational-services.js'
@@ -437,7 +438,7 @@ export class AgentContextBuilder {
     // One promise, two consumers: the wave's first entry below, and the fragment fold, which needs to
     // know whether this run carries a DESIGN document without re-resolving the corpus to find out.
     const linked = linkedContextWithDesignFlag(!reworked, (opts) =>
-      this.resolveLinkedContext(workspaceId, block.id, description, opts),
+      this.resolveLinkedContext(workspaceId, block.id, description, opts, observations),
     )
     // The remaining context resolutions are mutually independent — the frame resolvers all read
     // from the shared `serviceFrame`, and the rest read disjoint sources — so fan them out in one
@@ -526,15 +527,7 @@ export class AgentContextBuilder {
     const agentConfig = block.agentConfig
     const customTaskType = this.customTaskTypeFor(block)
     const reproduction = reproductionFor(agentKind, agentConfig, instance, validationChecks)
-    const priorOutputs = [
-      ...(architectureDirection
-        ? [{ agentKind: 'architecture-brainstorm', output: architectureDirection }]
-        : []),
-      ...instance.steps
-        .slice(0, instance.currentStep)
-        .filter((s) => s.output)
-        .map((s) => ({ agentKind: s.agentKind, output: s.output! })),
-    ]
+    const priorOutputs = priorOutputsFor(instance, architectureDirection)
     return {
       agentKind,
       pipelineName: instance.pipelineName,
@@ -1398,14 +1391,21 @@ export class AgentContextBuilder {
    * through the shared {@link resolveLinkedContextFor} — the same resolver the initiative-planning
    * interviewer uses, so an inline planning step and a container one can never disagree about what
    * a human attached.
+   *
+   * The per-dispatch RECORD of what came back is written here rather than by the shared resolver,
+   * because that resolver's other caller (the inline initiative interviewer) owns no step to write
+   * it onto. It is what makes "which revision of the design did this run build against" answerable
+   * once the run is over: the verdict is otherwise rendered into the agent's context and lost with
+   * the container, and re-probing afterwards answers about the revision the source is at NOW.
    */
-  private resolveLinkedContext(
+  private async resolveLinkedContext(
     workspaceId: string,
     blockId: string,
     description: string,
     opts: LinkedContextOptions,
+    observations: StepObservations,
   ): Promise<LinkedContext> {
-    return resolveLinkedContextFor(
+    const context = await resolveLinkedContextFor(
       {
         ...(this.deps.documents ? { documents: this.deps.documents } : {}),
         ...(this.deps.tasks ? { tasks: this.deps.tasks } : {}),
@@ -1420,6 +1420,8 @@ export class AgentContextBuilder {
       description,
       opts,
     )
+    observations.contextDocuments(context.docs)
+    return context
   }
 
   /**

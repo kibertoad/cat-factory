@@ -29,6 +29,7 @@ import {
   renderReproduction,
   renderValidation,
 } from './prReport.commands.js'
+import { composeContext, renderContext } from './prReport.context.js'
 import { absentNote, findStep } from './prReport.steps.js'
 
 // ---------------------------------------------------------------------------
@@ -606,6 +607,9 @@ export function composePrVerificationReport(
         title: scrubbed(issue.title),
       })),
     },
+    // What the run built FROM. Run-scoped like the sections below it: the linked documents are
+    // the TASK's, so every repo the run touched was written from the same brief.
+    context: composeContext(instance, (items, label) => cap(items, label, truncations)),
     // The CI gate, the tester, the judges, the environments and the merge sequence are all
     // RUN-scoped: the gate reduces every repo's checks to one verdict that blocks every PR the
     // run opened, the tester ran once, and the merger merges the whole set (peers first, own
@@ -972,6 +976,10 @@ export function renderPrVerificationReport(report: PrVerificationReport): string
     '',
     ...renderScope(report.scope),
     ...renderRun(report.run, report.observability),
+    // Before the evidence sections, because it frames how all of them read: a reviewer who does
+    // not know the design moved mid-run misreads every verdict below as a statement about the
+    // design they can see now.
+    ...renderContext(report.context),
     ...renderCi(report.ci),
     // The two CAPTURED-OUTPUT sections sit beside CI rather than at the end: they answer the same
     // question a reviewer asks first ("does it work?"), and unlike CI they are the platform's own

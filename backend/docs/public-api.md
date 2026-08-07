@@ -954,11 +954,22 @@ that never opened a pull request at all (a headless job, or a run that failed be
 those get `run.repo: null` rather than an invented one.
 
 Every section carries `status: "reported" | "absent"` plus a `note`, so _"this pipeline had no
-tester step"_ and _"the tester found nothing"_ never read the same. What it covers: the CI gate's
-verdict and failing checks, the platform's own run of the service's lint/test/build commands with
-the failing output, the red-then-green reproduction proof for a bugfix, the tester's structured
-report, requirement coverage, the throwaway-environment lifecycle, judge verdicts, and the merge
-decision. `truncations` names anything a per-list cap left out.
+tester step"_ and _"the tester found nothing"_ never read the same. What it covers: what the run
+built FROM, the CI gate's verdict and failing checks, the platform's own run of the service's
+lint/test/build commands with the failing output, the red-then-green reproduction proof for a
+bugfix, the tester's structured report, requirement coverage, the throwaway-environment lifecycle,
+judge verdicts, and the merge decision. `truncations` names anything a per-list cap left out.
+
+`context` is the one that answers what the run was working from: each linked document its agents
+read, with the revision the dispatch confirmed it at. `freshness` is the same three-way verdict the
+board surfaces (`confirmed` naming a `version`, `not-applicable` for a body with no source,
+`unconfirmed` naming which of four gaps applies), and an ABSENT `freshness` means the deployment
+runs no freshness check at all, which is not the same fact as a check that ran and could not
+conclude. `movedDuringRun` is computed from the run's own records: the source moved WHILE the run
+was in flight, so its earlier steps built against something its later ones did not read. Nothing
+here is re-probed at read time, by design: the source has moved on since, so a fresh probe would
+answer about a revision no agent on this run ever saw. Added in 1.22.0 (report `version` 8), so a
+consumer written earlier simply does not see the key.
 
 `observability` carries the links back: `runUrl` (the app's panel, for a person), `trajectoryUrl`
 (the run's tool calls in order, on the debug surface) and `reportUrl` (this endpoint). Each is

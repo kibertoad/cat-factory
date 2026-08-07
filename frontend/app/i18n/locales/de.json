@@ -6121,6 +6121,15 @@
       "title": "Was gefordert war",
       "none": "Diese Aufgabe hat keine Beschreibung, es gibt hier also nichts, womit sich das Ergebnis vergleichen ließe."
     },
+    "sources": {
+      "title": "Erstellt aus",
+      "unchecked": "Nicht mit der Quelle abgeglichen.",
+      "noSource": "Keine Quellseite zum Abgleichen vorhanden.",
+      "moved": "Diese Seite wurde während des Laufs geändert, frühere Schritte haben also eine ältere Revision gelesen.",
+      "gap": {
+        "none_linked": "Diese Aufgabe hat keine Seite verknüpft, ihre Beschreibung war also der gesamte Auftrag für die Agenten."
+      }
+    },
     "gap": {
       "run_unavailable": "Der Lauf dieser Aufgabe wurde nicht geladen, deshalb können die von ihm erfassten Belege hier nicht gezeigt werden. Das ist nicht dasselbe wie ein Lauf, der nichts erfasst hat."
     },

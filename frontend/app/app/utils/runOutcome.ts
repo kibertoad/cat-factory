@@ -28,7 +28,12 @@ import type { Block, RequirementVerdictStatus, TestConcernSeverity } from '~/typ
 import type { ExecutionInstance, PipelineStep } from '~/types/execution'
 import type { RequirementState, ServiceSpecView } from '~/types/spec'
 import type { ReproductionStatus } from '~/types/reproduction'
-import type { PullRequestRef, TestEnvironment } from '@cat-factory/contracts'
+import type {
+  DocumentFreshness,
+  DocumentOrigin,
+  PullRequestRef,
+  TestEnvironment,
+} from '@cat-factory/contracts'
 import { allPullRequests } from '@cat-factory/contracts'
 import { isTesterKind } from '~/utils/catalog'
 
@@ -194,6 +199,34 @@ export type OutcomeVisuals =
       views: OutcomeVisual[]
     }
 
+// ---- What it was built FROM ------------------------------------------------
+
+/** Why there is no linked source to show. */
+export type SourcesGap = RunUnavailableGap | 'none_linked'
+
+/**
+ * One linked document the run's agents read, reduced from the per-dispatch records its steps
+ * carry.
+ *
+ * The verdict is the LAST one the run recorded, because that is the state it ended on. What a
+ * last verdict cannot say is that the page moved WHILE the run was in flight, so that is carried
+ * separately: a designer editing a frame mid-run leaves the early steps building against
+ * something the late ones never read, and a row showing only the final revision reads as though
+ * every step had it.
+ */
+export interface OutcomeSource {
+  title: string
+  url: string | null
+  origin: DocumentOrigin
+  /** Absent ⇒ this deployment ran no freshness check, which is not "checked and unsure". */
+  freshness: DocumentFreshness | null
+  movedDuringRun: boolean
+}
+
+export type OutcomeSources =
+  | { status: 'absent'; gap: SourcesGap }
+  | { status: 'reported'; sources: OutcomeSource[] }
+
 // ---- The machine checks ----------------------------------------------------
 
 /** The three recorded machine verdicts a non-code reader still needs: did it build, does it work. */
@@ -223,6 +256,8 @@ export interface RunOutcome {
   requirements: OutcomeRequirements
   tests: OutcomeTests
   visuals: OutcomeVisuals
+  /** The linked pages the run built from, and how current the copy its agents read was. */
+  sources: OutcomeSources
   /** Only the checks that actually ran: an absent check is omitted, never rendered as passing. */
   checks: OutcomeCheck[]
 }
@@ -395,6 +430,35 @@ function composeVisuals(
   }
 }
 
+/**
+ * Reduce every dispatch's `contextDocuments` record into one row per linked page.
+ *
+ * The same reduction the PR verification report runs, on the same records, so the card a person
+ * opens and the report a reviewer reads cannot disagree about which revision the run built from.
+ * Order is first-read-first, so the list follows the run's own reading order.
+ */
+function composeSources(steps: readonly PipelineStep[]): OutcomeSources {
+  const rows = new Map<string, OutcomeSource>()
+  const revisions = new Map<string, Set<string>>()
+  for (const step of steps) {
+    for (const doc of step.contextDocuments ?? []) {
+      const key = `${doc.origin}:${doc.url || doc.title}`
+      const seen = revisions.get(key) ?? new Set<string>()
+      if (doc.freshness?.status === 'confirmed') seen.add(doc.freshness.version)
+      revisions.set(key, seen)
+      rows.set(key, {
+        title: doc.title,
+        url: doc.url || null,
+        origin: doc.origin,
+        freshness: doc.freshness ?? null,
+        movedDuringRun: seen.size > 1,
+      })
+    }
+  }
+  if (rows.size === 0) return { status: 'absent', gap: 'none_linked' }
+  return { status: 'reported', sources: [...rows.values()] }
+}
+
 function composeChecks(steps: readonly PipelineStep[]): OutcomeCheck[] {
   const checks: OutcomeCheck[] = []
 
@@ -466,6 +530,7 @@ export function composeRunOutcome({ block, instance, spec }: ComposeRunOutcomeIn
       requirements: { status: 'absent', gap: 'run_unavailable' },
       tests: { status: 'absent', gap: 'run_unavailable' },
       visuals: { status: 'absent', gap: 'run_unavailable', detail: null },
+      sources: { status: 'absent', gap: 'run_unavailable' },
       checks: [],
     }
   }
@@ -474,6 +539,7 @@ export function composeRunOutcome({ block, instance, spec }: ComposeRunOutcomeIn
     requirements: composeRequirements(tester, spec),
     tests: composeTests(tester),
     visuals: composeVisuals(steps, tester),
+    sources: composeSources(steps),
     checks: composeChecks(steps),
   }
 }
@@ -497,6 +563,9 @@ function toOutcomePr(ref: PullRequestRef, repo: string | undefined): OutcomePull
  * A run this card could not resolve answers false unless the block still carries a pull
  * request: there is nothing to show, and an affordance that opened onto four "not loaded"
  * notices would be the same empty card by another route.
+ *
+ * Linked SOURCES deliberately do not count. They say what the run was working from, not what it
+ * produced, so a run that has only read its brief has nothing for this card to answer yet.
  */
 export function hasOutcomeToShow(outcome: RunOutcome): boolean {
   return (

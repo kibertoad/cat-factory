@@ -451,6 +451,77 @@ describe('composeRunOutcome', () => {
   })
 })
 
+describe('composeRunOutcome: what the run was built FROM', () => {
+  const figma = (version: string) => ({
+    title: 'Checkout flow',
+    url: 'https://figma.com/design/f1',
+    origin: 'figma' as const,
+    freshness: { status: 'confirmed' as const, version, change: 'unchanged' as const },
+  })
+
+  it('says no page was linked rather than showing an empty list', () => {
+    const outcome = composeRunOutcome({ block: block(), instance: run([step()]) })
+    expect(outcome.sources).toEqual({ status: 'absent', gap: 'none_linked' })
+  })
+
+  it('reduces a page read by several dispatches to one row, keeping the last verdict', () => {
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([
+        step({ contextDocuments: [figma('v1')] }),
+        step({ agentKind: 'merger', contextDocuments: [figma('v1')] }),
+      ]),
+    })
+    expect(outcome.sources.status === 'reported' && outcome.sources.sources).toEqual([
+      { ...figma('v1'), url: 'https://figma.com/design/f1', movedDuringRun: false },
+    ])
+  })
+
+  it('flags a page whose revision moved between two of the run’s own dispatches', () => {
+    // The last revision alone reads as a run that built entirely against v2. The coder step
+    // finished before the designer's edit, and that is the whole reason this flag exists.
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([
+        step({ contextDocuments: [figma('v1')] }),
+        step({ agentKind: 'merger', contextDocuments: [figma('v2')] }),
+      ]),
+    })
+    const rows = outcome.sources.status === 'reported' ? outcome.sources.sources : []
+    expect(rows[0]).toMatchObject({ movedDuringRun: true, freshness: { version: 'v2' } })
+  })
+
+  it('keeps a page nobody checked apart from one that was checked and could not be confirmed', () => {
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([
+        step({
+          contextDocuments: [
+            { title: 'PRD', url: 'https://notion.so/prd', origin: 'notion' },
+            {
+              title: 'Design',
+              url: 'https://figma.com/design/f2',
+              origin: 'figma',
+              freshness: { status: 'unconfirmed', reason: 'source_unreachable' },
+            },
+          ],
+        }),
+      ]),
+    })
+    const rows = outcome.sources.status === 'reported' ? outcome.sources.sources : []
+    expect(rows[0]?.freshness).toBeNull()
+    expect(rows[1]?.freshness).toMatchObject({ status: 'unconfirmed' })
+  })
+
+  it('reports the unresolved run rather than blaming the task for linking nothing', () => {
+    const outcome = composeRunOutcome({
+      block: block({ executionId: 'exe_gone' }),
+      instance: null,
+    })
+    expect(outcome.sources).toEqual({ status: 'absent', gap: 'run_unavailable' })
+  })
+})
+
 describe('hasOutcomeToShow', () => {
   it('is false for a run that has produced nothing to read yet', () => {
     expect(

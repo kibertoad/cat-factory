@@ -120,7 +120,14 @@ const API_PREFIX = '/api/v1'
 // `extras` bag, which keeps serving them until the window in `public-api.md` closes, so no
 // consumer has to move on this version. 1.20.0 is main's published number as of this branch's last
 // merge; re-read this line after any merge rather than trusting that the VERSION auto-merged clean.
-const API_VERSION = '1.21.0'
+// 1.22.0, not 1.21.0: the verification report gains a `context` section, the linked documents the
+// run's agents read with the revision each was read at, and `PR_VERIFICATION_REPORT_VERSION` steps
+// to 8 with it. Additive on both surfaces (a new section object beside the existing ones, on an
+// endpoint and inside the PR body's fenced block), and inert for a consumer that ignores it: every
+// section it already reads is byte-for-byte unchanged. 1.21.0 is main's published number as of this
+// branch's last merge; re-read this line after any merge rather than trusting that the VERSION
+// auto-merged clean.
+const API_VERSION = '1.22.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
