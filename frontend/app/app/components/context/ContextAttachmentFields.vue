@@ -105,6 +105,19 @@ const chosenIssueKeys = computed(() => pendingIssues.value.map(contextKey))
 const offer = ref<{ url: string; source: DocumentSourceKind; externalId: string } | null>(null)
 /** The URL last resolved, so re-typing around an unchanged link costs no further round trips. */
 let judged: string | null = null
+/**
+ * Which link-resolution pass is the current one. A pass that has been superseded neither writes an
+ * offer nor spends another request.
+ *
+ * `judged` alone cannot do this: it is set BEFORE the awaits, so it stops a second pass starting
+ * for the same URL but says nothing about a pass already in flight for a DIFFERENT one. The
+ * description is a text field a person is still typing in, and the debounce releases a new pass
+ * every 500ms, so an earlier URL's resolve routinely settles after a later one. Landing it would
+ * offer to attach a link that is no longer in the description at all, and accepting the offer
+ * attaches that wrong document, silently: the chip it adds names the stale URL, which is the only
+ * place the mismatch is visible and the one part nobody re-reads.
+ */
+let offerPass = 0
 
 // Debounced, because this fires on every keystroke of a description and each miss costs one
 // request per connected host-pinned source.
@@ -118,12 +131,17 @@ watch(
   async (text) => {
     const url = firstLinkCandidate(text)
     if (url === judged) return
+    const pass = ++offerPass
     judged = url
     offer.value = null
     if (!url || !documents.available) return
     for (const source of claimCandidates(documents.connectedSources.map((s) => s.source))) {
+      // Checked per source, not just around the write: once superseded, the remaining sources
+      // would be asked about a URL nobody is looking at any more.
+      if (pass !== offerPass) return
       try {
         const ref = await documents.resolveRef(source, url)
+        if (pass !== offerPass) return
         offer.value = { url, source, externalId: ref.externalId }
         return
       } catch {

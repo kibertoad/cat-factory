@@ -119,9 +119,10 @@ export interface DocumentSourceProvider {
    * The source's OAuth connect declaration, when it has one. Absent ⇒ the typed credential in
    * {@link descriptor}`.credentialFields` is the only way in.
    *
-   * It is paired with `descriptor.oauth`, which is the same fact on the wire: the two are
-   * asserted to agree, so a provider cannot declare endpoints the UI never offers or advertise a
-   * button that reaches no flow.
+   * It is paired with `descriptor.oauth`, which is the same fact on the wire. The two are asserted
+   * to agree by {@link assertDocumentSourceOAuthAgrees}, which every registry construction runs, so
+   * a provider cannot declare endpoints the UI never offers or advertise a button that reaches no
+   * flow.
    */
   readonly oauth?: DocumentSourceOAuthSpec
   /**
@@ -337,6 +338,49 @@ export interface LinkedDocumentRefresher {
     workspaceId: string,
     documents: readonly DocumentRecord[],
   ): Promise<readonly RefreshedDocument[]>
+}
+
+/**
+ * Refuse a provider whose two OAuth declarations disagree, at the point it is registered.
+ *
+ * A source states the same fact twice, and it has to: {@link DocumentSourceProvider.oauth} is what
+ * the shared flow RUNS (endpoints, scopes, how the vendor joins them) and `descriptor.oauth` is
+ * what the SPA renders from, and the SPA cannot see kernel. Nothing else forces them together, and
+ * a source that declares only one half fails SILENTLY in whichever direction it was half-declared:
+ * with only the spec, the flow exists and no surface ever offers it; with only the descriptor, a
+ * board renders "Connect with <source>" that can do nothing but throw `oauth_not_supported`.
+ * Neither shows up as an error anywhere a deployment would look.
+ *
+ * The SCOPES are held to the same bar as the presence, because the descriptor's copy is not
+ * decoration: it is what the operator reads to decide whether to consent, on the page BEFORE the
+ * vendor's own. A descriptor asking for less than the flow requests is a consent screen that
+ * surprises them, which is the one part of this a wrong value makes worse than a missing one.
+ *
+ * A plain `Error` rather than a `DomainError`: this is a wiring mistake in a deployment's own code
+ * that no request can produce and no operator can fix at runtime, so it belongs to boot, loudly,
+ * beside the registration that made it.
+ */
+export function assertDocumentSourceOAuthAgrees(provider: DocumentSourceProvider): void {
+  const spec = provider.oauth
+  const wire = provider.descriptor.oauth
+  if (!spec && !wire) return
+  if (!spec || !wire) {
+    const [declared, missing] = spec
+      ? ['provider.oauth', 'descriptor.oauth']
+      : ['descriptor.oauth', 'provider.oauth']
+    throw new Error(
+      `Document source '${provider.kind}' declares ${declared} but not ${missing}. ` +
+        'Both halves are required: one runs the flow, the other is what offers it.',
+    )
+  }
+  const sent = [...spec.scopes].sort()
+  const shown = [...wire.scopes].sort()
+  if (sent.length !== shown.length || sent.some((scope, i) => scope !== shown[i])) {
+    throw new Error(
+      `Document source '${provider.kind}' requests scopes [${sent.join(', ')}] but its descriptor ` +
+        `shows [${shown.join(', ')}]. The descriptor is what the operator consents against.`,
+    )
+  }
 }
 
 /** A lookup of the providers wired for this deployment, keyed by source. */

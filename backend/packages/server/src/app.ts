@@ -458,31 +458,56 @@ function registerControllers<E extends AppEnv>(
   for (const entry of entries) app.route(entry.mount, entry.build())
 }
 
+/** One provider-facing receiver and the ROOT prefix it mounts under. */
+interface PublicControllerEntry {
+  /** Short name, so a guard test can say WHICH receiver broke an invariant. */
+  name: string
+  /**
+   * The root-level mount. Every value here MUST also appear in `authGate`'s `PUBLIC_PREFIXES`:
+   * these receivers authenticate themselves (an HMAC signature over the raw body, a signed
+   * `state`) and their callers carry no session, so one missing from that list is unreachable
+   * rather than merely gated.
+   */
+  mount: string
+  build: () => Hono<AppEnv>
+}
+
 /**
- * The provider-facing webhook receivers + OAuth redirect callbacks (GitHub / VCS / Slack / Linear);
- * not workspace-scoped. Mounted last, after the workspace API.
+ * The provider-facing webhook receivers + OAuth redirect callbacks, in registration order; not
+ * workspace-scoped, and mounted last, after the workspace API.
+ *
+ * A list rather than a run of `app.route` calls for the same reason {@link WORKSPACE_CONTROLLERS}
+ * is one: it lets a guard test judge exactly what the app mounts. Here the invariant is the
+ * session gate's public allowlist, and the failure it catches is a silent one — a receiver added
+ * by hand beside a loop looks correct at its own mount and only ever fails against the live
+ * vendor, as a 401 on a redirect nobody can retry. `http/publicPrefixes.test.ts` drives this list.
+ *
+ * The MCP tool-server OAuth flow deliberately has NO entry here: a vendor redirects the operator's
+ * browser to the SPA, which re-presents the `code` and `state` over the authenticated API
+ * (`mcpOAuthCompletionController`, mounted with the session-gated controllers above). A public
+ * receiver could not tell WHO was completing the grant, since a third-party navigation carries no
+ * bearer token.
  */
+export const PROVIDER_CALLBACK_CONTROLLERS: readonly PublicControllerEntry[] = [
+  // GitHub-facing (webhooks + setup callback).
+  { name: 'githubWebhook', mount: '/github', build: () => githubWebhookController() },
+  // Provider-neutral VCS webhook receiver (GitLab first). GitHub keeps its own route above; this
+  // serves any other provider registered in the VCS registry.
+  { name: 'vcsWebhook', mount: '/vcs', build: () => vcsWebhookController() },
+  // Tracker-facing webhook receiver (Jira / Linear / GitHub Issues). Unlike the two VCS receivers
+  // this carries the WORKSPACE in its path, because a tracker delivery has no installation id to
+  // resolve one from — see `TaskWebhookController`.
+  { name: 'taskWebhook', mount: '/webhooks', build: () => taskWebhookController() },
+  // Slack-facing OAuth callback (browser redirect).
+  { name: 'slackOAuth', mount: '/slack', build: () => slackOAuthController() },
+  // Linear-facing OAuth callback (browser redirect).
+  { name: 'linearOAuth', mount: '/tasks', build: () => linearOAuthController() },
+  // Document-source OAuth callback (browser redirect). ONE receiver for every OAuth-capable
+  // source — the source rides the signed `state`, because a deployment registers one redirect URL
+  // per vendor app and the path cannot vary per source.
+  { name: 'documentOAuth', mount: '/documents', build: () => documentOAuthController() },
+]
+
 function registerWebhookControllers<E extends AppEnv>(app: Hono<E>): void {
-  // GitHub-facing (webhooks + setup callback); not workspace-scoped.
-  app.route('/github', githubWebhookController())
-  // Provider-neutral VCS webhook receiver (GitLab first); not workspace-scoped. GitHub keeps
-  // its own route above; this serves any other provider registered in the VCS registry.
-  app.route('/vcs', vcsWebhookController())
-  // Tracker-facing webhook receiver (Jira / Linear / GitHub Issues); not session-scoped. Unlike
-  // the two VCS receivers this carries the WORKSPACE in its path, because a tracker delivery has
-  // no installation id to resolve one from — see `TaskWebhookController`.
-  app.route('/webhooks', taskWebhookController())
-  // Slack-facing OAuth callback (browser redirect); not workspace-scoped.
-  app.route('/slack', slackOAuthController())
-  // Linear-facing OAuth callback (browser redirect); not workspace-scoped.
-  app.route('/tasks', linearOAuthController())
-  // Document-source OAuth callback (browser redirect); not workspace-scoped. ONE receiver for
-  // every OAuth-capable source — the source rides the signed `state`, because a deployment
-  // registers one redirect URL per vendor app and the path cannot vary per source.
-  app.route('/documents', documentOAuthController())
-  // The MCP tool-server OAuth flow deliberately has NO receiver here: a vendor redirects the
-  // operator's browser to the SPA, which re-presents the `code` and `state` over the authenticated
-  // API (`mcpOAuthCompletionController`, mounted with the session-gated controllers above). A
-  // public receiver could not tell WHO was completing the grant, since a third-party navigation
-  // carries no bearer token.
+  for (const entry of PROVIDER_CALLBACK_CONTROLLERS) app.route(entry.mount, entry.build())
 }

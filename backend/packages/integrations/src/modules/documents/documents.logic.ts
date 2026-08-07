@@ -1,7 +1,12 @@
 import type { BlockType, DocumentOrigin, DocumentSourceKind } from '@cat-factory/kernel'
 import type { DocumentBoardPlan, PlanFrame, PlanModule, PlanTask } from '@cat-factory/kernel'
 import type { DocumentSourceProvider, DocumentSourceRegistry } from '@cat-factory/kernel'
-import { buildExcerpt, markdownToText, MapSourceRegistry } from '@cat-factory/kernel'
+import {
+  assertDocumentSourceOAuthAgrees,
+  buildExcerpt,
+  markdownToText,
+  MapSourceRegistry,
+} from '@cat-factory/kernel'
 
 // `markdownToText`/`buildExcerpt` now live in the shared markdown helpers (also
 // used by the task-source integration); re-exported here so existing
@@ -66,10 +71,22 @@ export function sameAgentVisibleProjection(
   return a.contentHash === b.contentHash && a.title === b.title && a.url === b.url
 }
 
-/** A trivial in-memory provider registry built from the wired providers. */
+/**
+ * A trivial in-memory provider registry built from the wired providers.
+ *
+ * The one construction path for every deployment's document sources, which is why the OAuth
+ * half-declaration check sits here rather than in each facade's wiring: a provider that reaches a
+ * registry has been through it.
+ */
 export class MapDocumentSourceRegistry
   extends MapSourceRegistry<DocumentSourceKind, DocumentSourceProvider>
-  implements DocumentSourceRegistry {}
+  implements DocumentSourceRegistry
+{
+  constructor(providers: DocumentSourceProvider[]) {
+    super(providers)
+    for (const provider of providers) assertDocumentSourceOAuthAgrees(provider)
+  }
+}
 
 interface Heading {
   level: number

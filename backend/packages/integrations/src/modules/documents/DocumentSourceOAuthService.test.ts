@@ -71,6 +71,53 @@ function grant(credentials: Record<string, string>): DocumentConnectionRecord {
   }
 }
 
+describe('half-declared OAuth', () => {
+  // The two declarations state one fact for two audiences (the flow, and the SPA that cannot see
+  // kernel), and nothing but this check forces them together. Both directions of the omission are
+  // SILENT in production — one hides the flow behind a button no surface renders, the other renders
+  // a button whose only outcome is `oauth_not_supported` — so the registry refuses them at
+  // registration, which is the last point at which the mistake is still a code change.
+  function providerWith(overrides: Partial<DocumentSourceProvider>): DocumentSourceProvider {
+    return Object.assign(Object.create(FigmaProvider.prototype) as DocumentSourceProvider, {
+      ...new FigmaProvider(),
+      ...overrides,
+    })
+  }
+
+  it('refuses a spec with no descriptor half', () => {
+    const figma = new FigmaProvider()
+    const specOnly = providerWith({
+      descriptor: { ...figma.descriptor, oauth: undefined },
+    })
+    expect(() => new MapDocumentSourceRegistry([specOnly])).toThrow(
+      /declares provider\.oauth but not descriptor\.oauth/,
+    )
+  })
+
+  it('refuses a descriptor half with no spec', () => {
+    const wireOnly = providerWith({ oauth: undefined })
+    expect(() => new MapDocumentSourceRegistry([wireOnly])).toThrow(
+      /declares descriptor\.oauth but not provider\.oauth/,
+    )
+  })
+
+  it('refuses scopes the operator would consent to that are not the ones requested', () => {
+    const figma = new FigmaProvider()
+    const drifted = providerWith({
+      descriptor: { ...figma.descriptor, oauth: { scopes: ['file_content:read'] } },
+    })
+    expect(() => new MapDocumentSourceRegistry([drifted])).toThrow(
+      /descriptor shows \[file_content:read\]/,
+    )
+  })
+
+  it('accepts the shipped providers as they are', () => {
+    expect(
+      () => new MapDocumentSourceRegistry([new FigmaProvider(), new NotionProvider()]),
+    ).not.toThrow()
+  })
+})
+
 describe('availableSources', () => {
   it('needs BOTH a declared OAuth half and a registered client', async () => {
     // Notion declares no half; Figma declares one, and the deployment has an app for it.
@@ -154,7 +201,7 @@ describe('exchangeCode', () => {
 
 describe('renewIfExpiring', () => {
   it('does nothing for a bag with no deadline, or one still comfortably live', async () => {
-    const { service, calls } = build()
+    const { service, calls, lines } = build()
     expect(await service.renewIfExpiring(grant({ apiToken: 'figd_x' }))).toBeNull()
     expect(
       await service.renewIfExpiring(
@@ -162,6 +209,25 @@ describe('renewIfExpiring', () => {
       ),
     ).toBeNull()
     expect(calls).toEqual([])
+    // SILENTLY nothing, which the call count alone cannot say. A missing deadline used to convert
+    // to 0 and read as "expired at the epoch", so this same PAT bag fell through to the renewal
+    // path and reported a permanent source outage on every credential resolution.
+    expect(lines).toEqual([])
+  })
+
+  it('treats a bag whose deadline is absent or garbled as having none, not as expired', async () => {
+    const { service, calls, lines } = build()
+    // A grant that COULD be refreshed, so the only thing keeping it off the refresh path is the
+    // reading of its deadline. Both spellings of "no usable deadline" must answer the same way.
+    for (const oauthExpiresAt of ['', '   ', 'not-a-number']) {
+      expect(
+        await service.renewIfExpiring(
+          grant({ oauthAccessToken: 'at_1', oauthRefreshToken: 'rt_1', oauthExpiresAt }),
+        ),
+      ).toBeNull()
+    }
+    expect(calls).toEqual([])
+    expect(lines).toEqual([])
   })
 
   it('renews inside the skew and CARRIES FORWARD a refresh token the response omitted', async () => {

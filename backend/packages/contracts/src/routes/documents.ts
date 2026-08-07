@@ -59,7 +59,15 @@ const documentSearchResultsViewSchema = v.object({
 })
 const spawnDocumentResultSchema = v.object({
   plan: documentBoardPlanSchema,
-  result: v.object({ frames: v.number(), modules: v.number(), tasks: v.number() }),
+  result: v.object({
+    frames: v.number(),
+    modules: v.number(),
+    tasks: v.number(),
+    // Planned modules whose tasks went into a module the target frame already had. Its own count
+    // rather than part of `modules`, so a spawn that reused every one of them cannot report
+    // "0 modules" against a preview that showed three.
+    reusedModules: v.number(),
+  }),
 })
 
 export const listDocumentSourcesContract = defineApiContract({

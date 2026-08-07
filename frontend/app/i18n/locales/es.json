@@ -4351,6 +4351,7 @@
       "frameCount": "{count} marco | {count} marcos",
       "moduleCount": "{count} módulo | {count} módulos",
       "taskCount": "{count} tarea | {count} tareas",
+      "reusedCount": "{count} módulo reutilizado | {count} módulos reutilizados",
       "intoService": "dentro del servicio elegido",
       "target": {
         "label": "Añadir al servicio",

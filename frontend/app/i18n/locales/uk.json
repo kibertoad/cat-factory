@@ -4351,6 +4351,7 @@
       "frameCount": "{count} фрейм | {count} фрейми | {count} фреймів",
       "moduleCount": "{count} модуль | {count} модулі | {count} модулів",
       "taskCount": "{count} завдання | {count} завдання | {count} завдань",
+      "reusedCount": "повторно використано {count} модуль | повторно використано {count} модулі | повторно використано {count} модулів",
       "intoService": "усередині вибраного сервісу",
       "target": {
         "label": "Додати до сервісу",

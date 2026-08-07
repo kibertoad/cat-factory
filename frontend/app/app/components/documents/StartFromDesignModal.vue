@@ -36,12 +36,28 @@ const pasted = ref('')
 const state = ref<RefState>({ status: 'none' })
 /** The source that claimed the paste, held beside the verdict so the staged item names it. */
 const claimant = ref<DocumentSourceKind | null>(null)
+/**
+ * The exact text {@link state} is the verdict FOR, so the same text is never re-resolved.
+ *
+ * This is what keeps Continue clickable. The input resolves on blur, and clicking Continue blurs
+ * it, so a person who resolved with Enter and then reached for the button re-entered `resolve()`
+ * on mousedown: the state fell back to `checking`, `row` went null, and Vue disabled the button
+ * before mouseup, so the click was never dispatched. The button came back enabled a moment later
+ * having done nothing, which reads as a dead button rather than as a race. (The `start-from-design`
+ * tour hit the same edge, its `advanceOn: 'target-click'` step waiting on a click that never fired.)
+ *
+ * Guarding on the TEXT rather than suppressing the blur is what makes it a fix instead of a
+ * workaround: re-resolving input that already has a verdict spends one HTTP call per connected
+ * design source to arrive back where it started, whoever caused it.
+ */
+const resolvedFor = ref<string | null>(null)
 
 watch(open, (isOpen) => {
   if (!isOpen) return
   pasted.value = ''
   state.value = { status: 'none' }
   claimant.value = null
+  resolvedFor.value = null
 })
 
 const row = computed(() => refRowFor(state.value, pasted.value))
@@ -73,9 +89,12 @@ const target = computed<DocumentSourceKind | null>(() => {
  */
 async function resolve() {
   const text = pasted.value.trim()
+  // Already judged, so there is nothing to learn and a verdict to lose (see `resolvedFor`).
+  if (text === resolvedFor.value) return
   claimant.value = null
   if (!text) {
     state.value = { status: 'none' }
+    resolvedFor.value = null
     return
   }
   state.value = { status: 'checking' }
@@ -85,6 +104,7 @@ async function resolve() {
       const ref: ResolvedDocumentRef = await documents.resolveRef(source, text)
       claimant.value = source
       state.value = { status: 'ok', ref }
+      resolvedFor.value = text
       return
     } catch (e) {
       last = classifyRefFailure(e)
@@ -94,6 +114,9 @@ async function resolve() {
     }
   }
   state.value = last
+  // A refusal and an outage are verdicts too: re-running on the same text would reach the same
+  // one, and an `unchecked` paste is stageable, so it must survive the blur Continue causes.
+  resolvedFor.value = text
 }
 
 /**

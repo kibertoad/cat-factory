@@ -80,8 +80,6 @@ export function documentSourceController(): Hono<AppEnv> {
   // - connect/disconnect write and clear the per-workspace source CREDENTIAL, which is integration
   //   management by definition. Gating at the mount rather than per-handler keeps the refusal ahead
   //   of body validation, so a member is refused whether or not their payload is well-formed and
-  //   never learns which sources this deployment configured; Gating at the mount rather than per-handler keeps the refusal ahead
-  //   of body validation, so a member is refused whether or not their payload is well-formed and
   //   never learns which sources this deployment configured;
   // - the per-DocKind template / exemplar tags are workspace-wide authoring CONFIG, not one task's
   //   context. One tag decides what EVERY doc run in the board writes from, the same blast radius

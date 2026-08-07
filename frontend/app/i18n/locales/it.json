@@ -3966,6 +3966,7 @@
       "frameCount": "{count} frame | {count} frame",
       "moduleCount": "{count} modulo | {count} moduli",
       "taskCount": "{count} attività | {count} attività",
+      "reusedCount": "{count} modulo riutilizzato | {count} moduli riutilizzati",
       "intoService": "dentro il servizio scelto",
       "target": {
         "label": "Aggiungi al servizio",

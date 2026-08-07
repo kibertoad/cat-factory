@@ -4351,6 +4351,7 @@
       "frameCount": "{count} ramka | {count} ramki | {count} ramek",
       "moduleCount": "{count} moduł | {count} moduły | {count} modułów",
       "taskCount": "{count} zadanie | {count} zadania | {count} zadań",
+      "reusedCount": "ponownie użyto {count} modułu | ponownie użyto {count} modułów | ponownie użyto {count} modułów",
       "intoService": "wewnątrz wybranej usługi",
       "target": {
         "label": "Dodaj do usługi",

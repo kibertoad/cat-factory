@@ -4488,6 +4488,7 @@
       "frameCount": "{count} frame | {count} frames",
       "moduleCount": "{count} module | {count} modules",
       "taskCount": "{count} task | {count} tasks",
+      "reusedCount": "{count} module reused | {count} modules reused",
       "intoService": "inside the selected service",
       "target": {
         "label": "Add to service",

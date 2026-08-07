@@ -4351,6 +4351,7 @@
       "frameCount": "{count} çerçeve | {count} çerçeve",
       "moduleCount": "{count} modül | {count} modül",
       "taskCount": "{count} görev | {count} görev",
+      "reusedCount": "{count} modül yeniden kullanıldı | {count} modül yeniden kullanıldı",
       "intoService": "seçilen servisin içinde",
       "target": {
         "label": "Servise ekle",

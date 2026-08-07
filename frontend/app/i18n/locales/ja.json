@@ -4351,6 +4351,7 @@
       "frameCount": "{count} フレーム | {count} フレーム",
       "moduleCount": "{count} モジュール | {count} モジュール",
       "taskCount": "{count} タスク | {count} タスク",
+      "reusedCount": "{count} 個のモジュールを再利用 | {count} 個のモジュールを再利用",
       "intoService": "選択したサービスの中に",
       "target": {
         "label": "サービスに追加",

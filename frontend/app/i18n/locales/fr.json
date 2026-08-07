@@ -4351,6 +4351,7 @@
       "frameCount": "{count} cadre | {count} cadres",
       "moduleCount": "{count} module | {count} modules",
       "taskCount": "{count} tâche | {count} tâches",
+      "reusedCount": "{count} module réutilisé | {count} modules réutilisés",
       "intoService": "dans le service choisi",
       "target": {
         "label": "Ajouter au service",

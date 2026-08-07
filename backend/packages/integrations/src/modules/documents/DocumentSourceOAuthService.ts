@@ -166,7 +166,16 @@ export class DocumentSourceOAuthService {
    * source whose refresh ROTATES cannot be added without revisiting this.
    */
   async renewIfExpiring(record: DocumentConnectionRecord): Promise<DocumentCredentials | null> {
-    const expiresAt = Number(record.credentials[DOCUMENT_OAUTH_CREDENTIAL_KEYS.expiresAt] ?? '')
+    // The ABSENCE of a deadline is tested BEFORE the value is converted, because `Number('')` is
+    // 0 rather than `NaN`: reading the two together makes every bag that never recorded an expiry
+    // (a typed credential, and an OAuth grant whose token response stated no `expires_in`) look
+    // like one that expired at the epoch. That is not a stale reading that corrects itself — it is
+    // permanent, and it lands on the resolution path of EVERY read: a PAT connection would warn
+    // "grant expired and cannot be renewed" on each one, and a lifetime-less grant would spend a
+    // refresh round trip plus a write on each one, forever.
+    const deadline = record.credentials[DOCUMENT_OAUTH_CREDENTIAL_KEYS.expiresAt]?.trim()
+    if (!deadline) return null
+    const expiresAt = Number(deadline)
     if (!Number.isFinite(expiresAt)) return null
     if (expiresAt - EXPIRY_SKEW_MS > this.deps.clock.now()) return null
 

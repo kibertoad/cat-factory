@@ -335,6 +335,7 @@ export type {
   RefreshedDocument,
 } from './document-source.js'
 export {
+  assertDocumentSourceOAuthAgrees,
   DEPLOYMENT_DOCUMENT_CACHE_GROUP,
   DOCUMENT_OAUTH_CREDENTIAL_KEYS,
   documentOAuthAccessToken,

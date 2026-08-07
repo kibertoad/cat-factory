@@ -39,6 +39,28 @@ export interface SpawnResult {
   frames: number
   modules: number
   tasks: number
+  /**
+   * Planned modules whose tasks went into a module the frame ALREADY had, rather than into a new
+   * one (see {@link DocumentLinkService.spawnInto}).
+   *
+   * Reported rather than folded into `modules`, because the two answer different questions and
+   * only one of them is about what changed. Without it a spawn that reused every module reports
+   * "0 modules · 12 tasks" against a preview that showed three, which reads as three modules
+   * having failed; and counting a reuse as a creation would claim a write that never happened.
+   */
+  reusedModules: number
+}
+
+/**
+ * The key a planned module name is matched against an existing one by.
+ *
+ * Case- and whitespace-insensitive on purpose: the planner is TOLD to reuse the names it was
+ * shown, but the thing being asked is a language model, and "Checkout" against "checkout" is a
+ * duplicate module on the board either way. Matching exactly would make the reuse work in testing
+ * and fail on the drift it exists to absorb.
+ */
+function moduleKey(name: string): string {
+  return name.trim().toLowerCase()
 }
 
 export class DocumentLinkService {
@@ -91,7 +113,7 @@ export class DocumentLinkService {
     editor: BlockEditAuthority,
     frameId?: string,
   ): Promise<SpawnResult> {
-    const result: SpawnResult = { frames: 0, modules: 0, tasks: 0 }
+    const result: SpawnResult = { frames: 0, modules: 0, tasks: 0, reusedModules: 0 }
 
     if (frameId) {
       const target = assertFound(
@@ -102,8 +124,18 @@ export class DocumentLinkService {
       if (target.level !== 'frame') {
         throw new ValidationError('Document structure can only be spawned into a service frame')
       }
+      // The frame's existing modules, read ONCE for the whole spawn and indexed by name. This is
+      // the write half of what `resolvePlanTarget` showed the planner: the prompt asks the model to
+      // reuse the names it was given, and until this existed nothing acted on the answer, so a plan
+      // that obeyed produced a second "Checkout" beside the first. A model's cooperation is not an
+      // implementation — the platform has to COMPUTE the reuse.
+      const existing = new Map(
+        (await this.deps.blockRepository.listByWorkspace(workspaceId))
+          .filter((block) => block.parentId === frameId && block.level === 'module')
+          .map((block) => [moduleKey(block.title), block.id]),
+      )
       for (const frame of plan.frames) {
-        await this.spawnInto(workspaceId, target.id, frame, result, editor)
+        await this.spawnInto(workspaceId, target.id, frame, result, editor, existing)
       }
       return result
     }
@@ -122,29 +154,50 @@ export class DocumentLinkService {
         { title: frame.title, ...(frame.description ? { description: frame.description } : {}) },
         editor,
       )
-      await this.spawnInto(workspaceId, created.id, frame, result, editor)
+      // A frame created a line ago holds nothing, so its index starts empty; it still travels,
+      // because two planned modules within ONE frame can name the same thing.
+      await this.spawnInto(workspaceId, created.id, frame, result, editor, new Map())
     }
     return result
   }
 
-  /** Add a planned frame's modules and tasks inside an existing frame. */
+  /**
+   * Add a planned frame's modules and tasks inside an existing frame.
+   *
+   * `modulesByName` is the frame's modules indexed by {@link moduleKey}, and it is both the input
+   * and the running record: a module created here is registered in it, so two planned modules that
+   * name the same thing converge on one block exactly as a planned name matching a pre-existing
+   * module does. A freshly created frame passes an empty map and every module is new.
+   */
   private async spawnInto(
     workspaceId: string,
     frameId: string,
     frame: PlanFrame,
     result: SpawnResult,
     editor: BlockEditAuthority,
+    modulesByName: Map<string, string>,
   ): Promise<void> {
     for (const task of frame.tasks) {
       await this.addTask(workspaceId, frameId, task, result, editor)
     }
     for (const planModule of frame.modules) {
-      const module = await this.deps.boardService.addModule(workspaceId, frameId, {
-        name: planModule.name,
-      })
-      result.modules += 1
+      const key = moduleKey(planModule.name)
+      // A module with nothing but whitespace for a name is not a module to reuse OR to key on: it
+      // would collapse every such module onto one block. Treated as its own new module each time.
+      const reused = key ? modulesByName.get(key) : undefined
+      let moduleId = reused
+      if (moduleId === undefined) {
+        const created = await this.deps.boardService.addModule(workspaceId, frameId, {
+          name: planModule.name,
+        })
+        moduleId = created.id
+        result.modules += 1
+        if (key) modulesByName.set(key, moduleId)
+      } else {
+        result.reusedModules += 1
+      }
       for (const task of planModule.tasks) {
-        await this.addTask(workspaceId, module.id, task, result, editor)
+        await this.addTask(workspaceId, moduleId, task, result, editor)
       }
     }
   }

@@ -46,20 +46,40 @@ watch(
   },
 )
 
+/**
+ * Which re-plan is the current one. Each request supersedes the one before it, and a superseded
+ * response is DROPPED rather than rendered.
+ *
+ * Two requests are genuinely in flight whenever the target is switched while a plan is still
+ * loading, and an LLM plan takes long enough for that to be ordinary rather than a stress case.
+ * The responses can land in either order, so without this the OLDER frame's plan can overwrite the
+ * newer one and sit under a selection it was not authored for: the preview then disagrees with the
+ * write, which re-plans against the target the user actually picked. That disagreement is the one
+ * thing the target-aware path exists to prevent, and it is silent, because a plan for the wrong
+ * service looks exactly like a plan.
+ */
+let planRequest = 0
+
 // The preview re-plans whenever the TARGET moves, not only when the document does: a plan
 // authored for one service says nothing about another, and leaving the previous frame's modules
 // on screen under a newly-picked service is the misreading this whole variant exists to prevent.
 watch(
   [() => ui.spawnPreview?.externalId, targetFrameId],
   async ([externalId]) => {
+    const request = ++planRequest
     plan.value = null
     const preview = ui.spawnPreview
     if (!externalId || !preview) return
     if (needsTarget.value && !targetFrameId.value) return
     loadingPlan.value = true
     try {
-      plan.value = await documents.plan(preview.source, externalId, targetFrameId.value)
+      const planned = await documents.plan(preview.source, externalId, targetFrameId.value)
+      if (request !== planRequest) return
+      plan.value = planned
     } catch (e) {
+      // A superseded request's failure is not this selection's failure: toasting it would report an
+      // outage against a target whose own plan may be loading fine.
+      if (request !== planRequest) return
       toast.add({
         title: t('documents.spawn.planFailed'),
         description: e instanceof Error ? e.message : String(e),
@@ -67,7 +87,9 @@ watch(
         color: 'error',
       })
     } finally {
-      loadingPlan.value = false
+      // Only the current request may clear the spinner; an older one settling first would report
+      // "loaded" over a plan still on its way.
+      if (request === planRequest) loadingPlan.value = false
     }
   },
   { immediate: true },
@@ -79,13 +101,19 @@ async function spawn() {
   spawning.value = true
   try {
     const result = await documents.spawn(preview.source, preview.externalId, targetFrameId.value)
+    const summary = t('documents.spawn.summary', {
+      frames: t('documents.spawn.frameCount', { count: result.frames }, result.frames),
+      modules: t('documents.spawn.moduleCount', { count: result.modules }, result.modules),
+      tasks: t('documents.spawn.taskCount', { count: result.tasks }, result.tasks),
+    })
     toast.add({
       title: t('documents.spawn.spawned'),
-      description: t('documents.spawn.summary', {
-        frames: t('documents.spawn.frameCount', { count: result.frames }, result.frames),
-        modules: t('documents.spawn.moduleCount', { count: result.modules }, result.modules),
-        tasks: t('documents.spawn.taskCount', { count: result.tasks }, result.tasks),
-      }),
+      // A reused module is stated only when there was one, and never folded into the created
+      // count: a spawn into a service that already had every planned module otherwise reports
+      // "0 modules" beside its tasks, which reads as the modules having failed.
+      description: result.reusedModules
+        ? `${summary} · ${t('documents.spawn.reusedCount', { count: result.reusedModules }, result.reusedModules)}`
+        : summary,
       icon: 'i-lucide-check',
       color: 'success',
     })
