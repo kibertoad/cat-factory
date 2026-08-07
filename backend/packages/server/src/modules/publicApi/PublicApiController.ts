@@ -126,6 +126,9 @@ function toPublicJob(execution: ExecutionInstance): PublicJob {
     jobId: execution.id,
     status,
     pipelineId: execution.pipelineId,
+    // Pinned at admission from the starting key, so it survives that key's revocation and costs
+    // this projection no lookup (`toPublicJob` also renders every row of a paged list).
+    externalIdentity: execution.initiatedByExternalIdentity ?? null,
     // The run's own creation stamp — the SAME value the list's keyset cursor is minted from
     // (`jobSortKey`), so a caller can page and correlate on one consistent number.
     createdAt: jobSortKey(execution),
@@ -190,6 +193,9 @@ function toPublicRun(execution: ExecutionInstance, block: Block): PublicRun {
           }
         : null,
     })),
+    // Who the run was started for, as pinned at admission; null for a run the app, a schedule or
+    // an identity-less key started.
+    externalIdentity: execution.initiatedByExternalIdentity ?? null,
     pullRequest: pr ? { url: pr.url, branch: pr.branch ?? null } : null,
     error:
       execution.status === 'failed'
@@ -456,6 +462,9 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     try {
       execution = await container.executionService.start(auth.workspaceId, block.id, pipelineId, {
         initiatedBy: null,
+        // No `usr_*` initiator, but the KEY may still name who it acts for. Pinned on the run so
+        // a caller minting one key per person can map this job back to that person later.
+        initiatedByExternalIdentity: auth.externalIdentity,
         intakeOrigin: 'public-api',
       })
     } catch (err) {
@@ -901,6 +910,8 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
     // abuse backstop for board starts — the analogue of the jobs surface's active-run cap.
     await container.executionService.start(auth.workspaceId, taskId, pipelineId, {
       initiatedBy: null,
+      // As on the jobs surface: no user, but the key can still name who it started this for.
+      initiatedByExternalIdentity: auth.externalIdentity,
       intakeOrigin: 'public-api',
     })
     // Re-read the task so the caller gets its AUTHORITATIVE post-start projection (status,

@@ -2,14 +2,13 @@ import {
   createPublicKeyContract,
   listPublicKeysContract,
   revokePublicKeyContract,
-  type PublicApiKey,
 } from '@cat-factory/contracts'
-import type { PublicApiKeyRecord } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { requireCapability } from '../../http/guards.js'
+import { publicApiKeyToWire } from './keyProjection.js'
 import { authorize, refuse } from './publicApiAuth.js'
 
 // HEADLESS key provisioning (`GET|POST|DELETE /api/v1/keys`): the external counterpart of the
@@ -38,22 +37,6 @@ import { authorize, refuse } from './publicApiAuth.js'
 // What this surface still cannot do, deliberately: mint an `admin` key (that needs a human
 // session and the `secrets.manage` workspace permission), or reach another workspace: every
 // route is bound to the calling key's own.
-
-/** Project a stored record onto the secret-free wire type. */
-function publicApiKeyToWire(record: PublicApiKeyRecord): PublicApiKey {
-  return {
-    id: record.id,
-    accountId: record.accountId,
-    workspaceId: record.workspaceId,
-    label: record.label,
-    scope: record.scope,
-    createdByUserId: record.createdByUserId,
-    createdByKeyId: record.createdByKeyId,
-    createdAt: record.createdAt,
-    lastUsedAt: record.lastUsedAt,
-    revokedAt: record.revokedAt,
-  }
-}
 
 /**
  * The key store. `authorize` has already proven it is wired (it resolves the caller's key
@@ -86,7 +69,7 @@ export function publicKeyController(): Hono<AppEnv> {
     const gate = await authorize(c, createPublicKeyContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const keys = keyStore(c)
-    const { label, scope } = c.req.valid('json')
+    const { label, scope, externalIdentity } = c.req.valid('json')
     // The account and workspace come from the KEY, never from the body: this surface mints into
     // the caller's own workspace and has no vocabulary for another one.
     const { record, secret } = await keys.issue(
@@ -98,6 +81,11 @@ export function publicKeyController(): Hono<AppEnv> {
         // recorded, and that is also what the revocation cascade follows.
         createdByUserId: null,
         createdByKeyId: gate.auth.keyId,
+        // Whoever the caller says this key acts for, stored verbatim and never resolved. It is
+        // NOT inherited from the provisioning key: a provisioner mints for many identities, so
+        // defaulting to its own would attribute every minted key (and every run they start) to
+        // the integration itself, which is exactly the answer this field exists to improve on.
+        externalIdentity: externalIdentity ?? null,
       },
       label,
       scope ?? DEFAULT_MINTED_SCOPE,

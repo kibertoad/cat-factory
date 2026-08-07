@@ -175,7 +175,14 @@ const API_PREFIX = '/api/v1'
 // 1.25.0, then 1.26.0, then 1.27.0, each published by main while the branch was in flight, and not
 // one of them announced itself on the VERSION line, which auto-merged clean to a number main had
 // already used every time. Re-read this line here, not there, after every merge.
-const API_VERSION = '1.28.0'
+//
+// 1.29.0: `POST /api/v1/keys` accepts an opaque `externalIdentity`, the identity a provisioner is
+// minting a key FOR, echoed on the key resource, on `GET /api/v1/me`, and on both run projections
+// (`publicRun`, `publicJob`) as the identity the run was started for. Additive on every axis: one
+// optional request field, one nullable response field on four projections, and `null` is what
+// every run and key that predates it correctly reports. Re-read this line after any merge rather
+// than trusting that the VERSION auto-merged clean.
+const API_VERSION = '1.29.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

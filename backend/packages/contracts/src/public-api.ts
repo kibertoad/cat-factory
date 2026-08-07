@@ -88,12 +88,28 @@ export const publicJobResultSchema = v.object({
 })
 export type PublicJobResult = v.InferOutput<typeof publicJobResultSchema>
 
+/**
+ * Who a run was started FOR, as the provisioner of the starting key named it
+ * (`externalIdentity` on the key resource). `null` is a real and common state: a run started from
+ * the app, by a schedule, or by a key minted with no identity has none, and the platform never
+ * guesses one.
+ *
+ * PINNED onto the run when it is admitted, never resolved from the key at read time. Three things
+ * follow, and each of them is why: the value survives its key being revoked (which is what an
+ * integration does when a person leaves, precisely when the mapping is still wanted); reading a
+ * run costs no key lookup, so a page of runs is not a page of key reads; and a run keeps naming
+ * the identity that STARTED it rather than whatever a re-minted key says today.
+ */
+export const publicRunExternalIdentitySchema = v.nullable(v.string())
+
 /** A public job resource — the external view of a headless pipeline run. */
 export const publicJobSchema = v.object({
   jobId: v.string(),
   status: publicJobStatusSchema,
   pipelineId: v.string(),
   createdAt: v.number(),
+  /** Who this run was started for ({@link publicRunExternalIdentitySchema}). */
+  externalIdentity: publicRunExternalIdentitySchema,
   /** Present once the run reaches `succeeded`; null while running or on failure. */
   result: v.nullable(publicJobResultSchema),
   /** Present when `status` is `failed`; null otherwise. */
@@ -489,6 +505,8 @@ export const publicRunSchema = v.object({
   /** Index of the step the run is currently on. */
   currentStep: v.number(),
   steps: v.array(publicRunStepSchema),
+  /** Who this run was started for ({@link publicRunExternalIdentitySchema}). */
+  externalIdentity: publicRunExternalIdentitySchema,
   /** The PR the run opened, once one exists; null otherwise. */
   pullRequest: v.nullable(v.object({ url: v.string(), branch: v.nullable(v.string()) })),
   /** Present when `status` is `failed` (the failure kind + message); null otherwise. */
@@ -648,6 +666,13 @@ export const publicIdentitySchema = v.object({
   scope: publicApiScopeSchema,
   /** The label the key was minted with, so a caller can log which credential it is running as. */
   label: v.string(),
+  /**
+   * Who this key acts for, as whoever provisioned it named them; `null` when it was minted with
+   * no identity. Answered from the key on THIS request, so a provisioning integration that
+   * hands a credential to a subsystem can have that subsystem discover which identity it holds
+   * rather than being told twice.
+   */
+  externalIdentity: v.nullable(v.string()),
   /** When the key was minted (epoch ms). */
   createdAt: v.number(),
 })

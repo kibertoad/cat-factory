@@ -49,6 +49,30 @@ export const PUBLIC_API_SCOPES = ['read', 'write', 'decide', 'admin'] as const
 export const publicApiScopeSchema = v.picklist(PUBLIC_API_SCOPES)
 export type PublicApiScope = v.InferOutput<typeof publicApiScopeSchema>
 
+/**
+ * An identifier the PROVISIONER attaches to a key it mints headlessly: who, on ITS side, the
+ * credential acts for (an OS user id, a tenant slug, a service account name).
+ *
+ * Opaque to the platform in the strongest sense: never parsed, never resolved against a user,
+ * never an authorization input. What a key may do is its own {@link publicApiScopeSchema}, and
+ * what a run may do is the policy the workspace authored. This value exists so an integration
+ * that mints one key per person can map a RUN back to that person without keeping a keyId table
+ * of its own, which is the whole cost it otherwise pays for real per-user attribution.
+ *
+ * Bounded and control-character-free rather than a bare string: it is echoed on the key resource,
+ * on run projections and (per key) on `GET /api/v1/me`, so a value carrying a newline or a
+ * terminator would be an integrator's own text breaking a line-oriented log or a table row on
+ * whichever surface renders it next.
+ */
+export const publicApiExternalIdentitySchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(1),
+  v.maxLength(200),
+  v.regex(/^[^\p{C}]+$/u, 'externalIdentity must not contain control characters'),
+)
+export type PublicApiExternalIdentity = v.InferOutput<typeof publicApiExternalIdentitySchema>
+
 /** One public-API key as exposed to clients — metadata only, never the secret. */
 export const publicApiKeySchema = v.object({
   /** `pak_*` — also the non-secret lookup id embedded in the raw key. */
@@ -69,6 +93,13 @@ export const publicApiKeySchema = v.object({
    * provisioning key cannot outlive its own revocation through the keys it left behind.
    */
   createdByKeyId: v.nullable(v.string()),
+  /**
+   * Who the provisioner said this key acts for, on its own side
+   * ({@link publicApiExternalIdentitySchema}); `null` for a key minted in the app and for one
+   * provisioned without it. Set only at mint time and never edited: a key IS one identity, so a
+   * value that could move would retro-attribute every run it already started.
+   */
+  externalIdentity: v.nullable(v.string()),
   createdAt: v.number(),
   lastUsedAt: v.nullable(v.number()),
   /** Set when the key was revoked (tombstone); a revoked key never authenticates. */
@@ -135,17 +166,23 @@ const _mintGateIsTopRung: TopScopeRung = HEADLESS_KEY_MINT_SCOPE
 
 /**
  * Mint a key HEADLESSLY, over `/api/v1`: the same body as the session-authed create, minus the
- * rung it may not reach.
+ * rung it may not reach, plus the identity the provisioner is minting it FOR.
  *
  * `scope` carries no schema-level DEFAULT where its session-authed twin does, deliberately: this
  * body ships in four generated SDKs, where a default reads as "always present on the way out" and
  * an omitted-optional as "may be absent on the way in", and the two cannot both be true of one
  * field. The omitted-scope behaviour (`write`, the same safe middle rung) is applied by the
  * handler and stated on the endpoint's docs instead.
+ *
+ * `externalIdentity` is offered HERE and not on the session-authed create, because the two mints
+ * answer "who is this key" differently: a person minting in the app is already recorded as
+ * `createdByUserId`, an account the platform can resolve. This field is for the identity the
+ * platform has no account for, which only a provisioning integration can name.
  */
 export const createHeadlessPublicApiKeySchema = v.object({
   label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
   scope: v.optional(v.picklist([...HEADLESS_MINTABLE_SCOPES])),
+  externalIdentity: v.optional(publicApiExternalIdentitySchema),
 })
 export type CreateHeadlessPublicApiKeyInput = v.InferOutput<typeof createHeadlessPublicApiKeySchema>
 

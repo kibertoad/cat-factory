@@ -401,6 +401,32 @@ describe('rowToExecution', () => {
     expect(rowToExecution({ ...base, detail }).initiatedByRole).toBeUndefined()
   })
 
+  it('round-trips who the run was started for, and stores nothing when nobody was named', () => {
+    // Pinned at admission from the starting key, read back on every projection of the run. It
+    // rides the same JSON as the pair above and would fail the same silent way: a run that could
+    // not say who it was for reads exactly like one an anonymous integration started.
+    const pinned = { ...rowToExecution(base), initiatedByExternalIdentity: 'os-user:ada' }
+    const back = rowToExecution({ ...base, detail: executionToDetail(pinned) })
+    expect(back.initiatedByExternalIdentity).toBe('os-user:ada')
+
+    const stored = JSON.parse(executionToDetail(rowToExecution(base))) as Record<string, unknown>
+    expect(stored.initiatedByExternalIdentity).toBeUndefined()
+    expect(rowToExecution(base).initiatedByExternalIdentity).toBeUndefined()
+  })
+
+  it('reads an unusable stored identity as nobody rather than as a name', () => {
+    // Opaque, so the only decode rule is "a non-empty string". Unlike `mode` there is nothing to
+    // fail closed about: the platform never acts on this value, so an unreadable one names nobody
+    // and the empty string must not become an identity that renders as blank.
+    for (const bad of ['', 0, null, {}, []]) {
+      const detail = JSON.stringify({
+        ...JSON.parse(base.detail),
+        initiatedByExternalIdentity: bad,
+      })
+      expect(rowToExecution({ ...base, detail }).initiatedByExternalIdentity).toBeUndefined()
+    }
+  })
+
   it('FAILS CLOSED on an unreadable mode instead of dropping it to live', () => {
     // The asymmetry with the role above is deliberate. A mode that is present-but-unreadable
     // means one was settled and we cannot tell which; reading it as `live` would hand the run

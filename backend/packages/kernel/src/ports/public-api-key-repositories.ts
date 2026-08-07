@@ -41,6 +41,17 @@ export interface PublicApiKeyRecord {
    * still never an authorization input: what a key may do is its own `scope`, nothing else.
    */
   createdByKeyId: string | null
+  /**
+   * Who this key acts for on the PROVISIONER's side (an OS user id, a tenant slug), supplied at a
+   * headless mint and opaque to the platform: never parsed, never resolved against a user, never
+   * an authorization input. `null` for a key minted in the app, one provisioned without it, and
+   * every row predating the column.
+   *
+   * Written once and never updated. A key IS one identity: a value that could move would
+   * retro-attribute every run the key already started, and those runs pinned their copy at
+   * admission precisely so the answer stays the one that was true then.
+   */
+  externalIdentity: string | null
   createdAt: number
   /** When the key last authenticated a call (null = never used). */
   lastUsedAt: number | null

@@ -1,6 +1,6 @@
 # Cloudflare OS Gatekeeper integration
 
-Status: in progress. Slices 1 and 2 have landed; slices 3 and 4 are open.
+Status: in progress. Slices 1, 2 and 3 have landed; slice 4 is open.
 
 ## Goal and rationale
 
@@ -117,11 +117,31 @@ statement rather than a read-then-write pair). D1 gets it from one conditional u
 needs a transaction-scoped advisory lock per workspace. The conformance suite races ten creates for
 four slots, which is the only shape that can see the difference.
 
-### 3. Key provisioning metadata
+### 3. Key provisioning metadata (landed)
 
 An opaque `externalIdentity` on `POST /api/v1/keys`, echoed on the key resource and on run
 detail, so an OS deployment can map a run back to the person whose per-user key started it
-without keeping its own keyId table. Additive field, both runtimes' key rows, changeset.
+without keeping its own keyId table. Shipped as an additive field on both runtimes' key rows
+(`external_identity`, D1 0086 ⇄ Drizzle), echoed on the key resource, on `GET /api/v1/me` and on
+BOTH run projections (`publicRun`, `publicJob`), OpenAPI 1.29.0.
+
+Three decisions worth carrying forward:
+
+- **The run PINS its own copy at admission; nothing joins back to the key.** An integration
+  revokes a per-user key the day that person leaves, which is exactly when the mapping is still
+  wanted, so a resolved read would answer `null` from then on. Pinning also keeps a page of runs
+  from being a page of key reads, and matches what the run already does with `initiatedByRole`
+  and `mode`. It rides `agent_runs.detail`, so the conformance case asserts the identity survives
+  BOTH the store round-trip and the key's revocation.
+- **A retry keeps the identity, and never re-takes it from whoever drove the re-drive.** Same
+  work, same requester: re-pinning would attribute the run to the operator who pressed retry, or
+  (from a sweeper, which presents no key) to nobody.
+- **It is never inherited from the provisioning key.** A provisioner mints for many identities, so
+  the obvious default would name the integration itself on every run it starts for anyone, which
+  is the answer this field exists to improve on.
+
+Offered on the headless mint only. The session-authed create already records `createdByUserId`,
+an account the platform can resolve; this field is for the identity it cannot.
 
 **Rejected: an `onBehalfOf` label on the start endpoints.** Attribution by assertion with no
 enforcement behind it; per-user keys already give the real thing. Do not re-propose.
@@ -206,7 +226,7 @@ Do not re-propose without a consumer that pulls rather than copies.
 - [x] Slice 1: scope as data, `x-min-scope`, `@cat-factory/gatekeeper-bindings`
       ([#1804](https://github.com/kibertoad/cat-factory/pull/1804))
 - [x] Slice 2: outbound webhook collection (both runtimes + conformance + SDK surface)
-- [ ] Slice 3: `externalIdentity` on key provisioning, echoed on run detail
+- [x] Slice 3: `externalIdentity` on key provisioning, echoed on run detail
 - [ ] Slice 4: reference Gatekeeper Worker (`deploy/gatekeeper`, own CI lane, unpublished)
 
 ## Gotchas the pilot surfaced
