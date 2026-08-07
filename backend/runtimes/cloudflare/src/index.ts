@@ -69,10 +69,8 @@ import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
 import { runPlatformMetricsSweep } from './infrastructure/observability/platformMetrics'
 import { flushOperationalMetricsForIsolate } from './infrastructure/observability/operationalFlush'
-import {
-  flushOtelLogsForIsolate,
-  installOtelLogSink,
-} from './infrastructure/observability/logExport'
+import { flushOtelLogsForIsolate } from './infrastructure/observability/logExport'
+import { applyLogSettings } from './infrastructure/observability/logSettings'
 import { loadOtelConfig } from './infrastructure/config/otel'
 import { SweepTick } from './infrastructure/observability/cronSweep'
 import {
@@ -99,8 +97,6 @@ import { D1KeyFingerprintStore } from './infrastructure/repositories/D1KeyFinger
 import {
   WebCryptoSecretCipher,
   checkKeyFingerprint,
-  parseLogLevel,
-  setLogLevel,
   sweepKeyDriftAndRaise,
 } from '@cat-factory/server'
 
@@ -822,21 +818,6 @@ async function handleScheduled(
   // tick drained an empty collector and left its own counters waiting for a next tick in the
   // same isolate — which for the daily retention cron is a tick that never comes.
   flushTelemetryAfter(tick.settled(), env, ctx, clock)
-}
-
-/**
- * Apply this isolate's logging settings from `env`: the emit threshold, and the opt-in OTLP
- * log sink the lines are copied to. Every entry point calls it FIRST, because a fresh isolate
- * can start on any of them and both settings are module state inside `@cat-factory/server`.
- * Idempotent and cheap (an env parse plus a null check), so it is not once-guarded.
- *
- * Reads `loadOtelConfig` rather than the whole `loadConfig`: this runs before the handler, and
- * a deployment whose config validation fails must still serve its misconfiguration fallback
- * with logging intact.
- */
-function applyLogSettings(env: Env): void {
-  setLogLevel(parseLogLevel(env.LOG_LEVEL))
-  installOtelLogSink(loadOtelConfig(env))
 }
 
 /**
