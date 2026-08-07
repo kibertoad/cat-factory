@@ -1520,6 +1520,15 @@
           "oauthTokenFailed": "was not available: the connection stopped producing an access token.",
           "overBudget": "was not available: this agent declares more tool servers than one run carries.",
           "unknown": "was not available ({reason})."
+        },
+        "remedy": {
+          "harnessUnsupported": "Run the step on an agent CLI that speaks MCP, or widen the server's harness list.",
+          "transportUnsupported": "Declare a stdio server for it, or run the step on an agent CLI that reaches HTTP servers.",
+          "missingSecret": "Set the credential it names under capability credentials, in the Infrastructure window.",
+          "reservedSecret": "Change the declaration to ask for another key; setting that variable is exactly what will not help.",
+          "oauthNotConnected": "Connect this board to it from the Infrastructure window.",
+          "oauthTokenFailed": "Reconnect it from the Infrastructure window, or wait out the vendor's outage.",
+          "overBudget": "Trim what the agent declares, so one run can carry all of it."
         }
       },
       "adherence": {

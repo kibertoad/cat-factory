@@ -1429,6 +1429,15 @@
           "oauthTokenFailed": "no estuvo disponible: la conexión dejó de producir un token de acceso.",
           "overBudget": "no estuvo disponible: este agente declara más servidores de los que lleva una ejecución.",
           "unknown": "no estuvo disponible ({reason})."
+        },
+        "remedy": {
+          "harnessUnsupported": "Ejecuta el paso en una CLI de agente que hable MCP, o amplía la lista de harnesses del servidor.",
+          "transportUnsupported": "Declara un servidor stdio para él, o ejecuta el paso en una CLI de agente que alcance servidores HTTP.",
+          "missingSecret": "Configura la credencial que nombra en las credenciales de capacidades, en la ventana de Infraestructura.",
+          "reservedSecret": "Cambia la declaración para que pida otra clave; definir esa variable es justo lo que no ayudará.",
+          "oauthNotConnected": "Conecta este tablero con él desde la ventana de Infraestructura.",
+          "oauthTokenFailed": "Vuelve a conectarlo desde la ventana de Infraestructura, o espera a que pase la caída del proveedor.",
+          "overBudget": "Recorta lo que declara el agente, para que una ejecución pueda llevarlo todo."
         }
       },
       "adherence": {

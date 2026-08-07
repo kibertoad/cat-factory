@@ -1998,6 +1998,15 @@
           "oauthTokenFailed": "non era disponibile: la connessione ha smesso di produrre un token di accesso.",
           "overBudget": "non era disponibile: questo agente dichiara più server di strumenti di quanti ne porti una singola esecuzione.",
           "unknown": "non era disponibile ({reason})."
+        },
+        "remedy": {
+          "harnessUnsupported": "Esegui il passo su una CLI dell'agente che parla MCP, oppure amplia l'elenco di harness del server.",
+          "transportUnsupported": "Dichiara un server stdio al suo posto, oppure esegui il passo su una CLI dell'agente che raggiunge i server HTTP.",
+          "missingSecret": "Imposta la credenziale che indica nelle credenziali delle capability, dalla finestra Infrastruttura.",
+          "reservedSecret": "Cambia la dichiarazione perché chieda un'altra chiave; impostare quella variabile è proprio ciò che non aiuterà.",
+          "oauthNotConnected": "Collega questa lavagna al server dalla finestra Infrastruttura.",
+          "oauthTokenFailed": "Ricollegalo dalla finestra Infrastruttura, oppure attendi la fine del disservizio del fornitore.",
+          "overBudget": "Riduci ciò che l'agente dichiara, così una singola esecuzione può portarlo tutto."
         }
       },
       "adherence": {
