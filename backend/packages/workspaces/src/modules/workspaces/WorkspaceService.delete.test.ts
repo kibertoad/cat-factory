@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createRecordingLogger } from '@cat-factory/kernel'
+import {
+  FINAL_SPEND_FOLD_BUDGET_MS,
+  SPEND_DAY_ROLLUP_LOOKBACK_MS,
+  createRecordingLogger,
+} from '@cat-factory/kernel'
 import type {
   BinaryArtifactStore,
   GroupCacheHandle,
@@ -141,8 +145,10 @@ const LEDGER_MS = 395 * DAY
 
 function spendFoldDeps(
   rollup: {
-    watermark?: number | null
+    watermark?: number | null | (() => Promise<number | null>)
     fold?: (workspaceId: string, from: number, to: number) => Promise<number>
+    /** Wall-clock ms each fold call "costs", so the walk's budget can be driven deterministically. */
+    costPerFoldMs?: number
   },
   order?: string[],
 ) {
@@ -152,18 +158,25 @@ function spendFoldDeps(
     return Promise.resolve()
   })
   const logger = createRecordingLogger()
+  // A controllable clock: the fold walk is budgeted against elapsed wall-clock, and a test that
+  // relied on real time to exhaust that budget would be exactly the flaky suite the repo bans.
+  let now = NOW
   const service = new WorkspaceService({
     workspaceRepository: fakeWorkspaceRepository(deleteSpy),
     blockRepository: {} as never,
     pipelineRepository: {} as never,
     executionRepository: {} as never,
     idGenerator: { next: () => 'x' },
-    clock: { now: () => NOW },
+    clock: { now: () => now },
     spendRollupRepository: {
-      spendRollupWatermark: () => Promise.resolve(rollup.watermark ?? null),
+      spendRollupWatermark: () =>
+        typeof rollup.watermark === 'function'
+          ? rollup.watermark()
+          : Promise.resolve(rollup.watermark ?? null),
       rollupWorkspaceSpendDays: (workspaceId, from, to) => {
         order?.push('fold')
         folds.push({ workspaceId, from, to })
+        now += rollup.costPerFoldMs ?? 0
         return rollup.fold?.(workspaceId, from, to) ?? Promise.resolve(1)
       },
     },
@@ -173,7 +186,11 @@ function spendFoldDeps(
   return { service, deleteSpy, logger, folds }
 }
 
-describe('WorkspaceService.delete — final durable spend fold', () => {
+/** The single message every "spend went with the board" warning shares. */
+const unfoldedWarns = (logger: ReturnType<typeof createRecordingLogger>) =>
+  logger.lines.filter((l) => l.level === 'warn' && /remaining spend/.test(l.msg))
+
+describe('WorkspaceService.delete: final durable spend fold', () => {
   it('folds the board’s un-rolled days BEFORE the cascade takes the ledger rows', async () => {
     // Ordering is the whole property. Afterwards `token_usage` is gone and the fold reads
     // nothing, so the same call would freeze an empty board rather than its last few days.
@@ -190,9 +207,82 @@ describe('WorkspaceService.delete — final durable spend fold', () => {
     const { service, folds } = spendFoldDeps({ watermark: NOW - 70 * DAY })
     await service.delete(WS.id)
     expect(folds.length).toBeGreaterThan(1)
-    expect(folds[0]?.from).toBe(NOW - 70 * DAY)
-    expect(folds.at(-1)?.to).toBe(NOW)
-    for (const [i, fold] of folds.slice(1).entries()) expect(fold.from).toBe(folds[i]?.to)
+    expect(folds[0]?.to).toBe(NOW)
+    expect(folds.at(-1)?.from).toBe(NOW - 70 * DAY)
+    for (const [i, fold] of folds.slice(1).entries()) expect(fold.to).toBe(folds[i]?.from)
+  })
+
+  it('folds the days nearest the delete FIRST', async () => {
+    // Which matters only because the walk can end early (budget, or a sick store), and then the
+    // order decides which days survive. The days adjacent to the delete are in every report
+    // window this rollup serves; the far end of a stale catch-up is outside the widest of them.
+    const { service, folds } = spendFoldDeps({ watermark: NOW - 70 * DAY })
+    await service.delete(WS.id)
+    for (const [i, fold] of folds.slice(1).entries())
+      expect(fold.to).toBeLessThan(folds[i]?.to ?? 0)
+  })
+
+  it('carries on past a failing chunk instead of dropping every older one with it', async () => {
+    // One statement timeout must not cost the whole walk: the chunks are independent rewrites
+    // over disjoint windows, so the only thing an all-or-nothing walk buys is a bigger loss.
+    const { service, deleteSpy, logger, folds } = spendFoldDeps({
+      watermark: NOW - 70 * DAY,
+      fold: (_ws, _from, to) =>
+        to === NOW ? Promise.reject(new Error('statement timeout')) : Promise.resolve(1),
+    })
+    await service.delete(WS.id)
+    expect(folds.length).toBe(3)
+    expect(deleteSpy).toHaveBeenCalledWith(WS.id, [])
+    // ...and the hole is reported AS a hole: the failed chunk named on its own, not folded into
+    // an extent that would read as a clean truncation of the walk.
+    const [warn] = unfoldedWarns(logger)
+    expect(warn?.fields).toMatchObject({
+      workspaceId: WS.id,
+      failedSpans: [[NOW - 30 * DAY, NOW]],
+      unattemptedSpans: [],
+      foldedSpans: 2,
+      err: 'statement timeout',
+    })
+  })
+
+  it('stops walking once the delete has waited long enough, and says what it never reached', async () => {
+    // The fold runs inside the user's delete request. Unbounded, a stale watermark plans up to a
+    // ledger-retention of chunks, and on the Worker that spends the invocation the cascade needed:
+    // the board then fails to delete, identically, on every retry. So the walk is a budget.
+    const { service, deleteSpy, logger, folds } = spendFoldDeps({
+      watermark: NOW - 200 * DAY,
+      costPerFoldMs: FINAL_SPEND_FOLD_BUDGET_MS,
+    })
+    await service.delete(WS.id)
+    // One chunk fits, then the budget is spent; the delete itself still happens.
+    expect(folds).toEqual([{ workspaceId: WS.id, from: NOW - 30 * DAY, to: NOW }])
+    expect(deleteSpy).toHaveBeenCalledWith(WS.id, [])
+    const [warn] = unfoldedWarns(logger)
+    // Never-reached is reported apart from refused: they need opposite responses (a sweep that
+    // is behind versus a store that is broken), so one count over both would misattribute.
+    expect(warn?.fields).toMatchObject({ failedSpans: [], foldedSpans: 1 })
+    // And it names the rest of the plan rather than a count: contiguous from where the one
+    // folded chunk stopped back to the resume point, so nothing reads as never-planned.
+    const unattempted = (warn?.fields?.unattemptedSpans ?? []) as Array<[number, number]>
+    expect(unattempted).toHaveLength(6)
+    expect(unattempted[0]?.[1]).toBe(NOW - 30 * DAY)
+    expect(unattempted.at(-1)?.[0]).toBe(NOW - 200 * DAY)
+  })
+
+  it('reports the whole tail as lost when the resume point itself cannot be read', async () => {
+    // With no watermark there is no plan, so nothing is folded at all. The extent is genuinely
+    // unknown (reading it is what failed), and saying that beats naming a span nothing derived.
+    const { service, deleteSpy, logger, folds } = spendFoldDeps({
+      watermark: () => Promise.reject(new Error('d1 unavailable')),
+    })
+    await service.delete(WS.id)
+    expect(folds).toEqual([])
+    expect(deleteSpy).toHaveBeenCalledWith(WS.id, [])
+    expect(unfoldedWarns(logger)[0]?.fields).toMatchObject({
+      workspaceId: WS.id,
+      table: 'spend_days',
+      reason: 'watermark_unreadable',
+    })
   })
 
   it('names the days the ledger no longer holds, which nothing downstream can restate', async () => {
@@ -217,7 +307,14 @@ describe('WorkspaceService.delete — final durable spend fold', () => {
     })
     await expect(service.delete(WS.id)).resolves.toBeUndefined()
     expect(deleteSpy).toHaveBeenCalledWith(WS.id, [])
-    expect(logger.lines.some((l) => l.level === 'warn' && /spend fold/.test(l.msg))).toBe(true)
+    expect(unfoldedWarns(logger)[0]?.fields).toMatchObject({
+      workspaceId: WS.id,
+      // The trailing lookback, not the watermark: a day still accruing when it was covered has
+      // to be recomputed, and the board's final hours are exactly such a day.
+      failedSpans: [[NOW - SPEND_DAY_ROLLUP_LOOKBACK_MS, NOW]],
+      foldedSpans: 0,
+      err: 'statement timeout',
+    })
   })
 
   it('deletes the board unchanged when the rollup is not wired', async () => {

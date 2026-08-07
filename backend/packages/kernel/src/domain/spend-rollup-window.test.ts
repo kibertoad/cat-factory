@@ -108,13 +108,25 @@ describe('finalSpendFoldPlan', () => {
     // the bound exists to keep one GROUP BY sane, which sequential queries satisfy too.
     const stale = NOW - 70 * DAY
     const { spans } = finalSpendFoldPlan(stale, NOW, LEDGER_MS)
-    expect(spans[0]?.from).toBe(stale)
-    expect(spans.at(-1)?.to).toBe(NOW)
+    expect(spans.at(-1)?.from).toBe(stale)
     for (const span of spans) {
       expect(span.to - span.from).toBeLessThanOrEqual(SPEND_DAY_ROLLUP_MAX_SPAN_MS)
     }
     // Contiguous, so the walk has no seam of its own making.
-    for (const [i, span] of spans.slice(1).entries()) expect(span.from).toBe(spans[i]?.to)
+    for (const [i, span] of spans.slice(1).entries()) expect(span.to).toBe(spans[i]?.from)
+  })
+
+  it('orders NEWEST FIRST, so a walk cut short keeps the days a report reads', () => {
+    // The walk this feeds is budgeted and its chunks can fail independently, so the order is
+    // which days survive a short walk. Every report window is anchored at `now`, and the far end
+    // of a stale-watermark catch-up is outside even the 90-day one, so the recent chunks are the
+    // ones worth doing first. The first chunk also ENDS at `now` rather than being the ragged
+    // remainder, which is what walking backwards from `now` buys over chunking forwards.
+    const { spans } = finalSpendFoldPlan(NOW - 70 * DAY, NOW, LEDGER_MS)
+    expect(spans[0]).toEqual({ from: NOW - SPEND_DAY_ROLLUP_MAX_SPAN_MS, to: NOW })
+    for (const [i, span] of spans.slice(1).entries()) {
+      expect(span.to).toBeLessThan(spans[i]?.to ?? 0)
+    }
   })
 
   it('reports the same unfoldable span the sweep does, and nothing more', () => {
@@ -123,8 +135,8 @@ describe('finalSpendFoldPlan', () => {
     const ancient = NOW - 3 * LEDGER_MS
     const { spans, skipped } = finalSpendFoldPlan(ancient, NOW, LEDGER_MS)
     expect(skipped).toEqual({ from: ancient, to: NOW - LEDGER_MS })
-    expect(spans[0]?.from).toBe(NOW - LEDGER_MS)
-    expect(spans.at(-1)?.to).toBe(NOW)
+    expect(spans.at(-1)?.from).toBe(NOW - LEDGER_MS)
+    expect(spans[0]?.to).toBe(NOW)
   })
 
   it('never plans an empty or inverted span, whatever the watermark says', () => {
@@ -136,7 +148,7 @@ describe('finalSpendFoldPlan', () => {
       const { spans } = finalSpendFoldPlan(watermark, NOW, LEDGER_MS)
       expect(spans.length).toBeGreaterThan(0)
       for (const span of spans) expect(span.to).toBeGreaterThan(span.from)
-      expect(spans.at(-1)?.to).toBe(NOW)
+      expect(spans[0]?.to).toBe(NOW)
     }
   })
 })

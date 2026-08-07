@@ -86,8 +86,9 @@ else imports its **ports** and domain types from here.
   (`spend_days`) covers, for the sweep's periodic pass (`spendRollupWindow`) and for the FINAL
   pass a board takes inside its own delete (`finalSpendFoldPlan`). Here rather than beside the
   sweep because those two callers sit in different layers and must agree that the catch-up
-  horizon is the LEDGER's retention; the delete's plan differs only in having no next pass to
-  leave a remainder to, so the span cap becomes a chunk size. See
+  horizon is the LEDGER's retention; the delete's plan differs in having no next pass to leave a
+  remainder to, so the span cap becomes a chunk size, and in running inside a request rather than
+  a cron, so its chunks are ordered NEWEST FIRST against `FINAL_SPEND_FOLD_BUDGET_MS`. See
   `backend/docs/storage-and-retention.md` §1c.
 - `domain/infra-reachability.ts`: the pure decision behind the **infrastructure-reachability
   watcher**: `decideReachability` (what to record + which transitions to announce, from this pass's

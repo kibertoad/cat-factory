@@ -29,6 +29,14 @@ a detail:
 - **It walks to now in chunks instead of capping its window.** A sweep can leave a wide catch-up for
   its next pass; this board has no next pass, so the span cap becomes a chunk size rather than a
   truncation. Truncating would have introduced a second, quieter version of the same loss.
+- **It walks newest-first, on a budget, and one bad chunk does not end it.** The walk is unbounded
+  by construction (a watermark left stale by an outage plans a ledger-retention's worth of chunks)
+  and it runs inside a user's delete request rather than on a cron. Unbounded, on the Worker, it
+  stops preserving the board's spend and starts preventing its deletion: the invocation dies before
+  the cascade, and the retry reads the same watermark and plans the same walk. So the walk stops at
+  `FINAL_SPEND_FOLD_BUDGET_MS` and a failing chunk costs only itself, which makes the ORDER decide
+  what survives: newest-first, because every report window this rollup serves is anchored at now
+  while the far end of a stale catch-up falls outside even the 90-day one.
 - **It does not touch the coverage marker.** `rolledUpThrough` is deployment-scoped and states how
   far the SWEEP has covered every board at once. One board's final fold covers no other board's
   days, and the marker only ever moves forward, so advancing it there would permanently present
@@ -46,5 +54,7 @@ wire `tokenUsageRetentionMs` onto `CoreDependencies` so both derive it from one 
 
 The fold is best-effort, which is a trade worth reviewing: refusing the delete on a sick rollup query
 would keep the spend foldable for a retry, but it would also render a reporting outage as a board
-that cannot be deleted. So the delete proceeds and the failure is named at `warn`, as is the span
-past the ledger's own retention, which was already unfoldable before the delete began.
+that cannot be deleted. So the delete proceeds and what was not folded is named on one `warn`, whose
+fields keep the causes apart because they need different responses: what the ledger no longer holds
+(already unfoldable before the delete began), what the store refused, what the budget never reached,
+and a resume point that could not be read at all.

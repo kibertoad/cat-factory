@@ -252,12 +252,23 @@ provider:model, billing, vendor)`. A run writes hundreds of ledger rows and a ha
     BECAUSE they were expensive. So `WorkspaceService.delete` runs one final per-workspace fold
     (`SpendRollupRepository.rollupWorkspaceSpendDays`) before the cascade, beside the
     binary-artifact purge and for the same reason: afterwards there is nothing left to read.
-    Three things make that fold a different shape from a sweep pass:
+    Four things make that fold a different shape from a sweep pass:
     - **It walks to `now` in CHUNKS instead of capping its window.** A sweep leaves a wide
       catch-up for its next pass; this board has no next pass, so `SPEND_DAY_ROLLUP_MAX_SPAN_MS`
       becomes a chunk size rather than a truncation. The resume point and the ledger-retention
       horizon are the sweep's own, derived by the shared `finalSpendFoldPlan` in kernel, so a
       board's last fold covers exactly the days a pass would have.
+    - **It walks NEWEST FIRST, on a budget.** The sweep folds on a cron, where running long
+      costs the cron; this fold runs inside a user's delete request, where it costs the
+      request, and a watermark left stale by an outage plans a ledger-retention's worth of
+      chunks. On the Worker, where the whole delete is one invocation, an unbounded walk stops
+      preserving the board's spend and starts preventing its deletion: the request dies before
+      the cascade, and the retry reads the same watermark and plans the same walk. So the walk
+      stops at `FINAL_SPEND_FOLD_BUDGET_MS` (checked between chunks, which bounds how MANY
+      aggregates run; the span cap bounds one), a chunk that throws does not end it, and the
+      order decides what survives either. Newest first, because every report window this
+      rollup serves is anchored at `now` while the far end of a stale catch-up falls outside
+      even the 90-day one.
     - **It does not touch the coverage marker.** `rolledUpThrough` is deployment-scoped and
       states how far the SWEEP has covered every board at once. One board's final fold covers no
       other board's days, and the marker only ever moves forward, so advancing it there would
@@ -267,9 +278,15 @@ provider:model, billing, vendor)`. A run writes hundreds of ledger rows and a ha
       nothing, and an unguarded window `DELETE` would reclaim the frozen rows the exclusion
       exists to keep. Both halves of the rule now live in the same statement.
 
-    What remains lost is only what the ledger no longer holds (days past
-    `TOKEN_USAGE_RETENTION_DAYS`), which was already unfoldable before the delete, and the fold
-    logs that span for the same reason the sweep does.
+    Everything the fold does not cover is reported on one `warn`, and the fields on it keep the
+    causes apart because they need different responses: `skippedFrom`/`skippedTo` is what the
+    ledger no longer holds (past `TOKEN_USAGE_RETENTION_DAYS`, already unfoldable before the
+    delete), `failedSpans` is what the store refused, `unattemptedSpans` is what the budget
+    never reached (a sweep that has been behind long enough for one board's catch-up to outgrow
+    a request), and `reason: watermark_unreadable` is a resume point that could not be read at
+    all, where the extent is genuinely unknown. Spans rather than one extent over them: a
+    failed chunk mid-walk leaves a hole, and a single `[from, to)` pair would render that hole
+    as a clean truncation.
 - **The pass resumes from its own watermark**, unlike the run rollup's fixed lookback, because
   a day missed here is missing from the only durable record of it. Each pass is capped
   (`SPEND_DAY_ROLLUP_MAX_SPAN_MS`) so a wide catch-up is several queries rather than one

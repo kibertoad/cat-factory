@@ -784,6 +784,7 @@ export {
 } from './domain/workspace-cascade.js'
 
 export {
+  FINAL_SPEND_FOLD_BUDGET_MS,
   SPEND_DAY_ROLLUP_BACKFILL_MS,
   SPEND_DAY_ROLLUP_LOOKBACK_MS,
   SPEND_DAY_ROLLUP_MAX_SPAN_MS,

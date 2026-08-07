@@ -40,6 +40,25 @@ export const SPEND_DAY_ROLLUP_MAX_SPAN_MS = 30 * 24 * 60 * 60_000
  */
 export const SPEND_DAY_ROLLUP_BACKFILL_MS = 90 * 24 * 60 * 60_000
 
+/**
+ * How long a board's FINAL fold may keep its delete waiting, checked between chunks.
+ *
+ * The sweep folds on a cron, where taking longer costs only the cron; the final fold runs inside
+ * a user's delete request, where it costs the request. And the walk it bounds is unbounded by
+ * construction: {@link finalSpendFoldPlan} covers everything back to the resume point, which a
+ * watermark left stale by an outage puts a ledger-retention (395 days by default) behind now, so
+ * fourteen sequential aggregates is a reachable plan rather than a pathological one. On the
+ * Worker, where the whole delete is one invocation, that is how the fold stops being the thing
+ * that preserves a board's spend and becomes the thing that prevents its deletion: the request
+ * dies before the cascade, and the retry re-reads the same watermark and plans the same walk.
+ *
+ * So the walk is a budget rather than a promise. What it does not reach is REPORTED as lost,
+ * which is the same disposition the rest of this path already takes: the delete wins, and the
+ * loss is named. Checked BETWEEN chunks, so it bounds how MANY aggregates run, not how long one
+ * of them takes; {@link SPEND_DAY_ROLLUP_MAX_SPAN_MS} is what bounds the one.
+ */
+export const FINAL_SPEND_FOLD_BUDGET_MS = 10_000
+
 /** A half-open `[from, to)` span of wall-clock time, in epoch ms. */
 export interface SpendFoldSpan {
   from: number
@@ -121,8 +140,17 @@ export function spendRollupWindow(
 /** The spans a board's FINAL fold has to cover, plus the span no fold can reach any more. */
 export interface FinalSpendFoldPlan {
   /**
-   * Oldest first, each at most {@link SPEND_DAY_ROLLUP_MAX_SPAN_MS} wide, together covering
-   * everything from the resume point up to `now`. EMPTY when there is nothing left to fold.
+   * NEWEST FIRST, each at most {@link SPEND_DAY_ROLLUP_MAX_SPAN_MS} wide, together covering
+   * everything from the resume point up to `now` with no seam between them.
+   *
+   * The order is a PRIORITY, not a presentation choice, and it is the reason the walk may be cut
+   * short at all. A fold that runs out of {@link FINAL_SPEND_FOLD_BUDGET_MS} (or hits a sick
+   * store) keeps whichever chunks it got to, and the chunks worth keeping are the recent ones:
+   * every report window this rollup serves is anchored at `now`, so the days adjacent to the
+   * delete are read by all of them, while the far end of a stale-watermark catch-up is outside
+   * even the 90-day window. Oldest-first inverts exactly that, and does it invisibly: the walk
+   * looks complete right up until the newest days, the ones the whole final fold exists for, are
+   * the ones that never ran.
    */
   spans: SpendFoldSpan[]
   /** As {@link SpendRollupWindow.skipped}: days the ledger no longer holds. */
@@ -139,8 +167,9 @@ export interface FinalSpendFoldPlan {
  * the walk runs to `now`: the cap exists to keep one `GROUP BY` bounded, which several
  * sequential queries satisfy just as well.
  *
- * Only `skipped` is a real loss here, and it is a loss that predates the delete: those days are
- * past the ledger's own retention, so there is nothing left anywhere to fold.
+ * `skipped` is the loss that predates the delete: those days are past the ledger's own retention,
+ * so there is nothing left anywhere to fold. The walk's own budget can produce a second one, and
+ * that is why {@link FinalSpendFoldPlan.spans} is ordered newest first.
  */
 export function finalSpendFoldPlan(
   throughDay: number | null,
@@ -149,8 +178,11 @@ export function finalSpendFoldPlan(
 ): FinalSpendFoldPlan {
   const { from, skipped } = foldStart(throughDay, now, ledgerRetentionMs)
   const spans: SpendFoldSpan[] = []
-  for (let start = from; start < now; start += SPEND_DAY_ROLLUP_MAX_SPAN_MS) {
-    spans.push({ from: start, to: Math.min(now, start + SPEND_DAY_ROLLUP_MAX_SPAN_MS) })
+  // Walked backwards from `now` so the FIRST chunk is the one ending at the delete, whatever the
+  // resume point is. Chunking forwards and reversing would instead align the ragged remainder
+  // with `now`, making the most valuable chunk the narrowest one.
+  for (let to = now; to > from; to -= SPEND_DAY_ROLLUP_MAX_SPAN_MS) {
+    spans.push({ from: Math.max(from, to - SPEND_DAY_ROLLUP_MAX_SPAN_MS), to })
   }
   return { spans, skipped }
 }

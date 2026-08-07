@@ -193,7 +193,7 @@ export function defineSpendRollupSuite(
     it('folds ONE board on its way out, without speaking for any other board', async () => {
       // The mirror image of the freeze above, and the half a sweep structurally cannot do. The
       // sweep reaches only boards that still exist, so a board's spend since the last completed
-      // rollup day has never been folded when its delete begins — and `token_usage` IS in the
+      // rollup day has never been folded when its delete begins, and `token_usage` IS in the
       // cascade, so those rows go before any later pass could see them. The delete therefore
       // folds them itself, while they are still there.
       const { reports, rollup } = makeRepos()
@@ -225,7 +225,7 @@ export function defineSpendRollupSuite(
     it('refuses to rewrite a board that is already gone, whatever the caller does', async () => {
       // The ordering (fold, THEN cascade) is enforced by the query and not only by the call
       // site. Run out of order, the fold would read nothing and its window DELETE would reclaim
-      // the very rows the cascade exclusion exists to keep — the same erasure the sweep is
+      // the very rows the cascade exclusion exists to keep, the same erasure the sweep is
       // bounded against, arriving through the other door.
       const { rollup } = makeRepos()
       const seed = makeSeed()
