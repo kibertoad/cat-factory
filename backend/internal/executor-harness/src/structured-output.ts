@@ -1,6 +1,7 @@
 import { redact, redactSecrets, secretsToRedact } from './redact.js'
 import { log } from './logger.js'
-import { PI_MAX_OUTPUT_TOKENS, phasedProxyBaseUrl } from './pi.js'
+import { phasedProxyBaseUrl } from './pi.js'
+import { PI_MAX_OUTPUT_TOKENS } from './pi-reduction.js'
 
 // A reusable abstraction for the "agent returns a structured JSON document as its
 // final assistant message" pattern (requirements, blueprint, merger — and any future

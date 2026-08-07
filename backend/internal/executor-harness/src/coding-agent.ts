@@ -30,7 +30,8 @@ import {
 } from './git.js'
 import { openPullRequest } from './vcs-api.js'
 import { FOLLOW_UPS_FILENAME, FollowUpTailer } from './follow-ups.js'
-import type { HarnessCallMetric, PiRunStats } from './pi.js'
+import type { HarnessCallMetric } from './pi.js'
+import type { PiRunStats } from './pi-reduction.js'
 import { EFFORT_REPORT_FILE, type EffortReport } from './effort.js'
 import {
   type AgentPrDescription,

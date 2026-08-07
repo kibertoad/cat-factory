@@ -6,19 +6,22 @@
 // only the reusable primitives are exposed here.
 
 export {
-  PI_MAX_OUTPUT_TOKENS,
   writePiModelsConfig,
   writeAgentsContext,
   runPi,
-  summarizePiRun,
-  parsePiOutput,
   parseTodoProgress,
-  terminalRunError,
   type PiRunOutcome,
-  type PiRunStats,
   type TodoItem,
   type TodoProgress,
 } from './pi.js'
+export {
+  PI_MAX_OUTPUT_TOKENS,
+  parsePiOutput,
+  summarizePiRun,
+  terminalRunError,
+  type PiRunReduction,
+  type PiRunStats,
+} from './pi-reduction.js'
 export {
   DEFAULT_PROGRESS_GUARD_LIMITS,
   progressGuardLimitsFromEnv,

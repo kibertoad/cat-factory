@@ -1,10 +1,17 @@
 # Initiative: stuck-run audit (agent / step / container wedge cases)
 
-**Status:** Groups A (F1/F2/F5) + B (F3/F7/F10) + C-engine (F4/F11) landed; F8 + D todo ·
+**Status:** Groups A (F1/F2/F5) + B (F3/F7/F10) + C (F4/F11/F8) + the harness half of D
+(F6/F13) landed; D's engine half (F9, F12) todo ·
 **Owner:** core · **Started:** 2026-07-02
 **Audited at:** `main` @ `fc8df61` (original file:line references are against that commit; the
 line numbers in individual findings have since drifted: the anchoring file + symbol names are
 kept current, so search by symbol, not line).
+**Re-checked for staleness at** `main` @ `74ea2bc` (the harness slice): every open finding still
+reproduced. Two things had moved and the finding text now reflects them: the harness package
+lives at `backend/internal/executor-harness` (not `backend/packages/`), and F13's progress guard
+has since grown into its own `src/progress-guard.ts` with several streak bounds, none of which
+changes the finding, because every one of them counts TOOL CALLS and the failure mode is a run
+that makes none.
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -137,16 +144,20 @@ send re-drives cleanly.
 instance can't die terminally on a transient wake failure; and/or teach `finalizeOrphan` to
 re-drive an execution whose record shows an unconsumed resolved decision rather than stopping.
 
-**F6: Harness event-loop starvation defeats both watchdogs.**
-Both watchdog timers (`executor-harness/src/runner.ts:255-268`) and the `/health` + `/jobs`
+**F6: Harness event-loop starvation defeats both watchdogs.** ✅ FIXED (this PR)
+Both watchdog timers (`executor-harness/src/runner.ts`) and the `/health` + `/jobs`
 poll endpoints share one Node event loop with the JSONL parsing hot path
-(`executor-harness/src/pi.ts:874-922`), and `summarizePiRun` re-parses the **entire** stdout
-buffer at close (`pi.ts:1056-1063`). A pathologically large JSONL line or huge stdout blocks
+(`src/pi.ts`'s `consumeStdout`), and `summarizePiRun` re-parsed the **entire** stdout
+buffer at close. A pathologically large JSONL line or huge stdout blocks
 the loop: the abort timers never fire and the container stops answering polls, so the
-advertised "a container can never run forever" guarantee (`runner.ts:18-21`) fails. Bounded
+advertised "a container can never run forever" guarantee fails. Bounded
 only by the engine-side poll-failure tolerance → `release()`/destroy and, last, the reaper.
-**Fix (harness, image-bumping):** cap accepted JSONL line size, and stream/chunk the
-close-time summary parse (or reuse the incrementally-parsed events) so the loop stays live.
+**Fix (landed):** a shared `src/jsonl-stream.ts`: `JsonlLineReader` frames both CLIs' stdout
+and refuses to buffer a runaway record; `BoundedTail` replaces the whole-run stdout/stderr
+strings that were retained only to slice a tail off. `runPi` FOLDS each record as it streams
+through `PiRunReducer` (`src/pi-reduction.ts`) instead of retaining them, so the two extra
+full-output passes are gone and the run's memory is O(largest record) rather than O(records).
+See the Group D notes.
 
 ### Medium
 
@@ -163,13 +174,17 @@ for THIS run already sits on the block. Every richer card raised during a run (`
 message wins" intent is preserved, while a prior run's card (different `executionId`, or a block-less
 workspace card) no longer masks the new park. Unit-tested.
 
-**F8: `reinitAndPush` (bootstrap push phase) takes no abort signal.**
-`executor-harness/src/git.ts:688-708`, called from `agent.ts:862`: none of its ~6 git commands
+**F8: `reinitAndPush` (bootstrap push phase) takes no abort signal.** ✅ FIXED (this PR)
+`executor-harness/src/git.ts`, called from `bootstrap-mode.ts` (the call site moved out of
+`agent.ts` since the audit): none of its ~6 git commands
 (`init`/`checkout`/`add`/`commit`/`remote`/`push --force`) thread `signal`, so the watchdog
 abort cannot interrupt the push phase; bounded only by per-command timeouts (~7 min × 6 ≈
 42 min of un-abortable work past `maxDurationMs`). Every other git helper threads `signal`;
 this one dropped it.
-**Fix (harness, image-bumping):** add `signal` to `reinitAndPush` and pass it through.
+**Fix (landed):** `signal` added to `reinitAndPush` and passed to all six commands; the
+bootstrap call site already had it in scope. Covered by a real-git test PAIR (`git-bootstrap-push.test.ts`):
+the abort case only proves anything because the control case shows the same call pushes for
+real when nothing aborts it.
 
 **F9: Node has no per-advance timeout; a hung advance wedges the run for hours.**
 `backend/packages/orchestration/src/modules/execution/drive.ts:113`: `await
@@ -213,12 +228,16 @@ only by polling; two backend poll-scheduling hiccups in one step fail a healthy 
 **Fix:** consider a larger recovery budget for sleep-evictions, or a keep-warm ping decoupled
 from the poll cadence.
 
-**F13: Pi "chatty hang" (streaming output, zero tool calls) runs the full 60 min.**
-`executor-harness/src/pi.ts:943-951` resets inactivity on **any** stdout/stderr chunk; the
-progress guard (`pi.ts:721-769`) only watches `tool_execution_end`. A thinking-forever model
+**F13: Pi "chatty hang" (streaming output, zero tool calls) runs the full 60 min.** ✅ FIXED (this PR)
+`executor-harness/src/pi.ts`'s `onChunk` resets inactivity on **any** stdout/stderr chunk; the
+progress guard (now `src/progress-guard.ts`, and much richer than at audit time) only ever
+observes `tool_execution_end`. A thinking-forever model
 never trips either and burns the whole budget (and the engine budget behind it).
-**Fix (harness, optional):** a no-tool-progress guard between the 10-min inactivity and the
-60-min cap. Arguably the 60-min ceiling is the intended bound: lowest-priority medium.
+**Fix (landed):** a third watchdog, `RunnerLimits.toolSilenceMs` (`JOB_TOOL_SILENCE_MS`),
+armed by the agent stream that can reset it and beaten by every completed tool call, failing
+the run under a NEW `no-tool-progress` harness failure cause. See the Group D notes for why it
+is a new cause rather than `inactivity-timeout`, and for the choices that bound its
+wrong-kill risk.
 
 **F14: Resumed work branch with nothing ahead of base fails the run with GitHub's opaque
 422 instead of no-op'ing (and the merger silently strands the branch).**
@@ -281,19 +300,29 @@ of each PR.
 | F10 | Recurring fire clobbers `blocked` run               | orchestration          | B                       | ✅ done    | this PR |
 | F4  | Pool transport: no eviction mapping / no-op release | integrations           | C; transport bounds     | ✅ done    | this PR |
 | F11 | `pr_ready` before `merge_review` raise              | engine                 | C                       | ✅ done    | this PR |
-| F8  | `reinitAndPush` not abort-aware                     | harness (image bump)   | C (harness slice)       | ⬜ todo    |         |
-| F6  | Harness event-loop starvation vs watchdogs          | harness (image bump)   | D; hang ceilings        | ⬜ todo    |         |
+| F8  | `reinitAndPush` not abort-aware                     | harness (image bump)   | C (harness slice)       | ✅ done    | this PR |
+| F6  | Harness event-loop starvation vs watchdogs          | harness (image bump)   | D; hang ceilings        | ✅ done    | this PR |
+| F13 | Chatty-hang runs full 60 min                        | harness (image bump)   | D                       | ✅ done    | this PR |
 | F9  | Node advance has no timeout                         | node driver            | D                       | ⬜ todo    |         |
 | F12 | Sleep-eviction burns the single recovery            | CF container           | D                       | ⬜ todo    |         |
-| F13 | Chatty-hang runs full 60 min                        | harness (image bump)   | D                       | ⬜ todo    |         |
 | F14 | Resumed empty branch fails 422 vs no-op             | harness + engine       | (fixed inline)          | ✅ done    | this PR |
 
 Suggested order: A (guaranteed wrong-kill on common operational events), then B (parks with
 no signal), then C, then D (most invasive; D is deferrable). C landed its two non-harness
 findings (F4, F11); F8 was split off because a harness change is image-bumping and the
-conventions below keep those out of a non-harness slice. Next up: **F8 + F6 + F13 as one
-harness/image slice**, then the rest of **D** (F9 Node advance timeout, F12 sleep-eviction
-budget).
+conventions below keep those out of a non-harness slice, then landed with F6 + F13 as the one
+harness/image slice.
+
+**Next up: the rest of D, which is entirely non-harness** and so is a single engine slice:
+F9 (bound the Node advance at CF's 5-minute ceiling, restoring runtime symmetry on the hang
+bound) and F12 (a larger recovery budget for a sleep-eviction, or a keep-warm ping decoupled
+from the poll cadence). Both were re-verified as live at `74ea2bc`: `drive.ts`'s
+`await exec.advanceInstance(...)` still has no ceiling, and `ExecutionContainer`'s
+`sleepAfter = '10m'` still meets `MAX_EVICTION_RECOVERIES = 1`.
+
+After that, the one structural item the audit deferred rather than fixed: **attempt-suffixed
+Workflows instance ids** (see the F5 note in the Group A section), which is what F5's complete
+fix, F2's option (a), and any future "let the sweeper re-drive a terminal instance" all need.
 
 ### Group A implementation notes (landed)
 
@@ -416,6 +445,99 @@ instance.id`. The whole point of the card is that it is a `blocked` run's ONLY r
   belongs with F6 and F13 in one harness slice rather than dragging an image bump into an
   engine PR.
 
+### Group C/D harness-slice implementation notes (landed)
+
+F8 (deferred out of C) plus D's two harness findings, landed together because one image bump
+covers all three. Runner image `1.97.0`.
+
+- **F6**: the fix is a shared `src/jsonl-stream.ts`, not a Pi-local patch: `agent-runner.ts` (the
+  claude-code/codex runner) had grown a byte-identical framing loop with the same unbounded
+  buffer, so one definition of "how much of a child's output we hold" now serves both, for the
+  same reason `ProgressGuard` already did.
+  - **Fold the records, don't retain them and don't chunk the re-parse.** The audit offered the
+    first two. Reducing what `processLine` parsed removes BOTH close-time passes outright, and it
+    also lets the raw stdout/stderr strings go: every consumer of those took a tail
+    (2 KB / 1.5 KB / 500 B), so a `BoundedTail` is lossless for them. Retaining the parsed
+    records instead — the first cut — bounded the framing and left the heap open, since a parsed
+    object is typically larger than the text it replaced. `PiRunReducer` keeps only what the
+    close-of-run answers read: the last terminal record, the one transcript all three reductions
+    scan back to, running counters, and a bounded tail of streamed assistant text. The
+    array-taking entry points offline tooling still uses are DEFINED in terms of the same
+    reducer, so the live and offline paths cannot drift.
+  - **Framing scans the CHUNK, never the buffer.** `buffer += chunk` is a cheap rope in V8, but
+    any search over it flattens the rope, so scanning the buffer once per chunk costs
+    O(record) per chunk — quadratic in a runaway record, on the very loop this bound protects.
+    Measured at ~6s of solid blocking for one 32 MB record: the cap bounded the memory and
+    handed back the stall in its place.
+  - **A dropped record must not be able to certify a run.** The terminal `agent_end` is both the
+    largest legitimate record and the one that decides whether an exit-0 run actually FAILED, so
+    it is the likeliest casualty of the cap and the costliest. With it dropped the terminal-error
+    check finds no failure from having seen nothing at all, and a hard-failed run resolves green
+    — the exact case that check exists to prevent. `runPi` now refuses to certify a clean exit
+    that saw no terminal record while the reader dropped one, under `no-usable-output`.
+  - **The subscription stream reports its drops too.** `streamCli` counted them and said nothing,
+    so an oversized record there cost the run its progress, trajectory and that turn's telemetry
+    with no evidence it had happened.
+  - **The cap is on the RECORD, not on the leftover buffer.** The first cut only checked what was
+    still buffered after framing, so a record that arrived whole inside one chunk sailed past it:
+    the bound would have depended on how the OS split the reads. Caught by a test that pushes an
+    oversized record and its newline in one call.
+  - **An oversized record is dropped WHOLE and counted**, never truncated: half a JSON document is
+    not a record, and feeding the parser one would report the bound firing as `malformedLines`,
+    i.e. as corrupt model output. The reader resynchronises on the next newline, so the loss stops
+    at that record, and the count is warned once at close beside the existing counters.
+  - The cap sits far above the largest LEGITIMATE record (the terminal `agent_end` transcript,
+    whose loss costs the run its summary and stats), because it is a ceiling on wedging the loop,
+    not a size policy.
+- **F13**: `RunnerLimits.toolSilenceMs`, a third watchdog beside inactivity and the cap. Three
+  choices bound the wrong-kill risk this obviously creates, and each is the reason a simpler
+  version was rejected:
+  - **Armed by the agent STREAM, not by the `agent` phase label.** The window is only meaningful
+    while something able to reset it is running, and only the runner knows whether its CLI
+    reports completed tool calls. Keying it on the phase looked equivalent and was not: `agent`
+    is a telemetry breadcrumb several sites mark for work that completes no tool calls at all
+    (a Codex pass, which emits no `ToolSpan`; a tool-less inline completion; the label restored
+    around a repair loop's shell commands), so a phase-armed window spent most of its time armed
+    over things that could only let it expire. Each runner opens its own window around its CLI
+    and closes it on exit (`ToolSilenceWatchdog`, `RunOptions.beginToolWindow`), which makes
+    "armed" and "can beat" the same fact rather than two call sites agreeing. A repair loop's
+    next pass opens a fresh window; the work between passes is outside the watchdog entirely.
+  - **The reset is tool ACTIVITY, not the trajectory.** `onSpan` is an observability opt-in and
+    `runCodex` produces no spans at all, so each runner beats the window where it already
+    recognises a completed tool call: Pi's `tool_execution_end`, claude-code's `tool_result`
+    turn, codex's tool/command/exec events.
+  - **A caller with no tool loop wires no window**, and says so: `handleInline` documents the
+    omission, because a window an inline one-shot could never beat can only ever expire.
+  - **Derived from `JOB_MAX_DURATION_MS` (half), not a constant**, per the harness rule in
+    CLAUDE.md: a fixed 30 minutes sits past the entire budget of a deployment running 20-minute
+    jobs, i.e. is silently disabled exactly where it is configured tightest.
+  - **The gone-quiet case is kept with inactivity at the FIRE SITE, not by the clamp.** The
+    default window is still floored at `JOB_INACTIVITY_MS`, but that floor cannot order the two:
+    they anchor on different events (last completed tool call vs last byte of output), so the
+    tool-silence anchor is always the earlier one and equal windows have it firing first — and an
+    explicit `JOB_TOOL_SILENCE_MS` is not floored at all. The watchdog therefore fires only when
+    output arrived DURING the window that elapsed, which is exactly what `no-tool-progress`
+    claims; a window that passed in silence re-arms and leaves the kill to inactivity.
+  - **Derived from `JOB_MAX_DURATION_MS` (half), not a constant**, per the harness rule in
+    CLAUDE.md: a fixed 30 minutes sits past the entire budget of a deployment running 20-minute
+    jobs, i.e. is silently disabled exactly where it is configured tightest.
+  - **Clamped to at least `JOB_INACTIVITY_MS`**, so it can never fire before the gone-quiet
+    watchdog, which owns that case and has the clearer diagnostic for it. That ordering is also
+    why the fire site needs no "has this run been chatty?" test: a silent run always trips
+    inactivity first, so by the time this one can fire, output has been arriving all along.
+  - **A NEW `no-tool-progress` failure cause, not `inactivity-timeout`.** Per the degrade-loudly
+    rule: the two need different fixes and "the container went quiet" is the wrong thing to tell
+    someone whose model was mid-monologue. Additive across a hand-kept boundary (the image can
+    carry no workspace dep), so `failure-cause.conformity.test.ts` now pins that every cause this
+    image can stamp is one kernel recognises AND classifies. Only that direction is asserted: a
+    kernel member no harness emits is dead vocabulary, while a cause kernel drops degrades a
+    watchdog kill into a generic agent error with nothing failing.
+  - `RunnerLimits` gained a REQUIRED field, so every construction site had to declare its window
+    (the interface's existing convention, and why the typecheck listed sixteen test literals).
+- **F8**: `signal` threaded through all six commands. Tested as a PAIR against a local bare repo:
+  the aborted case only proves anything because the control case shows the same call pushes for
+  real when nothing aborts it.
+
 ## Conventions & gotchas for implementers
 
 - **Runtime symmetry is mandatory** for anything touching engine/sweeper/notification
@@ -426,10 +548,11 @@ instance.id`. The whole point of the card is that it is a `blocked` run's ONLY r
   so unit tests are the honest coverage. F1/F2/F5 are CF-only by nature (the Node sweeper is
   the reference implementation being ported _from_), and F4 lives in the shared `integrations`
   transport both facades resolve.
-- **Harness changes (F6, F8, F13) are image-bumping:** bump `@cat-factory/executor-harness`'s
+- **Harness changes are image-bumping:** bump `@cat-factory/executor-harness`'s
   version + the three tag pins (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
   `RECOMMENDED_HARNESS_IMAGE`) per the release rules in CLAUDE.md: keep them separate from
-  non-harness slices.
+  non-harness slices. This is why F8 left Group C and why D split in half; **the remaining D
+  findings (F9, F12) touch no harness file, so they are one clean engine slice.**
 - **`sweepStuckRuns` is pure orchestration over `SweepDeps`**: extend its fake-based unit
   tests for F1/F2/F5; don't test through real Workflows.
 - **`runners.logic.ts` now has table tests** (`runners.logic.test.ts`, added with F4: the
