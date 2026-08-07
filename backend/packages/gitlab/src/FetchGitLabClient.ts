@@ -21,6 +21,7 @@ import type {
   Logger,
   Paged,
   ProjectIssueQuery,
+  ProjectIssuePage,
   RepoContentEntry,
   RepoEntry,
   RepoFileContent,
@@ -445,17 +446,26 @@ export class FetchGitLabClient implements VcsClient {
    * call rather than one call per candidate. `owner` / `repo` are read back off each issue's
    * own `web_url` rather than echoed from the ref, so a hit reported under a subgroup path
    * round-trips as the path GitLab itself uses.
+   *
+   * ONE page, unlike the `paginate` reads around it: the caller is walking pages itself (to get
+   * past a run of already-worked issues), so following `Link` here would fetch the whole board
+   * on every step of that walk. What it does carry out is GitLab's own answer to "is there
+   * another page", which is the fact a caller cannot re-derive: a short page proves nothing on
+   * an instance whose `max_page_size` is below the requested `per_page`.
    */
   async searchProjectIssues(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     query: ProjectIssueQuery,
-  ): Promise<GitHubIssueSearchHit[]> {
+  ): Promise<ProjectIssuePage> {
     const params = new URLSearchParams({
       per_page: String(Math.min(Math.max(query.limit, 1), 100)),
     })
     if (query.page && query.page > 1) params.set('page', String(query.page))
     if (query.text) params.set('search', query.text)
+    // GitLab searches title AND description by default; `in=title` is how it narrows, which is
+    // what an intake title-fragment predicate asks for.
+    if (query.text && query.textIn === 'title') params.set('in', 'title')
     if (query.openOnly) params.set('state', 'opened')
     // GitLab takes the label set as one comma-joined value, matched as AND.
     if (query.labels?.length) params.set('labels', query.labels.join(','))
@@ -465,7 +475,7 @@ export class FetchGitLabClient implements VcsClient {
       params.set('order_by', 'created_at')
       params.set('sort', 'asc')
     }
-    const { json } = await this.request(`/projects/${projectPath(ref)}/issues?${params}`, {
+    const { json, next } = await this.request(`/projects/${projectPath(ref)}/issues?${params}`, {
       connection,
     })
     const items = (Array.isArray(json) ? json : []) as GlProjectIssuePayload[]
@@ -489,7 +499,9 @@ export class FetchGitLabClient implements VcsClient {
         assignee: item.assignee?.username ?? null,
       })
     }
-    return hits.slice(0, query.limit)
+    // Two ways there is more: GitLab said so, or it filled the page past what the caller asked
+    // for and the slice below is dropping the tail. Either one makes the next page real.
+    return { hits: hits.slice(0, query.limit), hasMore: !!next || hits.length > query.limit }
   }
 
   async searchCode(): Promise<GitHubCodeSearchHit[]> {

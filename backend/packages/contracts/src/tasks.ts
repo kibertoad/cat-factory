@@ -22,6 +22,14 @@ import { vcsProviderSchema } from './routes/auth.js'
 export const BUILTIN_TASK_SOURCE_KINDS = ['jira', 'github', 'linear', 'gitlab'] as const
 
 /**
+ * One of the sources this build ships, as a type. Its use is a `Record<BuiltinTaskSourceKind, …>`
+ * where a caller must state something for EVERY built-in and a deployment-registered source is
+ * handled separately: a fifth built-in then fails to compile until it has an answer, where an
+ * `if`-chain over the same ids would silently fall through to whatever the last branch returns.
+ */
+export type BuiltinTaskSourceKind = (typeof BUILTIN_TASK_SOURCE_KINDS)[number]
+
+/**
  * A BUILT-IN task source OR a CONSUMER-namespaced one ({@link namespacedIdSchema},
  * `<ns>:<name>`, e.g. `acme:servicenow`) a deployment registers in code on its app-owned
  * `TaskSourceRegistry` — the same `picklist ∪ namespaced` shape `taskTypeSchema` uses, for the
@@ -162,6 +170,21 @@ export const taskSourceDescriptorSchema = v.object({
 })
 export type TaskSourceDescriptor = v.InferOutput<typeof taskSourceDescriptorSchema>
 
+/**
+ * The narrowing predicates an issue-intake query (the recurring `bug-intake` schedule and the
+ * interactive bug hunt share one vocabulary) can carry, as the closed set a source states its
+ * gaps against. The kernel port owns the query shape; this picklist is the member list, here
+ * because the SPA renders one form field per predicate and has to agree with the backend about
+ * which of them a given source will actually apply.
+ */
+export const issueIntakePredicateSchema = v.picklist([
+  'titleFragment',
+  'labels',
+  'issueType',
+  'unassignedOnly',
+])
+export type IssueIntakePredicate = v.InferOutput<typeof issueIntakePredicateSchema>
+
 /** A Linear team, offered in the ticket-filing team picker. */
 export const linearTeamSchema = v.object({
   id: v.string(),
@@ -207,6 +230,17 @@ export const taskSourceStateSchema = v.object({
    * schedule that can never fire, and the form has to know which before it renders a picker.
    */
   supportsIntake: v.boolean(),
+  /**
+   * The intake predicates this source's provider will NOT apply, because its vendor cannot
+   * express them. Empty for a source that applies all of them.
+   *
+   * On the wire because the form offering a predicate is the only place the gap is meetable: a
+   * dropped predicate leaves a schedule that saves, fires, and picks up the wrong issue, and the
+   * SPA cannot infer which those are from the source id without restating the backend's compiler
+   * (the exact split `binaryFormatCoverage` exists to avoid). So the field is rendered with the
+   * substitution stated on it rather than silently misleading.
+   */
+  ignoredIntakePredicates: v.array(issueIntakePredicateSchema),
 })
 export type TaskSourceState = v.InferOutput<typeof taskSourceStateSchema>
 

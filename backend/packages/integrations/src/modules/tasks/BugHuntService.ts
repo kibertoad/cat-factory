@@ -1,6 +1,7 @@
 import type { BlockEditAuthority } from '@cat-factory/contracts'
 import type {
   BugCandidate,
+  BuiltinTaskSourceKind,
   BugHuntAnalysisStatus,
   BugHuntAssessor,
   BugHuntCandidate,
@@ -258,23 +259,37 @@ export class BugHuntService {
 }
 
 /**
- * Put the caller's board id on the field the target provider reads. The three built-in vendors'
- * board notions are structurally different (a Jira project key, a Linear team UUID, an
- * `owner/repo` slug), which is exactly why the wire carries ONE opaque string and the mapping
- * happens here rather than in the SPA — a picker that had to know which field to fill would have
- * to be forked per provider.
+ * Which leg of the board scope each BUILT-IN source's provider reads. The vendors' board notions
+ * are structurally different (a Jira project key, a Linear team UUID, an `owner/repo` slug, a
+ * nesting GitLab project path), which is exactly why the wire carries ONE opaque string and the
+ * mapping happens here rather than in the SPA — a picker that had to know which field to fill
+ * would have to be forked per provider.
  *
- * A DEPLOYMENT-REGISTERED source takes the opaque `boardId` leg. It must not fall through to
- * `githubRepo`: every field here is a plain string, so a fall-through would hand a registered
- * provider's board scope to the GitHub field and fail as "no matching issues" rather than as the
- * mis-routing it is. The default is therefore keyed on the source being a BUILT-IN, not on it
- * being un-matched.
+ * A `Record` over the built-in vocabulary rather than an `if`-chain, because every field here is
+ * a plain string and so a fall-through is silent: when `gitlab` joined the built-ins, a chain
+ * ending in `return { boardId: board }` sent its project path to the opaque leg no built-in
+ * provider reads, which surfaces as "no matching issues" rather than as the mis-routing it is.
+ * A fifth built-in now fails to compile until it names its leg.
+ */
+const BUILTIN_BOARD_LEGS: Record<BuiltinTaskSourceKind, keyof IssueIntakeQuery['board']> = {
+  jira: 'jiraProjectKey',
+  linear: 'linearTeamId',
+  github: 'githubRepo',
+  gitlab: 'gitlabProject',
+}
+
+/**
+ * Put the caller's board id on the field the target provider reads.
+ *
+ * A DEPLOYMENT-REGISTERED source takes the opaque `boardId` leg, which only its own provider
+ * interprets. That default is keyed on the source NOT being a built-in, never on it being
+ * un-matched by the cases above.
  */
 function boardScopeFor(source: TaskSourceKind, board: string): IssueIntakeQuery['board'] {
-  if (source === 'jira') return { jiraProjectKey: board }
-  if (source === 'linear') return { linearTeamId: board }
-  if (source === 'github') return { githubRepo: board }
-  return { boardId: board }
+  const leg = BUILTIN_BOARD_LEGS[source as BuiltinTaskSourceKind] as
+    | keyof IssueIntakeQuery['board']
+    | undefined
+  return leg ? { [leg]: board } : { boardId: board }
 }
 
 /** Scrub the free-text fields of a candidate before it is sent to a model provider. */

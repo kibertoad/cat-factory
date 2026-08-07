@@ -32,6 +32,7 @@ import type {
   ListOptions,
   Paged,
   ProjectIssueQuery,
+  ProjectIssuePage,
   RepoContentEntry,
   RepoEntry,
   RepoFileContent,
@@ -51,6 +52,7 @@ export type {
   ListOptions,
   Paged,
   ProjectIssueQuery,
+  ProjectIssuePage,
   RepoContentEntry,
   RepoEntry,
   RepoFileContent,
@@ -169,7 +171,7 @@ export interface VcsClient {
     connection: VcsConnectionRef,
     ref: VcsRepoRef,
     query: ProjectIssueQuery,
-  ): Promise<GitHubIssueSearchHit[]>
+  ): Promise<ProjectIssuePage>
   /** Code-search files visible to the connection. */
   searchCode(
     connection: VcsConnectionRef,

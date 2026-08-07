@@ -376,6 +376,17 @@ export interface GitHubIssueSearchHit {
 export interface ProjectIssueQuery {
   /** Free text matched against the issue title/body; absent ⇒ every issue in scope. */
   text?: string
+  /**
+   * Narrow what {@link text} is matched against. `'title'` restricts it to the title, which is
+   * what an intake predicate asking for a title fragment means; absent ⇒ the vendor's default
+   * (title AND description on GitLab), which is the right reading for a picker's free-text box.
+   *
+   * Its own field rather than a convention on {@link text}, because the two readings differ in
+   * what they RETURN, not in how they are spelled: an issue whose body happens to mention the
+   * fragment is a legitimate picker hit and is not the issue an intake schedule was configured
+   * to pick up and start a pipeline on.
+   */
+  textIn?: 'title'
   /** Labels that must ALL be present. */
   labels?: string[]
   /** Restrict to open issues. Absent ⇒ any state. */
@@ -388,6 +399,21 @@ export interface ProjectIssueQuery {
   limit: number
   /** 1-based result page, for a caller walking past a run of ineligible hits. */
   page?: number
+}
+
+/**
+ * One page of a project-scoped issue search, plus whether the vendor said there is another.
+ *
+ * `hasMore` is on the response rather than inferred by the caller because the obvious inference
+ * is wrong: "fewer hits came back than I asked for, so that was the last page" assumes the vendor
+ * honoured `limit`, and GitLab's `max_page_size` is an INSTANCE setting an administrator can lower
+ * below it. On such an instance every page is short, so a caller reading a short page as the end
+ * stops after the first one and reports a board it never finished walking as exhausted. The
+ * adapter already has the honest answer (`Link: rel="next"`) and would otherwise discard it.
+ */
+export interface ProjectIssuePage {
+  hits: GitHubIssueSearchHit[]
+  hasMore: boolean
 }
 
 /** A single hit from code-searching an installation's repos for a file. */
@@ -618,7 +644,7 @@ export interface GitHubClient {
     installationId: number,
     ref: GitHubRepoRef,
     query: ProjectIssueQuery,
-  ): Promise<GitHubIssueSearchHit[]>
+  ): Promise<ProjectIssuePage>
   /**
    * Code-search files visible to the installation. `query` is the raw GitHub
    * code-search text and MUST already carry an `org:`/`user:`/`repo:` scope

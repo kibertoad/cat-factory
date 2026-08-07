@@ -1,5 +1,6 @@
 import type {
   BugCandidate,
+  IssueIntakePredicate,
   TaskSourceKind,
   TaskSourceDescriptor,
   TaskSourceDiagnostic,
@@ -119,13 +120,19 @@ export interface IssueIntakeQuery {
     jiraProjectKey?: string
     linearTeamId?: string
     githubRepo?: string
+    /** GitLab project as its full path with namespace, e.g. `group/sub/project`. */
+    gitlabProject?: string
     boardId?: string
   }
   /** Substring that must appear in the issue title. */
   titleFragment?: string
   /** Label(s) that must ALL be present on the issue. */
   labels?: string[]
-  /** Issue type name (Jira issue type / GitHub org issue type). Sources without a type notion ignore it. */
+  /**
+   * Issue type name (Jira issue type / GitHub org issue type). A source whose vendor has no
+   * type notion that can mean "bug" ignores it, and SAYS SO through
+   * {@link TaskSourceProvider.ignoredIntakePredicates} rather than dropping it quietly.
+   */
   issueType?: string
   /**
    * Restrict to issues with NO assignee. The bug hunt sets it (an unowned bug is what
@@ -142,6 +149,18 @@ export interface IssueIntakeQuery {
   /** Max hits to return. Small — the intake step picks exactly one. */
   limit: number
 }
+
+/**
+ * The narrowing predicates on {@link IssueIntakeQuery} a source can be asked to evaluate, named
+ * so a provider whose vendor cannot express one can STATE that rather than drop it.
+ *
+ * Only the predicates a caller CHOOSES are members. `board` and `limit` are not: a source that
+ * could not scope its scan or bound its result would not be an intake source at all, so there is
+ * no honest "ignored" answer for either. `excludeExternalIds` is not one either, because no
+ * vendor expresses it and every provider already overscans and filters, which is evaluation
+ * rather than omission.
+ */
+export type { IssueIntakePredicate }
 
 /**
  * A selectable "board" on a tracker (Jira project / Linear team / GitHub repository) and one
@@ -250,6 +269,26 @@ export interface TaskSourceProvider {
     query: IssueIntakeQuery,
     workspaceId: string,
   ): Promise<TaskSearchResult[]>
+  /**
+   * The {@link IssueIntakeQuery} predicates this provider does NOT push into its vendor query,
+   * because the vendor has no way to express them. Absent or empty ⇒ every predicate bites.
+   *
+   * It exists because a dropped predicate is INVISIBLE at every layer that would otherwise catch
+   * it: the query still compiles, the vendor still answers, and the caller still gets issues, just
+   * a wider set than the one it asked for. On a `bug-intake` schedule that is not a cosmetic gap —
+   * `issueType` defaults to `bug`, so a source that ignores it starts the bugfix pipeline on
+   * whatever is oldest and open, and the operator's only evidence is a run on a docs chore.
+   *
+   * DECLARED rather than derived, unlike `supportsIntake`: the four vendor grammars share no shape
+   * to inspect (JQL text, a GraphQL filter tree, GitHub qualifiers, GitLab request parameters), so
+   * there is nothing to ask. What keeps a declaration honest is a test that compiles each source's
+   * query with and without each predicate and asserts the pair differs exactly where this list
+   * says it should, which is the same fact read off the compiler rather than restated beside it.
+   *
+   * It reaches the SPA on `TaskSourceState`, so the form that offers a predicate is the form that
+   * says when it will not be applied and what to narrow with instead.
+   */
+  readonly ignoredIntakePredicates?: readonly IssueIntakePredicate[]
   /**
    * List the boards a hunt can be scoped to — Jira projects, Linear teams, GitHub
    * repositories. Optional: a provider without it can't back the bug hunt's board

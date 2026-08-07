@@ -11,6 +11,7 @@ import type { IssueIntakeRefusalReason } from '@cat-factory/contracts'
 import { BUILTIN_TASK_SOURCE_KINDS } from '@cat-factory/contracts'
 import { apiErrorReason } from '~/composables/api/errors'
 import { pipelineAllowedForSchedule } from '~/utils/pipeline'
+import { appliesIntakePredicate } from '~/utils/intakePredicates'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -48,6 +49,10 @@ const intakeSource = ref<TaskSourceKind | null>(null)
 const intakeJiraProjectKey = ref('')
 const intakeLinearTeamId = ref('')
 const intakeGithubRepo = ref('')
+// A GitLab project is its full path with namespace, which NESTS (`group/sub/project`), so it is
+// its own field rather than a reuse of the GitHub one: the two are not the same shape and the two
+// providers read different legs of the stored board scope.
+const intakeGitlabProject = ref('')
 /**
  * The board scope for a DEPLOYMENT-REGISTERED source, held opaquely. Its own field rather than
  * reusing one of the three above, mirroring `issueIntakeConfigSchema.board.boardId`: only that
@@ -181,6 +186,20 @@ const intakeDispatch = computed<'queue' | 'per-ticket'>(() =>
 // (`supportsIntake`, derived from the registered provider) rather than inferred from the id here.
 const intakeSources = computed(() => tasks.offeredSources.filter((s) => s.supportsIntake))
 
+/** The selected source's state, which is what declares the predicates it will not apply. */
+const intakeSourceState = computed(() =>
+  intakeSource.value ? tasks.descriptorFor(intakeSource.value) : undefined,
+)
+const intakeSourceLabel = computed(() => intakeSourceState.value?.label ?? '')
+/**
+ * Whether the selected source will actually apply the issue-type predicate. A schedule fires
+ * unattended, and `BugIntakeService` defaults the predicate to `bug`, so a source that drops it
+ * starts the bugfix pipeline on whatever is oldest and open with nothing to point at.
+ */
+const intakeIssueTypeApplies = computed(() =>
+  appliesIntakePredicate(intakeSourceState.value, 'issueType'),
+)
+
 watch(open, (isOpen) => {
   if (!isOpen) return
   name.value = ''
@@ -199,6 +218,7 @@ watch(open, (isOpen) => {
   intakeJiraProjectKey.value = ''
   intakeLinearTeamId.value = ''
   intakeGithubRepo.value = ''
+  intakeGitlabProject.value = ''
   intakeBoardId.value = ''
   trackerTrigger.value = false
   intakeTitleFragment.value = ''
@@ -229,6 +249,7 @@ const { requestClose } = useUnsavedGuard({
     intakeJiraProjectKey: intakeJiraProjectKey.value.trim(),
     intakeLinearTeamId: intakeLinearTeamId.value.trim(),
     intakeGithubRepo: intakeGithubRepo.value.trim(),
+    intakeGitlabProject: intakeGitlabProject.value.trim(),
     intakeBoardId: intakeBoardId.value.trim(),
     trackerTrigger: trackerTrigger.value,
     intakeTitleFragment: intakeTitleFragment.value.trim(),
@@ -253,6 +274,7 @@ const intakeReady = computed(() => {
   if (intakeSource.value === 'jira') return intakeJiraProjectKey.value.trim().length > 0
   if (intakeSource.value === 'linear') return intakeLinearTeamId.value.trim().length > 0
   if (intakeSource.value === 'github') return intakeGithubRepo.value.trim().length > 0
+  if (intakeSource.value === 'gitlab') return intakeGitlabProject.value.trim().length > 0
   // A registered source is scoped by its opaque board id. Falling through to `false` here would
   // make its schedule permanently unsaveable rather than merely unscoped.
   if (intakeSource.value) return intakeBoardId.value.trim().length > 0
@@ -277,6 +299,9 @@ function buildIssueIntake(): IssueIntakeConfig {
       ...(source === 'github' && intakeGithubRepo.value.trim()
         ? { githubRepo: intakeGithubRepo.value.trim() }
         : {}),
+      ...(source === 'gitlab' && intakeGitlabProject.value.trim()
+        ? { gitlabProject: intakeGitlabProject.value.trim() }
+        : {}),
       ...(!intakeSourceIsBuiltin.value && intakeBoardId.value.trim()
         ? { boardId: intakeBoardId.value.trim() }
         : {}),
@@ -286,7 +311,12 @@ function buildIssueIntake(): IssueIntakeConfig {
         ? { titleFragment: intakeTitleFragment.value.trim() }
         : {}),
       ...(labels.length ? { labels } : {}),
-      ...(intakeIssueType.value.trim() ? { issueType: intakeIssueType.value.trim() } : {}),
+      // Withheld for a source that would drop it anyway, so the STORED config carries no
+      // predicate the schedule never applies: a config read back later is evidence of what the
+      // schedule does, and a dead `issueType: 'bug'` on it is the same lie the form would tell.
+      ...(intakeIssueTypeApplies.value && intakeIssueType.value.trim()
+        ? { issueType: intakeIssueType.value.trim() }
+        : {}),
     },
     ...(source === 'github' && intakeInProgressLabel.value.trim()
       ? { inProgressLabel: intakeInProgressLabel.value.trim() }
@@ -547,6 +577,15 @@ async function add() {
             <UInput v-model="intakeGithubRepo" placeholder="owner/name" class="w-full" />
           </UFormField>
           <UFormField
+            v-if="intakeSource === 'gitlab'"
+            :label="t('board.recurring.intakeGitlabProject')"
+            :help="t('board.recurring.intakeGitlabProjectHelp')"
+            required
+          >
+            <!-- A GitLab project path is literal, and NESTS: subgroups are part of it. -->
+            <UInput v-model="intakeGitlabProject" placeholder="group/project" class="w-full" />
+          </UFormField>
+          <UFormField
             v-if="intakeSource && !intakeSourceIsBuiltin"
             :label="t('board.recurring.intakeBoardId')"
             :help="t('board.recurring.intakeBoardIdHelp')"
@@ -579,7 +618,23 @@ async function add() {
             </UFormField>
             <UFormField :label="t('board.recurring.intakeIssueType')">
               <!-- A literal issue-type example (tracker vocabulary), kept verbatim across locales. -->
-              <UInput v-model="intakeIssueType" placeholder="bug" class="w-full" />
+              <UInput
+                v-if="intakeIssueTypeApplies"
+                v-model="intakeIssueType"
+                placeholder="bug"
+                class="w-full"
+              />
+              <!-- Not a disabled input: this source's provider never sends the predicate, so a box
+                   still holding a value would read as a filter that is on. Stated here because a
+                   schedule fires unattended — the only other evidence of the gap is a bugfix run
+                   started on a docs chore. -->
+              <p v-else class="text-xs text-amber-400">
+                {{
+                  t('board.recurring.intakeIssueTypeUnsupported', {
+                    tracker: intakeSourceLabel,
+                  })
+                }}
+              </p>
             </UFormField>
             <UFormField
               v-if="intakeSource === 'github'"

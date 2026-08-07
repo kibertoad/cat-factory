@@ -249,6 +249,7 @@ export type {
   ListOptions,
   Paged,
   ProjectIssueQuery,
+  ProjectIssuePage,
   RateLimitSnapshot,
   RepoContentEntry,
   RepoEntry,
@@ -345,6 +346,7 @@ export type {
   TaskSearchRepoScope,
   TaskRepoScopeRules,
   IssueIntakeQuery,
+  IssueIntakePredicate,
   BugCandidate,
   TrackerBoard,
   NormalizedTaskConnection,
@@ -353,6 +355,7 @@ export type {
 } from './task-source.js'
 export type { BugHuntAssessor, BugHuntSubject } from './bug-hunt.js'
 export type {
+  BuiltinTaskSourceKind,
   TaskSourceWebhookAdapter,
   TrackerCommentAuthor,
   TrackerCommentEvent,
