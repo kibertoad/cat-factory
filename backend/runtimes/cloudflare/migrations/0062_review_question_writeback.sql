@@ -1,5 +1,5 @@
 -- Headless clarification loop, slice 2a: questions out to the linked tracker issue.
--- See docs/initiatives/headless-clarification-loop.md.
+-- See backend/docs/adr/0047-headless-clarification-loop.md.
 --
 -- When a run started through the public API parks its requirements review on open findings,
 -- the engine echoes those findings — each with its stable id — onto the block's linked tracker

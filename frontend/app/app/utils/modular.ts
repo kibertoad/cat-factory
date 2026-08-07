@@ -6,6 +6,6 @@
  * ergonomics as the layer's auto-imported stores and composables.
  *
  * See `app/modular/registry.ts` for the seam itself and
- * docs/initiatives/modular-vue-adoption.md for the adoption plan.
+ * backend/docs/adr/0049-modular-vue-adoption.md for the adoption plan.
  */
 export { registerAppModule } from '~/modular/registry'

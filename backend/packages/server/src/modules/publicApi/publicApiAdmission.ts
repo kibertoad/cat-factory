@@ -9,7 +9,7 @@
 // cannot drift between facades — which is also why it belongs here rather than in the
 // cross-runtime conformance suite.
 //
-// See docs/initiatives/headless-clarification-loop.md (D1).
+// See backend/docs/adr/0047-headless-clarification-loop.md (D1).
 
 import {
   type AgentKindRegistry,
@@ -41,7 +41,7 @@ import { HUMAN_WAIT_GATE_KINDS } from '@cat-factory/contracts'
  * for these runs" — and `POST /api/v1/jobs/:id/cancel` guarantees an abandoned park can always be
  * cleared, so the concurrency cap stays a recoverable `429` rather than a wall with no door. A
  * plain `write` key sees exactly the pre-existing behaviour, refusal included. See
- * `docs/initiatives/headless-clarification-loop.md` (decision D1).
+ * `backend/docs/adr/0047-headless-clarification-loop.md` (decision D1).
  */
 export const PARKING_INLINE_KINDS = new Set<string>([
   REQUIREMENTS_REVIEW_AGENT_KIND,

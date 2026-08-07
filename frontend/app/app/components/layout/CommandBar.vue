@@ -26,7 +26,7 @@ const library = useFragmentLibraryStore()
 const access = useWorkspaceAccess()
 
 // The static destination catalog + its RBAC/availability gating now comes from
-// the shared nav manifest (docs/initiatives/modular-vue-adoption.md, slice 1),
+// the shared nav manifest (backend/docs/adr/0049-modular-vue-adoption.md, slice 1),
 // rendered here as command entries. The DYNAMIC per-connection commands below
 // (github/slack/doc/task connect + import) stay local to the palette — they vary
 // per live connection, so they are not part of the static manifest this slice.

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Shared modal shell for the agent-run result windows (slice 5 of the modular-vue
-// adoption — docs/initiatives/modular-vue-adoption.md; progress in
-// docs/initiatives/modular-vue-slice5-progress.md).
+// adoption — backend/docs/adr/0049-modular-vue-adoption.md; progress in
+// backend/docs/adr/0049-modular-vue-adoption.md).
 //
 // Every result window (the merger verdict, the tester report, the requirements-review
 // loop, the gates, …) used to hand-roll the SAME modal chrome — `<Teleport>`, a

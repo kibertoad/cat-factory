@@ -195,7 +195,7 @@ function setResolveOnMerge(value: WritebackOverride | null) {
   board.updateBlock(props.block.id, { trackerResolveOnMerge: value })
 }
 // Only consulted for runs started through the public API — a task started here keeps its in-app
-// clarification window regardless (docs/initiatives/headless-clarification-loop.md).
+// clarification window regardless (backend/docs/adr/0047-headless-clarification-loop.md).
 function setQuestionsOnPark(value: WritebackOverride | null) {
   board.updateBlock(props.block.id, { trackerQuestionsOnPark: value })
 }

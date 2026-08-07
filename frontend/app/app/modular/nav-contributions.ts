@@ -10,7 +10,7 @@ export type { AppSlots } from './slots'
 
 /**
  * The single nav/command catalog for the layer (slice 1 of the modular-vue
- * adoption — docs/initiatives/modular-vue-adoption.md).
+ * adoption — backend/docs/adr/0049-modular-vue-adoption.md).
  *
  * Every destination is declared ONCE here as data and rendered three ways —
  * `SideBar`, `CommandBar`, `BoardToolbar` — instead of each shell hand-rolling

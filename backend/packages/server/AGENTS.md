@@ -51,7 +51,7 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   doors; the PATCH half MERGES over what the task already carries where creation takes the bag
   whole, because the surface never serves that bag back, so a replacing patch would ask a caller
   to restate values it cannot read. See
-  `docs/initiatives/headless-clarification-loop.md`,
+  [ADR 0047](../../docs/adr/0047-headless-clarification-loop.md),
   `backend/docs/adr/0030-public-api-surface.md` and
   `backend/docs/adr/0043-public-decision-surface.md`.
 - `modules/toolServers/`: the tool-server (MCP) **operability** surface, `secrets.manage`-gated

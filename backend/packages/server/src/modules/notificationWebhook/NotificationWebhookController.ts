@@ -29,7 +29,7 @@ function requireWebhooks<E extends AppEnv>(c: Context<E>): NotificationWebhookSe
  * Workspace-scoped management of the OUTBOUND notification webhooks: the HTTPS endpoints a
  * workspace registers to receive its notifications by push. This is how a headless integration —
  * which has no in-app inbox and no browser WebSocket — learns that a run parked on a human
- * decision (see `docs/initiatives/headless-clarification-loop.md`, D3).
+ * decision (see `backend/docs/adr/0047-headless-clarification-loop.md`, D3).
  *
  * Two shapes over one store: the SINGULAR routes address the `default` id, the COLLECTION
  * addresses any of them. Neither has logic of its own — both delegate to the same service methods
