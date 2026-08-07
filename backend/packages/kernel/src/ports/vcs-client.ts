@@ -31,6 +31,7 @@ import type {
   GitHubSubIssue,
   ListOptions,
   Paged,
+  ProjectIssueQuery,
   RepoContentEntry,
   RepoEntry,
   RepoFileContent,
@@ -49,6 +50,7 @@ export type {
   GitHubSubIssue,
   ListOptions,
   Paged,
+  ProjectIssueQuery,
   RepoContentEntry,
   RepoEntry,
   RepoFileContent,
@@ -156,6 +158,17 @@ export interface VcsClient {
     query: string,
     limit?: number,
     order?: 'created-asc',
+  ): Promise<GitHubIssueSearchHit[]>
+  /**
+   * Predicate-search ONE project's issues, every predicate pushed into the vendor request.
+   * Optional, and the counterpart of {@link VcsClient.searchIssues} for a vendor whose issue
+   * search carries no repository qualifier of its own: see the `GitHubClient` twin for why
+   * the scope is an argument rather than query text.
+   */
+  searchProjectIssues?(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    query: ProjectIssueQuery,
   ): Promise<GitHubIssueSearchHit[]>
   /** Code-search files visible to the connection. */
   searchCode(

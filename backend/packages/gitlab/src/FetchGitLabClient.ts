@@ -20,6 +20,7 @@ import type {
   ListOptions,
   Logger,
   Paged,
+  ProjectIssueQuery,
   RepoContentEntry,
   RepoEntry,
   RepoFileContent,
@@ -430,6 +431,65 @@ export class FetchGitLabClient implements VcsClient {
       })
     }
     return hits.slice(0, limit)
+  }
+
+  /**
+   * Predicate-search ONE project's issues through `GET /projects/:id/issues`, which is the
+   * endpoint that actually carries a scope: the global `/search?scope=issues` backing
+   * {@link FetchGitLabClient.searchIssues} has no project qualifier, so a caller that must
+   * confine its hits to one project cannot express that as search text (it would be matched
+   * as prose against every issue the token can read).
+   *
+   * Every predicate is a request PARAMETER GitLab evaluates, and the response carries the
+   * body, labels, creation time, comment count and assignee, so a candidate listing is one
+   * call rather than one call per candidate. `owner` / `repo` are read back off each issue's
+   * own `web_url` rather than echoed from the ref, so a hit reported under a subgroup path
+   * round-trips as the path GitLab itself uses.
+   */
+  async searchProjectIssues(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    query: ProjectIssueQuery,
+  ): Promise<GitHubIssueSearchHit[]> {
+    const params = new URLSearchParams({
+      per_page: String(Math.min(Math.max(query.limit, 1), 100)),
+    })
+    if (query.page && query.page > 1) params.set('page', String(query.page))
+    if (query.text) params.set('search', query.text)
+    if (query.openOnly) params.set('state', 'opened')
+    // GitLab takes the label set as one comma-joined value, matched as AND.
+    if (query.labels?.length) params.set('labels', query.labels.join(','))
+    // `assignee_id=None` is GitLab's unassigned filter (the literal string, not an id).
+    if (query.unassignedOnly) params.set('assignee_id', 'None')
+    if (query.order === 'created-asc') {
+      params.set('order_by', 'created_at')
+      params.set('sort', 'asc')
+    }
+    const { json } = await this.request(`/projects/${projectPath(ref)}/issues?${params}`, {
+      connection,
+    })
+    const items = (Array.isArray(json) ? json : []) as GlProjectIssuePayload[]
+    const hits: GitHubIssueSearchHit[] = []
+    for (const item of items) {
+      const parts = parseProjectWebUrl(item.web_url ?? '')
+      if (!parts) continue
+      hits.push({
+        owner: parts.owner,
+        repo: parts.repo,
+        number: item.iid ?? 0,
+        title: item.title ?? '(untitled)',
+        state: item.state === 'opened' ? 'open' : 'closed',
+        url: item.web_url ?? '',
+        body: item.description ?? '',
+        labels: (item.labels ?? [])
+          .map((l) => (typeof l === 'string' ? l : (l?.name ?? '')))
+          .filter(Boolean),
+        createdAt: item.created_at ?? '',
+        commentCount: item.user_notes_count ?? 0,
+        assignee: item.assignee?.username ?? null,
+      })
+    }
+    return hits.slice(0, query.limit)
   }
 
   async searchCode(): Promise<GitHubCodeSearchHit[]> {
@@ -1215,6 +1275,22 @@ function parseThreadId(threadId: string): { iid: number; discussionId: string } 
   const idx = threadId.indexOf(':')
   if (idx < 0) return { iid: 0, discussionId: threadId }
   return { iid: Number(threadId.slice(0, idx)) || 0, discussionId: threadId.slice(idx + 1) }
+}
+
+/**
+ * One entry of `GET /projects/:id/issues` — the richer per-issue payload the project-scoped
+ * search reads, beside the leaner {@link GlIssuePayload} the projection mapper takes.
+ */
+interface GlProjectIssuePayload {
+  iid?: number
+  title?: string
+  state?: string
+  web_url?: string
+  description?: string
+  labels?: Array<string | { name?: string }>
+  created_at?: string
+  user_notes_count?: number
+  assignee?: { username?: string } | null
 }
 
 /** A merge-request detail object — the fields the review + rebase reads consume. */

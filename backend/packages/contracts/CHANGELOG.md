@@ -1,5 +1,95 @@
 # @cat-factory/contracts
 
+## 0.265.0
+
+### Minor Changes
+
+- 6637bbd: Add GitLab Issues as a task source: import, search and setup check.
+
+  `gitlab` joins `BUILTIN_TASK_SOURCE_KINDS`, so a shop that runs GitLab for both code and issues can
+  link an issue onto a board block as agent context instead of connecting a second vendor beside its
+  repositories. `GitLabIssuesProvider` stores no credentials of its own: it reads through the
+  workspace's existing GitLab connection, the same credentialless shape GitHub Issues has. The
+  recurring `bug-intake` schedule, the bug hunt, push intake and ticket writeback are the remaining
+  slices ([`docs/initiatives/gitlab-issues-intake.md`](./docs/initiatives/gitlab-issues-intake.md)).
+
+  The public-API `TaskSourceKind` enum gains a member (OpenAPI 1.25.0, SDKs regenerated). Additive on
+  a closed vocabulary the clients already tolerate unknown members of, so a consumer built against
+  1.24.0 keeps parsing every response it understood.
+
+  Four internal shapes changed, none externally consumed:
+
+  - `VcsClient` / `GitHubClient` gain an optional `searchProjectIssues(connection, ref, query)`.
+    GitLab's global issue search accepts no project qualifier, so a repo scope cannot be expressed as
+    query text there the way GitHub's `repo:` does; the scope is an argument instead, and the
+    predicates ride a `ProjectIssueQuery` the vendor evaluates.
+  - `TaskSourceProvider.fetchTask` takes `workspaceId`. A GitLab PAT connection is keyed on the
+    workspace, not on the account owning the project, so without it the provider could only scan
+    every connection on the deployment for one able to read the id.
+  - `TaskSourceProvider` gains an optional `repoScope`, whose PRESENCE declares the source
+    repo-backed. One member rather than a flag beside a matcher, because the same fact decides two
+    things that must agree: that the source's search is handed a resolved repository, and that the
+    workspace's imported rows narrow to one.
+  - `TaskSourceState` gains `supportsIntake` and `ridesVcsProvider`, both derived from the registered
+    provider: whether it implements the predicate search a schedule fires, and which VCS connection
+    it authenticates through (so the settings panel can name the right remedy for an unavailable
+    source instead of inferring one).
+
+  Two live bugs are fixed on the way. A workspace connected to GitLab reported **GitHub Issues** as
+  available (availability keyed on a connection EXISTING rather than on its provider, and both live in
+  one row per workspace), so the source looked connected and its import resolved an empty projection.
+  And the recurring-schedule form offered every connected source regardless of whether its provider
+  could search on a schedule, which saved a schedule that could never fire.
+
+  Three surfaces that hard-coded `github` are now asked of the registry, which is what makes a
+  FOURTH source work rather than merely exist: the search route resolves a repo scope for any source
+  declaring `repoScope` (a repo-backed source refuses a null one, so GitLab search was 422ing on
+  every query), the imported-issue list narrows every repo-backed source's rows to the service's own
+  repository, and the issue-tracker settings panel renders one card per registered source instead of
+  one hard-coded card per built-in.
+
+## 0.264.0
+
+### Minor Changes
+
+- be9b8dc: Let a headless caller repair the input the platform itself refused.
+
+  `PATCH /api/v1/tasks/:taskId` accepts `fields`, the task's per-type bag, checked against the same
+  descriptors `GET /api/v1/task-types` serves and refused the same way (`422`,
+  `details.reason: 'task_type_fields_invalid'`, every problem at once). Four of the pre-dispatch input
+  gate's seven issue codes name a field of that bag, and it was accepted at creation and nowhere else,
+  so the platform could accept a task, refuse to run it, name precisely what to go and fix, and leave
+  a caller with `proceed` (waiving the finding) or deleting a task whose id every stored reference
+  points at. OpenAPI `info.version` 1.24.0; all four SDKs and the MCP facade regenerated.
+
+  The public `fields` MERGES over what the task carries where the internal patch keys replace, because
+  this API does not serve the bag back: a deployment's own type may declare a `password` field, so
+  there is no read surface to restate values from. Three rules keep that merge from judging or
+  rewriting what the caller never sent:
+
+  - Only the keys a request NAMES are checked against the descriptors. A stored value was admitted by
+    another authority (the public descriptors for a built-in type restate `taskTypeFieldsSchema` more
+    narrowly, and a deployment may re-register a custom type under tighter bounds), so re-judging it
+    refuses the patch for something it did not do, identically every time. Completeness (`required`)
+    is still judged on the merged result.
+  - Alternate SPELLINGS of one value supersede each other. A `review` task's target is `prNumber` or
+    `prUrl`; merging the stored number back in beside a caller's URL would outrank it and silently
+    revert the target.
+  - A description arriving with the patch has the fold it already carries REPLACED rather than
+    prepended to. The read surface serves the folded description, so a read-modify-write client
+    returns it, and prepending left the task naming two different pull requests.
+
+  Internally the per-type bag is now patched through two keys that each replace their own half:
+  `customTaskTypeFields` (unchanged) and a new `builtinTaskTypeFields`, validated by the schema rather
+  than by a deployment's descriptor. A `review` task's target repeats creation's own resolution on the
+  patch path (the pull request is verified against the provider and the confirmed reference re-folded
+  into the description); where the description has since been rewritten by hand, moving the target is
+  refused rather than left naming a pull request the run does not review.
+
+  Also retires a stale caveat on the visual-confirmation decision, which told callers the screenshots
+  and reference designs were not readable over `/api/v1`. They have been readable since the artifact
+  blob endpoint shipped: it is keyed on the artifact alone, so it serves both anchors.
+
 ## 0.263.0
 
 ### Minor Changes

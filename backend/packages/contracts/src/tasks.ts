@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { credentialFieldSchema } from './documents.js'
 import { namespacedIdSchema } from './primitives.js'
+import { vcsProviderSchema } from './routes/auth.js'
 
 // ---------------------------------------------------------------------------
 // Task-source integration wire contracts. A workspace can connect to one or
@@ -18,7 +19,7 @@ import { namespacedIdSchema } from './primitives.js'
 // ---------------------------------------------------------------------------
 
 /** The task sources this build ships. A deployment registers its own beside them (see below). */
-export const BUILTIN_TASK_SOURCE_KINDS = ['jira', 'github', 'linear'] as const
+export const BUILTIN_TASK_SOURCE_KINDS = ['jira', 'github', 'linear', 'gitlab'] as const
 
 /**
  * A BUILT-IN task source OR a CONSUMER-namespaced one ({@link namespacedIdSchema},
@@ -173,14 +174,39 @@ export type LinearTeam = v.InferOutput<typeof linearTeamSchema>
  * A source's descriptor plus the workspace's live state for it: whether it is
  * usable right now (`available`) and whether the workspace offers it (`enabled`,
  * the per-workspace toggle, default true). A credentialed source (Jira) is
- * `available` once connected; GitHub Issues is `available` once the workspace's
- * GitHub App is installed (it rides that App, so there is nothing to connect).
+ * `available` once connected; a VCS-backed one (GitHub Issues, GitLab Issues) is
+ * `available` once the workspace's VCS connection is that source's provider (it
+ * rides that connection, so there is nothing to connect on the source itself).
  * `available && enabled` is what makes a source offered for import.
  */
 export const taskSourceStateSchema = v.object({
   ...taskSourceDescriptorSchema.entries,
   available: v.boolean(),
   enabled: v.boolean(),
+  /**
+   * The VCS provider whose workspace connection this source authenticates through, or `null`
+   * for a source that carries its own credentials.
+   *
+   * On the wire because the REMEDY for an unavailable source is not derivable from
+   * `available: false` plus an empty `credentialFields`: "connect Jira" opens this source's own
+   * credential form, while "the GitLab connection is missing" points at an entirely different
+   * settings surface, and pointing at the wrong one is a worse failure than saying nothing. It
+   * is DERIVED from the registered provider for the same reason `supportsIntake` is: a
+   * descriptor field declaring it would drift from the availability rule it is supposed to
+   * explain.
+   */
+  ridesVcsProvider: v.nullable(vcsProviderSchema),
+  /**
+   * Whether this source can back a recurring `bug-intake` schedule, i.e. whether its provider
+   * implements the predicate search intake runs. DERIVED from the provider rather than declared
+   * on the descriptor beside it, because the answer is a fact about the registered
+   * implementation and a declared one drifts from it silently.
+   *
+   * It is on the STATE rather than the descriptor for the same reason `available` is: a source
+   * the schedule form offers but cannot search is not a source with a missing field, it is a
+   * schedule that can never fire, and the form has to know which before it renders a picker.
+   */
+  supportsIntake: v.boolean(),
 })
 export type TaskSourceState = v.InferOutput<typeof taskSourceStateSchema>
 

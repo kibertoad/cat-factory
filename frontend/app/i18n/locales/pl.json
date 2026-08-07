@@ -345,6 +345,7 @@
       "intake": "Pobieranie zgłoszeń",
       "intakeHint": "Każde uruchomienie wybiera jedno pasujące otwarte zgłoszenie z trackera i realizuje je od początku do końca.",
       "intakeNoSources": "Najpierw połącz źródło zadań, aby pobierać z niego zgłoszenia.",
+      "intakeNoIntakeSources": "Źródło zadań jest połączone, ale żadne z połączonych źródeł nie może jeszcze uruchomić zaplanowanego wyszukiwania zgłoszeń.",
       "intakeGithubRepo": "Repozytorium",
       "intakeBoardId": "ID tablicy",
       "intakeBoardIdHelp": "Tablica, projekt lub kolejka, do której ten tracker ogranicza pozyskiwanie. Format określa tracker.",
@@ -2761,27 +2762,21 @@
         "linearTeamSearchPlaceholder": "Szukaj zespołów…"
       },
       "vendor": {
-        "github": "GitHub Issues",
-        "jira": "Jira",
-        "linear": "Linear"
+        "github": "GitHub Issues"
       },
       "linking": {
         "heading": "Wiąż zgłoszenia jako kontekst",
         "description": "Gdy źródło jest dostępne, możesz zaimportować jego zgłoszenia i dołączyć je do zadania, aby agenci widzieli opis zgłoszenia i komentarze podczas implementacji. Jest to niezależne od systemu rejestrowania powyżej.",
-        "github": {
-          "available": "Korzysta z zainstalowanej aplikacji GitHub App — bez poświadczeń.",
-          "unavailable": "Zainstaluj aplikację GitHub App (Integracje → GitHub), aby udostępnić to źródło."
-        },
         "checkSetup": "Sprawdź konfigurację",
-        "install": "Zainstaluj",
         "connected": "Połączono.",
-        "jira": {
-          "connectHint": "Połącz za pomocą konta Jira i tokenu API."
+        "connect": "Połącz",
+        "state": {
+          "ridesConnected": "Korzysta z połączenia {provider} tego obszaru roboczego, więc nie wymaga własnych poświadczeń.",
+          "ridesMissing": "Połącz {provider} w sekcji Integracje, aby udostępnić to źródło.",
+          "notConnected": "Jeszcze nie połączono."
         },
-        "linear": {
-          "connectHint": "Połącz za pomocą osobistego klucza API Linear."
-        },
-        "connect": "Połącz"
+        "connectProvider": "Połącz {provider}",
+        "none": "To wdrożenie nie ma skonfigurowanych źródeł zadań."
       },
       "writeback": {
         "heading": "Zapis zwrotny",

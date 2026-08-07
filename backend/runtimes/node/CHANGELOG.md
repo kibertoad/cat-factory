@@ -1,5 +1,99 @@
 # @cat-factory/node-server
 
+## 0.187.0
+
+### Minor Changes
+
+- 6637bbd: Add GitLab Issues as a task source: import, search and setup check.
+
+  `gitlab` joins `BUILTIN_TASK_SOURCE_KINDS`, so a shop that runs GitLab for both code and issues can
+  link an issue onto a board block as agent context instead of connecting a second vendor beside its
+  repositories. `GitLabIssuesProvider` stores no credentials of its own: it reads through the
+  workspace's existing GitLab connection, the same credentialless shape GitHub Issues has. The
+  recurring `bug-intake` schedule, the bug hunt, push intake and ticket writeback are the remaining
+  slices ([`docs/initiatives/gitlab-issues-intake.md`](./docs/initiatives/gitlab-issues-intake.md)).
+
+  The public-API `TaskSourceKind` enum gains a member (OpenAPI 1.25.0, SDKs regenerated). Additive on
+  a closed vocabulary the clients already tolerate unknown members of, so a consumer built against
+  1.24.0 keeps parsing every response it understood.
+
+  Four internal shapes changed, none externally consumed:
+
+  - `VcsClient` / `GitHubClient` gain an optional `searchProjectIssues(connection, ref, query)`.
+    GitLab's global issue search accepts no project qualifier, so a repo scope cannot be expressed as
+    query text there the way GitHub's `repo:` does; the scope is an argument instead, and the
+    predicates ride a `ProjectIssueQuery` the vendor evaluates.
+  - `TaskSourceProvider.fetchTask` takes `workspaceId`. A GitLab PAT connection is keyed on the
+    workspace, not on the account owning the project, so without it the provider could only scan
+    every connection on the deployment for one able to read the id.
+  - `TaskSourceProvider` gains an optional `repoScope`, whose PRESENCE declares the source
+    repo-backed. One member rather than a flag beside a matcher, because the same fact decides two
+    things that must agree: that the source's search is handed a resolved repository, and that the
+    workspace's imported rows narrow to one.
+  - `TaskSourceState` gains `supportsIntake` and `ridesVcsProvider`, both derived from the registered
+    provider: whether it implements the predicate search a schedule fires, and which VCS connection
+    it authenticates through (so the settings panel can name the right remedy for an unavailable
+    source instead of inferring one).
+
+  Two live bugs are fixed on the way. A workspace connected to GitLab reported **GitHub Issues** as
+  available (availability keyed on a connection EXISTING rather than on its provider, and both live in
+  one row per workspace), so the source looked connected and its import resolved an empty projection.
+  And the recurring-schedule form offered every connected source regardless of whether its provider
+  could search on a schedule, which saved a schedule that could never fire.
+
+  Three surfaces that hard-coded `github` are now asked of the registry, which is what makes a
+  FOURTH source work rather than merely exist: the search route resolves a repo scope for any source
+  declaring `repoScope` (a repo-backed source refuses a null one, so GitLab search was 422ing on
+  every query), the imported-issue list narrows every repo-backed source's rows to the service's own
+  repository, and the issue-tracker settings panel renders one card per registered source instead of
+  one hard-coded card per built-in.
+
+### Patch Changes
+
+- Updated dependencies [6637bbd]
+  - @cat-factory/contracts@0.265.0
+  - @cat-factory/kernel@0.263.0
+  - @cat-factory/gitlab@0.17.0
+  - @cat-factory/integrations@0.142.0
+  - @cat-factory/server@0.243.0
+  - @cat-factory/agents@0.117.3
+  - @cat-factory/consensus@0.14.49
+  - @cat-factory/eks@0.1.261
+  - @cat-factory/gates@0.9.29
+  - @cat-factory/observability-otel@0.17.4
+  - @cat-factory/orchestration@0.232.1
+  - @cat-factory/prompt-fragments@1.0.13
+  - @cat-factory/spend@0.15.31
+  - @cat-factory/caching@0.18.4
+  - @cat-factory/observability-langfuse@0.10.33
+  - @cat-factory/provider-bedrock@0.7.410
+  - @cat-factory/provider-cloudflare@0.7.411
+  - @cat-factory/provider-s3@0.2.330
+
+## 0.186.2
+
+### Patch Changes
+
+- Updated dependencies [be9b8dc]
+  - @cat-factory/contracts@0.264.0
+  - @cat-factory/orchestration@0.232.0
+  - @cat-factory/server@0.242.0
+  - @cat-factory/agents@0.117.2
+  - @cat-factory/consensus@0.14.48
+  - @cat-factory/eks@0.1.260
+  - @cat-factory/gates@0.9.28
+  - @cat-factory/gitlab@0.16.19
+  - @cat-factory/integrations@0.141.2
+  - @cat-factory/kernel@0.262.2
+  - @cat-factory/observability-otel@0.17.3
+  - @cat-factory/prompt-fragments@1.0.12
+  - @cat-factory/spend@0.15.30
+  - @cat-factory/provider-bedrock@0.7.409
+  - @cat-factory/provider-cloudflare@0.7.410
+  - @cat-factory/caching@0.18.3
+  - @cat-factory/observability-langfuse@0.10.32
+  - @cat-factory/provider-s3@0.2.329
+
 ## 0.186.1
 
 ### Patch Changes

@@ -126,8 +126,7 @@ const API_PREFIX = '/api/v1'
 // always saw. It is the floor only: a run-starting operation can still escalate to `decide` at
 // request time when the named pipeline can park.
 //
-// 1.22.0 is main's published number as of this branch's last merge, and it is NOT this change:
-// it belongs to `GET /api/v1/runs/:runId/outcome` and the verification report's new optional
+// 1.22.0 belongs to `GET /api/v1/runs/:runId/outcome` and the verification report's new optional
 // `requirements.unmatchedVerdicts`. Two diffs claiming one number is a lie a consumer pinning
 // the version would act on, so re-read this line after any merge rather than trusting that the
 // VERSION auto-merged clean.
@@ -139,13 +138,24 @@ const API_PREFIX = '/api/v1'
 // `x-min-scope` while the branch was in flight: the collision surfaced as a conflict on this
 // comment block only because each version step writes its own paragraph here, never as one on the
 // VERSION line, which auto-merges clean to a number main has already used.
-// 1.25.0: the outbound webhook becomes a COLLECTION —
-// `GET /api/v1/notification-webhooks` plus `GET|PUT|DELETE /api/v1/notification-webhooks/:webhookId`
-// — beside the singular routes, which keep working and now address the `default` entry. Additive on
-// every axis: four new operations, and two new fields (`id`, `name`) on a response projection a
-// consumer already tolerates unknown members of. Re-read this line against `origin/main` before
-// merging: the number auto-merges clean when both sides pick it.
-const API_VERSION = '1.25.0'
+// 1.25.0, not 1.24.0: `gitlab` joins the `TaskSourceKind` enum, GitLab Issues being a fourth
+// built-in task source. Additive on a CLOSED vocabulary, which is the shape the SDKs are built to
+// tolerate: they map an unknown enum member through rather than refusing it, so a client compiled
+// against 1.24.0 keeps parsing every response it already understood and simply never asks for the
+// new source. No existing member changes meaning and no persisted `source` value moves.
+//
+// This branch has now lost that race TWICE (it claimed 1.22.0, then 1.23.0, then 1.24.0, each
+// published by main while the branch was in flight), which is the paragraph above's point made
+// again: the VERSION line auto-merges clean to a number main has already used, and only this
+// comment block conflicts. Re-read it after every merge.
+// 1.26.0, not 1.25.0: the outbound webhook becomes a COLLECTION, `GET /api/v1/notification-webhooks`
+// plus `GET|PUT|DELETE /api/v1/notification-webhooks/:webhookId`, beside the singular routes, which
+// keep working and now address the `default` entry. Additive on every axis: four new operations, and
+// two new fields (`id`, `name`) on a response projection a consumer already tolerates unknown members
+// of. This branch claimed 1.25.0 and lost it to `gitlab` above, the third branch in a row to lose
+// this race: the VERSION line auto-merges clean to a number main has already published, so re-read
+// it here, not there, after every merge.
+const API_VERSION = '1.26.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

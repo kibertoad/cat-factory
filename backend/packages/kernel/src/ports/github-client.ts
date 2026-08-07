@@ -367,6 +367,29 @@ export interface GitHubIssueSearchHit {
   assignee?: string | null
 }
 
+/**
+ * The predicates a project-scoped issue search may push into the vendor request (see
+ * {@link GitHubClient.searchProjectIssues}). Every field is a filter the vendor evaluates;
+ * nothing here is post-filtered by the caller, so a predicate a vendor cannot express is a
+ * predicate the adapter must refuse rather than silently ignore.
+ */
+export interface ProjectIssueQuery {
+  /** Free text matched against the issue title/body; absent ⇒ every issue in scope. */
+  text?: string
+  /** Labels that must ALL be present. */
+  labels?: string[]
+  /** Restrict to open issues. Absent ⇒ any state. */
+  openOnly?: boolean
+  /** Restrict to issues with no assignee. */
+  unassignedOnly?: boolean
+  /** `created-asc` sorts oldest-first (the issue-intake pickup order); absent ⇒ vendor default. */
+  order?: 'created-asc'
+  /** Max hits to return. */
+  limit: number
+  /** 1-based result page, for a caller walking past a run of ineligible hits. */
+  page?: number
+}
+
 /** A single hit from code-searching an installation's repos for a file. */
 export interface GitHubCodeSearchHit {
   owner: string
@@ -578,6 +601,23 @@ export interface GitHubClient {
     limit?: number,
     order?: 'created-asc',
     page?: number,
+  ): Promise<GitHubIssueSearchHit[]>
+  /**
+   * Predicate-search the issues of ONE repository/project, with every predicate pushed into
+   * the vendor request. Optional: a provider whose issue search takes free text with an
+   * in-query scope qualifier (GitHub) omits it and uses {@link GitHubClient.searchIssues}.
+   *
+   * It exists because a vendor can express the scope only OUT of the query text: GitLab's
+   * global `/search?scope=issues` has no repository qualifier at all, so folding a repo
+   * scope into the search string would match it as prose and return whatever the credential
+   * can reach. The repository is therefore an ARGUMENT here, not a qualifier a caller could
+   * forget to build, for the same reason the task-source port makes its repo scope a required
+   * parameter rather than an optional narrowing.
+   */
+  searchProjectIssues?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    query: ProjectIssueQuery,
   ): Promise<GitHubIssueSearchHit[]>
   /**
    * Code-search files visible to the installation. `query` is the raw GitHub

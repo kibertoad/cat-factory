@@ -807,6 +807,72 @@ describe('GitLab webhook', () => {
   })
 })
 
+describe('FetchGitLabClient — project-scoped issue search', () => {
+  const hit = {
+    iid: 12,
+    title: 'Crash on save',
+    state: 'opened',
+    web_url: 'https://gitlab.com/group/sub/proj/-/issues/12',
+    description: 'boom',
+    labels: ['bug', { name: 'p1' }],
+    created_at: '2026-01-02T03:04:05Z',
+    user_notes_count: 3,
+    assignee: { username: 'dev' },
+  }
+
+  it('pushes every predicate into the project request, never into search text', async () => {
+    const { c, calls } = client({
+      'GET /projects/7/issues?per_page=20&search=crash&state=opened&labels=bug%2Cp1&assignee_id=None&order_by=created_at&sort=asc':
+        { body: [hit] },
+    })
+
+    await c.searchProjectIssues(connection, ref, {
+      text: 'crash',
+      labels: ['bug', 'p1'],
+      openOnly: true,
+      unassignedOnly: true,
+      order: 'created-asc',
+      limit: 20,
+    })
+
+    // One call, and the project is in the PATH — the endpoint that has a scope, not the
+    // global search that has none.
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.url).toContain('/projects/7/issues?')
+  })
+
+  it('projects the whole candidate shape from that ONE response', async () => {
+    const { c } = client({ 'GET /projects/7/issues?per_page=20': { body: [hit] } })
+
+    const hits = await c.searchProjectIssues(connection, ref, { limit: 20 })
+
+    expect(hits).toEqual([
+      {
+        // Read back off the issue's own web_url, so a subgroup path round-trips as GitLab
+        // spells it rather than as the ref the caller happened to pass.
+        owner: 'group/sub',
+        repo: 'proj',
+        number: 12,
+        title: 'Crash on save',
+        state: 'open',
+        url: 'https://gitlab.com/group/sub/proj/-/issues/12',
+        body: 'boom',
+        labels: ['bug', 'p1'],
+        createdAt: '2026-01-02T03:04:05Z',
+        commentCount: 3,
+        assignee: 'dev',
+      },
+    ])
+  })
+
+  it('skips a hit whose web_url does not name a project', async () => {
+    const { c } = client({
+      'GET /projects/7/issues?per_page=20': { body: [{ ...hit, web_url: 'nonsense' }] },
+    })
+    await expect(c.searchProjectIssues(connection, ref, { limit: 20 })).resolves.toEqual([])
+  })
+})
+
 describe('registerGitLab', () => {
   it('registers a resolvable gitlab provider bundle', () => {
     const registry = defaultVcsRegistry()
