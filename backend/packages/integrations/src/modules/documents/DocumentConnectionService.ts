@@ -3,6 +3,7 @@ import type { DocumentConnectionRecord, DocumentConnectionRepository } from '@ca
 import type { DocumentSourceRegistry } from '@cat-factory/kernel'
 import type {
   DocumentConnection,
+  DocumentCredentials,
   DocumentSourceDescriptor,
   DocumentSourceKind,
 } from '@cat-factory/kernel'
@@ -17,11 +18,34 @@ import type { WorkspaceRepository } from '@cat-factory/kernel'
 // (source, label, timestamp) is. Every source is workspace-scoped: a single sealed
 // credential shared by everyone in the workspace.
 
+/**
+ * The renewal half of a source's OAuth grant, as this service consumes it: given a stored
+ * connection, the fresher credential bag to store, or null when there is nothing to do.
+ *
+ * A narrow interface rather than the service itself so the dependency runs ONE way. The OAuth
+ * service owns the protocol and knows nothing about the connection store; this service owns the
+ * row and calls into the protocol. Handing it the whole service would close the loop, and the
+ * only way out of that is a setter nobody can see is required.
+ */
+export interface DocumentOAuthRenewer {
+  renewIfExpiring(record: DocumentConnectionRecord): Promise<DocumentCredentials | null>
+}
+
 export interface DocumentConnectionServiceDependencies {
   documentConnectionRepository: DocumentConnectionRepository
   registry: DocumentSourceRegistry
   workspaceRepository: WorkspaceRepository
   clock: Clock
+  /**
+   * Renews an OAuth-granted connection whose access token is at or past its expiry, on the one
+   * seam every read resolves a credential through.
+   *
+   * HERE rather than at each reader, because there are four of them (import, search, the content
+   * resolver, the dispatch-time refresher) and a reader that forgot would spend a dead token and
+   * report a permanent source outage. Optional so the service stays unit-testable standalone and
+   * so a deployment wiring no OAuth-capable source pays nothing.
+   */
+  oauthRenewer?: DocumentOAuthRenewer
   /**
    * The dispatch-time freshness cache, so connecting or disconnecting a source drops every
    * verdict that connection authorised. Optional only so the service stays unit-testable
@@ -83,6 +107,44 @@ export class DocumentConnectionService {
     return toConnection(record)
   }
 
+  /**
+   * Store an OAuth grant as the workspace's connection to a source.
+   *
+   * It bypasses `normalizeConnection` deliberately: that method validates what a HUMAN typed, and
+   * the bag here was minted by the platform from a token response the authorization server
+   * already authenticated. Running it would require every OAuth-capable provider to also accept
+   * a credential shape it never reads.
+   *
+   * The bag REPLACES whatever was stored, personal access token included. A workspace that has
+   * just granted an app is connected BY that grant, and leaving the typed credential beside it
+   * would keep a token the operator believes they replaced alive as a silent fallback.
+   */
+  async connectWithOAuth(
+    workspaceId: string,
+    source: DocumentSourceKind,
+    credentials: DocumentCredentials,
+  ): Promise<DocumentConnection> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const provider = this.requireProvider(source)
+    const existing = await this.deps.documentConnectionRepository.getByWorkspace(
+      workspaceId,
+      source,
+    )
+    const record: DocumentConnectionRecord = {
+      workspaceId,
+      source,
+      credentials,
+      label: provider.descriptor.label,
+      createdAt: existing?.createdAt ?? this.deps.clock.now(),
+      deletedAt: null,
+    }
+    await this.deps.documentConnectionRepository.upsert(record)
+    // Same reason as `connect`: every cached verdict for this workspace was reached through the
+    // credential this call just replaced.
+    await this.deps.versionCache?.invalidateGroup(workspaceId)
+    return toConnection(record)
+  }
+
   /** The current connection for a source, or null if not connected. */
   async getConnection(
     workspaceId: string,
@@ -108,7 +170,24 @@ export class DocumentConnectionService {
     source: DocumentSourceKind,
   ): Promise<DocumentConnectionRecord | null> {
     const record = await this.deps.documentConnectionRepository.getByWorkspace(workspaceId, source)
-    return record ?? (await this.resolveImplicit(workspaceId, source))
+    if (record) return this.renewed(record)
+    return this.resolveImplicit(workspaceId, source)
+  }
+
+  /**
+   * Renew an OAuth-granted record whose access token is spent, persisting the result.
+   *
+   * Best-effort by construction: the renewer answers null for everything from "not an OAuth
+   * connection" to "the refresh call failed", and the stored record is what a null means. A read
+   * must never fail because a renewal could not be made; it fails on the source call that
+   * follows, where it is reported as the outage it looks like.
+   */
+  private async renewed(record: DocumentConnectionRecord): Promise<DocumentConnectionRecord> {
+    const credentials = await this.deps.oauthRenewer?.renewIfExpiring(record)
+    if (!credentials) return record
+    const renewed = { ...record, credentials }
+    await this.deps.documentConnectionRepository.upsert(renewed)
+    return renewed
   }
 
   /**
@@ -128,9 +207,16 @@ export class DocumentConnectionService {
     const resolved = new Map<DocumentSourceKind, DocumentConnectionRecord | null>()
     if (wanted.size === 0) return resolved
     const stored = await this.deps.documentConnectionRepository.listByWorkspace(workspaceId)
-    for (const record of stored) {
-      if (wanted.has(record.source)) resolved.set(record.source, record)
-    }
+    // The renewals run together rather than in the loop: this pass runs per step of every run,
+    // and at most one source's grant is ever due at a time, so a sequential await would put a
+    // token round trip in front of the whole corpus for the sake of one document.
+    await Promise.all(
+      stored
+        .filter((record) => wanted.has(record.source))
+        .map(async (record) => {
+          resolved.set(record.source, await this.renewed(record))
+        }),
+    )
     await Promise.all(
       [...wanted]
         .filter((source) => !resolved.has(source))

@@ -22,6 +22,7 @@ export function createNavGates(): NavGates {
   const access = useWorkspaceAccess()
   const github = useGitHubStore()
   const library = useFragmentLibraryStore()
+  const documents = useDocumentsStore()
   const accounts = useAccountsStore()
   const auth = useAuthStore()
   const providerConnections = useProviderConnectionsStore()
@@ -89,6 +90,9 @@ export function createNavGates(): NavGates {
     },
     get libraryAvailable() {
       return library.available === true
+    },
+    get designSourceConnected() {
+      return documents.connectedDesignSources.length > 0
     },
     get infrastructureAvailable() {
       // `integrations.manage` is required to provision/manage infrastructure, so

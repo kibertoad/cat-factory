@@ -1,6 +1,7 @@
 import {
   connectDocumentSourceContract,
   disconnectDocumentSourceContract,
+  documentSourceOAuthUrlContract,
   importDocumentContract,
   linkDocumentContract,
   linkDocumentForKindContract,
@@ -41,6 +42,14 @@ export function documentsApi({ send, ws }: ApiContext) {
         body: { credentials },
       }),
 
+    // The vendor authorization URL for a source's OAuth connect. Admin-tier: what it hands back
+    // is the first half of a credential write, completed by the public callback.
+    documentSourceOAuthUrl: (workspaceId: string, source: DocumentSourceKind) =>
+      send(documentSourceOAuthUrlContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { source },
+      }),
+
     disconnectDocumentSource: (workspaceId: string, source: DocumentSourceKind) =>
       send(disconnectDocumentSourceContract, {
         pathPrefix: ws(workspaceId),
@@ -77,12 +86,14 @@ export function documentsApi({ send, ws }: ApiContext) {
         body: { query },
       }),
 
-    planDocument: (workspaceId: string, source: DocumentSourceKind, externalId: string) =>
-      send(planDocumentContract, {
-        pathPrefix: ws(workspaceId),
-        pathParams: { source },
-        body: { externalId },
-      }),
+    // `frameId` makes the plan TARGET-AWARE: modules and tasks for a service that already exists
+    // rather than an architecture. The same frame is sent to the spawn, so the preview and the
+    // write agree about the target.
+    planDocument: (
+      workspaceId: string,
+      source: DocumentSourceKind,
+      body: { externalId: string; frameId?: string },
+    ) => send(planDocumentContract, { pathPrefix: ws(workspaceId), pathParams: { source }, body }),
 
     spawnDocument: (
       workspaceId: string,

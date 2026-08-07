@@ -2198,6 +2198,18 @@
         "keysValidation": "Inserire l'access key id e il secret S3",
         "saved": "Archiviazione dei contenuti salvata",
         "saveFailed": "Impossibile salvare l'archiviazione dei contenuti"
+      },
+      "figma": {
+        "title": "App Figma (OAuth)",
+        "description": "Abilita il flusso «Collega con Figma». Senza, gli spazi di lavoro possono comunque collegare Figma incollando un token di accesso personale.",
+        "clientId": "Client ID",
+        "clientSecret": "Client secret",
+        "redirectUrl": "URL di redirect",
+        "validation": "Inserisci client id, secret e URL di redirect",
+        "saved": "OAuth Figma salvato",
+        "saveFailed": "Impossibile salvare l’OAuth Figma",
+        "cleared": "OAuth Figma cancellato",
+        "clearFailed": "Impossibile cancellare l’OAuth Figma"
       }
     },
     "accountFragments": {
@@ -3003,7 +3015,8 @@
       "accessDenied": {
         "title": "Autorizzazione negata",
         "hint": "Non hai accesso al repository che supporta questo servizio."
-      }
+      },
+      "startFromDesignTitle": "Parti da un design"
     },
     "decisionBadge": {
       "decisionNeeded": "Decisione necessaria",
@@ -3075,7 +3088,11 @@
     "attachIssueDisabledConnect": "Connetti prima un issue tracker (Integrazioni)",
     "attachIssueDisabledEnable": "Abilita prima l'integrazione dell'issue tracker",
     "importsOnAdd": "importa all'aggiunta",
-    "unreadable": "Impossibile recuperarlo: {error}"
+    "unreadable": "Impossibile recuperarlo: {error}",
+    "pastedLink": {
+      "offer": "Questa descrizione rimanda a una pagina {source}. Allegarla come contesto?",
+      "attach": "Allega"
+    }
   },
   "providers": {
     "presetMismatch": {
@@ -3921,13 +3938,19 @@
     "connect": {
       "title": "Collega sorgente",
       "sourceFallback": "Sorgente",
-      "intro": "Collega {source} per importare requisiti, RFC e PRD, poi genera la struttura della board o allegali alle attività come contesto per l'agente.",
+      "intro": "Collega {source} per portare le sue pagine e i suoi design su questa board: importali, espandili in struttura della board oppure allegali a un task come contesto per gli agenti.",
       "disconnect": "Disconnetti",
       "connect": "Collega",
       "update": "Aggiorna connessione",
       "connected": "{source} collegato",
       "disconnected": "{source} disconnesso",
-      "connectFailed": "Impossibile collegare"
+      "connectFailed": "Impossibile collegare",
+      "oauth": {
+        "action": "Collega con {source}",
+        "scopes": "Ti verranno chiesti questi permessi: {scopes}",
+        "fallback": "Preferisci un token? Usa i campi qui sotto.",
+        "failed": "Impossibile avviare l'accesso a {source}"
+      }
     },
     "spawn": {
       "title": "Anteprima struttura",
@@ -3942,7 +3965,15 @@
       "summary": "{frames} · {modules} · {tasks}",
       "frameCount": "{count} frame | {count} frame",
       "moduleCount": "{count} modulo | {count} moduli",
-      "taskCount": "{count} attività | {count} attività"
+      "taskCount": "{count} attività | {count} attività",
+      "reusedCount": "{count} modulo riutilizzato | {count} moduli riutilizzati",
+      "intoService": "dentro il servizio scelto",
+      "target": {
+        "label": "Aggiungi al servizio",
+        "help": "Un design descrive schermate, non un’architettura: il piano propone quindi lavoro dentro un servizio che esiste già.",
+        "placeholder": "Scegli un servizio",
+        "required": "Scegli il servizio a cui appartiene questo design."
+      }
     },
     "taskDocs": {
       "heading": "Documenti di contesto",
@@ -3975,6 +4006,20 @@
       "remove": "Rimuovi",
       "linkFailed": "Impossibile aggiornare il collegamento del documento",
       "loadFailed": "Impossibile caricare i modelli di documento"
+    },
+    "startFromDesign": {
+      "title": "Parti da un design",
+      "intro": "Incolla il link a un frame o a un intero file. Viene allegato al nuovo task e l’agente ne legge layout, testi, componenti e token.",
+      "noSource": "Nessuna sorgente di design collegata. Un amministratore può collegare Figma o Zeplin dalle integrazioni.",
+      "linkLabel": "Link al design",
+      "linkPlaceholder": "https://www.figma.com/design/…?node-id=1-2",
+      "checking": "Controllo del link…",
+      "trimmed": "Ridotto alla forma supportata di questo link.",
+      "widened": "Il frame {scope} non è leggibile, quindi viene allegato l’intero file.",
+      "unchecked": "Al momento il link non è verificabile. Verrà scaricato alla creazione del task.",
+      "uncheckedAmbiguous": "Il link non è verificabile e sono collegate più sorgenti di design, quindi non si sa a quale appartenga. Riprova.",
+      "rejected": "Nessuna sorgente di design collegata riconosce questo link.",
+      "continue": "Continua"
     }
   },
   "tasks": {
@@ -6969,7 +7014,8 @@
       "library": "La libreria dei frammenti di contesto abilitata su questo deployment",
       "failedRun": "Un’esecuzione fallita",
       "infrastructure": "Un backend di esecuzione collegato a questo workspace",
-      "advancedTier": "La modalità interfaccia avanzata"
+      "advancedTier": "La modalità interfaccia avanzata",
+      "designSource": "Una sorgente di design collegata"
     },
     "overlay": {
       "next": "Avanti",
@@ -7347,6 +7393,36 @@
           "finish": {
             "title": "I passi di progettazione leggono questo",
             "body": "Un progetto che dichiara quali di questi usa riceve i loro contratti completi al passo successivo. Uno che non dichiara nulla non riceve nulla: tenere questo aggiornato è ciò che lo fa funzionare."
+          }
+        }
+      },
+      "startFromDesign": {
+        "title": "Parti da un design",
+        "description": "Trasforma un frame di design in un task che un agente può realizzare.",
+        "steps": {
+          "intro": {
+            "title": "Lavorare dal design",
+            "body": "Quando il lavoro nasce in uno strumento di design, il frame è il brief. Questo tour ne allega uno a un nuovo task."
+          },
+          "open": {
+            "title": "Parti da un design",
+            "body": "Ogni frame di servizio mostra questo pulsante non appena una sorgente di design è collegata."
+          },
+          "paste": {
+            "title": "Incolla il link",
+            "body": "Copia dal tuo strumento di design il link a un frame o a un intero file e incollalo qui."
+          },
+          "resolved": {
+            "title": "Controlla cosa è stato allegato",
+            "body": "Il link viene ridotto alla forma supportata. Se il frame non è leggibile viene allegato l’intero file, e qui lo si dice."
+          },
+          "continue": {
+            "title": "Prosegui verso il task",
+            "body": "Il design è pronto sul nuovo task. Descrivi il risultato che vuoi e crealo."
+          },
+          "finish": {
+            "title": "Pronto per l’esecuzione",
+            "body": "L’agente legge layout, testi, componenti e token del design, e ogni esecuzione lo riverifica con la sorgente."
           }
         }
       }

@@ -1230,6 +1230,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
             v-if="ui.addTaskContainerId"
             v-model="pendingContext"
             :scope-block-id="ui.addTaskContainerId"
+            :description="description"
             :docs-hint="t('board.addTask.noDocsHint')"
             :issues-hint="t('board.addTask.noIssuesHint')"
           />

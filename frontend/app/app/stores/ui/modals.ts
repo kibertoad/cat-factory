@@ -192,6 +192,11 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   // opened standalone, and the modal offers every container on the board.
   const bugHunt = ref<{ source: TaskSourceKind | null; containerId: string | null } | null>(null)
 
+  // Start-from-design: paste a design link, and the resolved reference is staged onto a new task
+  // in `frameId`. `frameId` is always present — the affordance lives on a frame header, and the
+  // flow ends in the add-task form, which needs a container to create in.
+  const startFromDesign = ref<{ frameId: string } | null>(null)
+
   // Add-task modal: the container (service frame or module) a new task is being
   // added to, or null when closed. The user types the title + description; nothing
   // is launched until they explicitly start the created task.
@@ -266,6 +271,13 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
   function closeBugHunt() {
     bugHunt.value = null
   }
+  function openStartFromDesign(frameId: string) {
+    resetHubReturn()
+    startFromDesign.value = { frameId }
+  }
+  function closeStartFromDesign() {
+    startFromDesign.value = null
+  }
   function openAddTask(containerId: string, prefill: AddTaskPrefill | null = null) {
     addTaskPrefill.value = prefill
     addTaskContainerId.value = containerId
@@ -301,6 +313,7 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
     taskConnect,
     taskImport,
     bugHunt,
+    startFromDesign,
     addTaskContainerId,
     addTaskPrefill,
     reviewFrictionContext,
@@ -320,6 +333,8 @@ function createDocumentTaskModals(resetHubReturn: ResetHubReturn) {
     closeTaskImport,
     openBugHunt,
     closeBugHunt,
+    openStartFromDesign,
+    closeStartFromDesign,
     openAddTask,
     closeAddTask,
     openReviewFriction,

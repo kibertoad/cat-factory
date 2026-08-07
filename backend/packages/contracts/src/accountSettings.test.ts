@@ -10,6 +10,7 @@ describe('accountSettingsSummary', () => {
     expect(accountSettingsSummary({})).toEqual({
       slackOAuthConfigured: false,
       linearOAuthConfigured: false,
+      figmaOAuthConfigured: false,
       webSearch: null,
       contentStorage: {
         backend: null,
@@ -24,10 +25,12 @@ describe('accountSettingsSummary', () => {
     const secrets: AccountSettingsSecrets = {
       slackOAuth: { clientId: 'id', clientSecret: 'shh', redirectUrl: 'https://x/y' },
       linearOAuth: { clientId: 'id', clientSecret: 'shh', redirectUrl: 'https://x/y' },
+      figmaOAuth: { clientId: 'id', clientSecret: 'shh', redirectUrl: 'https://x/y' },
     }
     const summary = accountSettingsSummary(secrets)
     expect(summary.slackOAuthConfigured).toBe(true)
     expect(summary.linearOAuthConfigured).toBe(true)
+    expect(summary.figmaOAuthConfigured).toBe(true)
     // No secret value should appear anywhere in the derived summary.
     expect(JSON.stringify(summary)).not.toContain('shh')
   })

@@ -16,6 +16,17 @@ export interface InstallState {
   userId: string | null
   /** Absolute expiry, epoch ms. */
   exp: number
+  /**
+   * Which SOURCE the round trip is for, on the flows where one callback serves several: the
+   * document-source OAuth connect registers one redirect URL per deployment, so the source
+   * cannot ride the path and the callback has nothing else to resolve a provider from.
+   *
+   * Absent on the flows with a dedicated callback (the GitHub App install, Slack, the Linear
+   * task-source connect), and that absence is load-bearing rather than incidental: the
+   * document callback REFUSES a state whose `source` is not one of its own sources, so a state
+   * minted for a different flow under the same signing secret cannot be presented to it.
+   */
+  source?: string
 }
 
 export class StateSigner {

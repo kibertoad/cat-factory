@@ -27,7 +27,13 @@ export { canCreateRepo } from './modules/github/provisioning.logic.js'
 export {
   DocumentConnectionService,
   type DocumentConnectionServiceDependencies,
+  type DocumentOAuthRenewer,
 } from './modules/documents/DocumentConnectionService.js'
+export {
+  DocumentSourceOAuthService,
+  type DocumentOAuthClient,
+  type DocumentSourceOAuthServiceDependencies,
+} from './modules/documents/DocumentSourceOAuthService.js'
 export {
   DocumentContentResolverService,
   type DocumentContentResolverServiceDependencies,
@@ -60,6 +66,7 @@ export {
   DocumentPlannerService,
   type DocumentPlannerServiceDependencies,
 } from './modules/documents/DocumentPlannerService.js'
+export type { PlanTarget } from './modules/documents/documents.logic.js'
 export {
   DocumentLinkService,
   type DocumentLinkServiceDependencies,
@@ -76,7 +83,7 @@ export * as designLogic from './modules/documents/design.logic.js'
 export { CONFLUENCE_DESCRIPTOR } from './modules/documents/confluence.logic.js'
 export { NOTION_DESCRIPTOR } from './modules/documents/notion.logic.js'
 export { GITHUB_DOCS_DESCRIPTOR } from './modules/documents/github-docs.logic.js'
-export { FIGMA_DESCRIPTOR } from './modules/documents/figma.logic.js'
+export { FIGMA_DESCRIPTOR, FIGMA_OAUTH } from './modules/documents/figma.logic.js'
 export { ZEPLIN_DESCRIPTOR } from './modules/documents/zeplin.logic.js'
 // Shared host-pinned HTTP helpers reused by the fixed-host document providers.
 export {

@@ -9,6 +9,7 @@ const NO_GATES: NavGates = {
   canManageSettings: false,
   githubAvailable: false,
   libraryAvailable: false,
+  designSourceConnected: false,
   infrastructureAvailable: false,
   accountsEnabled: false,
   isAccountAdmin: false,

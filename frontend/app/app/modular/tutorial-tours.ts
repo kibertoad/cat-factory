@@ -152,6 +152,15 @@ export const TUTORIAL_REQUIREMENTS = {
     labelKey: 'tutorial.requirements.library',
     met: (gates) => gates.libraryAvailable,
   },
+  // The CONNECTION rather than the permission to make one: starting from a design is
+  // member-tier, and the frame-header button the tour clicks exists only once some admin has
+  // connected a design source. A tour gated on `integrations.manage` would be withheld from
+  // exactly the persona it is written for.
+  designSource: {
+    id: 'design-source',
+    labelKey: 'tutorial.requirements.designSource',
+    met: (gates) => gates.designSourceConnected,
+  },
 } as const satisfies Record<string, TutorialRequirement>
 
 export const TUTORIAL_TOURS: readonly TutorialTour[] = [
@@ -572,6 +581,74 @@ export const TUTORIAL_TOURS: readonly TutorialTour[] = [
         id: 'finish',
         titleKey: 'tutorial.tours.reviewMerge.steps.finish.title',
         bodyKey: 'tutorial.tours.reviewMerge.steps.finish.body',
+      },
+    ],
+  },
+  {
+    id: 'start-from-design',
+    order: 55,
+    icon: 'i-lucide-frame',
+    titleKey: 'tutorial.tours.startFromDesign.title',
+    descriptionKey: 'tutorial.tours.startFromDesign.description',
+    // The delivery loop as a DESIGNER enters it, which is a different first step from
+    // `first-task`: the work starts from a frame in Figma, not from a title someone types. It
+    // rides the loop's order (after the run tours, before the platform half) rather than
+    // replacing `first-task`, because it ends in the same add-task form and everything after
+    // that point is the arc those tours already cover.
+    //
+    // Offered at launch, unlike the platform tours, and gated on the design source being
+    // CONNECTED: on a board with one, this is the everyday loop rather than reference material.
+    requires: [
+      TUTORIAL_REQUIREMENTS.boardWrite,
+      TUTORIAL_REQUIREMENTS.service,
+      TUTORIAL_REQUIREMENTS.designSource,
+    ],
+    steps: [
+      {
+        id: 'intro',
+        titleKey: 'tutorial.tours.startFromDesign.steps.intro.title',
+        bodyKey: 'tutorial.tours.startFromDesign.steps.intro.body',
+      },
+      {
+        id: 'open',
+        target: 'frame-start-from-design',
+        advanceOn: 'target-click',
+        placement: 'bottom',
+        titleKey: 'tutorial.tours.startFromDesign.steps.open.title',
+        bodyKey: 'tutorial.tours.startFromDesign.steps.open.body',
+      },
+      {
+        id: 'paste',
+        target: 'start-from-design-link',
+        // Inside the modal the previous click opens.
+        waitForTargetMs: 8000,
+        placement: 'bottom',
+        titleKey: 'tutorial.tours.startFromDesign.steps.paste.title',
+        bodyKey: 'tutorial.tours.startFromDesign.steps.paste.body',
+      },
+      {
+        // Left to the anchor-skip rather than given a `when`: the resolved card appears only
+        // once a link has actually been pasted, and someone walking the tour without one in
+        // hand should reach the finish card rather than stall on an input they cannot fill.
+        id: 'resolved',
+        target: 'start-from-design-resolved',
+        waitForTargetMs: 8000,
+        placement: 'bottom',
+        titleKey: 'tutorial.tours.startFromDesign.steps.resolved.title',
+        bodyKey: 'tutorial.tours.startFromDesign.steps.resolved.body',
+      },
+      {
+        id: 'continue',
+        target: 'start-from-design-continue',
+        advanceOn: 'target-click',
+        placement: 'top',
+        titleKey: 'tutorial.tours.startFromDesign.steps.continue.title',
+        bodyKey: 'tutorial.tours.startFromDesign.steps.continue.body',
+      },
+      {
+        id: 'finish',
+        titleKey: 'tutorial.tours.startFromDesign.steps.finish.title',
+        bodyKey: 'tutorial.tours.startFromDesign.steps.finish.body',
       },
     ],
   },
