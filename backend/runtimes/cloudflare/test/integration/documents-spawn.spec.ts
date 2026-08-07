@@ -75,6 +75,35 @@ describe('document spawn', () => {
     ])
   })
 
+  it('plans INTO a service when frameId is given: the target is the frame, not a proposed one', async () => {
+    const { app, workspaceId } = await setup()
+    const frame = await app.call<Block>('POST', `/workspaces/${workspaceId}/blocks`, {
+      type: 'frontend',
+      position: { x: 0, y: 0 },
+    })
+    await app.call('PATCH', `/workspaces/${workspaceId}/blocks/${frame.body.id}`, {
+      title: 'Storefront',
+    })
+
+    const planned = await app.call<DocumentBoardPlan>(
+      'POST',
+      `/workspaces/${workspaceId}/document-sources/notion/plan`,
+      { externalId: '777', frameId: frame.body.id },
+    )
+    expect(planned.status).toBe(200)
+    // The plan NAMES its target, which is what lets the preview say "three modules inside
+    // Storefront" instead of announcing a service the spawn will not create.
+    expect(planned.body.targetFrameId).toBe(frame.body.id)
+    const [only] = planned.body.frames
+    expect(planned.body.frames).toHaveLength(1)
+    expect({ title: only!.title, type: only!.type }).toEqual({
+      title: 'Storefront',
+      type: 'frontend',
+    })
+    // The document's own h1 is consumed by the target; its h2s are the modules.
+    expect(only!.modules.map((m) => m.name)).toEqual(['Invoices', 'Payments'])
+  })
+
   it('spawns modules and tasks into an existing frame when frameId is given', async () => {
     const { app, workspaceId } = await setup()
     const frame = await app.call<Block>('POST', `/workspaces/${workspaceId}/blocks`, {

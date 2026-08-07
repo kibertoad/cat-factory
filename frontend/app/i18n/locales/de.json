@@ -2198,6 +2198,18 @@
         "keysValidation": "Geben Sie die S3-Access Key ID und das Secret ein",
         "saved": "Inhaltsspeicher gespeichert",
         "saveFailed": "Inhaltsspeicher konnte nicht gespeichert werden"
+      },
+      "figma": {
+        "title": "Figma-App (OAuth)",
+        "description": "Aktiviert den Ablauf „Mit Figma verbinden“. Ohne ihn können Workspaces Figma weiterhin mit einem persönlichen Zugriffstoken verbinden.",
+        "clientId": "Client-ID",
+        "clientSecret": "Client-Secret",
+        "redirectUrl": "Redirect-URL",
+        "validation": "Client-ID, Secret und Redirect-URL eingeben",
+        "saved": "Figma-OAuth gespeichert",
+        "saveFailed": "Figma-OAuth konnte nicht gespeichert werden",
+        "cleared": "Figma-OAuth gelöscht",
+        "clearFailed": "Figma-OAuth konnte nicht gelöscht werden"
       }
     },
     "accountFragments": {
@@ -3000,7 +3012,8 @@
       "accessDenied": {
         "title": "Zugriff verweigert",
         "hint": "Sie haben keinen Zugriff auf das Repository, das diesem Service zugrunde liegt."
-      }
+      },
+      "startFromDesignTitle": "Mit einem Design starten"
     },
     "decisionBadge": {
       "decisionNeeded": "Entscheidung erforderlich",
@@ -3072,7 +3085,11 @@
     "attachIssueDisabledConnect": "Verbinden Sie zuerst einen Issue-Tracker (Integrationen)",
     "attachIssueDisabledEnable": "Aktivieren Sie zuerst die Issue-Tracker-Integration",
     "importsOnAdd": "importiert beim Hinzufügen",
-    "unreadable": "Konnte nicht abgerufen werden: {error}"
+    "unreadable": "Konnte nicht abgerufen werden: {error}",
+    "pastedLink": {
+      "offer": "Diese Beschreibung verlinkt eine {source}-Seite. Als Kontext anhängen?",
+      "attach": "Anhängen"
+    }
   },
   "providers": {
     "presetMismatch": {
@@ -3918,13 +3935,19 @@
     "connect": {
       "title": "Quelle verbinden",
       "sourceFallback": "Quelle",
-      "intro": "Verbinden Sie {source}, um Anforderungen, RFCs und PRDs zu importieren, und erzeugen Sie dann Board-Struktur oder hängen Sie sie als Agent-Kontext an Aufgaben an.",
+      "intro": "Verbinde {source}, um Seiten und Designs auf dieses Board zu holen: importieren, in Board-Struktur ausklappen oder als Agent-Kontext an eine Aufgabe hängen.",
       "disconnect": "Trennen",
       "connect": "Verbinden",
       "update": "Verbindung aktualisieren",
       "connected": "{source} verbunden",
       "disconnected": "{source} getrennt",
-      "connectFailed": "Verbindung nicht möglich"
+      "connectFailed": "Verbindung nicht möglich",
+      "oauth": {
+        "action": "Mit {source} verbinden",
+        "scopes": "Du wirst um folgende Berechtigungen gebeten: {scopes}",
+        "fallback": "Lieber ein Token? Nutze stattdessen die Felder unten.",
+        "failed": "Die Anmeldung bei {source} konnte nicht gestartet werden"
+      }
     },
     "spawn": {
       "title": "Struktur-Vorschau",
@@ -3939,7 +3962,14 @@
       "summary": "{frames} · {modules} · {tasks}",
       "frameCount": "{count} Frame | {count} Frames",
       "moduleCount": "{count} Modul | {count} Module",
-      "taskCount": "{count} Aufgabe | {count} Aufgaben"
+      "taskCount": "{count} Aufgabe | {count} Aufgaben",
+      "intoService": "innerhalb des gewählten Service",
+      "target": {
+        "label": "Zu Service hinzufügen",
+        "help": "Ein Design beschreibt Screens, keine Architektur. Der Plan schlägt deshalb Arbeit innerhalb eines bereits vorhandenen Service vor.",
+        "placeholder": "Service wählen",
+        "required": "Wähle den Service, zu dem dieses Design gehört."
+      }
     },
     "taskDocs": {
       "heading": "Kontextdokumente",
@@ -3972,6 +4002,20 @@
       "remove": "Entfernen",
       "linkFailed": "Die Dokumentverknüpfung konnte nicht aktualisiert werden",
       "loadFailed": "Dokumentvorlagen konnten nicht geladen werden"
+    },
+    "startFromDesign": {
+      "title": "Mit einem Design starten",
+      "intro": "Füge den Link zu einem Frame oder einer ganzen Datei ein. Er wird an die neue Aufgabe gehängt, und der Agent liest Layout, Texte, Komponenten und Tokens.",
+      "noSource": "Noch keine Design-Quelle verbunden. Ein Admin kann Figma oder Zeplin unter Integrationen verbinden.",
+      "linkLabel": "Design-Link",
+      "linkPlaceholder": "https://www.figma.com/design/…?node-id=1-2",
+      "checking": "Link wird geprüft…",
+      "trimmed": "Auf die unterstützte Form dieses Links gekürzt.",
+      "widened": "Der Frame {scope} konnte nicht gelesen werden, daher wird die gesamte Datei angehängt.",
+      "unchecked": "Der Link konnte gerade nicht geprüft werden. Er wird beim Anlegen der Aufgabe abgerufen.",
+      "uncheckedAmbiguous": "Der Link konnte nicht geprüft werden, und es ist mehr als eine Design-Quelle verbunden. Zu welcher er gehört, ist damit unbekannt. Bitte erneut versuchen.",
+      "rejected": "Keine verbundene Design-Quelle erkennt diesen Link.",
+      "continue": "Weiter"
     }
   },
   "tasks": {
@@ -6963,7 +7007,8 @@
       "library": "Eine in diesem Deployment aktivierte Kontextfragment-Bibliothek",
       "failedRun": "Ein fehlgeschlagener Lauf",
       "infrastructure": "Ein mit diesem Workspace verbundenes Ausführungs-Backend",
-      "advancedTier": "Der erweiterte Oberflächenmodus"
+      "advancedTier": "Der erweiterte Oberflächenmodus",
+      "designSource": "Eine verbundene Design-Quelle"
     },
     "overlay": {
       "next": "Weiter",
@@ -7341,6 +7386,36 @@
           "finish": {
             "title": "Entwurfsschritte lesen das",
             "body": "Ein Entwurf, der angibt, welche davon er nutzt, bekommt im nächsten Schritt ihre vollen Kontrakte. Einer, der nichts angibt, bekommt nichts: dass das hier aktuell bleibt, ist also die Bedingung dafür, dass es funktioniert."
+          }
+        }
+      },
+      "startFromDesign": {
+        "title": "Mit einem Design starten",
+        "description": "Mach aus einem Design-Frame eine Aufgabe, die ein Agent bauen kann.",
+        "steps": {
+          "intro": {
+            "title": "Vom Design aus arbeiten",
+            "body": "Wenn die Arbeit im Design-Tool beginnt, ist der Frame das Briefing. Diese Tour hängt einen an eine neue Aufgabe."
+          },
+          "open": {
+            "title": "Mit einem Design starten",
+            "body": "Jeder Service-Frame hat diese Schaltfläche, sobald eine Design-Quelle verbunden ist."
+          },
+          "paste": {
+            "title": "Link einfügen",
+            "body": "Kopiere im Design-Tool den Link zu einem Frame oder einer ganzen Datei und füge ihn hier ein."
+          },
+          "resolved": {
+            "title": "Prüfen, was angehängt wurde",
+            "body": "Der Link wird auf seine unterstützte Form gekürzt. Konnte der Frame selbst nicht gelesen werden, wird stattdessen die ganze Datei angehängt, und genau das steht hier."
+          },
+          "continue": {
+            "title": "Weiter zur Aufgabe",
+            "body": "Das Design liegt an der neuen Aufgabe bereit. Beschreibe das gewünschte Ergebnis und lege sie an."
+          },
+          "finish": {
+            "title": "Bereit für den Lauf",
+            "body": "Der Agent liest Layout, Texte, Komponenten und Tokens des Designs, und jeder Lauf gleicht es erneut mit der Quelle ab."
           }
         }
       }

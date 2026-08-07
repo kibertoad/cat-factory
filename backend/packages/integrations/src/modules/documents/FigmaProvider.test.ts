@@ -32,6 +32,33 @@ describe('FigmaProvider.normalizeConnection', () => {
   })
 })
 
+describe('FigmaProvider auth header', () => {
+  it('sends a Bearer token for an OAuth bag, and lets it beat a leftover PAT', async () => {
+    const headers: Array<Record<string, string>> = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: RequestInit) => {
+        headers.push(init.headers as Record<string, string>)
+        return jsonResponse({ version: 'file-v1' })
+      }),
+    )
+    const provider = new FigmaProvider()
+    await provider.probeVersion({ oauthAccessToken: 'oauth_tok' }, 'abc', 'ws_1')
+    // A grant is the credential the platform can RENEW, so it must not be shadowed by a token an
+    // earlier connect left in the bag: the PAT would silently outlive the rotation it replaced.
+    await provider.probeVersion(
+      { oauthAccessToken: 'oauth_tok', apiToken: 'figd_old' },
+      'abc',
+      null,
+    )
+
+    expect(headers.map((h) => [h.authorization, h['x-figma-token']])).toEqual([
+      ['Bearer oauth_tok', undefined],
+      ['Bearer oauth_tok', undefined],
+    ])
+  })
+})
+
 describe('FigmaProvider.fetchDocument', () => {
   it('renders a node subtree + preview, pins api.figma.com, sends the token header', async () => {
     const seen: string[] = []

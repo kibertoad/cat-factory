@@ -15,6 +15,7 @@ import type { BlockRepository } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
 import type { BoardWritePort } from '@cat-factory/kernel'
 import { toSourceDocument } from './DocumentImportService.js'
+import type { PlanTarget } from './documents.logic.js'
 
 /** The `(origin, externalId)` key a document is addressed by, as one string for `Map` indexing. */
 function refKey(ref: DocumentRef): string {
@@ -42,6 +43,38 @@ export interface SpawnResult {
 
 export class DocumentLinkService {
   constructor(private readonly deps: DocumentLinkServiceDependencies) {}
+
+  /**
+   * Describe an existing service frame as a {@link PlanTarget}, so a plan can be authored FOR it.
+   *
+   * It lives here rather than in the planner because it is a fact about the BOARD: the planner is
+   * a pure document→structure translator and must not learn to query blocks for a prompt detail.
+   * It refuses exactly what {@link spawn} refuses, one step earlier, so a preview cannot be
+   * rendered against a target the write would then reject.
+   */
+  async resolvePlanTarget(workspaceId: string, frameId: string): Promise<PlanTarget> {
+    const frame = assertFound(
+      await this.deps.blockRepository.get(workspaceId, frameId),
+      'Block',
+      frameId,
+    )
+    if (frame.level !== 'frame') {
+      throw new ValidationError('Document structure can only be planned into a service frame', {
+        reason: 'plan_target_not_a_frame',
+      })
+    }
+    const blocks = await this.deps.blockRepository.listByWorkspace(workspaceId)
+    return {
+      frameId,
+      title: frame.title,
+      type: frame.type,
+      // The names the frame ALREADY holds, so the plan adds beside them instead of proposing a
+      // second module meaning the same thing. One board read rather than a per-module lookup.
+      existingModules: blocks
+        .filter((b) => b.parentId === frameId && b.level === 'module')
+        .map((b) => b.title),
+    }
+  }
 
   /**
    * Apply a board plan to a workspace. Without `frameId` each planned frame

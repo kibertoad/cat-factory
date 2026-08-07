@@ -14,7 +14,10 @@
 // root-mounted with independent open flags), so in-progress form data survives. That upgrade is
 // itself gated on `integrations.manage` for documents, whose ATTACH writes are member-tier while
 // storing the credential is not.
+import { refDebounced } from '@vueuse/core'
+import type { DocumentSourceKind } from '~/types/domain'
 import type { PendingContext } from '~/composables/useContextLinking'
+import { claimCandidates, firstLinkCandidate } from '~/components/context/pastedLinkOffer.logic'
 import { connectableSources } from '~/utils/sourcePicker'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
@@ -32,6 +35,11 @@ const props = defineProps<{
    * service's linked repo, so there is no unscoped mode to fall back on.
    */
   scopeBlockId: string
+  /**
+   * The description the author is writing, watched for a pasted link worth attaching. Optional:
+   * a host with no description field simply never offers.
+   */
+  description?: string
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [PendingContext[]] }>()
@@ -88,6 +96,62 @@ const showDocPicker = ref(false)
 const chosenDocKeys = computed(() => pendingDocs.value.map(contextKey))
 const showIssuePicker = ref(false)
 const chosenIssueKeys = computed(() => pendingIssues.value.map(contextKey))
+
+// ---- the pasted-link offer ------------------------------------------------------------------
+// A URL named in a description already reaches the run path, where an UNIMPORTED one is dropped
+// with an info line and the agent gets nothing from it. Offering to attach it here turns that
+// silent drop into a decision the author can still make. Only HOST-PINNED sources are asked
+// (`claimCandidates`), because a host-blind parser claims a shape rather than a reference.
+const offer = ref<{ url: string; source: DocumentSourceKind; externalId: string } | null>(null)
+/** The URL last resolved, so re-typing around an unchanged link costs no further round trips. */
+let judged: string | null = null
+
+// Debounced, because this fires on every keystroke of a description and each miss costs one
+// request per connected host-pinned source.
+const debouncedDescription = refDebounced(
+  computed(() => props.description ?? ''),
+  500,
+)
+
+watch(
+  debouncedDescription,
+  async (text) => {
+    const url = firstLinkCandidate(text)
+    if (url === judged) return
+    judged = url
+    offer.value = null
+    if (!url || !documents.available) return
+    for (const source of claimCandidates(documents.connectedSources.map((s) => s.source))) {
+      try {
+        const ref = await documents.resolveRef(source, url)
+        offer.value = { url, source, externalId: ref.externalId }
+        return
+      } catch {
+        // silent-catch-ok: a source that refuses (or cannot be reached) simply makes no offer.
+        // There is nothing to report — the paste stays in the description exactly as typed, and
+        // the attach picker above is the route for anything this could not judge.
+      }
+    }
+  },
+  { immediate: true },
+)
+
+/** Stage the offered link, then withdraw the offer: it is now a chip in the list below. */
+function acceptOffer() {
+  const accepted = offer.value
+  if (!accepted) return
+  const descriptor = documents.descriptorFor(accepted.source)
+  addPending({
+    kind: 'document',
+    source: accepted.source,
+    externalId: accepted.externalId,
+    title: accepted.url,
+    subtitle: descriptor?.label,
+    icon: descriptor?.icon,
+    needsImport: true,
+  })
+  offer.value = null
+}
 
 function addPending(item: PendingContext) {
   if (props.modelValue.some((c) => contextKey(c) === contextKey(item))) return
@@ -160,6 +224,26 @@ function removePending(item: PendingContext) {
           {{ t('contextAttachments.attach') }}
         </UButton>
       </div>
+      <!-- Offered, never applied: the author wrote the link into prose, and silently turning
+           that into an attachment would attach pages nobody meant to attach. -->
+      <div
+        v-if="offer && docsConnected"
+        class="flex items-center gap-2 rounded-md border border-indigo-900/60 bg-indigo-950/30 px-2 py-1.5"
+        data-testid="pasted-link-offer"
+      >
+        <UIcon name="i-lucide-link" class="h-3.5 w-3.5 shrink-0 text-indigo-400" />
+        <span class="min-w-0 flex-1 truncate text-xs text-slate-300">
+          {{
+            t('contextAttachments.pastedLink.offer', {
+              source: documents.descriptorFor(offer.source)?.label ?? offer.source,
+            })
+          }}
+        </span>
+        <UButton color="primary" variant="soft" size="xs" @click="acceptOffer">
+          {{ t('contextAttachments.pastedLink.attach') }}
+        </UButton>
+      </div>
+
       <ContextDocumentPicker
         v-if="showDocPicker && docsConnected"
         :chosen-keys="chosenDocKeys"

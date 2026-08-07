@@ -322,6 +322,8 @@ export type { WebhookVerifier } from './webhook-verifier.js'
 export type {
   DocumentCredentials,
   DocumentContent,
+  DocumentOAuthTokens,
+  DocumentSourceOAuthSpec,
   NormalizedConnection,
   DocumentSourceProvider,
   DocumentSourceRegistry,
@@ -331,7 +333,11 @@ export type {
   LinkedDocumentRefreshOutcome,
   RefreshedDocument,
 } from './document-source.js'
-export { DEPLOYMENT_DOCUMENT_CACHE_GROUP } from './document-source.js'
+export {
+  DEPLOYMENT_DOCUMENT_CACHE_GROUP,
+  DOCUMENT_OAUTH_CREDENTIAL_KEYS,
+  documentOAuthAccessToken,
+} from './document-source.js'
 export type {
   DocumentConnectionRecord,
   DocumentConnectionRepository,

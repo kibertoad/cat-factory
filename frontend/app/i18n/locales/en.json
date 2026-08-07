@@ -478,7 +478,8 @@
       "accessDenied": {
         "title": "Permission denied",
         "hint": "You don't have access to the repository backing this service."
-      }
+      },
+      "startFromDesignTitle": "Start from a design"
     },
     "decisionBadge": {
       "decisionNeeded": "Decision needed",
@@ -553,7 +554,11 @@
     "attachIssueDisabledConnect": "Connect an issue tracker first (Integrations)",
     "attachIssueDisabledEnable": "Enable the issue-tracker integration first",
     "importsOnAdd": "imports on add",
-    "unreadable": "Could not be fetched: {error}"
+    "unreadable": "Could not be fetched: {error}",
+    "pastedLink": {
+      "offer": "This description links a {source} page. Attach it as context?",
+      "attach": "Attach"
+    }
   },
   "errors": {
     "generic": {
@@ -2133,6 +2138,18 @@
         "keysValidation": "Enter the S3 access key id and secret",
         "saved": "Content storage saved",
         "saveFailed": "Could not save content storage"
+      },
+      "figma": {
+        "title": "Figma app (OAuth)",
+        "description": "Enables the \"Connect with Figma\" flow. Without it, workspaces can still connect Figma by pasting a personal access token.",
+        "clientId": "Client ID",
+        "clientSecret": "Client secret",
+        "redirectUrl": "Redirect URL",
+        "validation": "Enter the client id, secret and redirect URL",
+        "saved": "Figma OAuth saved",
+        "saveFailed": "Could not save Figma OAuth",
+        "cleared": "Figma OAuth cleared",
+        "clearFailed": "Could not clear Figma OAuth"
       }
     },
     "accountFragments": {
@@ -4438,13 +4455,19 @@
     "connect": {
       "title": "Connect source",
       "sourceFallback": "Source",
-      "intro": "Connect {source} to import requirements, RFCs and PRDs, then spawn board structure or attach them to tasks as agent context.",
+      "intro": "Connect {source} to bring its pages and designs onto this board: import one, expand it into board structure, or attach it to a task as agent context.",
       "disconnect": "Disconnect",
       "connect": "Connect",
       "update": "Update connection",
       "connected": "{source} connected",
       "disconnected": "{source} disconnected",
-      "connectFailed": "Could not connect"
+      "connectFailed": "Could not connect",
+      "oauth": {
+        "action": "Connect with {source}",
+        "scopes": "You will be asked to grant: {scopes}",
+        "fallback": "Prefer a token? Use the fields below instead.",
+        "failed": "Could not start the {source} sign-in"
+      }
     },
     "spawn": {
       "title": "Preview structure",
@@ -4459,7 +4482,14 @@
       "summary": "{frames} · {modules} · {tasks}",
       "frameCount": "{count} frame | {count} frames",
       "moduleCount": "{count} module | {count} modules",
-      "taskCount": "{count} task | {count} tasks"
+      "taskCount": "{count} task | {count} tasks",
+      "intoService": "inside the selected service",
+      "target": {
+        "label": "Add to service",
+        "help": "A design describes screens, not an architecture, so the plan proposes work inside a service that already exists.",
+        "placeholder": "Pick a service",
+        "required": "Pick the service this design belongs to."
+      }
     },
     "taskDocs": {
       "heading": "Context documents",
@@ -4492,6 +4522,20 @@
       "remove": "Remove",
       "linkFailed": "Couldn't update the document link",
       "loadFailed": "Couldn't load document templates"
+    },
+    "startFromDesign": {
+      "title": "Start from a design",
+      "intro": "Paste a link to a frame or a whole file. It is attached to the new task, and the agent reads its layout, text, components and tokens.",
+      "noSource": "No design source is connected yet. An admin can connect Figma or Zeplin from Integrations.",
+      "linkLabel": "Design link",
+      "linkPlaceholder": "https://www.figma.com/design/…?node-id=1-2",
+      "checking": "Checking the link…",
+      "trimmed": "Trimmed to the supported form of this link.",
+      "widened": "The frame {scope} could not be read, so the whole file is attached instead.",
+      "unchecked": "The link could not be checked right now. It is fetched when the task is created.",
+      "uncheckedAmbiguous": "The link could not be checked, and more than one design source is connected, so which one it belongs to is unknown. Try again.",
+      "rejected": "No connected design source recognises this link.",
+      "continue": "Continue"
     }
   },
   "tasks": {
@@ -7209,7 +7253,8 @@
       "library": "The context fragment library enabled on this deployment",
       "failedRun": "A run that failed",
       "infrastructure": "An execution backend connected to this workspace",
-      "advancedTier": "The advanced interface mode"
+      "advancedTier": "The advanced interface mode",
+      "designSource": "A connected design source"
     },
     "overlay": {
       "next": "Next",
@@ -7596,6 +7641,36 @@
           "finish": {
             "title": "Design steps read this",
             "body": "A design that declares which of these it uses gets their full contracts in the next step. One that declares nothing gets nothing, so keeping this current is what makes it work."
+          }
+        }
+      },
+      "startFromDesign": {
+        "title": "Start from a design",
+        "description": "Turn a design frame into a task an agent can build.",
+        "steps": {
+          "intro": {
+            "title": "Work from the design",
+            "body": "When the work starts in a design tool, the frame is the brief. This tour attaches one to a new task."
+          },
+          "open": {
+            "title": "Start from a design",
+            "body": "Every service frame carries this button once a design source is connected."
+          },
+          "paste": {
+            "title": "Paste the link",
+            "body": "Copy the link to a frame or a whole file from your design tool and paste it here."
+          },
+          "resolved": {
+            "title": "Check what was attached",
+            "body": "The link is trimmed to its supported form. If the frame itself could not be read, the whole file is attached instead and it says so here."
+          },
+          "continue": {
+            "title": "Carry on to the task",
+            "body": "The design is staged on the new task. Describe the outcome you want and create it."
+          },
+          "finish": {
+            "title": "Ready to run",
+            "body": "The agent reads the design's layout, text, components and tokens, and every run re-checks it against the source."
           }
         }
       }

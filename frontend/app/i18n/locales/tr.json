@@ -427,7 +427,8 @@
       "accessDenied": {
         "title": "İzin reddedildi",
         "hint": "Bu hizmetin dayandığı depoya erişiminiz yok."
-      }
+      },
+      "startFromDesignTitle": "Tasarımdan başla"
     },
     "decisionBadge": {
       "decisionNeeded": "Karar gerekiyor",
@@ -499,7 +500,11 @@
     "attachIssueDisabledConnect": "Önce bir sorun izleyici bağlayın (Entegrasyonlar)",
     "attachIssueDisabledEnable": "Önce sorun izleyici entegrasyonunu etkinleştirin",
     "importsOnAdd": "eklendiğinde içe aktarılır",
-    "unreadable": "Getirilemedi: {error}"
+    "unreadable": "Getirilemedi: {error}",
+    "pastedLink": {
+      "offer": "Bu açıklama bir {source} sayfasına bağlantı veriyor. Bağlam olarak eklensin mi?",
+      "attach": "Ekle"
+    }
   },
   "errors": {
     "generic": {
@@ -2026,6 +2031,18 @@
         "keysValidation": "S3 erişim anahtarı kimliğini ve gizli anahtarı girin",
         "saved": "İçerik depolama kaydedildi",
         "saveFailed": "İçerik depolama kaydedilemedi"
+      },
+      "figma": {
+        "title": "Figma uygulaması (OAuth)",
+        "description": "\"Figma ile bağlan\" akışını etkinleştirir. Olmadan da çalışma alanları kişisel erişim belirteci yapıştırarak Figma’ya bağlanabilir.",
+        "clientId": "İstemci kimliği",
+        "clientSecret": "İstemci parolası",
+        "redirectUrl": "Yönlendirme adresi",
+        "validation": "İstemci kimliğini, parolayı ve yönlendirme adresini gir",
+        "saved": "Figma OAuth kaydedildi",
+        "saveFailed": "Figma OAuth kaydedilemedi",
+        "cleared": "Figma OAuth temizlendi",
+        "clearFailed": "Figma OAuth temizlenemedi"
       }
     },
     "accountFragments": {
@@ -4301,13 +4318,19 @@
     "connect": {
       "title": "Kaynak bağla",
       "sourceFallback": "Kaynak",
-      "intro": "Gereksinimleri, RFC'leri ve PRD'leri içe aktarmak için {source} bağla, ardından pano yapısı oluştur veya bunları agent bağlamı olarak görevlere ekle.",
+      "intro": "{source} bağlantısını kur ve sayfalarını, tasarımlarını bu panoya getir: içe aktar, pano yapısına dönüştür veya bir göreve ajan bağlamı olarak ekle.",
       "disconnect": "Bağlantıyı kes",
       "connect": "Bağla",
       "update": "Bağlantıyı güncelle",
       "connected": "{source} bağlandı",
       "disconnected": "{source} bağlantısı kesildi",
-      "connectFailed": "Bağlanamadı"
+      "connectFailed": "Bağlanamadı",
+      "oauth": {
+        "action": "{source} ile bağlan",
+        "scopes": "Şu izinler istenecek: {scopes}",
+        "fallback": "Belirteç mi tercih edersin? Aşağıdaki alanları kullan.",
+        "failed": "{source} oturumu başlatılamadı"
+      }
     },
     "spawn": {
       "title": "Yapıyı önizle",
@@ -4322,7 +4345,14 @@
       "summary": "{frames} · {modules} · {tasks}",
       "frameCount": "{count} çerçeve | {count} çerçeve",
       "moduleCount": "{count} modül | {count} modül",
-      "taskCount": "{count} görev | {count} görev"
+      "taskCount": "{count} görev | {count} görev",
+      "intoService": "seçilen servisin içinde",
+      "target": {
+        "label": "Servise ekle",
+        "help": "Bir tasarım mimariyi değil ekranları anlatır; bu yüzden plan, hâlihazırda var olan bir servisin içindeki işi önerir.",
+        "placeholder": "Bir servis seç",
+        "required": "Bu tasarımın ait olduğu servisi seç."
+      }
     },
     "taskDocs": {
       "heading": "Bağlam belgeleri",
@@ -4355,6 +4385,20 @@
       "remove": "Kaldır",
       "linkFailed": "Belge bağlantısı güncellenemedi",
       "loadFailed": "Belge şablonları yüklenemedi"
+    },
+    "startFromDesign": {
+      "title": "Tasarımdan başla",
+      "intro": "Bir çerçevenin ya da dosyanın bağlantısını yapıştır. Yeni göreve eklenir ve ajan düzenini, metinlerini, bileşenlerini ve token’larını okur.",
+      "noSource": "Henüz bağlı bir tasarım kaynağı yok. Bir yönetici Entegrasyonlar’dan Figma veya Zeplin bağlayabilir.",
+      "linkLabel": "Tasarım bağlantısı",
+      "linkPlaceholder": "https://www.figma.com/design/…?node-id=1-2",
+      "checking": "Bağlantı denetleniyor…",
+      "trimmed": "Bu bağlantının desteklenen biçimine kısaltıldı.",
+      "widened": "{scope} çerçevesi okunamadı, bu yüzden dosyanın tamamı eklendi.",
+      "unchecked": "Bağlantı şu anda denetlenemedi. Görev oluşturulurken indirilecek.",
+      "uncheckedAmbiguous": "Bağlantı denetlenemedi ve birden fazla tasarım kaynağı bağlı; hangisine ait olduğu bilinmiyor. Yeniden dene.",
+      "rejected": "Bağlı hiçbir tasarım kaynağı bu bağlantıyı tanımıyor.",
+      "continue": "Devam"
     }
   },
   "tasks": {
@@ -6963,7 +7007,8 @@
       "library": "Bu kurulumda etkinleştirilmiş bağlam parçaları kütüphanesi",
       "failedRun": "Başarısız olmuş bir çalıştırma",
       "infrastructure": "Bu çalışma alanına bağlı bir yürütme arka ucu",
-      "advancedTier": "Gelişmiş arayüz modu"
+      "advancedTier": "Gelişmiş arayüz modu",
+      "designSource": "Bağlı bir tasarım kaynağı"
     },
     "overlay": {
       "next": "İleri",
@@ -7341,6 +7386,36 @@
           "finish": {
             "title": "Tasarım adımları bunu okur",
             "body": "Bunlardan hangilerini kullandığını bildiren bir tasarım, sonraki adımda onların tam sözleşmelerini alır. Hiçbir şey bildirmeyen hiçbir şey almaz: bunu güncel tutmak, işin işlemesinin koşuludur."
+          }
+        }
+      },
+      "startFromDesign": {
+        "title": "Tasarımdan başla",
+        "description": "Bir tasarım çerçevesini ajanın yapabileceği bir göreve dönüştür.",
+        "steps": {
+          "intro": {
+            "title": "Tasarımdan çalışmak",
+            "body": "İş bir tasarım aracında başlıyorsa brief çerçevenin kendisidir. Bu tur, bir çerçeveyi yeni bir göreve ekler."
+          },
+          "open": {
+            "title": "Tasarımdan başla",
+            "body": "Bir tasarım kaynağı bağlandığı anda her servis çerçevesinde bu düğme belirir."
+          },
+          "paste": {
+            "title": "Bağlantıyı yapıştır",
+            "body": "Tasarım aracında bir çerçevenin veya dosyanın bağlantısını kopyala ve buraya yapıştır."
+          },
+          "resolved": {
+            "title": "Neyin eklendiğini denetle",
+            "body": "Bağlantı desteklenen biçimine kısaltılır. Çerçevenin kendisi okunamadıysa dosyanın tamamı eklenir ve burada bu yazar."
+          },
+          "continue": {
+            "title": "Göreve geç",
+            "body": "Tasarım yeni görevde hazır. İstediğin sonucu anlat ve görevi oluştur."
+          },
+          "finish": {
+            "title": "Çalıştırmaya hazır",
+            "body": "Ajan tasarımın düzenini, metinlerini, bileşenlerini ve token’larını okur; her çalıştırma bunu kaynağa karşı yeniden denetler."
           }
         }
       }

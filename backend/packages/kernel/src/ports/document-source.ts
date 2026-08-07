@@ -40,6 +40,68 @@ export interface DocumentContent {
   version: string
 }
 
+/**
+ * The keys an OAuth-granted document-source credential bag carries.
+ *
+ * PLATFORM-owned, not provider-owned, and that is what keeps the flow source-agnostic: one
+ * service runs the grant, writes these three keys, and refreshes them, while a provider's only
+ * job is to notice an access token in the bag it is handed and authenticate with it instead of
+ * with the typed credential. A per-provider bag shape would put the token lifecycle back inside
+ * each provider, which is where it cannot be shared.
+ *
+ * `oauthExpiresAt` is an ABSOLUTE epoch-ms deadline rather than the `expires_in` the vendor
+ * returns: a duration is only meaningful beside the instant it was issued at, and the bag is read
+ * days later by a dispatch that has no idea when the grant happened.
+ */
+export const DOCUMENT_OAUTH_CREDENTIAL_KEYS = {
+  accessToken: 'oauthAccessToken',
+  refreshToken: 'oauthRefreshToken',
+  expiresAt: 'oauthExpiresAt',
+} as const
+
+/** The access token in an OAuth-granted bag, or null for a typed credential. */
+export function documentOAuthAccessToken(credentials: DocumentCredentials): string | null {
+  return credentials[DOCUMENT_OAUTH_CREDENTIAL_KEYS.accessToken]?.trim() || null
+}
+
+/** A token set as an authorization server hands it back. */
+export interface DocumentOAuthTokens {
+  accessToken: string
+  refreshToken?: string
+  /** Absolute expiry (epoch ms), when the authorization server stated a lifetime. */
+  expiresAt?: number
+}
+
+/**
+ * A source's OAuth (`authorization_code`) half: the endpoints and scopes one shared flow needs to
+ * run the grant on its behalf.
+ *
+ * DECLARATION only, deliberately. No `fetch`, no token parsing, no credential mapping: the whole
+ * protocol lives in the platform's own OAuth service, so a second source that gains OAuth adds
+ * four constants rather than a second implementation of the flow. The one thing a provider still
+ * owns is the OTHER end: reading {@link documentOAuthAccessToken} off the bag it is handed and
+ * sending it the way its own API expects.
+ */
+export interface DocumentSourceOAuthSpec {
+  /** The vendor's authorization endpoint (where the operator's browser is sent). */
+  readonly authorizeUrl: string
+  /** The endpoint the callback's `code` is exchanged at. */
+  readonly tokenUrl: string
+  /**
+   * The endpoint a refresh token is redeemed at, or null when the grant does not refresh.
+   *
+   * Null is a real answer rather than an unimplemented method: a grant with no refresh endpoint
+   * expires for good, and the platform must reconnect rather than retry. Saying so here is what
+   * lets the refresh path tell "this token can be renewed and the renewal failed" from "this
+   * grant was never renewable".
+   */
+  readonly refreshUrl: string | null
+  /** The scopes requested at authorization, joined by {@link scopeSeparator}. */
+  readonly scopes: readonly string[]
+  /** How the vendor expects `scope` joined. Defaults to a space (RFC 6749). */
+  readonly scopeSeparator?: string
+}
+
 /** The result of validating + normalizing connect credentials. */
 export interface NormalizedConnection {
   /** The credential bag to persist (trimmed/normalized). */
@@ -53,6 +115,15 @@ export interface DocumentSourceProvider {
   readonly kind: DocumentSourceKind
   /** Self-description so the UI can render the connect/import forms generically. */
   readonly descriptor: DocumentSourceDescriptor
+  /**
+   * The source's OAuth connect declaration, when it has one. Absent ⇒ the typed credential in
+   * {@link descriptor}`.credentialFields` is the only way in.
+   *
+   * It is paired with `descriptor.oauth`, which is the same fact on the wire: the two are
+   * asserted to agree, so a provider cannot declare endpoints the UI never offers or advertise a
+   * button that reaches no flow.
+   */
+  readonly oauth?: DocumentSourceOAuthSpec
   /**
    * Validate the supplied credentials and return the bag to persist plus a
    * display label. Throws a ValidationError on anything missing/unsafe.

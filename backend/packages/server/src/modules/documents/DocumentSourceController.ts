@@ -2,6 +2,7 @@ import {
   connectDocumentSourceContract,
   disconnectDocumentSourceContract,
   documentSourceKindSchema,
+  documentSourceOAuthUrlContract,
   importDocumentContract,
   linkDocumentContract,
   linkDocumentForKindContract,
@@ -21,12 +22,17 @@ import * as v from 'valibot'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import { ValidationError } from '@cat-factory/kernel'
+import { UnauthorizedError, ValidationError } from '@cat-factory/kernel'
 import type { DocumentsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
-import { blockEditAuthority, mountWorkspacePermission } from '../../http/workspaceAccess.js'
+import {
+  blockEditAuthority,
+  mountWorkspacePermission,
+  requirePermission,
+} from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
+import { StateSigner } from '../../github/state.js'
 
 /** Resolve the documents module, or refuse with a 503 naming what isn't wired. */
 function requireDocuments<E extends AppEnv>(c: Context<E>): DocumentsModule {
@@ -35,6 +41,12 @@ function requireDocuments<E extends AppEnv>(c: Context<E>): DocumentsModule {
     'Document-source integration is not configured',
   )
 }
+
+/**
+ * How long a document-source OAuth `state` stays valid: long enough to sign in to a vendor and
+ * approve a consent screen, short enough that an abandoned one cannot be replayed days later.
+ */
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000
 
 /** Read + validate the `:source` path param as a known source kind. */
 function sourceParam<E extends AppEnv>(c: Context<E>): DocumentSourceKind {
@@ -68,6 +80,8 @@ export function documentSourceController(): Hono<AppEnv> {
   // - connect/disconnect write and clear the per-workspace source CREDENTIAL, which is integration
   //   management by definition. Gating at the mount rather than per-handler keeps the refusal ahead
   //   of body validation, so a member is refused whether or not their payload is well-formed and
+  //   never learns which sources this deployment configured; Gating at the mount rather than per-handler keeps the refusal ahead
+  //   of body validation, so a member is refused whether or not their payload is well-formed and
   //   never learns which sources this deployment configured;
   // - the per-DocKind template / exemplar tags are workspace-wide authoring CONFIG, not one task's
   //   context. One tag decides what EVERY doc run in the board writes from, the same blast radius
@@ -88,7 +102,16 @@ export function documentSourceController(): Hono<AppEnv> {
   // 503 here is how the frontend learns the integration is off.
   buildHonoRoute(app, listDocumentSourcesContract, async (c) => {
     const documents = requireDocuments(c)
-    return c.json({ sources: documents.connectionService.listSources() }, 200)
+    return c.json(
+      {
+        sources: documents.connectionService.listSources(),
+        // What a source DECLARES and what this deployment can RUN are two facts, so they travel
+        // as two fields: a source with an OAuth half and no registered app still connects by
+        // typed credential, and folding the two would render a button that can only 503.
+        oauthSources: await documents.oauthService.availableSources(param(c, 'workspaceId')),
+      },
+      200,
+    )
   })
 
   // ---- connections --------------------------------------------------------
@@ -107,6 +130,34 @@ export function documentSourceController(): Hono<AppEnv> {
       c.req.valid('json').credentials,
     )
     return c.json(connection, 201)
+  })
+
+  // Begin an `authorization_code` connect. The `state` binds the round trip to this workspace,
+  // this user and a short expiry, and NAMES the source, because one registered redirect URL
+  // serves every OAuth-capable source and the callback has nothing else to resolve a provider
+  // from. Nothing is written here: an abandoned consent screen leaves no row behind.
+  buildHonoRoute(app, documentSourceOAuthUrlContract, async (c) => {
+    // The one route here gated IMPERATIVELY, because it is the one gated READ. The mount above
+    // lets GET/HEAD through by design (on an admin controller the permission guards mutation and
+    // the configuration itself is viewer-readable), and this read is the exception: what it hands
+    // back is the first half of a credential write, completed through the PUBLIC callback where no
+    // tier can be checked at all. Ahead of `requireDocuments`, so a refusal never doubles as a
+    // report of which sources this deployment wired.
+    requirePermission(c, 'integrations.manage')
+    const documents = requireDocuments(c)
+    const workspaceId = param(c, 'workspaceId')
+    const source = sourceParam(c)
+    const signer = new StateSigner(c.get('container').config.auth.sessionSecret)
+    const state = await signer.sign({
+      workspaceId,
+      userId: c.get('user')?.id ?? null,
+      exp: Date.now() + OAUTH_STATE_TTL_MS,
+      source,
+    })
+    return c.json(
+      { url: await documents.oauthService.authorizeUrl({ workspaceId, source, state }) },
+      200,
+    )
   })
 
   buildHonoRoute(app, disconnectDocumentSourceContract, async (c) => {
@@ -179,12 +230,16 @@ export function documentSourceController(): Hono<AppEnv> {
   buildHonoRoute(app, planDocumentContract, async (c) => {
     const documents = requireDocuments(c)
     const workspaceId = param(c, 'workspaceId')
+    const { externalId, frameId } = c.req.valid('json')
     const record = await documents.importService.requireDocument(
       workspaceId,
       sourceParam(c),
-      c.req.valid('json').externalId,
+      externalId,
     )
-    return c.json(await documents.plannerService.plan(record), 200)
+    const target = frameId
+      ? await documents.linkService.resolvePlanTarget(workspaceId, frameId)
+      : undefined
+    return c.json(await documents.plannerService.plan(record, target), 200)
   })
 
   // Apply a page's structure to the board (new frames, or into an existing one).
@@ -197,7 +252,13 @@ export function documentSourceController(): Hono<AppEnv> {
       sourceParam(c),
       externalId,
     )
-    const plan = await documents.plannerService.plan(record)
+    // The plan is re-derived for the SAME target the preview was rendered for, so the write
+    // matches what the user approved: a board-wide plan flattened into a frame discards the frame
+    // titles and types the preview showed, and a targeted one has nothing to discard.
+    const target = frameId
+      ? await documents.linkService.resolvePlanTarget(workspaceId, frameId)
+      : undefined
+    const plan = await documents.plannerService.plan(record, target)
     // The plan comes from an imported document, but the board write is the member's: they asked
     // for the spawn on their own board, so it is judged under their tier (ADR 0037).
     const result = await documents.linkService.spawn(
@@ -253,6 +314,53 @@ export function documentSourceController(): Hono<AppEnv> {
     const { source, externalId } = c.req.valid('json')
     await documents.linkService.unlinkForKind(param(c, 'workspaceId'), source, externalId)
     return c.body(null, 204)
+  })
+
+  return app
+}
+
+/**
+ * Public document-source OAuth callback: the vendor redirects the operator's browser here with
+ * `?code&state`, so it cannot be workspace-scoped or session-gated and the `state` is what carries
+ * the trust. Mounted at `/documents`.
+ *
+ * ONE receiver for every OAuth-capable source, because a deployment registers ONE redirect URL per
+ * vendor app and the path cannot vary per source. That is why the state names the source: without
+ * it there is nothing to resolve a provider from, and a state minted by a DIFFERENT flow under the
+ * same signing secret (the GitHub install, Slack, the Linear task connect, all of which mint no
+ * `source`) would otherwise be presentable here.
+ *
+ * Mirrors the Linear task-source callback: the exchange happens server-side because the server
+ * holds the client secret, and the resulting grant is stored as the workspace's connection.
+ */
+export function documentOAuthController(): Hono<AppEnv> {
+  const app = new Hono<AppEnv>()
+
+  app.get('/oauth/callback', async (c) => {
+    const container = c.get('container')
+    const documents = requireDocuments(c)
+
+    const code = c.req.query('code')
+    if (!code) throw new ValidationError('Missing code')
+
+    const signer = new StateSigner(container.config.auth.sessionSecret)
+    const state = await signer.verify(c.req.query('state') ?? null)
+    if (!state) throw new UnauthorizedError('Invalid or expired state')
+    if (!v.is(documentSourceKindSchema, state.source)) {
+      // A state this deployment signed, for a flow that is not this one. Refused rather than
+      // guessed at: there is no correct source to substitute, and picking one would complete a
+      // grant against a provider the operator never consented to.
+      throw new UnauthorizedError('This authorization was not started for a document source')
+    }
+
+    const credentials = await documents.oauthService.exchangeCode({
+      workspaceId: state.workspaceId,
+      source: state.source,
+      code,
+    })
+    await documents.connectionService.connectWithOAuth(state.workspaceId, state.source, credentials)
+    // Land back on the app (reuse the GitHub setup redirect target as the app URL).
+    return c.redirect(container.config.github.setupRedirectUrl || '/')
   })
 
   return app

@@ -10,7 +10,10 @@ import { harnessArtifactController } from './modules/artifacts/HarnessArtifactCo
 import { authController } from './modules/auth/AuthController.js'
 import { boardController } from './modules/board/BoardController.js'
 import { bootstrapController } from './modules/bootstrap/BootstrapController.js'
-import { documentSourceController } from './modules/documents/DocumentSourceController.js'
+import {
+  documentOAuthController,
+  documentSourceController,
+} from './modules/documents/DocumentSourceController.js'
 import { environmentController } from './modules/environments/EnvironmentController.js'
 import { environmentUserHandlerController } from './modules/environments/EnvironmentUserHandlerController.js'
 import { eventsController } from './modules/events/EventsController.js'
@@ -461,6 +464,10 @@ function registerWebhookControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/slack', slackOAuthController())
   // Linear-facing OAuth callback (browser redirect); not workspace-scoped.
   app.route('/tasks', linearOAuthController())
+  // Document-source OAuth callback (browser redirect); not workspace-scoped. ONE receiver for
+  // every OAuth-capable source — the source rides the signed `state`, because a deployment
+  // registers one redirect URL per vendor app and the path cannot vary per source.
+  app.route('/documents', documentOAuthController())
   // The MCP tool-server OAuth flow deliberately has NO receiver here: a vendor redirects the
   // operator's browser to the SPA, which re-presents the `code` and `state` over the authenticated
   // API (`mcpOAuthCompletionController`, mounted with the session-gated controllers above). A

@@ -89,17 +89,43 @@ function extractHeadings(markdown: string): Heading[] {
 }
 
 /**
+ * The existing service frame a TARGET-AWARE plan is authored for.
+ *
+ * `existingModules` is what keeps a targeted plan additive: the planner is told what the frame
+ * already holds so it proposes work beside it rather than a second "Checkout" module beside the
+ * one that is already there. It is a fact about the board, so the caller reads it; a planner that
+ * fetched it would need the block repository for a prompt detail.
+ */
+export interface PlanTarget {
+  frameId: string
+  title: string
+  type: BlockType
+  existingModules: readonly string[]
+}
+
+/**
  * Deterministic fallback planner: map the document's heading outline onto the
  * board. h1 → a service frame, h2 → a module within it, h3 → a task within the
  * current module (or directly in the frame). Used whenever no LLM is configured,
  * and as the safety net when an LLM response can't be parsed.
+ *
+ * With a {@link PlanTarget} it maps onto that ONE frame instead, and the whole outline SHIFTS UP a
+ * level: the target occupies the level h1 would have created, so h1 is consumed by it, h2 becomes
+ * a module and h3 a task. Keeping h1 as a module would put a module named after the document
+ * around everything, one level below the service that is already named after it.
+ *
+ * A document with SEVERAL h1s therefore loses that top grouping, which is inherent to spawning
+ * into one frame rather than a defect of the mapping: a document describing two services is what
+ * the board-wide plan is for.
  */
 export function planFromHeadings(
   source: DocumentOrigin,
   externalId: string,
   title: string,
   body: string,
+  target?: PlanTarget,
 ): DocumentBoardPlan {
+  if (target) return targetedPlanFromHeadings(source, externalId, body, target)
   const headings = extractHeadings(body)
   const frames: PlanFrame[] = []
   let frame: PlanFrame | null = null
@@ -131,7 +157,34 @@ export function planFromHeadings(
   if (frames.length === 0) {
     frames.push({ type: 'service', title, modules: [], tasks: [] })
   }
-  return { source, externalId, planner: 'headings', frames }
+  return { source, externalId, planner: 'headings', targetFrameId: null, frames }
+}
+
+/** {@link planFromHeadings} onto one existing frame: h1 is the target, h2 → modules, h3 → tasks. */
+function targetedPlanFromHeadings(
+  source: DocumentOrigin,
+  externalId: string,
+  body: string,
+  target: PlanTarget,
+): DocumentBoardPlan {
+  const frame: PlanFrame = { type: target.type, title: target.title, modules: [], tasks: [] }
+  let module: PlanModule | null = null
+  for (const heading of extractHeadings(body)) {
+    if (heading.level === 1) {
+      // Consumed by the target, and it also CLOSES the open module: the h2s that follow belong
+      // to a new section of the document, so folding them into the previous h1's last module
+      // would group work the outline kept apart.
+      module = null
+    } else if (heading.level === 2) {
+      module = { name: heading.text, tasks: [] }
+      frame.modules.push(module)
+    } else if (module) {
+      module.tasks.push({ title: heading.text })
+    } else {
+      frame.tasks.push({ title: heading.text })
+    }
+  }
+  return { source, externalId, planner: 'headings', targetFrameId: target.frameId, frames: [frame] }
 }
 
 function asString(value: unknown): string | undefined {
@@ -190,5 +243,49 @@ export function coercePlan(
     frames.push(frame)
   }
   if (frames.length === 0) return null
-  return { source, externalId, planner: 'llm', frames }
+  return { source, externalId, planner: 'llm', targetFrameId: null, frames }
+}
+
+/**
+ * Coerce a TARGET-AWARE model response — `{ modules, tasks }` for one existing service — into a
+ * plan carrying exactly that frame. Null when nothing usable remains, so the caller falls back to
+ * the targeted heading parser rather than to a board-wide plan the user did not ask for.
+ *
+ * It reads a DIFFERENT top-level shape from {@link coercePlan} because it asked a different
+ * question: a targeted prompt that answered with `frames` would be a model proposing an
+ * architecture where a service already exists, and quietly re-reading those frames as modules
+ * would launder that mistake into the board.
+ */
+export function coerceTargetedPlan(
+  source: DocumentOrigin,
+  externalId: string,
+  parsed: unknown,
+  target: PlanTarget,
+): DocumentBoardPlan | null {
+  const root = (parsed ?? null) as Record<string, unknown> | null
+  const modules: PlanModule[] = []
+  for (const raw of Array.isArray(root?.modules) ? root.modules : []) {
+    if (typeof raw !== 'object' || raw === null) continue
+    const name = asString((raw as Record<string, unknown>).name)
+    if (!name) continue
+    const tasks = (
+      Array.isArray((raw as Record<string, unknown>).tasks)
+        ? ((raw as Record<string, unknown>).tasks as unknown[])
+        : []
+    )
+      .map(coerceTask)
+      .filter((t): t is PlanTask => t !== null)
+    modules.push({ name, tasks })
+  }
+  const tasks = (Array.isArray(root?.tasks) ? root.tasks : [])
+    .map(coerceTask)
+    .filter((t): t is PlanTask => t !== null)
+  if (modules.length === 0 && tasks.length === 0) return null
+  return {
+    source,
+    externalId,
+    planner: 'llm',
+    targetFrameId: target.frameId,
+    frames: [{ type: target.type, title: target.title, modules, tasks }],
+  }
 }

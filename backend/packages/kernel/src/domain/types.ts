@@ -649,6 +649,7 @@ export type {
   UpdateInitiativePolicyInput,
   AccountSettingsConfig,
   ContentStorageConfig,
+  FigmaOAuthSecret,
   LinearOAuthSecret,
   S3CredentialsSecret,
   SlackOAuthSecret,

@@ -4,6 +4,13 @@
 // same modal serves Confluence, Notion and any future source. Secret credentials
 // are write-only — the backend never returns them, so on reload we show
 // "Connected" with empty fields.
+//
+// A source that declares an OAuth half AND has a registered app on this deployment leads with
+// "Connect with <source>", and the credential form moves BELOW it as the fallback. That order is
+// the point of the slice: minting a personal access token by hand is an unreasonable first step
+// to put in front of a designer, and whichever affordance comes first is the one people use.
+// Where no app is registered the button is absent entirely rather than disabled, because the
+// remedy belongs to an admin in a different surface and a dead control states nothing.
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 
@@ -33,6 +40,33 @@ const back = useIntegrationBack(open)
 /** One value per credential field, reset whenever the modal (re)opens. */
 const values = ref<Record<string, string>>({})
 const saving = ref(false)
+const startingOAuth = ref(false)
+
+/** The OAuth half is offered only when the SOURCE declares one and this deployment registered an app. */
+const oauth = computed(() =>
+  source.value && descriptor.value?.oauth && documents.canConnectWithOAuth(source.value)
+    ? descriptor.value.oauth
+    : null,
+)
+
+async function connectWithOAuth() {
+  if (!source.value) return
+  startingOAuth.value = true
+  try {
+    // Navigates away on success, so nothing after this runs; the `finally` covers the refusal
+    // path (an app un-registered between the probe and the click).
+    await documents.beginOAuthConnect(source.value)
+  } catch (e) {
+    toast.add({
+      title: t('documents.connect.oauth.failed', { source: descriptor.value?.label ?? '' }),
+      description: e instanceof Error ? e.message : String(e),
+      icon: 'i-lucide-triangle-alert',
+      color: 'error',
+    })
+  } finally {
+    startingOAuth.value = false
+  }
+}
 
 watch(open, (isOpen) => {
   if (isOpen) values.value = {}
@@ -96,6 +130,22 @@ async function disconnect() {
         <p class="text-sm text-slate-400">
           {{ t('documents.connect.intro', { source: descriptor.label }) }}
         </p>
+
+        <div v-if="oauth" class="space-y-2">
+          <UButton
+            color="primary"
+            icon="i-lucide-shield-check"
+            :loading="startingOAuth"
+            data-testid="document-connect-oauth"
+            @click="connectWithOAuth"
+          >
+            {{ t('documents.connect.oauth.action', { source: descriptor.label }) }}
+          </UButton>
+          <p class="text-[11px] text-slate-500">
+            {{ t('documents.connect.oauth.scopes', { scopes: oauth.scopes.join(', ') }) }}
+          </p>
+          <p class="text-[11px] text-slate-500">{{ t('documents.connect.oauth.fallback') }}</p>
+        </div>
 
         <div class="space-y-3">
           <UFormField

@@ -427,7 +427,8 @@
       "accessDenied": {
         "title": "アクセスが拒否されました",
         "hint": "このサービスの基盤となるリポジトリにアクセスする権限がありません。"
-      }
+      },
+      "startFromDesignTitle": "デザインから始める"
     },
     "decisionBadge": {
       "decisionNeeded": "判断が必要",
@@ -499,7 +500,11 @@
     "attachIssueDisabledConnect": "まず issue トラッカーを接続してください（連携）",
     "attachIssueDisabledEnable": "まず issue トラッカー連携を有効にしてください",
     "importsOnAdd": "追加時にインポート",
-    "unreadable": "取得できませんでした: {error}"
+    "unreadable": "取得できませんでした: {error}",
+    "pastedLink": {
+      "offer": "この説明は {source} のページにリンクしています。コンテキストとして添付しますか？",
+      "attach": "添付"
+    }
   },
   "errors": {
     "generic": {
@@ -2026,6 +2031,18 @@
         "keysValidation": "S3 のアクセスキー ID とシークレットを入力してください",
         "saved": "コンテンツストレージを保存しました",
         "saveFailed": "コンテンツストレージを保存できませんでした"
+      },
+      "figma": {
+        "title": "Figma アプリ (OAuth)",
+        "description": "「Figma で接続」の流れを有効にします。設定しなくても、ワークスペースはパーソナルアクセストークンを貼り付けて Figma に接続できます。",
+        "clientId": "クライアント ID",
+        "clientSecret": "クライアントシークレット",
+        "redirectUrl": "リダイレクト URL",
+        "validation": "クライアント ID、シークレット、リダイレクト URL を入力してください",
+        "saved": "Figma の OAuth を保存しました",
+        "saveFailed": "Figma の OAuth を保存できませんでした",
+        "cleared": "Figma の OAuth を削除しました",
+        "clearFailed": "Figma の OAuth を削除できませんでした"
       }
     },
     "accountFragments": {
@@ -4301,13 +4318,19 @@
     "connect": {
       "title": "ソースを接続",
       "sourceFallback": "ソース",
-      "intro": "{source} を接続すると、要件、RFC、PRD をインポートし、ボード構造を生成したり、エージェントのコンテキストとしてタスクに添付したりできます。",
+      "intro": "{source} を接続して、ページやデザインをこのボードに取り込みます。インポートしてボード構造に展開したり、タスクにエージェント用のコンテキストとして添付したりできます。",
       "disconnect": "切断",
       "connect": "接続",
       "update": "接続を更新",
       "connected": "{source} を接続しました",
       "disconnected": "{source} を切断しました",
-      "connectFailed": "接続できませんでした"
+      "connectFailed": "接続できませんでした",
+      "oauth": {
+        "action": "{source} で接続",
+        "scopes": "次の権限が求められます: {scopes}",
+        "fallback": "トークンを使いますか？下のフィールドをご利用ください。",
+        "failed": "{source} へのサインインを開始できませんでした"
+      }
     },
     "spawn": {
       "title": "構造をプレビュー",
@@ -4322,7 +4345,14 @@
       "summary": "{frames} · {modules} · {tasks}",
       "frameCount": "{count} フレーム | {count} フレーム",
       "moduleCount": "{count} モジュール | {count} モジュール",
-      "taskCount": "{count} タスク | {count} タスク"
+      "taskCount": "{count} タスク | {count} タスク",
+      "intoService": "選択したサービスの中に",
+      "target": {
+        "label": "サービスに追加",
+        "help": "デザインが表すのはアーキテクチャではなく画面です。そのため計画は、すでに存在するサービスの中の作業を提案します。",
+        "placeholder": "サービスを選択",
+        "required": "このデザインが属するサービスを選んでください。"
+      }
     },
     "taskDocs": {
       "heading": "コンテキストドキュメント",
@@ -4355,6 +4385,20 @@
       "remove": "削除",
       "linkFailed": "ドキュメントのリンクを更新できませんでした",
       "loadFailed": "ドキュメントテンプレートを読み込めませんでした"
+    },
+    "startFromDesign": {
+      "title": "デザインから始める",
+      "intro": "フレームまたはファイル全体のリンクを貼り付けてください。新しいタスクに添付され、エージェントがレイアウト・テキスト・コンポーネント・トークンを読み取ります。",
+      "noSource": "デザインソースがまだ接続されていません。管理者が連携画面から Figma または Zeplin を接続できます。",
+      "linkLabel": "デザインのリンク",
+      "linkPlaceholder": "https://www.figma.com/design/…?node-id=1-2",
+      "checking": "リンクを確認しています…",
+      "trimmed": "このリンクのサポートされた形式に整形しました。",
+      "widened": "フレーム {scope} を読み取れなかったため、ファイル全体を添付しました。",
+      "unchecked": "今はリンクを確認できませんでした。タスク作成時に取得されます。",
+      "uncheckedAmbiguous": "リンクを確認できず、デザインソースが複数接続されているため、どれに属するか判断できません。もう一度お試しください。",
+      "rejected": "接続済みのデザインソースはどれもこのリンクを認識できません。",
+      "continue": "続ける"
     }
   },
   "tasks": {
@@ -6963,7 +7007,8 @@
       "library": "この環境で有効なコンテキストフラグメントのライブラリ",
       "failedRun": "失敗した実行",
       "infrastructure": "このワークスペースに接続された実行バックエンド",
-      "advancedTier": "詳細インターフェースモード"
+      "advancedTier": "詳細インターフェースモード",
+      "designSource": "接続済みのデザインソース"
     },
     "overlay": {
       "next": "次へ",
@@ -7341,6 +7386,36 @@
           "finish": {
             "title": "設計ステップがこれを読みます",
             "body": "どれを使うか宣言した設計は、次のステップでその完全な契約を受け取ります。何も宣言しなければ何も受け取りません。ここを最新に保つことが、これが機能する条件です。"
+          }
+        }
+      },
+      "startFromDesign": {
+        "title": "デザインから始める",
+        "description": "デザインのフレームを、エージェントが実装できるタスクに変えます。",
+        "steps": {
+          "intro": {
+            "title": "デザインから進める",
+            "body": "デザインツールから仕事が始まるとき、フレームそのものが指示書です。このツアーではフレームを新しいタスクに添付します。"
+          },
+          "open": {
+            "title": "デザインから始める",
+            "body": "デザインソースを接続すると、すべてのサービスフレームにこのボタンが表示されます。"
+          },
+          "paste": {
+            "title": "リンクを貼り付ける",
+            "body": "デザインツールでフレームまたはファイル全体のリンクをコピーし、ここに貼り付けてください。"
+          },
+          "resolved": {
+            "title": "添付された内容を確認する",
+            "body": "リンクはサポートされた形式に整形されます。フレーム自体を読み取れなかった場合はファイル全体が添付され、その旨がここに表示されます。"
+          },
+          "continue": {
+            "title": "タスクへ進む",
+            "body": "デザインは新しいタスクに用意されています。望む結果を書いて作成してください。"
+          },
+          "finish": {
+            "title": "実行の準備ができました",
+            "body": "エージェントはデザインのレイアウト・テキスト・コンポーネント・トークンを読み取り、実行のたびにソースと照合し直します。"
           }
         }
       }

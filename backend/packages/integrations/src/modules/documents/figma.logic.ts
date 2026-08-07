@@ -1,4 +1,4 @@
-import type { DocumentSourceDescriptor } from '@cat-factory/kernel'
+import type { DocumentSourceDescriptor, DocumentSourceOAuthSpec } from '@cat-factory/kernel'
 import {
   capped,
   dimensionMeta,
@@ -17,8 +17,35 @@ import { assertHostPinned } from './http.js'
 // lightweight Markdown the generic planner + `.cat-context/` materialisation consume.
 // The `fetch` itself (the `X-Figma-Token` REST client) lives in `FigmaProvider`.
 
-/** Figma's REST API host. The PAT is sent to this host only — see {@link assertSafeFigmaUrl}. */
+/** Figma's REST API host. The credential is sent to this host only — see {@link assertSafeFigmaUrl}. */
 export const FIGMA_API_HOST = 'api.figma.com'
+
+/**
+ * The scopes the OAuth consent screen asks for, and the reason each is on the list.
+ *
+ * `file_content:read` is what every import needs (the node tree, the published styles, the
+ * component sets). `file_variables:read` is the Enterprise-gated variables read, requested
+ * because asking for it costs nothing on a plan that does not grant it: the provider already
+ * treats a 403 there as a PLAN GATE rather than an error and falls back to published styles, so
+ * an over-broad ask degrades exactly as the PAT path does rather than failing the connect.
+ */
+const FIGMA_OAUTH_SCOPES = ['file_content:read', 'file_variables:read'] as const
+
+/**
+ * Figma's `authorization_code` endpoints.
+ *
+ * The authorize host is `www.figma.com` (the consent screen a person sees) while both token
+ * endpoints are on the API host this provider is already pinned to, so a refresh crosses no host
+ * the credential does not already reach.
+ */
+export const FIGMA_OAUTH: DocumentSourceOAuthSpec = {
+  authorizeUrl: 'https://www.figma.com/oauth',
+  tokenUrl: `https://${FIGMA_API_HOST}/v1/oauth/token`,
+  refreshUrl: `https://${FIGMA_API_HOST}/v1/oauth/refresh`,
+  scopes: FIGMA_OAUTH_SCOPES,
+  // Figma joins scopes with commas, not the RFC's space.
+  scopeSeparator: ',',
+}
 
 /** What the connect UI renders, and which credentials the provider needs. */
 export const FIGMA_DESCRIPTOR: DocumentSourceDescriptor = {
@@ -36,8 +63,11 @@ export const FIGMA_DESCRIPTOR: DocumentSourceDescriptor = {
   ],
   refLabel: 'Figma file or frame URL',
   refPlaceholder: 'https://www.figma.com/design/<key>/Title?node-id=1-2',
-  // No catalogue search API for a PAT — import a specific file/frame by URL.
+  // No catalogue search API for either credential — import a specific file/frame by URL.
   searchable: false,
+  // The wire half of {@link FIGMA_OAUTH}: it says the SOURCE can be connected this way, and the
+  // source listing says separately whether this deployment has a Figma app registered to do it.
+  oauth: { scopes: [...FIGMA_OAUTH_SCOPES] },
 }
 
 /**

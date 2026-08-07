@@ -19,6 +19,7 @@ const ALL_GATES: NavGates = {
   canManageSettings: true,
   githubAvailable: true,
   libraryAvailable: true,
+  designSourceConnected: true,
   infrastructureAvailable: true,
   accountsEnabled: true,
   isAccountAdmin: true,
@@ -392,6 +393,10 @@ describe('tour availability across the catalog', () => {
       // this is the tour the contextual offer raises when one does.
       'diagnose-failure',
       'review-merge',
+      // The same loop as a DESIGNER enters it. Offered rather than catalogue-only because on a
+      // board with a design source connected it IS the everyday loop, and its own requirement
+      // keeps it off every board without one.
+      'start-from-design',
     ]
     const CATALOGUE_ONLY = [
       'wire-models',
