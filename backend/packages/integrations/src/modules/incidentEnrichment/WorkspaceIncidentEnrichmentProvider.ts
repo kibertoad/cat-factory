@@ -3,9 +3,11 @@ import type {
   IncidentEnrichmentProvider,
   IncidentMatchQuery,
   IncidentUpdate,
+  OrgSecretCipher,
   SecretCipher,
+  SecretDelegate,
 } from '@cat-factory/kernel'
-import { CompositeIncidentEnrichmentProvider } from '@cat-factory/kernel'
+import { CompositeIncidentEnrichmentProvider, createOrgSecretCipher } from '@cat-factory/kernel'
 import { parseIncidentEnrichmentCredentials } from '@cat-factory/contracts'
 import { PagerDutyEnrichmentProvider } from '../pagerduty/PagerDutyEnrichmentProvider.js'
 import { IncidentIoEnrichmentProvider } from '../incidentio/IncidentIoEnrichmentProvider.js'
@@ -17,6 +19,12 @@ export interface WorkspaceIncidentEnrichmentProviderDependencies {
   incidentEnrichmentConnectionRepository: IncidentEnrichmentConnectionRepository
   /** Seals/opens the per-workspace credentials (domain tag 'cat-factory:incident-enrichment'). */
   secretCipher: SecretCipher
+  /**
+   * Present ONLY on a mothership-mode node, where the row was sealed under the MOTHERSHIP's key.
+   * The on-call escalation runs wherever the RUN runs, so without it the enrichment silently
+   * no-ops there, which is exactly the shape this provider's best-effort catch hides.
+   */
+  secretDelegate?: SecretDelegate
 }
 
 /**
@@ -28,11 +36,14 @@ export interface WorkspaceIncidentEnrichmentProviderDependencies {
  */
 export class WorkspaceIncidentEnrichmentProvider implements IncidentEnrichmentProvider {
   private readonly connections: IncidentEnrichmentConnectionRepository
-  private readonly cipher: SecretCipher
+  private readonly orgSecrets: OrgSecretCipher
 
   constructor(deps: WorkspaceIncidentEnrichmentProviderDependencies) {
     this.connections = deps.incidentEnrichmentConnectionRepository
-    this.cipher = deps.secretCipher
+    this.orgSecrets = createOrgSecretCipher({
+      cipher: deps.secretCipher,
+      ...(deps.secretDelegate ? { delegate: deps.secretDelegate } : {}),
+    })
   }
 
   async enrich(query: IncidentMatchQuery, update: IncidentUpdate): Promise<void> {
@@ -47,7 +58,12 @@ export class WorkspaceIncidentEnrichmentProvider implements IncidentEnrichmentPr
     let credentials
     try {
       credentials = parseIncidentEnrichmentCredentials(
-        JSON.parse(await this.cipher.decrypt(record.credentials)),
+        JSON.parse(
+          await this.orgSecrets.decryptFor(
+            { source: 'incident_enrichment_connection', workspaceId },
+            record.credentials,
+          ),
+        ),
       )
     } catch {
       // A drifted/corrupted row must never break a best-effort enrichment.

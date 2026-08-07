@@ -401,6 +401,34 @@ function defineMachineApiGate(harness: ConformanceHarness): void {
       expect(res.status).toBe(403)
     })
 
+    it('serves /internal/secrets/{unseal,seal} with the machine-token gate active', async () => {
+      const { call } = harness.makeApp()
+      // The SECRET DELEGATION pair (a mothership opening, and sealing, an ORG credential a
+      // mothership-mode node holds no key for). Mounted by the shared controller on both facades
+      // and machine-gated FIRST, before the "is this facade a mothership / does it have a cipher"
+      // 503, the source-table lookup and any scope resolution, so an unauthenticated call is a
+      // 403 everywhere. This is the endpoint where an ungated slip would be worst of all: it is
+      // the one surface in the machine API that answers with a PLAINTEXT credential.
+      expect(
+        (
+          await call('POST', '/internal/secrets/unseal', {
+            source: 'environment_access',
+            workspaceId: 'ws_x',
+            key: ['env_x'],
+          })
+        ).status,
+      ).toBe(403)
+      expect(
+        (
+          await call('POST', '/internal/secrets/seal', {
+            source: 'environment_access',
+            workspaceId: 'ws_x',
+            plaintext: 'x',
+          })
+        ).status,
+      ).toBe(403)
+    })
+
     it('serves /internal/foundational-services with the machine-token gate active', async () => {
       const { call } = harness.makeApp()
       // The catalog's `builtin` TIER read (a mothership-mode node resolving the deployment's

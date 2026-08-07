@@ -568,6 +568,26 @@ export {
   type GitHubDelegationClientOptions,
 } from './github/DelegatedAppTokenSource.js'
 
+// Mothership-mode SECRET DELEGATION: the mothership opens (and seals) an ORG-owned credential a
+// laptop holds no key for, addressed by ROW rather than by ciphertext. The closed source table is
+// the server-side binding of kernel's `OrgSecretSource` vocabulary; the client is what a local
+// facade composes into `createOrgSecretCipher`.
+export {
+  SEALED_SECRET_SOURCES,
+  SEALED_SECRET_SOURCE_NAMES,
+  sealedSecretSourceSpec,
+  type SealedSecretSourceSpec,
+} from './secrets/sealedSecretSources.js'
+export {
+  HttpSecretDelegate,
+  MachineSecretDelegationUnavailableError,
+  type HttpSecretDelegateOptions,
+  type DelegatedSealRequest,
+  type DelegatedSealResponse,
+  type DelegatedUnsealRequest,
+  type DelegatedUnsealResponse,
+} from './persistence/secretDelegation.js'
+
 // Per-account binary-artifact store resolution (the blob backend is configured per-account
 // in the UI; each facade supplies its own backend factory + default).
 export {

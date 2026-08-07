@@ -576,19 +576,21 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // branch) is served by mothership GitHub token delegation
   // (`/internal/github/installation-token`), so the old "needs GitHub which mothership does
   // not proxy" blocker is gone; the remaining gate on a FULL mothership-mode self-test is
-  // the provisioning writes (`environmentRegistryRepository.insert`/`update`, the
-  // secrets-delegation slice below). `listStale` is the stale-run cron sweeper's
-  // cross-workspace read (mirrors `agentRunRepository.listStale`) — mothership-internal.
+  // the provisioning writes, now remote (`environmentRegistryRepository.insert`/`update`).
+  // `listStale` is the stale-run cron sweeper's cross-workspace read (mirrors
+  // `agentRunRepository.listStale`): mothership-internal.
   environmentTestRunRepository: { listStale: 'sweeper' },
   // The whole environment-connection management surface is now remote (the connection +
   // per-type infra-handler settings panels: list/connect/disconnect/register-handler). Its
-  // secrets ride a SEALED `secretsCipher` blob (sealed/decrypted in the service under the LOCAL
-  // key), so no plaintext credential crosses the machine API. Provisioning WRITES
-  // (`environmentRegistryRepository.insert`/`update`) stay off — the later secrets-delegation slice.
+  // secrets ride a SEALED `secretsCipher` blob, so no plaintext credential crosses the machine
+  // API; the bundle is OPENED on the node by the mothership over `/internal/secrets/unseal`
+  // (the secrets-delegation slice), which is also what made the provisioning WRITES below safe.
   environmentConnectionRepository: {},
   environmentRegistryRepository: {
-    insert: 'pending',
-    update: 'pending',
+    // `insert`/`update` are now allow-listed (REMOTE_PERSISTENCE_METHODS): the provisioning write
+    // path. Safe because the row's `accessCipher`/`provisionFieldsCipher` are sealed BY THE
+    // MOTHERSHIP over `/internal/secrets/seal`, so a laptop-provisioned environment stays
+    // readable by the org (and reclaimable by the mothership's own teardown).
     // listByWorkspace is now allow-listed (REMOTE_PERSISTENCE_METHODS) — the frontend UI-test
     // gate's batch env read + the environments list endpoint. Classified there, not here.
     listExpired: 'sweeper',

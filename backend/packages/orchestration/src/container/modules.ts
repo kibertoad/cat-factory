@@ -486,6 +486,7 @@ export function createEnvironmentsModule(
     environmentConnectionRepository,
     workspaceRepository: deps.workspaceRepository,
     secretCipher,
+    ...(deps.secretDelegate ? { secretDelegate: deps.secretDelegate } : {}),
     clock: deps.clock,
     environmentBackendRegistry:
       deps.environmentBackendRegistry ?? defaultEnvironmentBackendRegistry(),

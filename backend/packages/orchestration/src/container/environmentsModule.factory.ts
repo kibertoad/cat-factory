@@ -80,6 +80,7 @@ export function buildEnvironmentProvisioningService(args: {
     connectionService,
     environmentRegistryRepository,
     secretCipher,
+    ...(deps.secretDelegate ? { secretDelegate: deps.secretDelegate } : {}),
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     environmentTeardown: teardownService,

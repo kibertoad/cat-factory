@@ -194,6 +194,11 @@ export function assembleNodeCoreDependencies(bundle: NodeCoreDepsBundle): CoreDe
     auditLogReader: audit,
     ...buildNodeStoreDeps(bundle),
     ...buildNodeServiceDeps(bundle),
+    // Mothership-mode SECRET DELEGATION, wired at the TOP level for the same reason the logger is:
+    // it is not one integration's concern. Every service holding an ORG-owned sealed row composes
+    // it with its own cipher, so a facade that forgot it would run each of them against a key the
+    // org never sealed with, which fails at PROBE/PROVISION time, not at boot.
+    ...(bundle.options.secretDelegate ? { secretDelegate: bundle.options.secretDelegate } : {}),
   }
 }
 

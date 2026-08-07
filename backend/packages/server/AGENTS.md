@@ -192,6 +192,11 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
 - The **mothership-mode machine API** (`/internal/*`, machine-token authed, mounted on both
   facades: see `docs/initiatives/mothership-mode.md`): `persistence/rpc.ts` +
   `modules/persistence/` (the repository RPC + GitHub installation-token delegation),
+  `secrets/sealedSecretSources.ts` + `persistence/secretDelegation.ts` +
+  `modules/persistence/SecretDelegationController.ts` (SECRET delegation: the mothership opens,
+  and seals, an ORG credential a node holds no key for. The one machine surface answering with a
+  PLAINTEXT credential, which is why the request names a ROW rather than an envelope and the
+  readable sources are a CLOSED table),
   `events/machineEvents.ts` + `events/machineSubscribe.ts` +
   `modules/events/EventsRelayController.ts` (real-time in BOTH directions; the upstream publish
   and the node's inbound per-workspace subscription, whose handshake is handed to the SAME

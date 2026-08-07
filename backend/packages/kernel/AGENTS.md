@@ -71,6 +71,14 @@ else imports its **ports** and domain types from here.
   physical copy of that package, which a published dependency graph does not guarantee. The source
   is the third `/internal/*` read of the mothership family beside `FoundationalBuiltinSource` and
   `BinaryGeneratorSource`, and it THROWS rather than answering an empty pool for the reason they do.
+- `ports/secret-delegation.ts`: `OrgSecretSource` (a CLOSED vocabulary of org-owned sealed rows),
+  `SecretDelegate` and `createOrgSecretCipher`: the seam every service holding one of those rows
+  composes with its own `SecretCipher`. With no delegate (every hosted deployment) it is a
+  pass-through; on a mothership-mode node it routes BOTH directions to the mothership, which holds
+  the key. Deliberately NOT a `SecretCipher` decorator: an envelope alone carries no claim about
+  who may open it, so the delegated call addresses a ROW and the mothership re-reads it under the
+  node's account scope. The server binds each member to one repository read in
+  `SEALED_SECRET_SOURCES`; a member with no binding fails to compile.
 - `domain/llm-phase.ts`: `normalizeCallPhase` + `UNATTRIBUTED_CALL_PHASE`, the boundary for the
   **phase axis** on `llm_call_metrics` (which slice of a run spent a model call). The label is
   free-form and comes from producers the platform does not fully author (a proxy request path, a
