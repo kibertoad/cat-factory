@@ -53,6 +53,12 @@ export const CONFLICT_REASONS = [
   'preset_unsatisfiable',
   'dependencies_unmet',
   'task_limit_reached',
+  // The workspace already has as many outbound notification webhooks as it may register
+  // (`MAX_NOTIFICATION_WEBHOOKS_PER_WORKSPACE`), so registering ANOTHER one is refused; editing or
+  // removing an existing endpoint still works, which is the remedy. `details.limit` carries the
+  // cap. Kept apart from `task_limit_reached` because nothing here clears on its own: waiting does
+  // not help, an operator has to remove a receiver they no longer want.
+  'webhook_limit_reached',
   'tester_infra_unsupported',
   'binary_storage_unconfigured',
   'agent_backend_unconfigured',

@@ -27,15 +27,19 @@ export interface NotificationWebhookSupportDependencies {
    */
   urlSafetyPolicy?: UrlSafetyPolicy
   fetchImpl?: typeof fetch
+  // Each hook's context carries a `webhookId` when the failure belongs to ONE endpoint, and omits
+  // it when it belongs to the workspace's configuration (the endpoint read itself failing). Both
+  // facades spread the context onto their log line, so which receiver is broken is on the record
+  // rather than inferable only from the URL nobody logged.
   /** Structured-logger hook for a delivery that ultimately failed (best-effort ≠ invisible). */
   onError?: (
     error: unknown,
-    context: { workspaceId: string; notificationId: string; type: string },
+    context: { workspaceId: string; notificationId: string; type: string; webhookId?: string },
   ) => void
   /** The same hook for a RUN-LIFECYCLE delivery, whose context names a run rather than a card. */
   onRunEventError?: (
     error: unknown,
-    context: { workspaceId: string; runId: string; event: string },
+    context: { workspaceId: string; runId: string; event: string; webhookId?: string },
   ) => void
   /**
    * The same hook for a PLATFORM-HEALTH delivery, whose context names the account whose health
@@ -44,7 +48,7 @@ export interface NotificationWebhookSupportDependencies {
    */
   onPlatformAlertError?: (
     error: unknown,
-    context: { workspaceId: string; accountId: string; event: string },
+    context: { workspaceId: string; accountId: string; event: string; webhookId?: string },
   ) => void
 }
 

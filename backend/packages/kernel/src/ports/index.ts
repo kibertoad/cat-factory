@@ -697,6 +697,7 @@ export type {
 export type { BranchUpdateOutcome, BranchUpdater } from './branch-updater.js'
 export type { NotificationRepository } from './notification-repositories.js'
 export type {
+  NotificationWebhookPutOutcome,
   NotificationWebhookRecord,
   NotificationWebhookRepository,
 } from './notification-webhook-repositories.js'

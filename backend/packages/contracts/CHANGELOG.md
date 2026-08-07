@@ -1,5 +1,91 @@
 # @cat-factory/contracts
 
+## 0.268.0
+
+### Minor Changes
+
+- eaab22a: Register several NAMED outbound webhooks per workspace, instead of one that each integration overwrites
+
+  `/api/v1/notification-webhook` was one endpoint per workspace, which made a second integration's
+  enrolment a destructive act: registering it replaced whatever was already there, and the only symptom
+  was that the previous receiver went quiet. `GET /api/v1/notification-webhooks` plus
+  `GET|PUT|DELETE /api/v1/notification-webhooks/:webhookId` are the additive fix. The singular routes
+  keep working unchanged and now address the reserved id `default`, which appears in the collection
+  like any other entry, so the two surfaces are two views of one store rather than two stores.
+
+  The endpoint id is CALLER-CHOSEN and `PUT` is idempotent by it. That is what the motivating consumer
+  needs (a credential-holding front-end, the Cloudflare OS gatekeeper of
+  `docs/initiatives/cloudflare-os-gatekeeper.md`): a Worker booting cold writes its own well-known id
+  and is enrolled, whether or not it has ever run, with no id table of its own and no
+  create-or-discover round trip it might be racing a second instance on. A server-minted id would have
+  pushed exactly that state back onto the caller.
+
+  Each endpoint carries its own sealed signing secret and its own three filters, and every rule the
+  singular routes enforce holds identically: the `admin` floor, keep-on-omit in every field, the
+  write-only secret, the SSRF guard at the write boundary and per redirect hop. Deliveries FAN OUT to
+  every subscribed endpoint, concurrently but BOUNDED at six in flight, isolated per endpoint, and
+  sharing ONE wall-clock budget. All three are deliberate: the caller awaits the fan-out on a run's
+  terminal path, so serial delivery would make enrolling a second integration a latency cost on every
+  run; six is the Workers ceiling on simultaneous connections, past which a `fetch` queues invisibly
+  while the delivery's clock runs, so an unbounded fan-out reports failures it never attempted; and a
+  shared failure path would let one permanently broken receiver mask every sibling's health. An
+  endpoint the budget never reached is reported as not attempted rather than as a delivery failure.
+  `deliveryId` is unchanged and carries no endpoint segment, because each receiver only ever sees its
+  own copy.
+
+  Watch for two things in review. `notification_webhooks` is re-keyed to `(workspace_id, id)` on both
+  stores, and neither generator produces a migration that survives existing rows: the D1 side is the
+  usual SQLite rebuild, and drizzle-kit's in-place `ALTER` adds `name` as `NOT NULL` with no default,
+  so both are hand-healed (add nullable, backfill to `default` / `Default`, then constrain). And the
+  per-workspace cap of 10 is a 409 `webhook_limit_reached` that bounds only what CREATES an endpoint,
+  since disabling and deleting are the actions an operator at the cap needs. The cap is enforced in
+  the STORE, because counting in the service and writing a statement later admits two racing
+  enrolments, which is the access pattern this exists for: D1 gets it from one conditional upsert,
+  Postgres from a transaction-scoped advisory lock per workspace.
+
+  Additive on the public surface throughout: four new operations, and two new response fields (`id`,
+  `name`) on a projection consumers already tolerate unknown members of. OpenAPI `info.version` goes to
+  1.25.0 and all four SDK clients, the MCP facade and the gatekeeper bindings pick the operations up
+  from the same generation pass.
+
+## 0.267.0
+
+### Minor Changes
+
+- 74ea2bc: Record which revision of a linked design a run actually built against.
+
+  The dispatch-time freshness check already computed the verdict and rendered it into the agent's
+  context, where it did its job and vanished with the container. So "did this run build from the
+  revision the designer is looking at" was answerable only while the run was live, and only by
+  re-probing the source, which by then answers about the revision it is at NOW. On a design under
+  active iteration that is exactly the wrong answer: a reviewer cannot tell an implementation that
+  MISREAD the design from one that faithfully implemented a revision the designer has since moved
+  past, and the two need opposite reactions.
+
+  Each dispatch now records the documents it put in front of its agent, with the verdict it reached
+  about each, on `step.contextDocuments`. The PR verification report gains a `Context sources`
+  section composed from those records, and the in-app run outcome card gains the matching "Built
+  from" list; both reduce the same records the same way, so the page a person reads and the report
+  a reviewer reads cannot disagree.
+
+  The write goes through the existing `StepObservations` seam rather than a call at each dispatch
+  site, which is what makes it correct: `buildContext` has two callers that resolve a full context
+  and start no job (the over-budget exemption probe, and a re-attach to a job a replayed dispatch
+  already started), so a source that recovered in between would otherwise overwrite the revision the
+  shipped job actually read with one it never saw.
+
+  A moved revision is DERIVED, not recorded. A row carries the last verdict, since that is the state
+  the run ended on, and that alone says the run ended current while saying nothing about the coder
+  step that finished before the edit landed. So both readers compute `movedDuringRun` from the
+  distinct revisions the run's own steps recorded and state it beside the revision rather than folded
+  into it.
+
+  Additive on the public surface: `PR_VERIFICATION_REPORT_VERSION` steps to 9, `RUN_OUTCOME_VERSION`
+  to 2, and the API to 1.27.0. `GET /api/v1/runs/:runId/outcome` grows a `sources` section beside the
+  existing ones and `GET /api/v1/runs/:runId/report` a `context` one; every section a consumer
+  already reads is byte-for-byte unchanged, and the four SDKs plus the MCP facade are regenerated
+  from the spec.
+
 ## 0.266.0
 
 ### Minor Changes

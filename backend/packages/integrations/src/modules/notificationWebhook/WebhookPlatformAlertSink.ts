@@ -7,10 +7,10 @@ import type {
   SecretCipher,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
-import { postSignedWebhook } from './signedDelivery.js'
+import { fanOutSignedWebhook } from './signedDelivery.js'
 
-// WebhookPlatformAlertSink: the PLATFORM-HEALTH half of the workspace's one registered outbound
-// endpoint. Its two siblings deliver facts about the workspace's work — the cards a human must
+// WebhookPlatformAlertSink: the PLATFORM-HEALTH family of the workspace's registered outbound
+// endpoints. Its two siblings deliver facts about the workspace's work — the cards a human must
 // resolve, and the lifecycle of the runs an integration queued. This one delivers the deployment
 // watching itself: the alert an on-call rotation is paged by.
 //
@@ -22,10 +22,11 @@ import { postSignedWebhook } from './signedDelivery.js'
 // because somebody cleared a badge. The edges here come from the SWEEP'S OWN VERDICT instead, so
 // `platform_health.resolved` means the platform observed recovery and nothing else does.
 //
-// One endpoint, one secret, one SSRF guard, one retry budget: the delivery core is shared with
+// One secret, one SSRF guard and one retry budget per endpoint: the delivery core is shared with
 // both siblings because everything interesting about a delivery is a property of the ENDPOINT
 // rather than of the payload. The three bodies are told apart by shape as well as by name — this
-// one carries `event` + `alert`.
+// one carries `event` + `alert`. A transition fans out to every endpoint subscribed to this
+// family, isolated per endpoint (see `fanOutSignedWebhook`).
 //
 // Runtime-neutral (fetch + decrypt + one DB read), like its siblings, so it serves both facades.
 
@@ -47,7 +48,7 @@ export interface WebhookPlatformAlertSinkDependencies {
    */
   onError?: (
     error: unknown,
-    context: { workspaceId: string; accountId: string; event: string },
+    context: { workspaceId: string; accountId: string; event: string; webhookId?: string },
   ) => void
 }
 
@@ -67,12 +68,13 @@ export class WebhookPlatformAlertSink implements PlatformAlertSink {
   }
 
   private async post(workspaceId: string, event: PlatformAlertEvent): Promise<void> {
-    const webhook = await this.deps.notificationWebhookRepository.get(workspaceId)
-    if (!webhook || !webhook.enabled) return
-    // EMPTY means NONE, like the run-lifecycle filter and unlike the notification `types` one: an
-    // endpoint registered to hear about parked decisions must never start paging an on-call
-    // rotation because the deployment shipped a new event family.
-    if (!webhook.alertEvents.includes(event.event)) return
+    const endpoints = (await this.deps.notificationWebhookRepository.list(workspaceId)).filter(
+      // EMPTY means NONE, like the run-lifecycle filter and unlike the notification `types` one: an
+      // endpoint registered to hear about parked decisions must never start paging an on-call
+      // rotation because the deployment shipped a new event family.
+      (webhook) => webhook.enabled && webhook.alertEvents.includes(event.event),
+    )
+    if (endpoints.length === 0) return
 
     const body: PlatformAlertWebhookDelivery = {
       deliveryId: deliveryIdFor(event),
@@ -98,12 +100,18 @@ export class WebhookPlatformAlertSink implements PlatformAlertSink {
         failedTotal: event.failedTotal,
       },
     }
-    await postSignedWebhook(this.deps, {
-      url: webhook.url,
-      secretSealed: webhook.secretSealed,
-      payload: JSON.stringify(body),
-      sentAt: body.sentAt,
-    })
+    await fanOutSignedWebhook(
+      this.deps,
+      endpoints,
+      { payload: JSON.stringify(body), sentAt: body.sentAt },
+      (error, target) =>
+        this.deps.onError?.(error, {
+          workspaceId,
+          accountId: event.accountId,
+          event: event.event,
+          webhookId: target.id,
+        }),
+    )
   }
 }
 

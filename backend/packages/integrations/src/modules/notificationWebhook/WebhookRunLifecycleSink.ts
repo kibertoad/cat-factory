@@ -7,18 +7,21 @@ import type {
   SecretCipher,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
-import { postSignedWebhook } from './signedDelivery.js'
+import { fanOutSignedWebhook } from './signedDelivery.js'
 
-// WebhookRunLifecycleSink: the run-lifecycle half of the workspace's ONE registered outbound
-// endpoint. Where `WebhookNotificationChannel` pushes the cards a human must resolve, this pushes
+// WebhookRunLifecycleSink: the run-lifecycle family of the workspace's registered outbound
+// endpoints. Where `WebhookNotificationChannel` pushes the cards a human must resolve, this pushes
 // the lifecycle of the work itself — started / completed / failed — which raises no notification
 // at all on the happy path (a pipeline with a `merger` merges its own PR and settles with an empty
 // inbox). Without it a headless caller's only way to learn its task finished is to keep polling.
 //
-// One endpoint, one secret, one SSRF guard, one retry budget: an operator registers a receiver
-// once and chooses which families it hears, rather than configuring two near-identical webhooks.
-// The two bodies are told apart by shape as well as by name — a lifecycle delivery carries `event`
-// + `run`, a notification delivery carries `notification`.
+// One secret, one SSRF guard and one retry budget PER ENDPOINT: an operator registers a receiver
+// once and chooses which families it hears, rather than configuring two near-identical webhooks
+// per integration. The three bodies are told apart by shape as well as by name — a lifecycle
+// delivery carries `event` + `run`, a notification delivery carries `notification`.
+//
+// A workspace can register several endpoints, so a transition fans out to every one subscribed to
+// this family, isolated per endpoint (see `fanOutSignedWebhook`).
 //
 // Runtime-neutral (fetch + decrypt + one DB read), like its sibling, so it serves both facades.
 
@@ -37,7 +40,10 @@ export interface WebhookRunLifecycleSinkDependencies {
    * — a receiver outage must never fail the run it was registered to watch — but a swallowed
    * failure should still be diagnosable, so the facades wire this to their structured logger.
    */
-  onError?: (error: unknown, context: { workspaceId: string; runId: string; event: string }) => void
+  onError?: (
+    error: unknown,
+    context: { workspaceId: string; runId: string; event: string; webhookId?: string },
+  ) => void
 }
 
 export class WebhookRunLifecycleSink implements RunLifecycleSink {
@@ -47,6 +53,8 @@ export class WebhookRunLifecycleSink implements RunLifecycleSink {
     try {
       await this.post(workspaceId, event)
     } catch (error) {
+      // A per-endpoint failure is reported by the fan-out with the endpoint named; what reaches
+      // here is the read or the compose failing, which belongs to no one receiver.
       this.deps.onError?.(error, {
         workspaceId,
         runId: event.runId,
@@ -56,11 +64,12 @@ export class WebhookRunLifecycleSink implements RunLifecycleSink {
   }
 
   private async post(workspaceId: string, event: RunLifecycleEvent): Promise<void> {
-    const webhook = await this.deps.notificationWebhookRepository.get(workspaceId)
-    if (!webhook || !webhook.enabled) return
-    // EMPTY means NONE here, unlike the notification `types` filter next door: an endpoint
-    // registered before run events existed must not silently start receiving a new event family.
-    if (!webhook.runEvents.includes(event.event)) return
+    const endpoints = (await this.deps.notificationWebhookRepository.list(workspaceId)).filter(
+      // EMPTY means NONE here, unlike the notification `types` filter next door: an endpoint
+      // registered before run events existed must not silently start receiving a new event family.
+      (webhook) => webhook.enabled && webhook.runEvents.includes(event.event),
+    )
+    if (endpoints.length === 0) return
 
     const body: RunWebhookDelivery = {
       // `<runId>:<event>` — stable across retries AND across a re-delivery, so it is the dedupe
@@ -83,11 +92,17 @@ export class WebhookRunLifecycleSink implements RunLifecycleSink {
         failure: event.failure,
       },
     }
-    await postSignedWebhook(this.deps, {
-      url: webhook.url,
-      secretSealed: webhook.secretSealed,
-      payload: JSON.stringify(body),
-      sentAt: body.sentAt,
-    })
+    await fanOutSignedWebhook(
+      this.deps,
+      endpoints,
+      { payload: JSON.stringify(body), sentAt: body.sentAt },
+      (error, target) =>
+        this.deps.onError?.(error, {
+          workspaceId,
+          runId: event.runId,
+          event: event.event,
+          webhookId: target.id,
+        }),
+    )
   }
 }

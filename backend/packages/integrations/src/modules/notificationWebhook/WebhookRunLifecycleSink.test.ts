@@ -14,10 +14,14 @@ import { WebhookRunLifecycleSink } from './WebhookRunLifecycleSink.js'
 // filter), because an endpoint registered before run events existed must not start receiving a new
 // family. These also pin the dedupe key and that nothing ever throws out of `runTransitioned`.
 
-function repoWith(record: NotificationWebhookRecord | null): NotificationWebhookRepository {
+function repoWith(
+  ...records: readonly (NotificationWebhookRecord | null)[]
+): NotificationWebhookRepository {
+  const present = records.filter((record): record is NotificationWebhookRecord => record !== null)
   return {
-    get: async () => record,
-    put: async () => {},
+    get: async (_workspaceId, id) => present.find((record) => record.id === id) ?? null,
+    list: async () => present,
+    put: async () => 'stored' as const,
     delete: async () => {},
   }
 }
@@ -31,6 +35,8 @@ const clock = { now: () => 1_700_000_000_000 }
 function webhook(overrides: Partial<NotificationWebhookRecord> = {}): NotificationWebhookRecord {
   return {
     workspaceId: 'ws1',
+    id: 'default',
+    name: 'Default',
     url: 'https://example.test/hook',
     types: [],
     runEvents: ['run.started', 'run.completed', 'run.failed'],
@@ -220,5 +226,55 @@ describe('WebhookRunLifecycleSink', () => {
     // Best-effort must not mean invisible: a receiver that never accepted the delivery is
     // reported once, so a broken endpoint is diagnosable rather than silently swallowed.
     expect(errors).toHaveLength(1)
+  })
+
+  it('fans out to every subscribed endpoint and skips the ones that did not subscribe', async () => {
+    const calls: string[] = []
+    const s = new WebhookRunLifecycleSink({
+      notificationWebhookRepository: repoWith(
+        webhook({ id: 'ci', url: 'https://ci.test/hook' }),
+        webhook({ id: 'gatekeeper', url: 'https://gate.test/hook' }),
+        webhook({ id: 'quiet', url: 'https://quiet.test/hook', runEvents: [] }),
+        webhook({ id: 'off', url: 'https://off.test/hook', enabled: false }),
+      ),
+      secretCipher: cipher,
+      clock,
+      fetchImpl: (async (url: unknown) => {
+        calls.push(String(url))
+        return new Response(null, { status: 200 })
+      }) as unknown as typeof fetch,
+      sleep: async () => {},
+    })
+    await s.runTransitioned('ws1', event())
+    expect(calls.sort()).toEqual(['https://ci.test/hook', 'https://gate.test/hook'])
+  })
+
+  it('lets one dead receiver fail alone, naming it, while its siblings still get the event', async () => {
+    // The property the fan-out exists to hold. A shared failure path would have let a permanently
+    // broken endpoint mask every sibling's health, and an un-isolated one would have cost them
+    // the delivery.
+    const delivered: string[] = []
+    const reported: { webhookId?: string }[] = []
+    const s = new WebhookRunLifecycleSink({
+      notificationWebhookRepository: repoWith(
+        webhook({ id: 'broken', url: 'https://broken.test/hook' }),
+        webhook({ id: 'healthy', url: 'https://healthy.test/hook' }),
+      ),
+      secretCipher: cipher,
+      clock,
+      fetchImpl: (async (url: unknown) => {
+        if (String(url).includes('broken')) throw new Error('network down')
+        delivered.push(String(url))
+        return new Response(null, { status: 200 })
+      }) as unknown as typeof fetch,
+      sleep: async () => {},
+      onError: (_error, context) => reported.push(context),
+    })
+
+    await expect(s.runTransitioned('ws1', event())).resolves.toBeUndefined()
+    expect(delivered).toEqual(['https://healthy.test/hook'])
+    expect(reported).toEqual([
+      { workspaceId: 'ws1', runId: 'exec_1', event: 'run.completed', webhookId: 'broken' },
+    ])
   })
 })
