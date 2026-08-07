@@ -2214,7 +2214,9 @@
       },
       "members": {
         "title": "Mitglieder",
-        "empty": "Noch keine Mitglieder."
+        "empty": "Noch keine Mitglieder.",
+        "revokeSessions": "Auf allen Geräten abmelden",
+        "sessionsRevoked": "Auf allen Geräten abgemeldet"
       },
       "invite": {
         "title": "Ein Teammitglied einladen",
@@ -2253,7 +2255,8 @@
         "sendInvite": "Einladung konnte nicht gesendet werden",
         "revokeInvite": "Einladung konnte nicht widerrufen werden",
         "connectEmail": "E-Mail-Absender konnte nicht verbunden werden",
-        "disconnectEmail": "E-Mail-Absender konnte nicht getrennt werden"
+        "disconnectEmail": "E-Mail-Absender konnte nicht getrennt werden",
+        "revokeSessions": "Mitglied konnte nicht abgemeldet werden"
       },
       "emailNoun": "E-Mail-Versand"
     },
@@ -2663,6 +2666,39 @@
     },
     "accountFoundational": {
       "intro": "Die gemeinsamen Fähigkeiten, die diese Organisation bereits betreibt - Dateiablage, Benachrichtigungen, Audit - samt ihren API-Verträgen. Jedes Board erbt sie, und einem Architekten wird gesagt, sie zu nutzen statt einen Neubau vorzuschlagen. Dienste, die dieses Deployment im Code registriert, werden hier ebenfalls geerbt und können per ID überschrieben oder unten abgewählt werden."
+    },
+    "auditLog": {
+      "title": "Prüfprotokoll",
+      "description": "Wer in diesem Konto was und wann geändert hat. Einträge werden nur angehängt und können weder bearbeitet noch gelöscht werden.",
+      "empty": "Für dieses Konto wurde bisher nichts aufgezeichnet.",
+      "loadMore": "Ältere Einträge laden",
+      "refresh": "Aktualisieren",
+      "retiredAction": "hat eine Aktion ausgeführt, die diese Version nicht mehr kennt ({action})",
+      "actors": {
+        "system": "Das System",
+        "apiKey": "API-Schlüssel {id}"
+      },
+      "values": {
+        "none": "keine"
+      },
+      "actions": {
+        "accountMemberAdded": "hat {target} als {roles} zum Konto hinzugefügt",
+        "accountMemberRolesChanged": "hat die Rollen von {target} von {previousRoles} zu {roles} geändert",
+        "accountBudgetChanged": "hat das monatliche Ausgabenlimit auf {limit} gesetzt",
+        "accountSettingsChanged": "hat den Standard-Cloud-Anbieter auf {defaultCloudProvider} gesetzt",
+        "accountInvitationCreated": "hat {email} als {roles} eingeladen",
+        "accountInvitationRevoked": "hat die Einladung für {email} zurückgezogen",
+        "accountInvitationAccepted": "hat die Einladung für {email} als {roles} angenommen",
+        "accountMemberSessionsRevoked": "hat {target} auf allen Geräten abgemeldet",
+        "workspaceMemberAdded": "hat {target} als {role} zu einem Board hinzugefügt",
+        "workspaceMemberRoleChanged": "hat die Board-Rolle von {target} von {previousRole} zu {role} geändert",
+        "workspaceMemberRemoved": "hat {target} aus einem Board entfernt (war {role})",
+        "workspaceAccessModeChanged": "hat den Board-Zugriff auf {accessMode} gesetzt"
+      },
+      "errors": {
+        "load": "Das Prüfprotokoll konnte nicht geladen werden.",
+        "loadMore": "Ältere Einträge konnten nicht geladen werden"
+      }
     }
   },
   "board": {
@@ -2680,7 +2716,12 @@
       "archived": "Archiviert: „{name}“",
       "restored": "Wiederhergestellt: „{name}“",
       "archiveFailed": "Dienst konnte nicht archiviert werden",
-      "restoreFailed": "Dienst konnte nicht wiederhergestellt werden"
+      "restoreFailed": "Dienst konnte nicht wiederhergestellt werden",
+      "moveRefused": {
+        "relaxes_role_sandbox": "Die Ausführungen dieser Aufgabe laufen an ihrem jetzigen Ort für deine Rolle isoliert, die Merge-Richtlinie am Zielort jedoch nicht. Bitte eine Workspace-Administration, sie zu verschieben.",
+        "relaxes_role_submission_allowlist": "Die Merge-Richtlinie am Zielort würde dich Änderungsarten mergen lassen, die dir hier verwehrt sind. Bitte eine Workspace-Administration, sie zu verschieben.",
+        "relaxes_role_class_rule": "Die Merge-Richtlinie am Zielort merged Änderungen automatisch, die du hier prüfen musst. Bitte eine Workspace-Administration, sie zu verschieben."
+      }
     },
     "repoTypes": {
       "service": "Service",

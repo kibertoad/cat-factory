@@ -2,6 +2,7 @@ import type {
   AgentContextSnapshotRepository,
   AgentSearchQueryRepository,
   AgentToolCallRepository,
+  AuditEventRepository,
   Clock,
   CommitProjectionRepository,
   LlmCallMetricRepository,
@@ -69,6 +70,8 @@ interface RetentionPolicy {
   gateOutcomesMs: number
   /** Daily run rollup (`platform_run_days`) behind the `30d` / `90d` dashboard windows. */
   runDaysMs: number
+  /** The account audit log (`audit_events`), in its own AUDIT_DB. The longest window here. */
+  auditEventsMs: number
 }
 
 export interface RetentionDeps {
@@ -110,6 +113,13 @@ export interface RetentionDeps {
    */
   platformMetricsRepository: PlatformMetricsRepository
   /**
+   * The account audit log, pruned to `auditEventsMs`. REQUIRED rather than optional, matching the
+   * roster and throttle above and for the same reason: both facades wire the store
+   * unconditionally, and an optional field would let a call-site regression silently drop the one
+   * prune on the one table that is otherwise unbounded for years.
+   */
+  auditEventRepository: AuditEventRepository
+  /**
    * The durable cost-attribution rollup. This pass only WRITES it: `spend_days` has no prune,
    * here or on Node, and no `deleteOlderThan` on its port to call. A TCO table that expires is
    * just a slower ledger.
@@ -139,6 +149,7 @@ export interface RetentionResult {
   notifications: number
   gateOutcomes: number
   runDays: number
+  auditEvents: number
   /** Daily buckets (re)written by this pass's rollup: a WRITE, not rows reclaimed. */
   runDaysRolledUp: number
   /** Durable cost-attribution buckets (re)written by this pass: a WRITE, never a prune. */
@@ -179,6 +190,7 @@ export async function sweepRetention({
   notificationRepository,
   gateOutcomeRepository,
   platformMetricsRepository,
+  auditEventRepository,
   spendRollupRepository,
   clock,
   policy,
@@ -278,6 +290,11 @@ export async function sweepRetention({
     ),
     runDays: await pass.prune('platform_run_days', policy.runDaysMs, now, (c) =>
       platformMetricsRepository.deleteRunDaysOlderThan(c),
+    ),
+    // The audit log, in its own database. Last because it is the only pass whose window is
+    // measured in years: the others reclaim on most ticks, this one usually reclaims nothing.
+    auditEvents: await pass.prune('audit_events', policy.auditEventsMs, now, (c) =>
+      auditEventRepository.deleteOlderThan(c),
     ),
     failedTables: pass.failed,
   }

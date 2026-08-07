@@ -1,4 +1,4 @@
-import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
@@ -68,7 +68,7 @@ describe('BoardService.addTask containment rule', () => {
         WS,
         parent,
         { title: 'Feature' },
-        UNATTRIBUTED_BLOCK_EDITOR,
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       )
       expect(task).toMatchObject({ level: 'task', parentId: parent })
     }
@@ -79,14 +79,14 @@ describe('BoardService.addTask containment rule', () => {
     // through parentage — a task parented to one would be structurally orphaned.
     for (const parent of ['epic_q3', 'init_loop']) {
       await expect(
-        build().addTask(WS, parent, { title: 'Feature' }, UNATTRIBUTED_BLOCK_EDITOR),
+        build().addTask(WS, parent, { title: 'Feature' }, UNATTRIBUTED_BLOCK_EDIT_AUTHORITY),
       ).rejects.toBeInstanceOf(ValidationError)
     }
   })
 
   it('still refuses a task as the container, with its own message', async () => {
     await expect(
-      build().addTask(WS, 'task_existing', { title: 'Nested' }, UNATTRIBUTED_BLOCK_EDITOR),
+      build().addTask(WS, 'task_existing', { title: 'Nested' }, UNATTRIBUTED_BLOCK_EDIT_AUTHORITY),
     ).rejects.toThrow(/cannot contain other tasks/i)
   })
 })

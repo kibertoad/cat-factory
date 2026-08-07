@@ -154,6 +154,21 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
         })
       : undefined,
   )
+  const userService = new UserService({
+    userRepository: dependencies.userRepository,
+    passwordHasher: dependencies.passwordHasher,
+    idGenerator: dependencies.idGenerator,
+    clock: dependencies.clock,
+    // The session-generation read runs on every authenticated request, so it goes through the
+    // cache seam rather than the store; `revokeSessions` drops the key right after the bump
+    // commits, which is the coherence story (the TTL is only the backstop).
+    sessionGenerationCache: caches.userSessionGeneration,
+  })
+
+  // Built BEFORE `accountService` so the admin offboarding route can be handed
+  // `revokeSessions` as a bound callback: the two-step bump-then-invalidate ordering that makes
+  // a revocation coherent stays owned by `UserService`, and the tenancy service depends on the
+  // one capability it needs rather than on another service's whole surface.
   const accountService = new AccountService({
     accountRepository: dependencies.accountRepository,
     membershipRepository: dependencies.membershipRepository,
@@ -172,12 +187,9 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
     // Membership, role and budget/settings edits are the account-admin actions the audit log
     // exists for. Required on `CoreDependencies`, so this is never accidentally absent.
     audit: dependencies.auditRecorder,
-  })
-  const userService = new UserService({
-    userRepository: dependencies.userRepository,
-    passwordHasher: dependencies.passwordHasher,
-    idGenerator: dependencies.idGenerator,
-    clock: dependencies.clock,
+    // Admin-forced offboarding: end every session the member holds, leaving their membership and
+    // roles untouched.
+    revokeUserSessions: (userId) => userService.revokeSessions(userId),
   })
   const email = modules.build('email', () =>
     dependencies.emailConnectionRepository && dependencies.emailSecretCipher

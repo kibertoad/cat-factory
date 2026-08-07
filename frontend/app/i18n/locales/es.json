@@ -147,7 +147,12 @@
       "archived": "Archivado «{name}»",
       "restored": "Restaurado «{name}»",
       "archiveFailed": "No se pudo archivar el servicio",
-      "restoreFailed": "No se pudo restaurar el servicio"
+      "restoreFailed": "No se pudo restaurar el servicio",
+      "moveRefused": {
+        "relaxes_role_sandbox": "Las ejecuciones de esta tarea están aisladas para tu rol donde está ahora, y la política de fusión que la regiría donde la mueves no lo está. Pide a una administración del espacio de trabajo que la mueva.",
+        "relaxes_role_submission_allowlist": "La política de fusión del destino te dejaría fusionar tipos de cambio que aquí tienes vedados. Pide a una administración del espacio de trabajo que la mueva.",
+        "relaxes_role_class_rule": "La política de fusión del destino fusiona automáticamente cambios que aquí debes revisar. Pide a una administración del espacio de trabajo que la mueva."
+      }
     },
     "repoTypes": {
       "service": "Servicio",
@@ -2030,7 +2035,9 @@
       },
       "members": {
         "title": "Miembros",
-        "empty": "Todavía no hay miembros."
+        "empty": "Todavía no hay miembros.",
+        "revokeSessions": "Cerrar sesión en todos los dispositivos",
+        "sessionsRevoked": "Sesión cerrada en todos los dispositivos"
       },
       "invite": {
         "title": "Invitar a un compañero",
@@ -2069,7 +2076,8 @@
         "sendInvite": "No se pudo enviar la invitación",
         "revokeInvite": "No se pudo revocar la invitación",
         "connectEmail": "No se pudo conectar el remitente de correo",
-        "disconnectEmail": "No se pudo desconectar el remitente de correo"
+        "disconnectEmail": "No se pudo desconectar el remitente de correo",
+        "revokeSessions": "No se pudo cerrar la sesión del miembro"
       },
       "emailNoun": "el envío de correo"
     },
@@ -2479,6 +2487,39 @@
     },
     "accountFoundational": {
       "intro": "Las capacidades compartidas que esta organización ya opera - almacenamiento de archivos, notificaciones, auditoría - con sus contratos de API. Todos los tableros las heredan, y a un arquitecto se le indica que las consuma en lugar de proponer reconstruirlas. Los servicios que este despliegue registra en código también se heredan aquí, y se pueden sobrescribir por id o excluir abajo."
+    },
+    "auditLog": {
+      "title": "Registro de auditoría",
+      "description": "Quién cambió qué en esta cuenta, y cuándo. Los registros solo se añaden y no se pueden editar ni eliminar.",
+      "empty": "Todavía no se ha registrado nada para esta cuenta.",
+      "loadMore": "Cargar entradas anteriores",
+      "refresh": "Actualizar",
+      "retiredAction": "realizó una acción que esta versión ya no reconoce ({action})",
+      "actors": {
+        "system": "El sistema",
+        "apiKey": "Clave de API {id}"
+      },
+      "values": {
+        "none": "ninguno"
+      },
+      "actions": {
+        "accountMemberAdded": "añadió a {target} a la cuenta como {roles}",
+        "accountMemberRolesChanged": "cambió los roles de {target} de {previousRoles} a {roles}",
+        "accountBudgetChanged": "estableció el límite de gasto mensual en {limit}",
+        "accountSettingsChanged": "estableció el proveedor de nube predeterminado en {defaultCloudProvider}",
+        "accountInvitationCreated": "invitó a {email} como {roles}",
+        "accountInvitationRevoked": "revocó la invitación de {email}",
+        "accountInvitationAccepted": "aceptó la invitación de {email} como {roles}",
+        "accountMemberSessionsRevoked": "cerró la sesión de {target} en todos los dispositivos",
+        "workspaceMemberAdded": "añadió a {target} a un tablero como {role}",
+        "workspaceMemberRoleChanged": "cambió el rol de tablero de {target} de {previousRole} a {role}",
+        "workspaceMemberRemoved": "eliminó a {target} de un tablero (era {role})",
+        "workspaceAccessModeChanged": "estableció el acceso al tablero en {accessMode}"
+      },
+      "errors": {
+        "load": "No se pudo cargar el registro de auditoría.",
+        "loadMore": "No se pudieron cargar las entradas anteriores"
+      }
     }
   },
   "settings": {

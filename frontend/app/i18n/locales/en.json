@@ -171,7 +171,12 @@
       "archived": "Archived \"{name}\"",
       "restored": "Restored \"{name}\"",
       "archiveFailed": "Couldn't archive the service",
-      "restoreFailed": "Couldn't restore the service"
+      "restoreFailed": "Couldn't restore the service",
+      "moveRefused": {
+        "relaxes_role_sandbox": "This task’s runs are sandboxed for your role where it is now, and the merge policy governing it where you are moving it is not. Ask a workspace admin to move it.",
+        "relaxes_role_submission_allowlist": "The merge policy where you are moving this task would let you land kinds of change it holds you back from here. Ask a workspace admin to move it.",
+        "relaxes_role_class_rule": "The merge policy where you are moving this task auto-merges changes you are held to review on it here. Ask a workspace admin to move it."
+      }
     },
     "repoTypes": {
       "service": "Service",
@@ -2137,7 +2142,9 @@
       },
       "members": {
         "title": "Members",
-        "empty": "No members yet."
+        "empty": "No members yet.",
+        "revokeSessions": "Sign out of every device",
+        "sessionsRevoked": "Signed out of every device"
       },
       "invite": {
         "title": "Invite a teammate",
@@ -2176,7 +2183,8 @@
         "sendInvite": "Could not send invitation",
         "revokeInvite": "Could not revoke invitation",
         "connectEmail": "Could not connect email sender",
-        "disconnectEmail": "Could not disconnect email sender"
+        "disconnectEmail": "Could not disconnect email sender",
+        "revokeSessions": "Could not sign the member out"
       },
       "emailNoun": "email sending"
     },
@@ -2586,6 +2594,39 @@
     },
     "accountFoundational": {
       "intro": "The shared capabilities this organisation already runs - file storage, notifications, audit - with their API contracts. Every board inherits them, and an architect is told to consume them instead of proposing a rebuild. Services this deployment registers in code are inherited here too, and can be overridden by id or opted out of below."
+    },
+    "auditLog": {
+      "title": "Audit log",
+      "description": "Who changed what in this account, and when. Records are append-only and cannot be edited or deleted.",
+      "empty": "Nothing has been recorded for this account yet.",
+      "loadMore": "Load older entries",
+      "refresh": "Refresh",
+      "retiredAction": "performed an action this version no longer recognises ({action})",
+      "actors": {
+        "system": "The system",
+        "apiKey": "API key {id}"
+      },
+      "values": {
+        "none": "none"
+      },
+      "actions": {
+        "accountMemberAdded": "added {target} to the account as {roles}",
+        "accountMemberRolesChanged": "changed the roles of {target} from {previousRoles} to {roles}",
+        "accountBudgetChanged": "set the monthly spending limit to {limit}",
+        "accountSettingsChanged": "set the default cloud provider to {defaultCloudProvider}",
+        "accountInvitationCreated": "invited {email} as {roles}",
+        "accountInvitationRevoked": "revoked the invitation for {email}",
+        "accountInvitationAccepted": "accepted the invitation for {email} as {roles}",
+        "accountMemberSessionsRevoked": "signed {target} out of every device",
+        "workspaceMemberAdded": "added {target} to a board as {role}",
+        "workspaceMemberRoleChanged": "changed the board role of {target} from {previousRole} to {role}",
+        "workspaceMemberRemoved": "removed {target} from a board (they were {role})",
+        "workspaceAccessModeChanged": "set board access to {accessMode}"
+      },
+      "errors": {
+        "load": "The audit log could not be loaded.",
+        "loadMore": "Could not load older entries"
+      }
     }
   },
   "settings": {

@@ -147,7 +147,12 @@
       "archived": "Zarchiwizowano „{name}”",
       "restored": "Przywrócono „{name}”",
       "archiveFailed": "Nie udało się zarchiwizować usługi",
-      "restoreFailed": "Nie udało się przywrócić usługi"
+      "restoreFailed": "Nie udało się przywrócić usługi",
+      "moveRefused": {
+        "relaxes_role_sandbox": "Uruchomienia tego zadania są w obecnym miejscu izolowane dla twojej roli, a zasada scalania obowiązująca w miejscu docelowym już nie. Poproś administrację przestrzeni roboczej o przeniesienie.",
+        "relaxes_role_submission_allowlist": "Zasada scalania w miejscu docelowym pozwoliłaby ci scalać rodzaje zmian, których tutaj nie możesz. Poproś administrację przestrzeni roboczej o przeniesienie.",
+        "relaxes_role_class_rule": "Zasada scalania w miejscu docelowym automatycznie scala zmiany, które tutaj musisz przejrzeć. Poproś administrację przestrzeni roboczej o przeniesienie."
+      }
     },
     "repoTypes": {
       "service": "Usługa",
@@ -2030,7 +2035,9 @@
       },
       "members": {
         "title": "Członkowie",
-        "empty": "Brak członków."
+        "empty": "Brak członków.",
+        "revokeSessions": "Wyloguj ze wszystkich urządzeń",
+        "sessionsRevoked": "Wylogowano ze wszystkich urządzeń"
       },
       "invite": {
         "title": "Zaproś członka zespołu",
@@ -2069,7 +2076,8 @@
         "sendInvite": "Nie udało się wysłać zaproszenia",
         "revokeInvite": "Nie udało się odwołać zaproszenia",
         "connectEmail": "Nie udało się połączyć nadawcy e-maili",
-        "disconnectEmail": "Nie udało się rozłączyć nadawcy e-maili"
+        "disconnectEmail": "Nie udało się rozłączyć nadawcy e-maili",
+        "revokeSessions": "Nie udało się wylogować członka"
       },
       "emailNoun": "wysyłanie e-maili"
     },
@@ -2479,6 +2487,39 @@
     },
     "accountFoundational": {
       "intro": "Wspólne możliwości, które ta organizacja już utrzymuje - przechowywanie plików, powiadomienia, audyt - wraz z ich kontraktami API. Każda tablica je dziedziczy, a architekt dostaje polecenie, by z nich korzystać zamiast proponować budowę od nowa. Usługi rejestrowane przez to wdrożenie w kodzie są dziedziczone również tutaj; można je nadpisać po identyfikatorze albo wyłączyć poniżej."
+    },
+    "auditLog": {
+      "title": "Dziennik audytu",
+      "description": "Kto co zmienił na tym koncie i kiedy. Wpisy są tylko dopisywane i nie można ich edytować ani usuwać.",
+      "empty": "Dla tego konta nie zarejestrowano jeszcze niczego.",
+      "loadMore": "Wczytaj starsze wpisy",
+      "refresh": "Odśwież",
+      "retiredAction": "wykonał(a) działanie, którego ta wersja już nie rozpoznaje ({action})",
+      "actors": {
+        "system": "System",
+        "apiKey": "Klucz API {id}"
+      },
+      "values": {
+        "none": "brak"
+      },
+      "actions": {
+        "accountMemberAdded": "dodał(a) {target} do konta jako {roles}",
+        "accountMemberRolesChanged": "zmienił(a) role użytkownika {target} z {previousRoles} na {roles}",
+        "accountBudgetChanged": "ustawił(a) miesięczny limit wydatków na {limit}",
+        "accountSettingsChanged": "ustawił(a) domyślnego dostawcę chmury na {defaultCloudProvider}",
+        "accountInvitationCreated": "zaprosił(a) {email} jako {roles}",
+        "accountInvitationRevoked": "cofnął(-ęła) zaproszenie dla {email}",
+        "accountInvitationAccepted": "przyjął(-ęła) zaproszenie dla {email} jako {roles}",
+        "accountMemberSessionsRevoked": "wylogował(a) użytkownika {target} ze wszystkich urządzeń",
+        "workspaceMemberAdded": "dodał(a) {target} do tablicy jako {role}",
+        "workspaceMemberRoleChanged": "zmienił(a) rolę użytkownika {target} na tablicy z {previousRole} na {role}",
+        "workspaceMemberRemoved": "usunął(-ęła) {target} z tablicy (był(a) {role})",
+        "workspaceAccessModeChanged": "ustawił(a) dostęp do tablicy na {accessMode}"
+      },
+      "errors": {
+        "load": "Nie udało się wczytać dziennika audytu.",
+        "loadMore": "Nie udało się wczytać starszych wpisów"
+      }
     }
   },
   "settings": {

@@ -3,7 +3,7 @@ import type {
   AddFrameInput,
   AddModuleInput,
   AddTaskInput,
-  BlockEditActor,
+  BlockEditAuthority,
   UpdateBlockInput,
 } from '@cat-factory/contracts'
 import type { Block } from '../domain/types.js'
@@ -14,11 +14,11 @@ import type { Block } from '../domain/types.js'
  * A narrow port so the integrations package does not depend on the full
  * BoardService class.
  *
- * The two writes that can carry a task's merge preset take the {@link BlockEditActor} making
+ * The two writes that can carry a task's merge preset take the {@link BlockEditAuthority} making
  * them, which is what refuses a selection relaxing the editor's own role policy (ADR 0037). It is
  * REQUIRED rather than defaulted so a new caller has to answer the question: an integration
  * materialising external structure has no workspace tier behind it and passes
- * `UNATTRIBUTED_BLOCK_EDITOR`, but that has to be said rather than inherited from a default.
+ * `UNATTRIBUTED_BLOCK_EDIT_AUTHORITY`, but that has to be said rather than inherited from a default.
  */
 export interface BoardWritePort {
   addFrame(workspaceId: string, input: AddFrameInput): Promise<Block>
@@ -27,14 +27,14 @@ export interface BoardWritePort {
     workspaceId: string,
     containerId: string,
     input: AddTaskInput,
-    editor: BlockEditActor,
+    editor: BlockEditAuthority,
     createdBy?: string | null,
   ): Promise<Block>
   updateBlock(
     workspaceId: string,
     blockId: string,
     patch: UpdateBlockInput,
-    editor: BlockEditActor,
+    editor: BlockEditAuthority,
   ): Promise<Block>
   /** Create an `epic`-level grouping node (used by the epic-import spawn). */
   addEpic(workspaceId: string, input: AddEpicInput): Promise<Block>
