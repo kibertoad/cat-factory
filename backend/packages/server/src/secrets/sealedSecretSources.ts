@@ -1,4 +1,4 @@
-import { ORG_SECRET_SOURCES, type OrgSecretSource } from '@cat-factory/kernel'
+import { ORG_SECRET_KEY_ARITY, ORG_SECRET_SOURCES, type OrgSecretSource } from '@cat-factory/kernel'
 
 // The server-side half of mothership secret delegation: what each `OrgSecretSource` actually
 // binds to on the mothership's own repository registry.
@@ -23,13 +23,6 @@ export interface SealedSecretSourceSpec {
    * caller a choice the scope check never saw.
    */
   method: string
-  /**
-   * How many trailing identifier args the read takes after `workspaceId`. The request's `key` must
-   * supply EXACTLY this many. Arity is part of the shape because the args are spread into the
-   * call, so a short list would read a different row than the caller named (and a long one would
-   * pass an argument the port never declared).
-   */
-  keyArity: number
   /** The record field holding the sealed envelope. */
   field: string
   /** The HKDF `info` domain-separation tag the envelope was sealed under. */
@@ -49,7 +42,6 @@ export const SEALED_SECRET_SOURCES: Record<OrgSecretSource, SealedSecretSourceSp
   environment_access: {
     repo: 'environmentRegistryRepository',
     method: 'get',
-    keyArity: 1,
     field: 'accessCipher',
     info: 'cat-factory:environments',
     label: 'environment access handle',
@@ -59,7 +51,6 @@ export const SEALED_SECRET_SOURCES: Record<OrgSecretSource, SealedSecretSourceSp
   environment_provision_fields: {
     repo: 'environmentRegistryRepository',
     method: 'get',
-    keyArity: 1,
     field: 'provisionFieldsCipher',
     info: 'cat-factory:environments',
     label: 'environment provision fields',
@@ -69,7 +60,6 @@ export const SEALED_SECRET_SOURCES: Record<OrgSecretSource, SealedSecretSourceSp
   environment_connection: {
     repo: 'environmentConnectionRepository',
     method: 'getByWorkspaceAndType',
-    keyArity: 2,
     field: 'secretsCipher',
     info: 'cat-factory:environments',
     label: 'environment connection secrets',
@@ -79,7 +69,6 @@ export const SEALED_SECRET_SOURCES: Record<OrgSecretSource, SealedSecretSourceSp
   observability_connection: {
     repo: 'observabilityConnectionRepository',
     method: 'get',
-    keyArity: 0,
     field: 'credentials',
     info: 'cat-factory:observability',
     label: 'observability connection credentials',
@@ -89,7 +78,6 @@ export const SEALED_SECRET_SOURCES: Record<OrgSecretSource, SealedSecretSourceSp
   incident_enrichment_connection: {
     repo: 'incidentEnrichmentConnectionRepository',
     method: 'get',
-    keyArity: 0,
     field: 'credentials',
     info: 'cat-factory:incident-enrichment',
     label: 'incident enrichment credentials',
@@ -102,7 +90,6 @@ export const SEALED_SECRET_SOURCES: Record<OrgSecretSource, SealedSecretSourceSp
   document_source_connection: {
     repo: 'documentConnectionRepository',
     method: 'getByWorkspace',
-    keyArity: 1,
     field: 'credentialsCipher',
     info: 'cat-factory:documents',
     label: 'document source credentials',
@@ -112,7 +99,6 @@ export const SEALED_SECRET_SOURCES: Record<OrgSecretSource, SealedSecretSourceSp
   task_source_connection: {
     repo: 'taskConnectionRepository',
     method: 'getByWorkspace',
-    keyArity: 1,
     field: 'credentialsCipher',
     info: 'cat-factory:tasks',
     label: 'task source credentials',
@@ -120,14 +106,29 @@ export const SEALED_SECRET_SOURCES: Record<OrgSecretSource, SealedSecretSourceSp
 }
 
 /**
+ * A resolved binding: the mothership-side spec plus the source's own name and its declared key
+ * arity, READ from kernel's `ORG_SECRET_KEY_ARITY` rather than restated here.
+ *
+ * Arity belongs to the source, not to this table, and both halves of the delegation need it: the
+ * node to build a well-formed `key`, this endpoint to reject one that disagrees. Kept in one
+ * declaration so the check and the call site cannot drift into disagreeing about a row.
+ */
+export interface SealedSecretSourceBinding extends SealedSecretSourceSpec {
+  source: OrgSecretSource
+  /** How many trailing args the read takes after `workspaceId`; the request's `key` must match. */
+  keyArity: number
+}
+
+/**
  * Look a source up by its wire value. OWN-PROPERTY only, exactly like the persistence allow-list:
  * an attacker-supplied `__proto__` / `constructor` / `toString` must not reach a prototype member
  * and be treated as a spec.
  */
-export function sealedSecretSourceSpec(source: unknown): SealedSecretSourceSpec | undefined {
+export function sealedSecretSourceSpec(source: unknown): SealedSecretSourceBinding | undefined {
   if (typeof source !== 'string') return undefined
   if (!Object.prototype.hasOwnProperty.call(SEALED_SECRET_SOURCES, source)) return undefined
-  return SEALED_SECRET_SOURCES[source as OrgSecretSource]
+  const name = source as OrgSecretSource
+  return { ...SEALED_SECRET_SOURCES[name], source: name, keyArity: ORG_SECRET_KEY_ARITY[name] }
 }
 
 /** The declared vocabulary, for tests and for the boot-time completeness assertions. */

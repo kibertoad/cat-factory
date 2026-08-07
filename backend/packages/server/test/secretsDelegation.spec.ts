@@ -1,12 +1,19 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
-import { ORG_SECRET_SOURCES, createOrgSecretCipher } from '@cat-factory/kernel'
+import {
+  ORG_SECRET_KEY_ARITY,
+  ORG_SECRET_SOURCES,
+  createOrgSecretCipher,
+} from '@cat-factory/kernel'
 import { HmacSigner, TOKEN_AUDIENCE } from '../src/auth/signing.js'
 import { mintMachineToken } from '../src/auth/machineToken.js'
 import type { AppEnv, ServerContainer } from '../src/http/env.js'
 import { handleError } from '../src/http/errorHandler.js'
 import { secretDelegationController } from '../src/modules/persistence/SecretDelegationController.js'
-import { SEALED_SECRET_SOURCES } from '../src/secrets/sealedSecretSources.js'
+import {
+  SEALED_SECRET_SOURCES,
+  sealedSecretSourceSpec,
+} from '../src/secrets/sealedSecretSources.js'
 import {
   HttpSecretDelegate,
   MachineSecretDelegationUnavailableError,
@@ -432,7 +439,34 @@ describe('the source table', () => {
       expect(spec.method.length, source).toBeGreaterThan(0)
       expect(spec.field.length, source).toBeGreaterThan(0)
       expect(spec.info, source).toMatch(/^cat-factory:/)
-      expect(spec.keyArity, source).toBeGreaterThanOrEqual(0)
+    }
+  })
+
+  it('resolves a binding whose key arity comes from the KERNEL declaration, never a local copy', () => {
+    // Arity is the one part of a binding the CALLER also has to get right, and it cannot see this
+    // table. Restated here it was prose a call site could disagree with in silence — a store that
+    // sent no key passed every hosted test (a local cipher ignores the ref) and answered 422 on
+    // every open on the only deployment shape that delegates. One declaration, read by both halves.
+    for (const source of ORG_SECRET_SOURCES) {
+      expect(sealedSecretSourceSpec(source)?.keyArity, source).toBe(ORG_SECRET_KEY_ARITY[source])
+    }
+  })
+
+  it('refuses a key whose arity disagrees with the source, in EITHER direction', async () => {
+    const token = await machineToken()
+    // Too few: the args are spread into the declared read, so a short list would silently read a
+    // DIFFERENT row than the caller named. Too many passes an argument the port never declared.
+    for (const key of [undefined, [], ['jira', 'extra']]) {
+      const res = await makeApp().request('/internal/secrets/unseal', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          source: 'task_source_connection',
+          workspaceId: 'ws_1',
+          ...(key ? { key } : {}),
+        }),
+      })
+      expect(res.status, JSON.stringify(key)).toBe(422)
     }
   })
 })

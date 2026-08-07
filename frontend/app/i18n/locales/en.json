@@ -587,7 +587,8 @@
     "unavailable": {
       "description": {
         "binary_generators_unreachable": "This deployment's generative integrations could not be read just now, so the run was not started. Nothing is misconfigured and no change is needed: try again once the connection recovers.",
-        "foundational_builtins_unreachable": "This deployment's built-in foundational services could not be read just now. Nothing is misconfigured and no change is needed: try again once the connection recovers."
+        "foundational_builtins_unreachable": "This deployment's built-in foundational services could not be read just now. Nothing is misconfigured and no change is needed: try again once the connection recovers.",
+        "connection_credentials_unreadable": "The stored credentials for this connection could not be read. If this deployment can reach the service holding its key, re-connect the source to replace them; otherwise try again once that connection recovers."
       }
     },
     "action": {

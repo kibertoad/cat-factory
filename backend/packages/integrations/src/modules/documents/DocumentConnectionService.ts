@@ -21,6 +21,19 @@ import type { WorkspaceRepository } from '@cat-factory/kernel'
 // deployment holding no key for these rows — a mothership-mode node — still resolves them, by
 // naming the row over `/internal/secrets/unseal`.
 
+/**
+ * What a batched resolution found for ONE source.
+ *
+ * Three states rather than a nullable record, because they need three different reactions and
+ * only the caller knows which: "never connected" is the workspace's to fix, and a bag that will
+ * not open is the deployment's. Folding the second into the first is the false-zero this whole
+ * seam exists to remove — it reads to a run's context builder exactly like a source nobody wired.
+ */
+export type ResolvedDocumentConnection =
+  | { status: 'connected'; connection: DocumentConnectionRecord }
+  | { status: 'not_connected' }
+  | { status: 'unreadable'; cause: unknown }
+
 export interface DocumentConnectionServiceDependencies {
   documentConnectionStore: DocumentConnectionStore
   registry: DocumentSourceRegistry
@@ -128,23 +141,39 @@ export class DocumentConnectionService {
    * repo bans, and the connection is invariant per `(workspace, source)` for the entire pass. Only
    * a source with NO stored row falls through to its provider's implicit resolution, which is an
    * out-of-band credential the provider owns and so has nothing to batch.
+   *
+   * Answers PER SOURCE, and a source whose stored bag will not open is `unreadable` rather than
+   * absent. It does NOT fall through to implicit resolution: the workspace explicitly connected
+   * that source, so quietly authenticating as the GitHub App instead would answer a question about
+   * one credential with a different one.
    */
   async resolveConnections(
     workspaceId: string,
     sources: readonly DocumentSourceKind[],
-  ): Promise<Map<DocumentSourceKind, DocumentConnectionRecord | null>> {
+  ): Promise<Map<DocumentSourceKind, ResolvedDocumentConnection>> {
     const wanted = new Set(sources)
-    const resolved = new Map<DocumentSourceKind, DocumentConnectionRecord | null>()
+    const resolved = new Map<DocumentSourceKind, ResolvedDocumentConnection>()
     if (wanted.size === 0) return resolved
     // The named sources only: opening a bag for a source this corpus never mentions costs a
     // mothership-mode node a round trip for an answer nobody reads.
     const stored = await this.deps.documentConnectionStore.listBySources(workspaceId, [...wanted])
-    for (const record of stored) resolved.set(record.source, record)
+    for (const result of stored) {
+      resolved.set(
+        result.source,
+        result.status === 'opened'
+          ? { status: 'connected', connection: result.connection }
+          : { status: 'unreadable', cause: result.cause },
+      )
+    }
     await Promise.all(
       [...wanted]
         .filter((source) => !resolved.has(source))
         .map(async (source) => {
-          resolved.set(source, await this.resolveImplicit(workspaceId, source))
+          const implicit = await this.resolveImplicit(workspaceId, source)
+          resolved.set(
+            source,
+            implicit ? { status: 'connected', connection: implicit } : { status: 'not_connected' },
+          )
         }),
     )
     return resolved

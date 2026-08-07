@@ -362,6 +362,10 @@ export function createTasksModule(
     registry,
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
+    // Where the three surfaces that DEGRADE on an unopenable credential bag report (a re-connect
+    // that could not carry the webhook secret over, the setup check, the webhook panel). Without
+    // it those gaps are only visible in a panel nobody is looking at.
+    logger: deps.logger,
     // GitHub Issues' availability is the installed GitHub App's presence; absent when
     // the GitHub integration isn't wired (the provider then isn't registered anyway).
     ...(deps.githubInstallationRepository

@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest'
-import type { SecretCipher } from '@cat-factory/kernel'
-import { createOrgSecretCipher } from '@cat-factory/kernel'
+import { describe, expect, it, vi } from 'vitest'
+import type { DelegatedSecretRef, SecretCipher, SecretDelegate } from '@cat-factory/kernel'
+import { ORG_SECRET_KEY_ARITY, createOrgSecretCipher } from '@cat-factory/kernel'
 import {
+  ConnectionCredentialsUnreadableError,
   createSealedConnectionStore,
+  type OpenedConnectionResult,
   type SealedConnectionRepository,
   type SealedConnectionRow,
 } from './sealedConnectionStore.js'
@@ -21,7 +23,7 @@ const cipher: SecretCipher = {
   },
 }
 
-function makeStore(seed: SealedConnectionRow<Kind>[] = []) {
+function makeStore(seed: SealedConnectionRow<Kind>[] = [], delegate?: SecretDelegate) {
   const rows = new Map(seed.map((row) => [row.source, row]))
   const calls = { get: 0, list: 0 }
   const repository: SealedConnectionRepository<Kind> = {
@@ -44,7 +46,7 @@ function makeStore(seed: SealedConnectionRow<Kind>[] = []) {
   }
   const store = createSealedConnectionStore<Kind>({
     repository,
-    orgSecrets: createOrgSecretCipher({ cipher }),
+    orgSecrets: createOrgSecretCipher({ cipher, ...(delegate ? { delegate } : {}) }),
     secretSource: 'task_source_connection',
   })
   return { store, rows, calls }
@@ -92,7 +94,8 @@ describe('createSealedConnectionStore', () => {
       row('figma', { c: '3' }),
     ])
     const result = await store.listBySources('ws_1', ['jira', 'figma'])
-    opened.push(...result.map((connection) => connection.source))
+    opened.push(...result.map((entry) => entry.source))
+    expect(result.every((entry) => entry.status === 'opened')).toBe(true)
     expect(opened.sort()).toEqual(['figma', 'jira'])
     expect(calls.list).toBe(1)
     expect(calls.get).toBe(0)
@@ -121,12 +124,70 @@ describe('createSealedConnectionStore', () => {
     // from a connection saved with no credentials — so every caller re-derived the difference from
     // whatever the vendor said next.
     const { store } = makeStore([{ ...row('jira', {}), credentialsCipher: 'corrupt' }])
-    await expect(store.getByWorkspace('ws_1', 'jira')).rejects.toThrow(/not an envelope/)
+    const failure = await store.getByWorkspace('ws_1', 'jira').catch((error: unknown) => error)
+    // A DomainError, so a controller answers 503 with a reason the SPA can translate rather than
+    // the 500 a bare Error becomes; the cause is kept for the log, never for the client.
+    expect(failure).toBeInstanceOf(ConnectionCredentialsUnreadableError)
+    expect((failure as ConnectionCredentialsUnreadableError).code).toBe('unavailable')
+    expect((failure as ConnectionCredentialsUnreadableError).details).toMatchObject({
+      reason: 'connection_credentials_unreadable',
+      source: 'jira',
+    })
+    expect((failure as { cause?: unknown }).cause).toMatchObject({ message: 'not an envelope' })
   })
 
   it('THROWS on a decrypted blob that is not a credential bag', async () => {
     const { store } = makeStore([{ ...row('jira', {}), credentialsCipher: 'sealed(["nope"])' }])
-    await expect(store.getByWorkspace('ws_1', 'jira')).rejects.toThrow(/not a credential bag/)
+    await expect(store.getByWorkspace('ws_1', 'jira')).rejects.toBeInstanceOf(
+      ConnectionCredentialsUnreadableError,
+    )
+  })
+
+  it('confines an unopenable bag to its own source in a batch, opening the rest', async () => {
+    // One rejected open used to reject the whole batch, so a single drifted row reported every
+    // other source as unreadable too — a run's whole document corpus, a block's every reply
+    // channel. They are independent vendors and independent facts.
+    const { store } = makeStore([
+      row('jira', { a: '1' }),
+      { ...row('linear', {}), credentialsCipher: 'corrupt' },
+      row('figma', { c: '3' }),
+    ])
+
+    const results = await store.listBySources('ws_1', ['jira', 'linear', 'figma'])
+    const byStatus = (status: OpenedConnectionResult<Kind>['status']) =>
+      results
+        .filter((entry) => entry.status === status)
+        .map((entry) => entry.source)
+        .sort()
+
+    expect(byStatus('opened')).toEqual(['figma', 'jira'])
+    expect(byStatus('unreadable')).toEqual(['linear'])
+  })
+
+  it('names the ROW, not just the workspace, when a mothership opens the bag', async () => {
+    // The delegated path's whole contract in one assertion. These rows are keyed
+    // `(workspace, source)`, so `task_source_connection` declares `keyArity: 1` and a mothership
+    // REFUSES (422) a request whose `key` disagrees. A local cipher ignores the ref entirely, so
+    // every no-delegate test here passes with the key absent — which is exactly how a store that
+    // sent none shipped green and failed every open on the only deployment shape that delegates.
+    const unseal = vi.fn(async (_ref: DelegatedSecretRef) =>
+      JSON.stringify({ apiToken: 'from-mothership' }),
+    )
+    const { store } = makeStore([row('jira', { apiToken: 'unused-local' })], {
+      unseal,
+      seal: async () => 'org(sealed)',
+    })
+
+    const opened = await store.getByWorkspace('ws_1', 'jira')
+
+    expect(opened?.credentials).toEqual({ apiToken: 'from-mothership' })
+    const ref = unseal.mock.calls[0]![0]
+    expect(ref.source).toBe('task_source_connection')
+    expect(ref.workspaceId).toBe('ws_1')
+    expect(ref.key).toEqual(['jira'])
+    // Derived from the declaration both halves read, never a literal restated beside it: a source
+    // whose addressing changes fails this without anyone remembering to update a number.
+    expect(ref.key).toHaveLength(ORG_SECRET_KEY_ARITY.task_source_connection)
   })
 
   it('passes softDelete straight through, so disconnecting needs no key', async () => {

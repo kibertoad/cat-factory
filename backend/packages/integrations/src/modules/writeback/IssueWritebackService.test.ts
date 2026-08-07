@@ -8,7 +8,10 @@ import type {
   ReviewQuestionPostRecord,
   ReviewQuestionPostRepository,
   TaskConnectionStore,
+  SealedConnectionOpenResult,
+  TaskConnectionRecord,
   TaskRecord,
+  TaskSourceKind,
   TrackerSettings,
   TrackerSettingsRepository,
   TaskRepository,
@@ -62,18 +65,37 @@ function fakeTasks(issues: TaskRecord[]): TaskRepository {
  * the question comment may tell a reporter to type one.
  */
 function fakeConnections(
-  options: { webhookSecret?: string; throws?: boolean } = {},
+  options: {
+    webhookSecret?: string
+    /** The stored-row READ itself fails, before any source is opened. */
+    throws?: boolean
+    /** Sources whose sealed bag will not open, the rest of the batch answering normally. */
+    unreadable?: readonly TaskSourceKind[]
+  } = {},
 ): TaskConnectionStore {
+  const unreadable = new Set(options.unreadable ?? [])
   return {
     getByWorkspace: async () => null,
     listBySources: async (_ws, sources) => {
       if (options.throws) throw new Error('cipher unavailable')
       return sources.map(
-        (source) =>
-          ({
-            source,
-            credentials: options.webhookSecret ? { webhookSecret: options.webhookSecret } : {},
-          }) as never,
+        (source): SealedConnectionOpenResult<TaskSourceKind, TaskConnectionRecord> =>
+          unreadable.has(source)
+            ? { source, status: 'unreadable' as const, cause: new Error('corrupt envelope') }
+            : {
+                source,
+                status: 'opened' as const,
+                connection: {
+                  workspaceId: 'ws',
+                  source,
+                  credentials: options.webhookSecret
+                    ? { webhookSecret: options.webhookSecret }
+                    : {},
+                  label: source,
+                  createdAt: 0,
+                  deletedAt: null,
+                },
+              },
       )
     },
     listSummaries: async () => [],
@@ -872,6 +894,15 @@ describe('IssueWritebackService.postReviewQuestions — answer channels', () => 
     expect(await postWith(fakeConnections({ throws: true }))).not.toContain('@cat-factory')
   })
 
+  it('keeps a HEALTHY source wired when a different one is unreadable', async () => {
+    // The other half of the rule above, and the one a batch-wide catch got wrong: unreadable is a
+    // fact about the source that was unreadable. A corrupt Linear envelope is no evidence about
+    // the workspace's GitHub connection, so folding them together silently took a working reply
+    // channel away from a healthy ticket.
+    const body = await postWith(fakeConnections({ webhookSecret: 'whsec', unreadable: ['linear'] }))
+    expect(body).toContain('@cat-factory answer <id>')
+  })
+
   it('reads the connections ONCE for the whole block, not once per linked issue', async () => {
     // A block can carry several issues on one tracker; the reply channel is a property of the
     // `(workspace, source)` connection, and each read opens a credential bag — which on a
@@ -881,9 +912,18 @@ describe('IssueWritebackService.postReviewQuestions — answer channels', () => 
       ...fakeConnections({ webhookSecret: 'whsec' }),
       listBySources: async (_ws, sources) => {
         reads += 1
-        return sources.map(
-          (source) => ({ source, credentials: { webhookSecret: 'whsec' } }) as never,
-        )
+        return sources.map((source) => ({
+          source,
+          status: 'opened' as const,
+          connection: {
+            workspaceId: 'ws',
+            source,
+            credentials: { webhookSecret: 'whsec' },
+            label: source,
+            createdAt: 0,
+            deletedAt: null,
+          },
+        }))
       },
     }
     const comments: string[] = []

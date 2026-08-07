@@ -1,5 +1,6 @@
 import type { TaskSourceKind, TaskComment } from '../domain/types.js'
 import type { TaskCredentials } from './task-source.js'
+import type { SealedConnectionOpenResult } from './sealed-connections.js'
 
 // Persistence ports for the task-source integration. The worker implements
 // these against D1 (migration 0014); tests can supply in-memory fakes. All rows
@@ -73,13 +74,14 @@ export interface TaskConnectionStore {
   /** The workspace's live connection for a source, opened, or null if not connected. */
   getByWorkspace(workspaceId: string, source: TaskSourceKind): Promise<TaskConnectionRecord | null>
   /**
-   * The named sources' live connections, opened, in ONE stored-row read. A source with no stored
-   * row is simply absent from the result; empty input reads nothing.
+   * The named sources' live connections in ONE stored-row read, each opened INDEPENDENTLY. A
+   * source with no stored row is simply absent from the result; empty input reads nothing; a
+   * source whose bag will not open answers `unreadable` rather than failing the sources beside it.
    */
   listBySources(
     workspaceId: string,
     sources: readonly TaskSourceKind[],
-  ): Promise<TaskConnectionRecord[]>
+  ): Promise<SealedConnectionOpenResult<TaskSourceKind, TaskConnectionRecord>[]>
   /** Every live connection's non-secret half. Opens no envelope. */
   listSummaries(workspaceId: string): Promise<TaskConnectionSummary[]>
   /** Seal `record`'s bag and store it as the live connection for its (workspace, source). */

@@ -576,6 +576,7 @@ export {
   SEALED_SECRET_SOURCES,
   SEALED_SECRET_SOURCE_NAMES,
   sealedSecretSourceSpec,
+  type SealedSecretSourceBinding,
   type SealedSecretSourceSpec,
 } from './secrets/sealedSecretSources.js'
 export {

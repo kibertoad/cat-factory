@@ -439,11 +439,20 @@
     which is why "give those repos a sealed-blob read first" was the standing prerequisite.
 
   - **Two new `ORG_SECRET_SOURCES`**, `document_source_connection` and `task_source_connection`,
-    bound to `getByWorkspace` with **keyArity 1** (the source kind) under the
+    bound to `getByWorkspace` with **key arity 1** (the source kind) under the
     `cat-factory:documents` / `cat-factory:tasks` HKDF tags. Both clear the table's bar — the node
     needs the PLAINTEXT, not merely the row: the dispatch-time freshness refresh authenticates
     against the source on the run path, an import is the node's own outbound call, and the `tracker`
     step files a real ticket from wherever the run runs.
+  - **Key arity is declared in KERNEL (`ORG_SECRET_KEY_ARITY`) and enforced by the type system.**
+    It used to live only in the server's `SEALED_SECRET_SOURCES`, which is the one part of a binding
+    the CALLER has to get right and the one table the caller cannot see: `@cat-factory/integrations`
+    does not depend on `@cat-factory/server`. Stated only there it was prose a call site could
+    disagree with silently — and a local cipher IGNORES the ref entirely, so a store that sent no
+    key passed every hosted test and answered 422 on every open on the only deployment shape that
+    delegates. Now `DelegatedSecretRef` is a union over the vocabulary (a literal is checked against
+    its own source's arity) and `orgSecretRef(source, workspaceId, ...key)` is the door for a
+    generic caller, with the server READING the same numbers rather than restating them.
   - **The allow-list widens to the whole of both integrations**: the connection repos
     (`getByWorkspace`/`listByWorkspace`/`softDelete` via `workspace`, `upsert` via `workspaceField`),
     `taskSourceSettingsRepository`, the document import/link writes plus the WS1 role-link surface,
@@ -468,6 +477,28 @@
     `credentials_unreadable` separately from `source_unreachable`. That gap's log line went back to
     `warn` in the same change: it was `info` only because a mothership-mode node failed it
     permanently and by design, and a warning that repeats forever is how a channel gets tuned out.
+    It throws a `ConnectionCredentialsUnreadableError` (a 503 carrying
+    `reason: 'connection_credentials_unreadable'`) rather than a bare `Error`, so the surfaces that
+    genuinely cannot proceed refuse with translated copy instead of a 500.
+  - **A BATCHED open answers per source; only a POINT read throws.** The sources in one
+    `listBySources` are independent facts about independent vendors, so one rejection speaking for
+    all of them was the same bug twice: a run's whole document corpus reported
+    `credentials_unreadable` because one shelf entry drifted, and a block's every ticket losing its
+    reply channel because one tracker's envelope did. Both read to an operator as the HEALTHY
+    sources being broken, which is the misattribution this work exists to remove rather than
+    relocate. `SealedConnectionOpenResult` (kernel) is the shape; a corpus-wide verdict is now
+    reachable only when the stored-row QUERY itself failed, where nothing about any source was
+    learned.
+  - **A surface that REPAIRS this state may not be the surface that needs the key.** `connect`
+    reads the old bag for one reason (`preservedPlatformCredentials` carries the platform-owned
+    webhook secret across a vendor rotation, and it lives inside the bag), and refusing on that read
+    left a workspace with no way out of an unopenable row at all. So the read degrades: the secret
+    is lost, loudly, and `getWebhookState` reports it. What keeps that from being a silent loss on a
+    TRANSIENT fault is that sealing rides the same delegation as opening — a node that cannot reach
+    its key service fails the `upsert` too, so nothing is overwritten. `diagnose` reports the fault
+    as a verdict, and the read-only webhook panel states it as `credentialsReadable: false`.
+    `clearWebhookSecret` is the one that still refuses, because clearing REWRITES the bag minus a
+    key and proceeding blind would replace the vendor credentials with an empty object.
   - **Node sources every repo both helpers build** (`selectNodeDocumentsDeps` /
     `selectNodeTasksDeps`) through `pickRepoSource` and composes the store over the result, so the
     facade's own tracker/writeback credential closures read the same remote-backed rows the module
@@ -1170,7 +1201,11 @@ never remotely invocable (mothership-internal cron).
 | `skillSourceRepository`                  | ✅ done | account list + link + the id-keyed sync mgmt; global `listByRepo` internal                         |
 | `documentRepository`                     | ✅ done | whole repo: run-path context reads + import/link writes + the WS1 role-link surface                |
 | `documentConnectionRepository`           | ✅ done | connect/list/disconnect (sealed `credentialsCipher`, opened via `/internal/secrets/unseal`)        |
-| `taskRepository`                         | ◑ part  | run-path context reads; mgmt writes pending (module needs the connection repo)                     |
+| `taskRepository`                         | ✅ done | whole repo: run-path context reads + import/link writes + the atomic `claimBlockLink`              |
+| `taskConnectionRepository`               | ✅ done | connect/list/disconnect (sealed `credentialsCipher`, opened via `/internal/secrets/unseal`)        |
+| `taskSourceSettingsRepository`           | ✅ done | the per-workspace source on/off toggles (no secrets)                                               |
+| `reviewQuestionPostRepository`           | ⬜ todo | engine-written park writeback markers; claim/settle/get pending a scope rule                       |
+| `trackerCommentIngestRepository`         | n/a     | inbound webhook dedupe: written where a delivery ARRIVES, which is never a node                    |
 | `githubInstallationRepository`           | ◑ part  | `getByWorkspace` + `listActiveForAccount` run-path reads; id-keyed / sync writes pending           |
 | `repoProjectionRepository`               | ◑ part  | `list` (SPA + run path); sync/repo-write surface pending; `listByInstallation` internal            |
 | `branchProjectionRepository`             | ◑ part  | `listByRepo` read; `upsertMany` sync pending                                                       |

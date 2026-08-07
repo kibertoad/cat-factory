@@ -343,6 +343,11 @@ export class IssueWritebackService implements IssueWritebackProvider {
    * An unreadable connection resolves to `false` and is REPORTED, never guessed at: the failure
    * mode of guessing `true` is a reporter told to reply where nothing listens, which is the exact
    * thing this resolution exists to prevent.
+   *
+   * Unreadable is scoped to the SOURCE that was unreadable. The block's issues can span trackers,
+   * and a corrupt Linear envelope is no evidence at all about the workspace's Jira connection —
+   * so a batch-wide catch would take a working reply channel away from a healthy ticket and tell
+   * its reporter to use the API path instead.
    */
   private async resolveTicketReplyChannels(
     workspaceId: string,
@@ -352,21 +357,32 @@ export class IssueWritebackService implements IssueWritebackProvider {
     const connections = this.deps.taskConnectionStore
     if (!connections) return wired
     const sources = [...new Set(issues.map((issue) => issue.source))]
+    // Default FALSE for every source asked about, then raise the ones that answered: a source with
+    // no stored connection is simply absent from the result, and it has no reply channel.
+    for (const source of sources) wired.set(source, false)
+    let opened: Awaited<ReturnType<typeof connections.listBySources>>
     try {
-      const opened = await connections.listBySources(workspaceId, sources)
-      // Default FALSE for every source asked about, then raise the ones that answered: a source
-      // with no stored connection is simply absent from the result, and it has no reply channel.
-      for (const source of sources) wired.set(source, false)
-      for (const connection of opened) {
-        wired.set(connection.source, trackerWebhookSecret(connection.credentials) !== '')
-      }
+      opened = await connections.listBySources(workspaceId, sources)
     } catch (error) {
+      // The stored-row READ itself failed, before any source was opened, so nothing was learned
+      // about any of them and the whole set stays false.
       this.log.warn('tracker connections unreadable; offering the API answer path only', {
         workspaceId,
         sources,
         ...describeError(error),
       })
-      for (const source of sources) wired.set(source, false)
+      return wired
+    }
+    for (const result of opened) {
+      if (result.status === 'unreadable') {
+        this.log.warn('tracker connection unreadable; offering the API answer path only', {
+          workspaceId,
+          source: result.source,
+          ...describeError(result.cause),
+        })
+        continue
+      }
+      wired.set(result.source, trackerWebhookSecret(result.connection.credentials) !== '')
     }
     return wired
   }

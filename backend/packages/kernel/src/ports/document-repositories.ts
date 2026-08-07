@@ -5,6 +5,7 @@ import type {
   DocumentSourceKind,
 } from '../domain/types.js'
 import type { DocumentCredentials } from './document-source.js'
+import type { SealedConnectionOpenResult } from './sealed-connections.js'
 
 // Persistence ports for the document-source integration. The worker implements
 // these against D1 (migration 0012); tests can supply in-memory fakes. All rows
@@ -95,13 +96,15 @@ export interface DocumentConnectionStore {
     source: DocumentSourceKind,
   ): Promise<DocumentConnectionRecord | null>
   /**
-   * The named sources' live connections, opened, in ONE stored-row read. A source with no stored
-   * row is simply absent from the result (callers index by `source`); empty input reads nothing.
+   * The named sources' live connections in ONE stored-row read, each opened INDEPENDENTLY. A
+   * source with no stored row is simply absent from the result (callers index by `source`); empty
+   * input reads nothing; a source whose bag will not open answers `unreadable` rather than failing
+   * the sources beside it.
    */
   listBySources(
     workspaceId: string,
     sources: readonly DocumentSourceKind[],
-  ): Promise<DocumentConnectionRecord[]>
+  ): Promise<SealedConnectionOpenResult<DocumentSourceKind, DocumentConnectionRecord>[]>
   /** Every live connection's non-secret half. Opens no envelope. */
   listSummaries(workspaceId: string): Promise<DocumentConnectionSummary[]>
   /** Seal `record`'s bag and store it as the live connection for its (workspace, source). */

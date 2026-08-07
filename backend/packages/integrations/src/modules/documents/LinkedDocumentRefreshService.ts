@@ -16,7 +16,10 @@ import type {
 import { describeError, noopLogger, noopOperationalMetrics } from '@cat-factory/kernel'
 import { isConnectableSource, type RefreshedDocumentView } from '@cat-factory/contracts'
 import pMap from 'p-map'
-import type { DocumentConnectionService } from './DocumentConnectionService.js'
+import type {
+  DocumentConnectionService,
+  ResolvedDocumentConnection,
+} from './DocumentConnectionService.js'
 import { type DocumentImportService, toSourceDocument } from './DocumentImportService.js'
 import { probeCacheKey, sameAgentVisibleProjection } from './documents.logic.js'
 
@@ -62,14 +65,14 @@ const REFRESH_CONCURRENCY = 4
 type RefreshTrigger = 'dispatch' | 'manual'
 
 /**
- * Sentinel for "the connection READ itself failed", distinct from the `null` that means "there is
- * definitely no connection". A sentinel rather than a rethrow because the two land on different
- * `DocumentFreshnessGap`s and the caller must not have to tell them apart by inspecting an error.
+ * What the pass resolved for one source: a live connection, no connection, or an unreadable read.
+ *
+ * The connection service's own vocabulary, not a second one restated here. It used to be a local
+ * `Symbol` sentinel because the service answered a nullable record and the distinction had to be
+ * re-invented at this layer; now the three states travel from the store that observed them, which
+ * is what lets ONE unopenable source be unreadable while its healthy neighbours stay confirmable.
  */
-const CONNECTION_UNREADABLE = Symbol('connection-unreadable')
-
-/** What the pass resolved for one source: a live connection, no connection, or an unreadable read. */
-type ResolvedConnection = DocumentConnectionRecord | null | typeof CONNECTION_UNREADABLE
+type ResolvedConnection = ResolvedDocumentConnection
 
 export interface LinkedDocumentRefreshServiceDependencies {
   registry: DocumentSourceRegistry
@@ -157,9 +160,15 @@ export class LinkedDocumentRefreshService implements LinkedDocumentRefresher {
    * The live connection per source this corpus actually needs, in ONE read.
    *
    * Its own failure disposition, so three different facts stay three different notes. A definite
-   * "no connection" is the workspace's to fix; a read that THROWS is the deployment's — a corrupt
-   * envelope, a drifted key, or a mothership that could not be reached to open the row. Folding it
-   * into the per-document catch would tell every such run that Figma is down.
+   * "no connection" is the workspace's to fix; a bag that will not open is the deployment's — a
+   * corrupt envelope, a drifted key, or a mothership that could not be reached to open the row.
+   * Folding it into the per-document catch would tell every such run that Figma is down.
+   *
+   * The unreadable verdict is PER SOURCE, which is the distinction that stopped one drifted shelf
+   * entry speaking for the whole corpus: a workspace with a broken Confluence bag still gets
+   * confirmed freshness on its Figma designs. Only a read that fails WHOLESALE (the stored-row
+   * query itself, which precedes every open) can mark them all, because in that case nothing about
+   * any source was learned.
    *
    * It is no longer the PERMANENT state it was: a mothership-mode node used to fail this read on
    * every dispatch of every run, because the connection repository decrypted inside and so had to
@@ -178,21 +187,34 @@ export class LinkedDocumentRefreshService implements LinkedDocumentRefresher {
           .filter((source) => this.deps.registry.get(source)),
       ),
     ]
+    // WARN on either shape below, because there is now always something to fix. This was `info`
+    // while a mothership-mode node failed it permanently and by design (a warning that repeats
+    // forever is how a channel gets tuned out); with the connection row sealed and openable over
+    // the machine API, every remaining cause is a real fault. The `document.freshness_gap` counter,
+    // incremented per affected document, is what answers whether it is rising.
     try {
-      return new Map<DocumentSourceKind, ResolvedConnection>(
+      const resolved = new Map(
         await this.deps.connectionService.resolveConnections(workspaceId, sources),
       )
+      // One line per FAILING source, which is the granularity of both the fault and its remedy.
+      for (const [source, connection] of resolved) {
+        if (connection.status !== 'unreadable') continue
+        this.log.warn('linked document freshness: source credentials could not be read', {
+          workspaceId,
+          source,
+          ...describeError(connection.cause),
+        })
+      }
+      return resolved
     } catch (error) {
-      // WARN, because there is now always something to fix. This was `info` while a mothership-mode
-      // node failed it permanently and by design (a warning that repeats forever is how a channel
-      // gets tuned out); with the connection row sealed and openable over the machine API, every
-      // remaining cause is a real fault. The `document.freshness_gap` counter, incremented per
-      // affected document below, is what answers whether it is rising.
-      this.log.warn('linked document freshness: source credentials could not be read', {
+      // ONE fault, so ONE line naming the sources it took down with it — not the same cause
+      // repeated once per source, which would read as several independent failures.
+      this.log.warn('linked document freshness: the connection read failed for every source', {
         workspaceId,
+        sources,
         ...describeError(error),
       })
-      return new Map(sources.map((source) => [source, CONNECTION_UNREADABLE]))
+      return new Map(sources.map((source) => [source, { status: 'unreadable', cause: error }]))
     }
   }
 
@@ -240,10 +262,17 @@ export class LinkedDocumentRefreshService implements LinkedDocumentRefresher {
     const provider = this.deps.registry.get(source)
     if (!provider) return notApplicable(record)
     const connection = connections.get(source)
-    if (connection === CONNECTION_UNREADABLE) return unconfirmed(record, 'credentials_unreadable')
-    if (!connection) return unconfirmed(record, 'not_connected')
+    if (connection?.status === 'unreadable') return unconfirmed(record, 'credentials_unreadable')
+    if (connection?.status !== 'connected') return unconfirmed(record, 'not_connected')
     try {
-      return await this.confirm(workspaceId, source, provider, connection, record, trigger)
+      return await this.confirm(
+        workspaceId,
+        source,
+        provider,
+        connection.connection,
+        record,
+        trigger,
+      )
     } catch (error) {
       // The ladder catches its own failures inside the cache loader (so they are REMEMBERED rather
       // than retried per dispatch); this covers what is left, above all the local re-read below.

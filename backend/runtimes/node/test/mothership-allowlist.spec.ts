@@ -48,7 +48,11 @@ import {
   DrizzleSkillSourceRepository,
 } from '../src/repositories/skills.js'
 import { DrizzleNotificationRepository } from '../src/repositories/notifications.js'
-import { DrizzleNotificationWebhookRepository } from '../src/repositories/drizzle/settings.js'
+import {
+  DrizzleNotificationWebhookRepository,
+  DrizzleReviewQuestionPostRepository,
+  DrizzleTrackerCommentIngestRepository,
+} from '../src/repositories/drizzle/settings.js'
 import {
   DrizzleSlackConnectionRepository,
   DrizzleSlackMemberMappingRepository,
@@ -78,12 +82,17 @@ import { DrizzleUserRepoAccessRepository } from '../src/repositories/userRepoAcc
 // coverage-independent backstop: it reflects EVERY public method of EVERY Drizzle repository and
 // requires each to be CLASSIFIED exactly once — either it is in the server-side allow-list
 // (`REMOTE_PERSISTENCE_METHODS`, i.e. remotely callable), or it is in `NON_REMOTE` with an explicit
-// reason (telemetry / local-sqlite / admin-gated / sweeper / pending / helper).
+// reason (telemetry / local-sqlite / admin-gated / sweeper / pending / inbound / helper).
 //
 // So adding a new Drizzle repository or method WITHOUT a deliberate decision fails this test: the
 // author must either allow-list it (proxy it to the mothership) or record why it stays off the
 // machine API. That is the "you forgot to proxy it" guarantee, independent of whether any
 // behavioural test happens to call the new method.
+//
+// The guarantee has one edge the assertions cannot reach on their own: a repository absent from the
+// reflection below is invisible to ALL of it, so `nonCore` is the load-bearing half. Two marker
+// stores sat outside it until the sealed-connection work went looking, which is why the classes are
+// listed rather than the classifications.
 // ---------------------------------------------------------------------------
 
 type Reason =
@@ -107,6 +116,11 @@ type Reason =
   // A non-port implementation helper that is public on the prototype but never called via the
   // repository registry (row mappers, credential decoders, etc.).
   | 'helper'
+  // State of an INBOUND delivery path, written only where the delivery ARRIVES. A webhook reaches
+  // whichever deployment holds the public URL, which in mothership mode is the mothership; a
+  // laptop receives none, so it has nothing to dedupe and never reads these rows. Permanent (the
+  // node cannot be the receiver), not a backlog state.
+  | 'inbound'
 
 // Every repository method that is NOT in the allow-list, with the reason it stays off the machine
 // API. Keep in sync with the reflected surface — a NEW method missing from BOTH this map and the
@@ -664,6 +678,28 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   taskSourceSettingsRepository: {
     rowToRecord: 'helper',
   },
+  // The tracker writeback's idempotency marker for a parked review's question comments. The ENGINE
+  // writes it, so a mothership-mode node genuinely reaches it (unlike its ingest sibling below) and
+  // it is already routed through `pickRepoSource` — but the methods are not allow-listed yet, so a
+  // claim answers `unknown_method` and `postReviewQuestions` degrades to "someone else holds the
+  // claim", loudly. A real backlog item: allow-listing it needs a scope rule keyed on the marker's
+  // own workspace plus conformance coverage of the claim/settle race.
+  reviewQuestionPostRepository: {
+    where: 'helper',
+    claim: 'pending',
+    settle: 'pending',
+    get: 'pending',
+  },
+  // The INBOUND half of the same idea: dedupe for tracker comments arriving by webhook. It rides
+  // `'inbound'` rather than `'pending'` because there is nothing to complete — a delivery reaches
+  // the deployment holding the public URL, which is the mothership, and a laptop that receives no
+  // delivery has nothing to claim. `where` is a private predicate helper, not a port method.
+  trackerCommentIngestRepository: {
+    where: 'helper',
+    claim: 'inbound',
+    settle: 'inbound',
+    get: 'inbound',
+  },
   // The whole custom-manifest-type catalog is now remote (the environments management panel's
   // infra-configurator reads/edits it — no secrets, just manifest metadata).
   customManifestTypeRepository: {},
@@ -838,6 +874,8 @@ function reflectAllRepositories(): Record<string, string[]> {
     taskRepository: DrizzleTaskRepository,
     taskConnectionRepository: DrizzleTaskConnectionRepository,
     taskSourceSettingsRepository: DrizzleTaskSourceSettingsRepository,
+    reviewQuestionPostRepository: DrizzleReviewQuestionPostRepository,
+    trackerCommentIngestRepository: DrizzleTrackerCommentIngestRepository,
     providerApiKeyRepository: DrizzleProviderApiKeyRepository,
     providerModelCatalogRepository: DrizzleProviderModelCatalogRepository,
     providerSubscriptionTokenRepository: DrizzleProviderSubscriptionTokenRepository,

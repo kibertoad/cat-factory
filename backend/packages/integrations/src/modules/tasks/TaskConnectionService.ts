@@ -1,4 +1,5 @@
-import type { Clock } from '@cat-factory/kernel'
+import type { Clock, Logger } from '@cat-factory/kernel'
+import { describeError, noopLogger } from '@cat-factory/kernel'
 import type { TaskConnectionRecord, TaskConnectionStore } from '@cat-factory/kernel'
 import type { TaskSourceSettingsRepository } from '@cat-factory/kernel'
 import type { GitHubInstallationRepository, VcsProvider } from '@cat-factory/kernel'
@@ -54,6 +55,12 @@ export interface TaskConnectionServiceDependencies {
    * onboarding isn't offered (the manual personal-API-key path still works).
    */
   resolveLinearOAuth?: (accountKey: string) => Promise<LinearOAuthSecret | undefined>
+  /**
+   * Where the paths that DEGRADE report: a connection whose sealed bag would not open, on the
+   * three surfaces that must keep answering anyway (re-connect, the setup check, the webhook
+   * panel). Absent ⇒ `noopLogger`, so the service stays unit-testable standalone.
+   */
+  logger?: Logger
 }
 
 /**
@@ -143,7 +150,11 @@ function toConnection(record: {
 }
 
 export class TaskConnectionService {
-  constructor(private readonly deps: TaskConnectionServiceDependencies) {}
+  private readonly log: Logger
+
+  constructor(private readonly deps: TaskConnectionServiceDependencies) {
+    this.log = deps.logger ?? noopLogger
+  }
 
   /**
    * Every configured source with the workspace's live state for it (drives the
@@ -229,7 +240,27 @@ export class TaskConnectionService {
     }
 
     // Credentialed source (Jira, …): a connection must exist before we can probe.
-    const connection = await this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
+    //
+    // The OPEN is inside the check's own error handling rather than in front of it. A setup check
+    // that 500s is the one failure mode this surface may not have: it exists to turn a broken
+    // integration into an actionable sentence, and a bag that will not open is exactly such a
+    // break — reported with its remedy, like every other verdict here.
+    let connection: TaskConnectionRecord | null
+    try {
+      connection = await this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
+    } catch (error) {
+      this.log.warn('tracker setup check: the stored credentials could not be read', {
+        workspaceId,
+        source,
+        ...describeError(error),
+      })
+      return {
+        source,
+        ok: false,
+        status: 'error',
+        message: `${label} is connected, but this deployment could not read the stored credentials. If it reaches its key service, re-connect ${label} to replace them; otherwise re-check once that connection recovers.`,
+      }
+    }
     if (!connection) {
       return {
         source,
@@ -389,10 +420,16 @@ export class TaskConnectionService {
   ): Promise<TaskConnection> {
     // The stored bag is READ here, not just its timestamp: `preservedPlatformCredentials` below
     // carries the platform-owned webhook keys across a vendor-credential rotation, and they live
-    // inside the bag. So a re-connect against a row this deployment cannot open fails rather than
-    // silently dropping the workspace's webhook secret, which would 503 every later delivery with
-    // nothing to point at the cause.
-    const existing = await this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
+    // inside the bag.
+    //
+    // But the read must not be able to BLOCK the write, because re-connecting is the documented
+    // remedy for a bag that has gone bad — a connect that refuses on the very row it exists to
+    // replace leaves the workspace with no way out at all. So an unopenable bag costs the
+    // preserved keys and says so, and it is the SEAL a few lines down that keeps that from being
+    // a silent loss on a transient fault: sealing rides the same delegation as opening, so a node
+    // that cannot reach its key service fails the upsert too and nothing is overwritten. What
+    // survives to here is the case whose only remedy IS this call.
+    const existing = await this.openForReconnect(workspaceId, source)
     const record: TaskConnectionRecord = {
       workspaceId,
       source,
@@ -409,6 +446,30 @@ export class TaskConnectionService {
     }
     await this.deps.taskConnectionStore.upsert(record)
     return toConnection(record)
+  }
+
+  /**
+   * The existing connection for a re-connect, or null when there is none to carry anything from.
+   *
+   * An unopenable bag answers null rather than throwing, and is REPORTED: the platform-owned
+   * webhook secret inside it cannot be carried across, so the connection lands with none and
+   * `getWebhookState` reports `configured: false` — the operator's own panel states the loss and
+   * offers the mint that repairs it. Losing it loudly is strictly better than the alternative this
+   * replaced, which was refusing the re-connect and leaving the row unopenable forever.
+   */
+  private async openForReconnect(
+    workspaceId: string,
+    source: TaskSourceKind,
+  ): Promise<TaskConnectionRecord | null> {
+    try {
+      return await this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
+    } catch (error) {
+      this.log.warn(
+        'tracker re-connect against an unopenable bag: the stored webhook secret is not carried over',
+        { workspaceId, source, ...describeError(error) },
+      )
+      return null
+    }
   }
 
   /** The workspace's current connection for a source, or null if not connected. */
@@ -464,18 +525,46 @@ export class TaskConnectionService {
     return this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
   }
 
-  /** The connection's inbound-webhook state, safe to read back at any time (never the secret). */
+  /**
+   * The connection's inbound-webhook state, safe to read back at any time (never the secret).
+   *
+   * DEGRADES rather than refuses when the bag will not open: this is the read-only panel an
+   * operator opens to find out what is wrong, so failing it replaces an answer with a 503 about
+   * the very thing they came to look at. The gap travels as `credentialsReadable: false`, which
+   * is what keeps the reported `configured: false` from reading as "no secret has been minted" —
+   * the state that would have them mint one over a bag still holding the live secret.
+   */
   async getWebhookState(
     workspaceId: string,
     source: TaskSourceKind,
   ): Promise<TaskSourceWebhookState> {
-    const record = await this.getConnectionRecord(workspaceId, source)
+    const supported = this.deps.registry.get(source)?.webhook != null
+    const deliveryPath = trackerWebhookPath(workspaceId, source)
+    let record: TaskConnectionRecord | null
+    try {
+      record = await this.getConnectionRecord(workspaceId, source)
+    } catch (error) {
+      this.log.warn('tracker webhook state: the stored credentials could not be read', {
+        workspaceId,
+        source,
+        ...describeError(error),
+      })
+      return {
+        source,
+        supported,
+        configured: false,
+        deliveryPath,
+        replyAllow: '',
+        credentialsReadable: false,
+      }
+    }
     return {
       source,
-      supported: this.deps.registry.get(source)?.webhook != null,
+      supported,
       configured: trackerWebhookSecret(record?.credentials) !== '',
-      deliveryPath: trackerWebhookPath(workspaceId, source),
+      deliveryPath,
       replyAllow: record?.credentials?.[TRACKER_WEBHOOK_REPLY_ALLOW_KEY] ?? '',
+      credentialsReadable: true,
     }
   }
 
@@ -513,6 +602,8 @@ export class TaskConnectionService {
       configured: true,
       deliveryPath: trackerWebhookPath(workspaceId, source),
       replyAllow: credentials[TRACKER_WEBHOOK_REPLY_ALLOW_KEY] ?? '',
+      // This path OPENED the bag to rotate inside it, so the state it returns is fully known.
+      credentialsReadable: true,
       secret,
     }
   }
@@ -544,6 +635,8 @@ export class TaskConnectionService {
       configured: trackerWebhookSecret(credentials) !== '',
       deliveryPath: trackerWebhookPath(workspaceId, source),
       replyAllow: credentials[TRACKER_WEBHOOK_REPLY_ALLOW_KEY] ?? '',
+      // Editing the allow-list rewrites the opened bag, so this state is known too.
+      credentialsReadable: true,
     }
   }
 
@@ -551,6 +644,13 @@ export class TaskConnectionService {
    * Clear the inbound-webhook secret, so deliveries stop being accepted (they 503 at the receiver,
    * which is the honest answer: the operator turned this off). The connection itself is untouched
    * — polling intake and imports keep working exactly as before.
+   *
+   * This one must OPEN the bag, and rightly REFUSES when it cannot: clearing is a rewrite of the
+   * bag minus one key, so proceeding blind would replace the workspace's vendor credentials with
+   * an empty object and take polling intake and imports down with the webhook. The refusal is the
+   * store's typed 503 (`connection_credentials_unreadable`), which names the remedy — and the
+   * operator's actual goal is already met either way, since a receiver that cannot open the bag
+   * cannot verify a delivery against it.
    */
   async clearWebhookSecret(workspaceId: string, source: TaskSourceKind): Promise<void> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
@@ -576,6 +676,11 @@ export interface TaskSourceWebhookState {
   configured: boolean
   deliveryPath: string
   replyAllow: string
+  /**
+   * Whether the sealed bag could be opened to answer this. `false` ⇒ `configured` and `replyAllow`
+   * are their safe defaults rather than observed facts (see `taskSourceWebhookSchema`).
+   */
+  credentialsReadable: boolean
 }
 
 /**

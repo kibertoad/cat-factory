@@ -122,7 +122,12 @@ beforeEach(() => {
   requireDocument = vi.fn(async () => record())
   resolveConnections = vi.fn(
     async (_ws: string, sources: readonly DocumentSourceKind[]) =>
-      new Map(sources.map((source) => [source, connectionRecord(source)])),
+      new Map(
+        sources.map((source) => [
+          source,
+          { status: 'connected', connection: connectionRecord(source) },
+        ]),
+      ),
   )
   provider = { kind: 'figma', probeVersion } as unknown as DocumentSourceProvider
 })
@@ -216,7 +221,7 @@ describe('LinkedDocumentRefreshService', () => {
   })
 
   it('names a lost connection distinctly from an unreachable source', async () => {
-    resolveConnections.mockResolvedValue(new Map([['figma', null]]))
+    resolveConnections.mockResolvedValue(new Map([['figma', { status: 'not_connected' }]]))
 
     const [out] = await service({ versionCache: passThroughCache() }).refresh(WS, [record()])
 
@@ -231,8 +236,16 @@ describe('LinkedDocumentRefreshService', () => {
     // Reporting any of them as `source_unreachable` would send an operator hunting a Figma incident
     // that does not exist.
     const logger = createRecordingLogger()
-    resolveConnections.mockRejectedValue(
-      new Error('the stored figma credentials are not valid JSON'),
+    resolveConnections.mockResolvedValue(
+      new Map([
+        [
+          'figma',
+          {
+            status: 'unreadable',
+            cause: new Error('the stored figma credentials are not valid JSON'),
+          },
+        ],
+      ]),
     )
 
     const [out] = await service({ versionCache: passThroughCache(), logger }).refresh(WS, [
@@ -245,6 +258,21 @@ describe('LinkedDocumentRefreshService', () => {
     // node failed this permanently and by design (its connection repository decrypted inside, so it
     // stayed db-direct over an absent `db`); with the row sealed and openable over the machine API,
     // every remaining cause is a real fault.
+    expect(logger.lines.some((e) => e.level === 'warn')).toBe(true)
+  })
+
+  it('marks every source unreadable only when the READ ITSELF failed, not one bad bag', async () => {
+    // The stored-row query precedes every open, so its failure means nothing was learned about any
+    // source and the whole set is honestly unknown. That is the ONLY remaining path to a
+    // corpus-wide verdict: a single unopenable bag is confined to its own source above.
+    const logger = createRecordingLogger()
+    resolveConnections.mockRejectedValue(new Error('persistence RPC unreachable'))
+
+    const [out] = await service({ versionCache: passThroughCache(), logger }).refresh(WS, [
+      record(),
+    ])
+
+    expect(out?.freshness).toEqual({ status: 'unconfirmed', reason: 'credentials_unreadable' })
     expect(logger.lines.some((e) => e.level === 'warn')).toBe(true)
   })
 
