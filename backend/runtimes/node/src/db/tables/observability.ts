@@ -1,4 +1,13 @@
-import { bigint, index, integer, pgSchema, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
+import {
+  bigint,
+  doublePrecision,
+  index,
+  integer,
+  pgSchema,
+  pgTable,
+  primaryKey,
+  text,
+} from 'drizzle-orm/pg-core'
 
 // The observability schema: the four append-heavy TELEMETRY sinks (one row per model call,
 // per dispatched agent context, per web search a container agent performed, per tool call it
@@ -224,6 +233,70 @@ export const platformRunDays = pgTable(
     primaryKey({ columns: [t.workspace_id, t.day_start, t.status, t.failure_kind] }),
     // The prune's access path; the account-scoped read rides the primary key's leading columns.
     index('idx_platform_run_days_day').on(t.day_start),
+  ],
+)
+
+/**
+ * The DURABLE cost-attribution rollup (mirror of D1 migration 0084): one row per
+ * `(workspace, UTC day, run, agent kind, provider:model, billing, vendor)`, carrying the board
+ * shape the spend happened under (the run's block, service, repository, task type and tracker
+ * ticket), FROZEN at rollup time, plus the display names for each.
+ *
+ * It exists because the ledger cannot answer a TCO question durably: `token_usage` is pruned,
+ * and everything past the workspace is resolved at read time through `agent_runs` and the LIVE
+ * service↔repo / ticket↔block links, so re-pointing a service silently rewrites last quarter.
+ *
+ * This is the only table in the deployment with NO retention: there is no prune for it in
+ * either facade's sweep, and no `deleteOlderThan` on its port. Key columns carry '' rather
+ * than NULL (a nullable key column would not deduplicate a rewritten bucket); label columns
+ * stay nullable, matching the wire shape's nullable label.
+ */
+export const spendDays = pgTable(
+  'spend_days',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    day_start: bigint('day_start', { mode: 'number' }).notNull(),
+    execution_id: text('execution_id').notNull().default(''),
+    agent_kind: text('agent_kind').notNull().default(''),
+    provider: text('provider').notNull().default(''),
+    model: text('model').notNull().default(''),
+    billing: text('billing').notNull().default('metered'),
+    vendor: text('vendor').notNull().default(''),
+    account_id: text('account_id').notNull().default(''),
+    workspace_name: text('workspace_name'),
+    block_id: text('block_id').notNull().default(''),
+    block_title: text('block_title'),
+    service_id: text('service_id').notNull().default(''),
+    service_name: text('service_name'),
+    repo_id: text('repo_id').notNull().default(''),
+    repo_name: text('repo_name'),
+    task_type: text('task_type').notNull().default(''),
+    ticket_ref: text('ticket_ref').notNull().default(''),
+    calls: integer('calls').notNull().default(0),
+    input_tokens: bigint('input_tokens', { mode: 'number' }).notNull().default(0),
+    output_tokens: bigint('output_tokens', { mode: 'number' }).notNull().default(0),
+    metered_cost: doublePrecision('metered_cost').notNull().default(0),
+    subscription_cost: doublePrecision('subscription_cost').notNull().default(0),
+  },
+  (t) => [
+    primaryKey({
+      columns: [
+        t.workspace_id,
+        t.day_start,
+        t.execution_id,
+        t.agent_kind,
+        t.provider,
+        t.model,
+        t.billing,
+        t.vendor,
+      ],
+    }),
+    // The read's access path: one account's (optionally one board's) buckets over a window.
+    index('idx_spend_days_account').on(t.account_id, t.day_start),
+    // The rewrite's access path: a pass deletes its whole day window across every workspace.
+    index('idx_spend_days_day').on(t.day_start),
+    // Per-run lookup (the finest TCO axis), independent of when the run happened.
+    index('idx_spend_days_execution').on(t.workspace_id, t.execution_id),
   ],
 )
 

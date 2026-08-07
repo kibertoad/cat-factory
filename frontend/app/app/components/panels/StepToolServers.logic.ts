@@ -25,6 +25,29 @@ export const REASON_KEY: Record<ToolServerUnavailableReason, string> = {
   over_budget: 'panels.stepDetail.toolServers.reason.overBudget',
 }
 
+/**
+ * The i18n key per reason for the REMEDY line: what an operator has to change to get the server
+ * wired next run. Exhaustive on the same vocabulary and for the same reason as {@link REASON_KEY}.
+ *
+ * Split from the reason rather than folded into one sentence because the two answer different
+ * questions and only one of them is stable: the reason states what the dispatch decided and is a
+ * fact about that run forever, while the remedy names a surface this deployment happens to offer
+ * (the Infrastructure window, a declaration in deployment code). The split is also the vocabulary's
+ * own justification, since every member exists precisely because it needs a DIFFERENT fix
+ * (`docs`' table in `backend/docs/mcp-tool-servers.md` is the same mapping for a reader who never
+ * opens the SPA); a reason with no remedy leaves the operator holding an accurate diagnosis and no
+ * next step, which is the state this surface was built to end.
+ */
+export const REMEDY_KEY: Record<ToolServerUnavailableReason, string> = {
+  harness_unsupported: 'panels.stepDetail.toolServers.remedy.harnessUnsupported',
+  transport_unsupported: 'panels.stepDetail.toolServers.remedy.transportUnsupported',
+  missing_secret: 'panels.stepDetail.toolServers.remedy.missingSecret',
+  reserved_secret: 'panels.stepDetail.toolServers.remedy.reservedSecret',
+  oauth_not_connected: 'panels.stepDetail.toolServers.remedy.oauthNotConnected',
+  oauth_token_failed: 'panels.stepDetail.toolServers.remedy.oauthTokenFailed',
+  over_budget: 'panels.stepDetail.toolServers.remedy.overBudget',
+}
+
 /** The reason vocabulary as the SCHEMA states it: what a parity assertion grades {@link REASON_KEY} against. */
 export const KNOWN_REASONS = toolServerUnavailableReasonSchema.options
 
@@ -55,4 +78,19 @@ export function reasonText(
   return isKnownReason(reason)
     ? t(REASON_KEY[reason])
     : t('panels.stepDetail.toolServers.reason.unknown', { reason })
+}
+
+/**
+ * Render the remedy for one reason, or `null` when there is none to give.
+ *
+ * `null` is the honest answer for a RETIRED member and the reason it is not folded into
+ * {@link reasonText}: this build knows the code was recorded and does not know what it meant, so it
+ * cannot name a surface to change without guessing which current member the operator should act
+ * on. The reason line already names the raw code, which is the whole of what is known.
+ */
+export function remedyText(
+  reason: ToolServerUnavailableReason,
+  t: (key: string, params?: Record<string, unknown>) => string,
+): string | null {
+  return isKnownReason(reason) ? t(REMEDY_KEY[reason]) : null
 }

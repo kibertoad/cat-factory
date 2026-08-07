@@ -205,7 +205,7 @@ export interface BoardServiceDependencies {
    * (ADR 0037), so re-pointing a task is a policy decision, not a preference.
    *
    * Absent is not a hole to guard. With no preset library there is nothing for a task to point
-   * at: every task resolves the built-in `DEFAULT_RISK_POLICY`, whose role layer is empty and
+   * at: every task resolves the built-in `FALLBACK_RISK_POLICY`, whose role layer is empty and
    * therefore holds nobody to anything, so the guard is VACUOUS rather than skipped: the same
    * answer it gives on a workspace whose presets treat every initiator alike.
    */

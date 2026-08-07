@@ -1268,6 +1268,7 @@
         "within_thresholds": "Todas las puntuaciones están dentro de los umbrales de {preset}, por lo que el PR se fusionó automáticamente.",
         "exceeded_thresholds": "{axes} superó los umbrales de {preset}, por lo que el PR espera a que una persona lo fusione.",
         "auto_merge_disabled": "El preajuste {preset} envía todos los PR a una persona, así que este espera revisión.",
+        "no_policy_configured": "Ninguna política de fusión rigió esta ejecución, así que ningún PR se fusiona por sí solo. Esta implementación no tiene configurada una biblioteca de preajustes de fusión, algo que solo puede corregir un operador.",
         "no_rationale": "El fusionador puntuó el PR pero no dio ninguna justificación, así que no se pudo confiar en el veredicto para fusionar automáticamente; el PR espera a que una persona lo fusione.",
         "no_assessment": "El fusionador no devolvió una evaluación analizable, por lo que el PR espera a que una persona lo fusione.",
         "merge_failed": "Las puntuaciones estaban dentro de los umbrales de {preset}, pero la fusión automática no pudo completarse (por ejemplo, protección de rama o un conflicto), por lo que el PR espera a que una persona lo fusione.",
@@ -1433,6 +1434,15 @@
           "oauthTokenFailed": "no estuvo disponible: la conexión dejó de producir un token de acceso.",
           "overBudget": "no estuvo disponible: este agente declara más servidores de los que lleva una ejecución.",
           "unknown": "no estuvo disponible ({reason})."
+        },
+        "remedy": {
+          "harnessUnsupported": "Ejecuta el paso en una CLI de agente que hable MCP, o amplía la lista de harnesses del servidor.",
+          "transportUnsupported": "Declara un servidor stdio para él, o ejecuta el paso en una CLI de agente que alcance servidores HTTP.",
+          "missingSecret": "Configura la credencial que nombra en las credenciales de capacidades, en la ventana de Infraestructura.",
+          "reservedSecret": "Cambia la declaración para que pida otra clave; definir esa variable es justo lo que no ayudará.",
+          "oauthNotConnected": "Conecta este tablero con él desde la ventana de Infraestructura.",
+          "oauthTokenFailed": "Vuelve a conectarlo desde la ventana de Infraestructura, o espera a que pase la caída del proveedor.",
+          "overBudget": "Recorta lo que declara el agente, para que una ejecución pueda llevarlo todo."
         }
       },
       "adherence": {
@@ -1782,6 +1792,11 @@
     "retry": "Reintentar",
     "error": "No se pudieron cargar los informes.",
     "period": "Del {from} al {to}",
+    "rollup": {
+      "none": "La agregación de costes duradera aún no ha producido nada, así que esta ventana está vacía por falta de datos, no por falta de gasto.",
+      "stale": "La agregación de costes duradera solo llega hasta {date}. Lo posterior son datos que faltan, no una semana barata.",
+      "current": "De la agregación de costes duradera, completa hasta {date}. La atribución a repositorio, tique y ejecución es la que se registró cuando se produjo el gasto."
+    },
     "unattributed": "Sin atribuir",
     "window": {
       "oneDay": "Últimas 24 horas",
@@ -1824,6 +1839,7 @@
       "byAgentKind": "Gasto por tipo de agente",
       "byRepo": "Gasto por repositorio",
       "byTicket": "Gasto por tique",
+      "byRun": "Gasto por ejecución",
       "heading": "Gasto",
       "empty": "No se registró uso en este periodo.",
       "calls": "{count} llamada | {count} llamadas",
@@ -4221,6 +4237,25 @@
       "noneImported": "Aún no se ha importado ningún documento.",
       "imported": "Se importó \"{title}\"",
       "importFailed": "Error al importar"
+    },
+    "freshness": {
+      "updated": "Actualizado el {when}",
+      "refresh": "Buscar cambios",
+      "change": {
+        "unchanged": "Coincide con la fuente",
+        "reimported": "Se ha traído la versión más reciente",
+        "revision_only": "La fuente ha cambiado, pero esta copia sigue igual"
+      },
+      "checkedAt": "Comprobado el {when}",
+      "revision": "Revisión {version}",
+      "notApplicable": "Esta instalación no tiene lector para esa fuente, así que no hay nada con lo que comparar.",
+      "gap": {
+        "not_connected": "Sin comprobar: este espacio de trabajo ya no está conectado a la fuente.",
+        "credentials_unreadable": "Sin comprobar: esta instalación no puede leer las credenciales de la fuente.",
+        "unversioned": "Sin comprobar: la fuente no publica ninguna revisión con la que comparar.",
+        "source_unreachable": "Sin comprobar: no se ha podido contactar con la fuente."
+      },
+      "refreshFailed": "No se han podido buscar cambios"
     },
     "connect": {
       "title": "Conectar fuente",

@@ -1268,6 +1268,7 @@
         "within_thresholds": "Tüm puanlar {preset} eşiklerinin içinde olduğundan PR otomatik olarak birleştirildi.",
         "exceeded_thresholds": "{axes} {preset} eşiklerini aştığından PR bir kişinin birleştirmesini bekliyor.",
         "auto_merge_disabled": "{preset} ön ayarı her PR'yi bir kişiye yönlendirir, bu yüzden bu PR inceleme bekliyor.",
+        "no_policy_configured": "Bu çalıştırmayı yöneten bir birleştirme politikası yoktu, bu yüzden hiçbir PR kendiliğinden birleşmez. Bu dağıtımda birleştirme ön ayarı kitaplığı kurulu değil; bunu yalnızca bir operatör düzeltebilir.",
         "no_rationale": "Birleştirici PR'yi puanladı ancak bir gerekçe vermedi, bu yüzden karara otomatik birleştirme için güvenilemedi; PR bir kişinin birleştirmesini bekliyor.",
         "no_assessment": "Birleştirici ayrıştırılabilir bir değerlendirme döndürmedi, bu yüzden PR bir kişinin birleştirmesini bekliyor.",
         "merge_failed": "Puanlar {preset} eşiklerinin içindeydi ancak otomatik birleştirme tamamlanamadı (örneğin dal koruması veya bir çakışma), bu yüzden PR bir kişinin birleştirmesini bekliyor.",
@@ -1433,6 +1434,15 @@
           "oauthTokenFailed": "kullanılamadı: bağlantı artık erişim jetonu üretmiyor.",
           "overBudget": "kullanılamadı: bu ajan tek bir çalıştırmanın taşıdığından fazla araç sunucusu bildiriyor.",
           "unknown": "kullanılamadı ({reason})."
+        },
+        "remedy": {
+          "harnessUnsupported": "Adımı MCP konuşan bir ajan CLI'sinde çalıştırın ya da sunucunun harness listesini genişletin.",
+          "transportUnsupported": "Onun için bir stdio sunucusu bildirin ya da adımı HTTP sunucularına erişen bir ajan CLI'sinde çalıştırın.",
+          "missingSecret": "Adı geçen kimlik bilgisini Altyapı penceresindeki yetenek kimlik bilgilerinde ayarlayın.",
+          "reservedSecret": "Bildirimi başka bir anahtar isteyecek şekilde değiştirin; o değişkeni ayarlamak tam da yardımcı olmayacak şeydir.",
+          "oauthNotConnected": "Bu panoyu Altyapı penceresinden ona bağlayın.",
+          "oauthTokenFailed": "Altyapı penceresinden yeniden bağlayın ya da sağlayıcının kesintisinin geçmesini bekleyin.",
+          "overBudget": "Tek bir çalıştırma hepsini taşıyabilsin diye ajanın bildirdiklerini kısaltın."
         }
       },
       "adherence": {
@@ -1782,6 +1792,11 @@
     "retry": "Yeniden dene",
     "error": "Raporlar yüklenemedi.",
     "period": "{from} – {to}",
+    "rollup": {
+      "none": "Kalıcı maliyet toplaması henüz hiçbir şey üretmedi; bu pencere harcama olmadığı için değil, veri olmadığı için boş.",
+      "stale": "Kalıcı maliyet toplaması yalnızca {date} tarihine kadar geliyor. Sonrası ucuz geçen bir hafta değil, eksik veri.",
+      "current": "Kalıcı maliyet toplamasından; {date} tarihine kadar eksiksiz. Buradaki depo, bilet ve çalıştırma ataması, harcama yapıldığı anda kaydedilenidir."
+    },
     "unattributed": "Atanmamış",
     "window": {
       "oneDay": "Son 24 saat",
@@ -1824,6 +1839,7 @@
       "byAgentKind": "Ajan türüne göre harcama",
       "byRepo": "Depoya göre harcama",
       "byTicket": "Bilete göre harcama",
+      "byRun": "Çalıştırmaya göre harcama",
       "heading": "Harcama",
       "empty": "Bu dönemde kayıtlı kullanım yok.",
       "calls": "{count} çağrı | {count} çağrı",
@@ -4221,6 +4237,25 @@
       "noneImported": "Henüz belge içe aktarılmadı.",
       "imported": "\"{title}\" içe aktarıldı",
       "importFailed": "İçe aktarma başarısız"
+    },
+    "freshness": {
+      "updated": "{when} tarihinde güncellendi",
+      "refresh": "Değişiklikleri denetle",
+      "change": {
+        "unchanged": "Kaynakla eşleşiyor",
+        "reimported": "Daha yeni sürüm alındı",
+        "revision_only": "Kaynak değişti, ancak bu kopya aynı kaldı"
+      },
+      "checkedAt": "{when} tarihinde denetlendi",
+      "revision": "Revizyon {version}",
+      "notApplicable": "Bu kurulumda o kaynak için okuyucu yok, dolayısıyla karşılaştırılacak bir şey de yok.",
+      "gap": {
+        "not_connected": "Denetlenmedi: bu çalışma alanı artık kaynağa bağlı değil.",
+        "credentials_unreadable": "Denetlenmedi: bu kurulum kaynağın kimlik bilgilerini okuyamıyor.",
+        "unversioned": "Denetlenmedi: kaynak karşılaştırılacak bir revizyon yayınlamıyor.",
+        "source_unreachable": "Denetlenmedi: kaynağa ulaşılamadı."
+      },
+      "refreshFailed": "Değişiklikler denetlenemedi"
     },
     "connect": {
       "title": "Kaynak bağla",

@@ -80,6 +80,35 @@ describe('StepGraph.resetStepForRerun', () => {
     expect(s.jobId).toBeUndefined()
     expect(s.state).toBe('pending')
   })
+
+  it('drops the tool-server record but keeps the attribution the settle path reads back', () => {
+    // The two halves of one rule, asserted together because the rule is the DIFFERENCE between
+    // them: both are pinned at dispatch by `recordDispatchAttribution` and only one is consumed
+    // again. `model` and its two siblings are read when the job's usage lands, so a reset that
+    // cleared them would put every re-run's `token_usage` row back to provider "unknown" — the bug
+    // the guard in that function exists to prevent. The tool-server record has no such reader, so
+    // holding it past a reset only lets a re-armed step render chips for a resolution no dispatch
+    // has made yet.
+    const graph = new StepGraph(clock)
+    const s = step({
+      state: 'working',
+      model: 'anthropic/claude-x',
+      subscriptionTokenId: 'tok_1',
+      initiatedByUserId: 'user_1',
+      toolServers: {
+        agentKind: 'coder',
+        wired: [{ id: 'linear', label: 'Linear', transport: 'http' }],
+        unavailable: [{ id: 'slack', label: 'Slack', reason: 'missing_secret' }],
+      },
+    })
+    graph.resetStepForRerun(s)
+    expect(s.toolServers).toBeUndefined()
+    expect([s.model, s.subscriptionTokenId, s.initiatedByUserId]).toEqual([
+      'anthropic/claude-x',
+      'tok_1',
+      'user_1',
+    ])
+  })
 })
 
 // Two facts have to OUTLIVE a reset, because a reset is exactly what destroys the evidence that

@@ -55,7 +55,7 @@ function refresherReturning(records: DocumentRecord[]): LinkedDocumentRefresher 
     refresh: async () =>
       records.map((record) => ({
         record,
-        freshness: { status: 'confirmed' as const, version: 'v9', reimported: true },
+        freshness: { status: 'confirmed' as const, version: 'v9', change: 'reimported' },
       })),
   }
 }

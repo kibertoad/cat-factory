@@ -1268,6 +1268,7 @@
         "within_thresholds": "Wszystkie oceny mieszczą się w progach {preset}, więc PR został scalony automatycznie.",
         "exceeded_thresholds": "{axes} przekroczył progi {preset}, więc PR czeka na scalenie przez człowieka.",
         "auto_merge_disabled": "Ustawienie {preset} kieruje każdy PR do człowieka, więc ten czeka na przegląd.",
+        "no_policy_configured": "Tym uruchomieniem nie rządziła żadna polityka scalania, więc żaden PR nie scala się samodzielnie. To wdrożenie nie ma skonfigurowanej biblioteki ustawień scalania, co może naprawić tylko operator.",
         "no_rationale": "Scalający ocenił PR, ale nie podał uzasadnienia, więc werdyktowi nie można było zaufać na tyle, by scalić automatycznie; PR czeka na scalenie przez człowieka.",
         "no_assessment": "Scalający nie zwrócił możliwej do przetworzenia oceny, więc PR czeka na scalenie przez człowieka.",
         "merge_failed": "Oceny mieściły się w progach {preset}, ale automatyczne scalenie nie mogło się powieść (np. ochrona gałęzi lub konflikt), więc PR czeka na scalenie przez człowieka.",
@@ -1433,6 +1434,15 @@
           "oauthTokenFailed": "nie był dostępny: połączenie przestało wydawać token dostępu.",
           "overBudget": "nie był dostępny: ten agent deklaruje więcej serwerów narzędzi, niż niesie jedno uruchomienie.",
           "unknown": "nie był dostępny ({reason})."
+        },
+        "remedy": {
+          "harnessUnsupported": "Uruchom krok na CLI agenta, które zna MCP, albo poszerz listę harnessów serwera.",
+          "transportUnsupported": "Zadeklaruj dla niego serwer stdio albo uruchom krok na CLI agenta, które dosięga serwerów HTTP.",
+          "missingSecret": "Ustaw wskazane poświadczenie w poświadczeniach możliwości, w oknie Infrastruktura.",
+          "reservedSecret": "Zmień deklarację tak, by prosiła o inny klucz; ustawienie tej zmiennej to właśnie to, co nie pomoże.",
+          "oauthNotConnected": "Połącz tę tablicę z serwerem w oknie Infrastruktura.",
+          "oauthTokenFailed": "Połącz go ponownie w oknie Infrastruktura albo przeczekaj awarię dostawcy.",
+          "overBudget": "Skróć to, co deklaruje agent, aby jedno uruchomienie uniosło całość."
         }
       },
       "adherence": {
@@ -1782,6 +1792,11 @@
     "retry": "Spróbuj ponownie",
     "error": "Nie udało się wczytać raportów.",
     "period": "Od {from} do {to}",
+    "rollup": {
+      "none": "Trwałe zestawienie kosztów nie wyprodukowało jeszcze niczego, więc to okno jest puste z braku danych, a nie z braku wydatków.",
+      "stale": "Trwałe zestawienie kosztów sięga tylko do {date}. To, co po tej dacie, to brakujące dane, a nie tani tydzień.",
+      "current": "Z trwałego zestawienia kosztów, kompletnego do {date}. Przypisanie do repozytorium, zgłoszenia i uruchomienia jest tym zapisanym w chwili poniesienia kosztu."
+    },
     "unattributed": "Nieprzypisane",
     "window": {
       "oneDay": "Ostatnie 24 godziny",
@@ -1824,6 +1839,7 @@
       "byAgentKind": "Koszty według typu agenta",
       "byRepo": "Koszty według repozytorium",
       "byTicket": "Koszty według zgłoszenia",
+      "byRun": "Koszty według uruchomienia",
       "heading": "Koszty",
       "empty": "W tym okresie nie zarejestrowano użycia.",
       "calls": "{count} wywołanie | {count} wywołania | {count} wywołań",
@@ -4221,6 +4237,25 @@
       "noneImported": "Nie zaimportowano jeszcze żadnych dokumentów.",
       "imported": "Zaimportowano „{title}”",
       "importFailed": "Import nie powiódł się"
+    },
+    "freshness": {
+      "updated": "Zaktualizowano {when}",
+      "refresh": "Sprawdź zmiany",
+      "change": {
+        "unchanged": "Zgodny ze źródłem",
+        "reimported": "Pobrano nowszą wersję",
+        "revision_only": "Źródło się zmieniło, ale ta kopia pozostaje bez zmian"
+      },
+      "checkedAt": "Sprawdzono {when}",
+      "revision": "Wersja {version}",
+      "notApplicable": "Ta instalacja nie ma czytnika dla tego źródła, więc nie ma z czym porównać.",
+      "gap": {
+        "not_connected": "Nie sprawdzono: ta przestrzeń robocza nie jest już połączona ze źródłem.",
+        "credentials_unreadable": "Nie sprawdzono: ta instalacja nie może odczytać poświadczeń źródła.",
+        "unversioned": "Nie sprawdzono: źródło nie udostępnia wersji do porównania.",
+        "source_unreachable": "Nie sprawdzono: nie udało się połączyć ze źródłem."
+      },
+      "refreshFailed": "Nie udało się sprawdzić zmian"
     },
     "connect": {
       "title": "Połącz źródło",
