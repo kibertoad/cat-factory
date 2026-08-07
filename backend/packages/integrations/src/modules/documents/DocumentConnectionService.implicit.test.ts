@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   Clock,
   DocumentConnectionRecord,
-  DocumentConnectionRepository,
+  DocumentConnectionStore,
   DocumentSourceProvider,
   DocumentSourceRegistry,
   NormalizedConnection,
@@ -26,14 +26,25 @@ function makeService(opts: {
   for (const r of opts.stored ?? []) store.set(r.source, r)
   const reads = { byWorkspace: 0, listed: 0 }
   const invalidatedGroups: string[] = []
-  const documentConnectionRepository: DocumentConnectionRepository = {
+  // Faked at the STORE level: these cases are about the service's stored-⊕-implicit resolution,
+  // and the sealing itself has its own unit test (`sealedConnectionStore.test.ts`).
+  const documentConnectionStore: DocumentConnectionStore = {
     async getByWorkspace(_ws, source) {
       reads.byWorkspace += 1
       return store.get(source) ?? null
     },
-    async listByWorkspace() {
+    async listBySources(_ws, sources) {
       reads.listed += 1
-      return [...store.values()]
+      return sources.map((source) => store.get(source)).filter((row) => row !== undefined)
+    },
+    async listSummaries() {
+      reads.listed += 1
+      return [...store.values()].map(({ workspaceId, source, label, createdAt }) => ({
+        workspaceId,
+        source,
+        label,
+        createdAt,
+      }))
     },
     async upsert(record) {
       store.set(record.source, record)
@@ -66,7 +77,7 @@ function makeService(opts: {
   const clock: Clock = { now: () => 1000 }
 
   const service = new DocumentConnectionService({
-    documentConnectionRepository,
+    documentConnectionStore,
     registry,
     workspaceRepository,
     clock,

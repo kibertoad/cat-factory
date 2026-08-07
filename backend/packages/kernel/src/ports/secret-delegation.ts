@@ -50,6 +50,10 @@ export const ORG_SECRET_SOURCES = [
   'observability_connection',
   /** `incident_enrichment_connections.credentials`: the PagerDuty / incident.io credentials. */
   'incident_enrichment_connection',
+  /** `document_connections.credentials`: a workspace's document-source credential bag. */
+  'document_source_connection',
+  /** `task_connections.credentials`: a workspace's tracker credential bag. */
+  'task_source_connection',
 ] as const
 
 export type OrgSecretSource = (typeof ORG_SECRET_SOURCES)[number]

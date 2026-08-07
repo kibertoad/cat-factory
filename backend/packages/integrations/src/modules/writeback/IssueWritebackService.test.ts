@@ -7,7 +7,7 @@ import type {
   ReviewQuestionPostKey,
   ReviewQuestionPostRecord,
   ReviewQuestionPostRepository,
-  TaskConnectionRepository,
+  TaskConnectionStore,
   TaskRecord,
   TrackerSettings,
   TrackerSettingsRepository,
@@ -63,15 +63,20 @@ function fakeTasks(issues: TaskRecord[]): TaskRepository {
  */
 function fakeConnections(
   options: { webhookSecret?: string; throws?: boolean } = {},
-): TaskConnectionRepository {
+): TaskConnectionStore {
   return {
-    getByWorkspace: async () => {
+    getByWorkspace: async () => null,
+    listBySources: async (_ws, sources) => {
       if (options.throws) throw new Error('cipher unavailable')
-      return {
-        credentials: options.webhookSecret ? { webhookSecret: options.webhookSecret } : {},
-      } as never
+      return sources.map(
+        (source) =>
+          ({
+            source,
+            credentials: options.webhookSecret ? { webhookSecret: options.webhookSecret } : {},
+          }) as never,
+      )
     },
-    listByWorkspace: async () => [],
+    listSummaries: async () => [],
     upsert: async () => {},
     softDelete: async () => {},
   }
@@ -611,7 +616,7 @@ describe('IssueWritebackService.postReviewQuestions', () => {
       trackerSettingsRepository: fakeTrackerSettings(settings()),
       taskRepository: fakeTasks([githubIssue('acme/web#3')]),
       reviewQuestionPostRepository: fakeMarkers(),
-      taskConnectionRepository: fakeConnections({ webhookSecret: 'whsec' }),
+      taskConnectionStore: fakeConnections({ webhookSecret: 'whsec' }),
       commentOnGitHubIssue: async (_ws, _id, body) => void comments.push(body),
     })
     const outcome = await svc.postReviewQuestions(
@@ -822,7 +827,7 @@ describe('IssueWritebackService.postReviewQuestions', () => {
 describe('IssueWritebackService.postReviewQuestions — answer channels', () => {
   /** Post one question comment and hand back what landed on the issue. */
   async function postWith(
-    connections: TaskConnectionRepository | undefined,
+    connections: TaskConnectionStore | undefined,
     issues = [githubIssue('acme/web#3')],
   ): Promise<string> {
     const comments: string[] = []
@@ -830,7 +835,7 @@ describe('IssueWritebackService.postReviewQuestions — answer channels', () => 
       trackerSettingsRepository: fakeTrackerSettings(settings({ writebackQuestionsOnPark: true })),
       taskRepository: fakeTasks(issues),
       reviewQuestionPostRepository: fakeMarkers(),
-      ...(connections ? { taskConnectionRepository: connections } : {}),
+      ...(connections ? { taskConnectionStore: connections } : {}),
       commentOnGitHubIssue: async (_ws, _id, body) => void comments.push(body),
     })
     expect(await svc.postReviewQuestions('ws', block(), questionPost())).toEqual({
@@ -867,15 +872,18 @@ describe('IssueWritebackService.postReviewQuestions — answer channels', () => 
     expect(await postWith(fakeConnections({ throws: true }))).not.toContain('@cat-factory')
   })
 
-  it('reads the connection ONCE per distinct source, not once per linked issue', async () => {
+  it('reads the connections ONCE for the whole block, not once per linked issue', async () => {
     // A block can carry several issues on one tracker; the reply channel is a property of the
-    // `(workspace, source)` connection, and each read decrypts a credential bag.
+    // `(workspace, source)` connection, and each read opens a credential bag — which on a
+    // mothership-mode node is a round trip.
     let reads = 0
-    const counting: TaskConnectionRepository = {
+    const counting: TaskConnectionStore = {
       ...fakeConnections({ webhookSecret: 'whsec' }),
-      getByWorkspace: async () => {
+      listBySources: async (_ws, sources) => {
         reads += 1
-        return { credentials: { webhookSecret: 'whsec' } } as never
+        return sources.map(
+          (source) => ({ source, credentials: { webhookSecret: 'whsec' } }) as never,
+        )
       },
     }
     const comments: string[] = []
@@ -887,7 +895,7 @@ describe('IssueWritebackService.postReviewQuestions — answer channels', () => 
         githubIssue('acme/web#5'),
       ]),
       reviewQuestionPostRepository: fakeMarkers(),
-      taskConnectionRepository: counting,
+      taskConnectionStore: counting,
       commentOnGitHubIssue: async (_ws, _id, body) => void comments.push(body),
     })
     expect(await svc.postReviewQuestions('ws', block(), questionPost())).toEqual({

@@ -1,5 +1,5 @@
 import type { Clock } from '@cat-factory/kernel'
-import type { TaskConnectionRecord, TaskConnectionRepository } from '@cat-factory/kernel'
+import type { TaskConnectionRecord, TaskConnectionStore } from '@cat-factory/kernel'
 import type { TaskSourceSettingsRepository } from '@cat-factory/kernel'
 import type { GitHubInstallationRepository, VcsProvider } from '@cat-factory/kernel'
 import type { TaskCredentials, TaskSourceProvider, TaskSourceRegistry } from '@cat-factory/kernel'
@@ -26,9 +26,13 @@ import type { LinearTeam } from './linear.logic.js'
 // source's provider, then stores the credential bag; the import path resolves it
 // to authenticate. Credentials are never exposed back to clients — only the safe
 // connection metadata (source, label, timestamp) is.
+//
+// The bag is sealed in the STORE (`createTaskConnectionStore`), not in the repository, so a
+// deployment holding no key for these rows — a mothership-mode node — still files tickets with
+// them, by naming the row over `/internal/secrets/unseal`.
 
 export interface TaskConnectionServiceDependencies {
-  taskConnectionRepository: TaskConnectionRepository
+  taskConnectionStore: TaskConnectionStore
   /** Per-workspace on/off toggle for each source (absent row ⇒ enabled). */
   taskSourceSettingsRepository: TaskSourceSettingsRepository
   registry: TaskSourceRegistry
@@ -125,7 +129,12 @@ function hasListTeams(
   return typeof (provider as Partial<LinearTeamLister>).listTeams === 'function'
 }
 
-function toConnection(record: TaskConnectionRecord): TaskConnection {
+/** The client-safe projection: everything but the credential bag. */
+function toConnection(record: {
+  source: TaskSourceKind
+  label: string
+  createdAt: number
+}): TaskConnection {
   return {
     source: record.source,
     label: record.label,
@@ -153,8 +162,10 @@ export class TaskConnectionService {
     const vcsConnection = this.deps.installations
       ? await this.deps.installations.getByWorkspace(workspaceId)
       : null
+    // Summaries: this asks WHICH sources are connected, and opening a bag per source to answer
+    // it would fail the whole settings panel on the first row this deployment cannot open.
     const connectedSources = new Set(
-      (await this.deps.taskConnectionRepository.listByWorkspace(workspaceId)).map((c) => c.source),
+      (await this.deps.taskConnectionStore.listSummaries(workspaceId)).map((c) => c.source),
     )
     const states: TaskSourceState[] = []
     for (const provider of this.deps.registry.list()) {
@@ -218,7 +229,7 @@ export class TaskConnectionService {
     }
 
     // Credentialed source (Jira, …): a connection must exist before we can probe.
-    const connection = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
+    const connection = await this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
     if (!connection) {
       return {
         source,
@@ -345,10 +356,7 @@ export class TaskConnectionService {
    */
   async listLinearTeams(workspaceId: string): Promise<LinearTeam[]> {
     const provider = this.requireProvider('linear')
-    const connection = await this.deps.taskConnectionRepository.getByWorkspace(
-      workspaceId,
-      'linear',
-    )
+    const connection = await this.deps.taskConnectionStore.getByWorkspace(workspaceId, 'linear')
     if (!connection)
       throw new ConflictError(`Workspace '${workspaceId}' is not connected to linear`)
     if (!hasListTeams(provider)) return []
@@ -379,7 +387,12 @@ export class TaskConnectionService {
     credentials: TaskCredentials,
     label: string,
   ): Promise<TaskConnection> {
-    const existing = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
+    // The stored bag is READ here, not just its timestamp: `preservedPlatformCredentials` below
+    // carries the platform-owned webhook keys across a vendor-credential rotation, and they live
+    // inside the bag. So a re-connect against a row this deployment cannot open fails rather than
+    // silently dropping the workspace's webhook secret, which would 503 every later delivery with
+    // nothing to point at the cause.
+    const existing = await this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
     const record: TaskConnectionRecord = {
       workspaceId,
       source,
@@ -394,20 +407,25 @@ export class TaskConnectionService {
       createdAt: existing?.createdAt ?? this.deps.clock.now(),
       deletedAt: null,
     }
-    await this.deps.taskConnectionRepository.upsert(record)
+    await this.deps.taskConnectionStore.upsert(record)
     return toConnection(record)
   }
 
   /** The workspace's current connection for a source, or null if not connected. */
   async getConnection(workspaceId: string, source: TaskSourceKind): Promise<TaskConnection | null> {
-    const record = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
-    return record ? toConnection(record) : null
+    const summary = await this.summaryFor(workspaceId, source)
+    return summary ? toConnection(summary) : null
   }
 
   /** Every live connection the workspace holds, across sources. */
   async listConnections(workspaceId: string): Promise<TaskConnection[]> {
-    const records = await this.deps.taskConnectionRepository.listByWorkspace(workspaceId)
-    return records.map(toConnection)
+    return (await this.deps.taskConnectionStore.listSummaries(workspaceId)).map(toConnection)
+  }
+
+  /** The stored connection's non-secret half, opening nothing. */
+  private async summaryFor(workspaceId: string, source: TaskSourceKind) {
+    const summaries = await this.deps.taskConnectionStore.listSummaries(workspaceId)
+    return summaries.find((summary) => summary.source === source)
   }
 
   /** Resolve the live connection (with credentials) or throw if not connected. */
@@ -415,7 +433,7 @@ export class TaskConnectionService {
     workspaceId: string,
     source: TaskSourceKind,
   ): Promise<TaskConnectionRecord> {
-    const record = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
+    const record = await this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
     if (!record) {
       throw new ConflictError(`Workspace '${workspaceId}' is not connected to ${source}`)
     }
@@ -443,7 +461,7 @@ export class TaskConnectionService {
     workspaceId: string,
     source: TaskSourceKind,
   ): Promise<TaskConnectionRecord | null> {
-    return this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
+    return this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
   }
 
   /** The connection's inbound-webhook state, safe to read back at any time (never the secret). */
@@ -488,7 +506,7 @@ export class TaskConnectionService {
         ? { [TRACKER_WEBHOOK_REPLY_ALLOW_KEY]: input.replyAllow.trim() }
         : {}),
     }
-    await this.deps.taskConnectionRepository.upsert({ ...record, credentials })
+    await this.deps.taskConnectionStore.upsert({ ...record, credentials })
     return {
       source,
       supported: true,
@@ -519,7 +537,7 @@ export class TaskConnectionService {
       ...record.credentials,
       [TRACKER_WEBHOOK_REPLY_ALLOW_KEY]: replyAllow.trim(),
     }
-    await this.deps.taskConnectionRepository.upsert({ ...record, credentials })
+    await this.deps.taskConnectionStore.upsert({ ...record, credentials })
     return {
       source,
       supported: this.deps.registry.get(source)?.webhook != null,
@@ -536,18 +554,18 @@ export class TaskConnectionService {
    */
   async clearWebhookSecret(workspaceId: string, source: TaskSourceKind): Promise<void> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    const record = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
+    const record = await this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
     if (!record) return
     const credentials = { ...record.credentials }
     delete credentials[TRACKER_WEBHOOK_SECRET_KEY]
-    await this.deps.taskConnectionRepository.upsert({ ...record, credentials })
+    await this.deps.taskConnectionStore.upsert({ ...record, credentials })
   }
 
   /** Disconnect a workspace from a source (tombstones the binding). */
   async disconnect(workspaceId: string, source: TaskSourceKind): Promise<void> {
-    const record = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
-    if (!record) return
-    await this.deps.taskConnectionRepository.softDelete(workspaceId, source, this.deps.clock.now())
+    // Presence, not the bag: removing a connection nobody can open must not itself need the key.
+    if (!(await this.summaryFor(workspaceId, source))) return
+    await this.deps.taskConnectionStore.softDelete(workspaceId, source, this.deps.clock.now())
   }
 }
 

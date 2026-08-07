@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   GitHubInstallation,
   GitHubInstallationRepository,
-  TaskConnectionRepository,
+  TaskConnectionStore,
   TaskSourceProvider,
   TaskSourceRegistry,
   TaskSourceSettingsRepository,
@@ -38,11 +38,11 @@ function service(connected: VcsProvider | null): TaskConnectionService {
     },
   } as unknown as GitHubInstallationRepository
   return new TaskConnectionService({
-    taskConnectionRepository: {
-      async listByWorkspace() {
+    taskConnectionStore: {
+      async listSummaries() {
         return []
       },
-    } as unknown as TaskConnectionRepository,
+    } as unknown as TaskConnectionStore,
     taskSourceSettingsRepository: {
       async getByWorkspace() {
         return []

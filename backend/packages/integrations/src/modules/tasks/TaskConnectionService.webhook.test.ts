@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type {
   TaskConnectionRecord,
-  TaskConnectionRepository,
+  TaskConnectionStore,
   TaskSourceProvider,
 } from '@cat-factory/kernel'
 import { TaskConnectionService, trackerWebhookPath } from './TaskConnectionService.js'
@@ -19,17 +19,28 @@ import { MapTaskSourceRegistry } from './tasks.logic.js'
 
 function makeService(seed: TaskConnectionRecord[] = []) {
   const rows = new Map(seed.map((r) => [`${r.workspaceId}:${r.source}`, r]))
-  const taskConnectionRepository: TaskConnectionRepository = {
+  // Faked at the STORE level: these cases are about the webhook secret's read-modify-write, and
+  // the sealing itself has its own unit test (`sealedConnectionStore.test.ts`).
+  const taskConnectionStore: TaskConnectionStore = {
     getByWorkspace: async (workspaceId, source) => rows.get(`${workspaceId}:${source}`) ?? null,
-    listByWorkspace: async (workspaceId) =>
-      [...rows.values()].filter((r) => r.workspaceId === workspaceId),
+    listBySources: async (workspaceId, sources) =>
+      sources.map((source) => rows.get(`${workspaceId}:${source}`)).filter((r) => r !== undefined),
+    listSummaries: async (workspaceId) =>
+      [...rows.values()]
+        .filter((r) => r.workspaceId === workspaceId)
+        .map(({ workspaceId: ws, source, label, createdAt }) => ({
+          workspaceId: ws,
+          source,
+          label,
+          createdAt,
+        })),
     upsert: async (record) => {
       rows.set(`${record.workspaceId}:${record.source}`, record)
     },
     softDelete: async () => {},
   }
   const service = new TaskConnectionService({
-    taskConnectionRepository,
+    taskConnectionStore,
     taskSourceSettingsRepository: {
       getByWorkspace: async () => [],
       get: async () => null,
@@ -99,9 +110,10 @@ describe('TaskConnectionService — inbound webhook configuration', () => {
     // so the surface can never offer a secret for deliveries that would 404 on arrival.
     const bare = { ...new JiraProvider(), webhook: undefined } as unknown as TaskSourceProvider
     const svc = new TaskConnectionService({
-      taskConnectionRepository: {
+      taskConnectionStore: {
         getByWorkspace: async () => connected,
-        listByWorkspace: async () => [connected],
+        listBySources: async () => [connected],
+        listSummaries: async () => [connected],
         upsert: async () => {},
         softDelete: async () => {},
       },

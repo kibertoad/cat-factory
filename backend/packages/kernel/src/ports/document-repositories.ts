@@ -12,14 +12,25 @@ import type { DocumentCredentials } from './document-source.js'
 // tables serves every provider.
 
 /**
- * A workspace's connection to one document source, including its credential bag.
- * Credentials are infrastructure detail (never sent on the wire); they live here
- * so the import path can authenticate against the source for this workspace.
+ * A workspace's connection to one document source AS STORED: the credential bag as a SEALED
+ * envelope, plus the non-secret label.
+ *
+ * The seal is the row's own representation, not an encoding the repository hides. A repository
+ * that decrypted on read could only ever be called by a process holding the key, which is what
+ * kept this integration off the mothership persistence RPC while every other connection surface
+ * (environments, observability, Slack, runner pools) crossed it as ciphertext. Here the envelope
+ * is the value, so the row travels like any other, and the ONE place it is opened is
+ * {@link DocumentConnectionStore}.
  */
-export interface DocumentConnectionRecord {
+export interface SealedDocumentConnectionRecord {
   workspaceId: string
   source: DocumentSourceKind
-  credentials: DocumentCredentials
+  /**
+   * AES-GCM envelope over the JSON credential bag, sealed under the deployment's
+   * `cat-factory:documents` cipher — the `document_source_connection` entry of the mothership's
+   * `ORG_SECRET_SOURCES` table, which is how a node holding no org key opens it.
+   */
+  credentialsCipher: string
   /** Human-friendly label for the connection (site URL, workspace name). */
   label: string
   createdAt: number
@@ -32,10 +43,68 @@ export interface DocumentConnectionRepository {
   getByWorkspace(
     workspaceId: string,
     source: DocumentSourceKind,
-  ): Promise<DocumentConnectionRecord | null>
+  ): Promise<SealedDocumentConnectionRecord | null>
   /** Every live connection the workspace holds, across sources. */
-  listByWorkspace(workspaceId: string): Promise<DocumentConnectionRecord[]>
+  listByWorkspace(workspaceId: string): Promise<SealedDocumentConnectionRecord[]>
   /** Create or replace the live connection for a (workspace, source). */
+  upsert(record: SealedDocumentConnectionRecord): Promise<void>
+  /** Tombstone the workspace's connection to a source. */
+  softDelete(workspaceId: string, source: DocumentSourceKind, at: number): Promise<void>
+}
+
+/**
+ * The OPENED view of the same rows: what a provider actually authenticates with.
+ *
+ * Credentials are infrastructure detail (never sent on the wire); they live here so the import
+ * path can authenticate against the source for this workspace.
+ */
+export interface DocumentConnectionRecord {
+  workspaceId: string
+  source: DocumentSourceKind
+  credentials: DocumentCredentials
+  label: string
+  createdAt: number
+  deletedAt: number | null
+}
+
+/** A stored connection's non-secret half: everything but the credential bag. */
+export interface DocumentConnectionSummary {
+  workspaceId: string
+  source: DocumentSourceKind
+  label: string
+  createdAt: number
+}
+
+/**
+ * The credential-bearing view of {@link DocumentConnectionRepository}, and the ONE place a
+ * document-source credential is sealed or opened. Implemented by `createDocumentConnectionStore`
+ * (`@cat-factory/integrations`) over an `OrgSecretCipher`, so on a mothership-mode node the open
+ * is a `/internal/secrets/unseal` round trip and no key has to be present on the machine.
+ *
+ * The surface is split by how much each caller needs OPENED, not by how much it reads. That is
+ * the whole reason it is not just the repository with decryption bolted on: a settings panel
+ * wants labels, and opening a bag per connected source to render one would turn a page load into
+ * a burst of unseal round trips and fail the whole panel on the first row this deployment cannot
+ * open. So `listSummaries` opens nothing, and the run path names the sources it is about to
+ * authenticate as ({@link listBySources}) rather than opening the workspace's whole shelf.
+ */
+export interface DocumentConnectionStore {
+  /** The workspace's live connection for a source, opened, or null if not connected. */
+  getByWorkspace(
+    workspaceId: string,
+    source: DocumentSourceKind,
+  ): Promise<DocumentConnectionRecord | null>
+  /**
+   * The named sources' live connections, opened, in ONE stored-row read. A source with no stored
+   * row is simply absent from the result (callers index by `source`); empty input reads nothing.
+   */
+  listBySources(
+    workspaceId: string,
+    sources: readonly DocumentSourceKind[],
+  ): Promise<DocumentConnectionRecord[]>
+  /** Every live connection's non-secret half. Opens no envelope. */
+  listSummaries(workspaceId: string): Promise<DocumentConnectionSummary[]>
+  /** Seal `record`'s bag and store it as the live connection for its (workspace, source). */
   upsert(record: DocumentConnectionRecord): Promise<void>
   /** Tombstone the workspace's connection to a source. */
   softDelete(workspaceId: string, source: DocumentSourceKind, at: number): Promise<void>

@@ -336,6 +336,9 @@ export { DEPLOYMENT_DOCUMENT_CACHE_GROUP } from './document-source.js'
 export type {
   DocumentConnectionRecord,
   DocumentConnectionRepository,
+  DocumentConnectionStore,
+  DocumentConnectionSummary,
+  SealedDocumentConnectionRecord,
   DocumentRecord,
   DocumentRef,
   DocumentRepository,
@@ -373,6 +376,9 @@ export {
 export type {
   TaskConnectionRecord,
   TaskConnectionRepository,
+  TaskConnectionStore,
+  TaskConnectionSummary,
+  SealedTaskConnectionRecord,
   TaskSourceSettingsRecord,
   TaskSourceSettingsRepository,
   TaskRecord,

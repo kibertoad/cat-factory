@@ -28,6 +28,12 @@ export {
   DocumentConnectionService,
   type DocumentConnectionServiceDependencies,
 } from './modules/documents/DocumentConnectionService.js'
+// The ONE place a document-source credential bag is sealed or opened — over the deployment's own
+// key, or over the mothership's when this node holds none.
+export {
+  createDocumentConnectionStore,
+  type DocumentConnectionStoreDependencies,
+} from './modules/documents/documentConnectionStore.js'
 export {
   DocumentContentResolverService,
   type DocumentContentResolverServiceDependencies,
@@ -112,6 +118,11 @@ export {
   TaskConnectionService,
   type TaskConnectionServiceDependencies,
 } from './modules/tasks/TaskConnectionService.js'
+// The ONE place a tracker credential bag is sealed or opened; the document-source sibling above.
+export {
+  createTaskConnectionStore,
+  type TaskConnectionStoreDependencies,
+} from './modules/tasks/taskConnectionStore.js'
 export {
   TaskImportService,
   type TaskImportServiceDependencies,

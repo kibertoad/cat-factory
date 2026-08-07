@@ -8,7 +8,7 @@ import type {
   BugHuntResult,
   IssueIntakeQuery,
   RunBugHuntInput,
-  TaskConnectionRepository,
+  TaskConnectionStore,
   TaskRepository,
   TaskSourceKind,
   TaskSourceRegistry,
@@ -42,7 +42,7 @@ import type { TaskFromIssue, TaskLinkService } from './TaskLinkService.js'
 
 export interface BugHuntServiceDependencies {
   taskSourceRegistry: TaskSourceRegistry
-  taskConnectionRepository: TaskConnectionRepository
+  taskConnectionStore: TaskConnectionStore
   taskRepository: TaskRepository
   importService: TaskImportService
   linkService: TaskLinkService
@@ -253,7 +253,7 @@ export class BugHuntService {
     workspaceId: string,
     source: TaskSourceKind,
   ): Promise<Record<string, string>> {
-    const connection = await this.deps.taskConnectionRepository.getByWorkspace(workspaceId, source)
+    const connection = await this.deps.taskConnectionStore.getByWorkspace(workspaceId, source)
     return connection?.credentials ?? {}
   }
 }

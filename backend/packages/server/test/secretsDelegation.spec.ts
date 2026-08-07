@@ -62,6 +62,20 @@ const OBSERVABILITY: Record<string, { credentials: string }> = {
   ws_1: { credentials: `sealed[${OBS_INFO}]({"apiKey":"dd-key"})` },
 }
 
+// The two source-connection tables. Keyed by `(workspaceId, source)` — the one-key arity that
+// distinguishes them from the workspace-only observability read above.
+const DOC_INFO = SEALED_SECRET_SOURCES.document_source_connection.info
+const TASK_INFO = SEALED_SECRET_SOURCES.task_source_connection.info
+
+const DOCUMENT_CONNECTIONS: Record<string, { credentialsCipher: string }> = {
+  'ws_1:figma': { credentialsCipher: `sealed[${DOC_INFO}]({"token":"figma-pat"})` },
+  'ws_other:figma': { credentialsCipher: `sealed[${DOC_INFO}]({"token":"other-org-pat"})` },
+}
+
+const TASK_CONNECTIONS: Record<string, { credentialsCipher: string }> = {
+  'ws_1:jira': { credentialsCipher: `sealed[${TASK_INFO}]({"apiToken":"jira-token"})` },
+}
+
 interface AppOptions {
   cipher?: boolean
   repositories?: boolean
@@ -93,6 +107,14 @@ function makeApp(opts: AppOptions = {}) {
             },
             observabilityConnectionRepository: {
               get: async (workspaceId: string) => OBSERVABILITY[workspaceId] ?? null,
+            },
+            documentConnectionRepository: {
+              getByWorkspace: async (workspaceId: string, source: string) =>
+                DOCUMENT_CONNECTIONS[`${workspaceId}:${source}`] ?? null,
+            },
+            taskConnectionRepository: {
+              getByWorkspace: async (workspaceId: string, source: string) =>
+                TASK_CONNECTIONS[`${workspaceId}:${source}`] ?? null,
             },
           },
     config: { auth: { sessionSecret: SECRET } },
@@ -340,6 +362,63 @@ describe('POST /internal/secrets/seal', () => {
       workspaceId: 'ws_1',
     })
     expect(res.status).toBe(422)
+  })
+})
+
+describe('the document / task source connections', () => {
+  // The last integration to reach a mothership-mode node, and the reason it was last: its
+  // repositories decrypted INSIDE, so there was no sealed field for a row-addressed unseal to name.
+  // These assert the binding that closed it — the right row, under the right HKDF domain, reached
+  // by a source-keyed read whose workspace half the node does not get to choose.
+  const app = makeApp()
+
+  it('opens a document-source bag by (workspace, source)', async () => {
+    const res = await post(app, 'unseal', await machineToken(), {
+      source: 'document_source_connection',
+      workspaceId: 'ws_1',
+      key: ['figma'],
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, plaintext: '{"token":"figma-pat"}' })
+  })
+
+  it('opens a tracker bag by (workspace, source)', async () => {
+    const res = await post(app, 'unseal', await machineToken(), {
+      source: 'task_source_connection',
+      workspaceId: 'ws_1',
+      key: ['jira'],
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, plaintext: '{"apiToken":"jira-token"}' })
+  })
+
+  it('cannot reach another account`s connection through an in-scope workspace id', async () => {
+    // `workspaceId` is PREPENDED server-side, so naming `ws_other` is a scope refusal rather than
+    // a read — the row exists and stays a uniform 404.
+    const res = await post(app, 'unseal', await machineToken(), {
+      source: 'document_source_connection',
+      workspaceId: 'ws_other',
+      key: ['figma'],
+    })
+    expect(res.status).toBe(404)
+  })
+
+  it('refuses a workspace-only key: the arity is part of the row`s address', async () => {
+    // A short key would read a DIFFERENT row than the caller named, because the args are spread.
+    const res = await post(app, 'unseal', await machineToken(), {
+      source: 'task_source_connection',
+      workspaceId: 'ws_1',
+    })
+    expect(res.status).toBe(422)
+  })
+
+  it('404s a source the workspace has never connected', async () => {
+    const res = await post(app, 'unseal', await machineToken(), {
+      source: 'task_source_connection',
+      workspaceId: 'ws_1',
+      key: ['linear'],
+    })
+    expect(res.status).toBe(404)
   })
 })
 

@@ -540,32 +540,16 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `secretsCipher` blob (sealed/decrypted in the service under the LOCAL key), so no plaintext
   // crosses the machine API — the same precedent as the observability / environment connections.
   runnerPoolConnectionRepository: {},
-  documentRepository: {
-    upsert: 'pending',
-    listByWorkspace: 'pending',
-    linkBlock: 'pending',
-    // The batched siblings of the link write above, and the block-delete cascade's detach. They
-    // join `linkBlock` on the same surface rather than opening a new gap: all three are the
-    // document-link WRITE path, which is mothership-internal until the documents management
-    // slice proxies it. (`listByRefs`, the batched READ they pair with, IS allow-listed — the
-    // point read `get` already was.)
-    linkBlockMany: 'pending',
-    detachBlocks: 'pending',
-    // WS1 role-link management surface (controller-driven, not the agent run path — the run-path
-    // reads `getRoleLink`/`listRoleLinks` ARE allow-listed). Mothership-internal until a slice
-    // proxies the documents management surface.
-    listRoleLinksByWorkspace: 'pending',
-    setRole: 'pending',
-    clearRole: 'pending',
-    clearRoleForKind: 'pending',
-  },
+  // The whole documents surface is now remote: the run-path context reads, the import/link WRITE
+  // path and its batched siblings, and the WS1 role-link management surface.
+  documentRepository: {},
+  // The workspace's document-source connections. Previously ALL pending, and not for want of a
+  // scope rule: the repository decrypted INSIDE, so a proxied read would have put a plaintext
+  // Figma/Confluence token on the wire. The row now carries its bag SEALED and the node opens it
+  // over `/internal/secrets/unseal` (`document_source_connection`), which is the same shape the
+  // environment / observability / Slack / runner-pool connections already used.
   documentConnectionRepository: {
-    decodeCredentials: 'helper',
     rowToRecord: 'helper',
-    getByWorkspace: 'pending',
-    listByWorkspace: 'pending',
-    upsert: 'pending',
-    softDelete: 'pending',
   },
   // `get`/`insert`/`update` are now allow-listed (the repair retry/stop run-control surface);
   // `listByWorkspace` was already remote (the run-path list). The whole repo is now remote.
@@ -669,38 +653,16 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   slackConnectionRepository: { getByTeam: 'sweeper' },
   slackSettingsRepository: {},
   slackMemberMappingRepository: {},
-  taskRepository: {
-    upsert: 'pending',
-    listByWorkspace: 'pending',
-    linkBlock: 'pending',
-    // The conditional form of `linkBlock`: the atomic claim that holds one-task-per-ticket when
-    // two filings of an issue race. It migrates WITH `linkBlock` rather than ahead of it, because
-    // proxying a claim on its own buys a mothership node nothing: the filing that takes it also
-    // imports the issue through `upsert`, which is `pending` one line up, so the surface only
-    // works remotely once the slice moves as a whole.
-    claimBlockLink: 'pending',
-    // The recurring intake's replace-link write — fires on the (mothership-owned) recurring
-    // run path, not from the SPA; stays mothership-internal like the other task writes.
-    unlinkAllFromBlock: 'pending',
-    // The block-delete cascade's batched detach: the same write as `unlinkAllFromBlock` one line
-    // up, keyed by a SET of doomed blocks. It joins that method's existing gap rather than opening
-    // a new one: every task-link write on this repo is `pending`, and the cascade only reaches a
-    // mothership node once the slice moves as a whole.
-    unlinkAllFromBlocks: 'pending',
-  },
+  // The whole tasks surface is now remote: the run-path context reads, the import/link writes and
+  // the atomic `claimBlockLink` that holds one-task-per-ticket, plus both unlink forms.
+  taskRepository: {},
+  // The tracker connections, on the same sealed-row argument as their document-source sibling
+  // above (`task_source_connection`).
   taskConnectionRepository: {
-    decodeCredentials: 'helper',
     rowToRecord: 'helper',
-    getByWorkspace: 'pending',
-    listByWorkspace: 'pending',
-    upsert: 'pending',
-    softDelete: 'pending',
   },
   taskSourceSettingsRepository: {
     rowToRecord: 'helper',
-    getByWorkspace: 'pending',
-    get: 'pending',
-    upsert: 'pending',
   },
   // The whole custom-manifest-type catalog is now remote (the environments management panel's
   // infra-configurator reads/edits it — no secrets, just manifest metadata).

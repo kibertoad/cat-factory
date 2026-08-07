@@ -1,6 +1,5 @@
 import type {
   DocKind,
-  DocumentConnectionRecord,
   DocumentConnectionRepository,
   DocumentLinkRole,
   DocumentOrigin,
@@ -8,7 +7,7 @@ import type {
   DocumentRef,
   DocumentRepository,
   DocumentSourceKind,
-  SecretCipher,
+  SealedDocumentConnectionRecord,
 } from '@cat-factory/kernel'
 import { urlMatchCandidates } from '@cat-factory/kernel'
 import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
@@ -20,46 +19,23 @@ import { documentConnections, documents } from '../db/schema.js'
 // provider. Behaviourally identical to the D1 repos so the cross-runtime conformance
 // suite asserts the same document behaviour against both stores.
 
-function parseCredentials(json: string): Record<string, string> {
-  try {
-    const parsed = JSON.parse(json)
-    if (parsed && typeof parsed === 'object') return parsed as Record<string, string>
-  } catch {
-    // A malformed bag is treated as empty; the import path then fails closed.
-  }
-  return {}
-}
-
 type DocumentConnectionRow = typeof documentConnections.$inferSelect
 
 /**
- * Workspace → document-source connections over Postgres. Source credentials (a
- * third-party API token) are encrypted at rest with the same AES-256-GCM envelope
- * cipher the environments/Slack integrations use — never stored plaintext. A legacy
- * row whose `credentials` predates encryption (no `v1.` envelope) is read as
- * plaintext JSON, then re-encrypted on the next write.
+ * Workspace → document-source connections over Postgres. Source credentials cross this repository
+ * as the AES-256-GCM ENVELOPE they are stored as: the seal is the row's value, not an encoding
+ * this class hides. Opening one belongs to `createDocumentConnectionStore`
+ * (`@cat-factory/integrations`), which is what lets a deployment holding no key for these rows — a
+ * mothership-mode node — still read them, by naming the row over `/internal/secrets/unseal`.
  */
 export class DrizzleDocumentConnectionRepository implements DocumentConnectionRepository {
-  constructor(
-    private readonly db: DrizzleDb,
-    private readonly cipher: SecretCipher,
-  ) {}
+  constructor(private readonly db: DrizzleDb) {}
 
-  private async decodeCredentials(stored: string): Promise<Record<string, string>> {
-    if (!stored.startsWith('v1.')) return parseCredentials(stored)
-    try {
-      return parseCredentials(await this.cipher.decrypt(stored))
-    } catch {
-      // Wrong key / corrupt envelope: fail closed with an empty bag.
-      return {}
-    }
-  }
-
-  private async rowToRecord(row: DocumentConnectionRow): Promise<DocumentConnectionRecord> {
+  private rowToRecord(row: DocumentConnectionRow): SealedDocumentConnectionRecord {
     return {
       workspaceId: row.workspace_id,
       source: row.source as DocumentSourceKind,
-      credentials: await this.decodeCredentials(row.credentials),
+      credentialsCipher: row.credentials,
       label: row.label,
       createdAt: row.created_at,
       deletedAt: row.deleted_at,
@@ -69,7 +45,7 @@ export class DrizzleDocumentConnectionRepository implements DocumentConnectionRe
   async getByWorkspace(
     workspaceId: string,
     source: DocumentSourceKind,
-  ): Promise<DocumentConnectionRecord | null> {
+  ): Promise<SealedDocumentConnectionRecord | null> {
     const rows = await this.db
       .select()
       .from(documentConnections)
@@ -84,7 +60,7 @@ export class DrizzleDocumentConnectionRepository implements DocumentConnectionRe
     return rows[0] ? this.rowToRecord(rows[0]) : null
   }
 
-  async listByWorkspace(workspaceId: string): Promise<DocumentConnectionRecord[]> {
+  async listByWorkspace(workspaceId: string): Promise<SealedDocumentConnectionRecord[]> {
     const rows = await this.db
       .select()
       .from(documentConnections)
@@ -95,11 +71,10 @@ export class DrizzleDocumentConnectionRepository implements DocumentConnectionRe
         ),
       )
       .orderBy(desc(documentConnections.created_at))
-    return Promise.all(rows.map((row) => this.rowToRecord(row)))
+    return rows.map((row) => this.rowToRecord(row))
   }
 
-  async upsert(record: DocumentConnectionRecord): Promise<void> {
-    const credentials = await this.cipher.encrypt(JSON.stringify(record.credentials))
+  async upsert(record: SealedDocumentConnectionRecord): Promise<void> {
     // A workspace has a single live connection per source: clear any prior binding
     // (live or tombstoned) before inserting, so reconnecting can't collide on the
     // (workspace_id, source) primary key. Delete + insert run in one transaction so a
@@ -116,7 +91,7 @@ export class DrizzleDocumentConnectionRepository implements DocumentConnectionRe
       await tx.insert(documentConnections).values({
         workspace_id: record.workspaceId,
         source: record.source,
-        credentials,
+        credentials: record.credentialsCipher,
         label: record.label,
         created_at: record.createdAt,
         deleted_at: null,

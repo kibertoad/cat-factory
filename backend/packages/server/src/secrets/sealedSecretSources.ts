@@ -94,6 +94,29 @@ export const SEALED_SECRET_SOURCES: Record<OrgSecretSource, SealedSecretSourceSp
     info: 'cat-factory:incident-enrichment',
     label: 'incident enrichment credentials',
   },
+  // A workspace's document-source credential bag (a Figma/Confluence/Notion token), keyed by
+  // `source`. The node needs the PLAINTEXT rather than the row: the dispatch-time freshness
+  // refresh authenticates against the source on the run path, and an import is the node's own
+  // outbound call. Until the row carried an envelope at all there was nothing here to name, which
+  // is why this integration was the last one parked off the persistence RPC.
+  document_source_connection: {
+    repo: 'documentConnectionRepository',
+    method: 'getByWorkspace',
+    keyArity: 1,
+    field: 'credentialsCipher',
+    info: 'cat-factory:documents',
+    label: 'document source credentials',
+  },
+  // The tracker sibling, keyed the same way. Same argument: the `tracker` step files a real
+  // ticket from wherever the run runs.
+  task_source_connection: {
+    repo: 'taskConnectionRepository',
+    method: 'getByWorkspace',
+    keyArity: 1,
+    field: 'credentialsCipher',
+    info: 'cat-factory:tasks',
+    label: 'task source credentials',
+  },
 }
 
 /**

@@ -157,11 +157,14 @@ export class LinkedDocumentRefreshService implements LinkedDocumentRefresher {
    * The live connection per source this corpus actually needs, in ONE read.
    *
    * Its own failure disposition, so three different facts stay three different notes. A definite
-   * "no connection" is the workspace's to fix; a read that THROWS is the deployment's, and it is a
-   * real permanent state rather than a defensive branch: on a mothership-mode node the
-   * document-connection repository is db-direct over an absent `db` handle (its rows are sealed with
-   * the mothership's key, so they cannot be served over the persistence RPC), so this read always
-   * fails there. Folding it into the per-document catch would tell every such run that Figma is down.
+   * "no connection" is the workspace's to fix; a read that THROWS is the deployment's — a corrupt
+   * envelope, a drifted key, or a mothership that could not be reached to open the row. Folding it
+   * into the per-document catch would tell every such run that Figma is down.
+   *
+   * It is no longer the PERMANENT state it was: a mothership-mode node used to fail this read on
+   * every dispatch of every run, because the connection repository decrypted inside and so had to
+   * stay db-direct over an absent `db` handle. The row now carries its envelope and the mothership
+   * opens it by name, so `credentials_unreadable` has gone back to meaning what it says.
    */
   private async resolveConnections(
     workspaceId: string,
@@ -180,12 +183,12 @@ export class LinkedDocumentRefreshService implements LinkedDocumentRefresher {
         await this.deps.connectionService.resolveConnections(workspaceId, sources),
       )
     } catch (error) {
-      // INFO, not `warn`. In mothership mode this fails permanently and BY DESIGN, on every
-      // dispatch of every run, with no remedy anyone intends to apply, and a warning that repeats
-      // forever is how a channel gets tuned out (the same call `reportUnmatchedUrls` makes one
-      // layer up). The `document.freshness_gap` counter, incremented per affected document below,
-      // is what answers whether this is rising.
-      this.log.info('linked document freshness: source credentials could not be read', {
+      // WARN, because there is now always something to fix. This was `info` while a mothership-mode
+      // node failed it permanently and by design (a warning that repeats forever is how a channel
+      // gets tuned out); with the connection row sealed and openable over the machine API, every
+      // remaining cause is a real fault. The `document.freshness_gap` counter, incremented per
+      // affected document below, is what answers whether it is rising.
+      this.log.warn('linked document freshness: source credentials could not be read', {
         workspaceId,
         ...describeError(error),
       })

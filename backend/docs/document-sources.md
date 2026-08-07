@@ -143,12 +143,15 @@ In `llm` mode the planner reuses the agents' default model
 parsed, it degrades to the deterministic heading parser, so import/plan/spawn
 always work.
 
-Credentials are stored encrypted at rest in D1: the per-source JSON bag is
-sealed with AES-256-GCM (the same `WebCryptoSecretCipher` envelope the
-environments integration uses, under a documents-scoped HKDF `info`) before it
-is written, and decrypted only on the import path. They are never returned on the
-wire. Rows written before encryption was introduced are read back as legacy
-plaintext and re-encrypted on the next write.
+Credentials are stored encrypted at rest: the per-source JSON bag is sealed with AES-256-GCM (the
+same `WebCryptoSecretCipher` envelope the environments integration uses, under a documents-scoped
+HKDF `info`). The SEAL is the row's own value: the repository stores and returns the envelope, and
+the one place it is opened is `createDocumentConnectionStore`, which every service in the module
+holds instead of the repository. That is what lets a deployment holding no key for these rows (a
+mothership-mode node) still resolve them: it names the row over `/internal/secrets/unseal` and the
+mothership opens it. Credentials are never returned on the wire, and a bag that cannot be opened
+raises rather than resolving to an empty one, so "connected with nothing in it" and "this row is
+unreadable" stay different answers.
 
 - **Confluence**: each workspace owner connects their own site with an Atlassian
   **API token** (`id.atlassian.com → Security → API tokens`); the backend
@@ -359,9 +362,9 @@ states it in the reader's own language off an exhaustive `Record` keyed by its m
 `confirmed` names the revision (so "which revision did this run build against" is answerable
 afterwards), `not-applicable` renders nothing at all (an `upload` has no source to trail, so a
 warning would invent a problem), and `unconfirmed` names which of four gaps applies, because
-"reconnect the source" / "this deployment cannot read the credentials at all" (mothership mode,
-where the read fails permanently and by design) / "wait out the outage" / "this source has no
-revision" are four different fixes. Every gap also increments the `document.freshness_gap` counter,
+"reconnect the source" / "this deployment cannot read the credentials at all" (a corrupt envelope,
+a drifted key, or a mothership that could not be reached to open the row) / "wait out the outage" /
+"this source has no revision" are four different fixes. Every gap also increments the `document.freshness_gap` counter,
 dimensioned by reason and source: each repeats per dispatch while it lasts, so the log line says
 which run and only the rate says whether it is spreading.
 

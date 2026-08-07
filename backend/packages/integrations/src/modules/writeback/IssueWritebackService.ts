@@ -14,7 +14,7 @@ import {
   type ReviewQuestionPost,
   type ReviewQuestionPostOutcome,
   type ReviewQuestionPostRepository,
-  type TaskConnectionRepository,
+  type TaskConnectionStore,
   type TaskRecord,
   type TaskRepository,
   type TaskSourceKind,
@@ -119,7 +119,7 @@ export interface IssueWritebackServiceDependencies {
    * `trackerCommentIngestRepository`, which both runtimes wire unconditionally and the tracker
    * webhook conformance suite proves end to end.
    */
-  taskConnectionRepository?: TaskConnectionRepository
+  taskConnectionStore?: TaskConnectionStore
   /**
    * Wall clock for the marker rows and their abandonment window. The facade's shared `Clock`,
    * like every other service here; defaults to the real clock so a test can pin time without
@@ -349,24 +349,25 @@ export class IssueWritebackService implements IssueWritebackProvider {
     issues: readonly Pick<TaskRecord, 'source'>[],
   ): Promise<Map<TaskSourceKind, boolean>> {
     const wired = new Map<TaskSourceKind, boolean>()
-    const connections = this.deps.taskConnectionRepository
+    const connections = this.deps.taskConnectionStore
     if (!connections) return wired
     const sources = [...new Set(issues.map((issue) => issue.source))]
-    await Promise.all(
-      sources.map(async (source) => {
-        try {
-          const connection = await connections.getByWorkspace(workspaceId, source)
-          wired.set(source, trackerWebhookSecret(connection?.credentials) !== '')
-        } catch (error) {
-          this.log.warn('tracker connection unreadable; offering the API answer path only', {
-            workspaceId,
-            source,
-            ...describeError(error),
-          })
-          wired.set(source, false)
-        }
-      }),
-    )
+    try {
+      const opened = await connections.listBySources(workspaceId, sources)
+      // Default FALSE for every source asked about, then raise the ones that answered: a source
+      // with no stored connection is simply absent from the result, and it has no reply channel.
+      for (const source of sources) wired.set(source, false)
+      for (const connection of opened) {
+        wired.set(connection.source, trackerWebhookSecret(connection.credentials) !== '')
+      }
+    } catch (error) {
+      this.log.warn('tracker connections unreadable; offering the API answer path only', {
+        workspaceId,
+        sources,
+        ...describeError(error),
+      })
+      for (const source of sources) wired.set(source, false)
+    }
     return wired
   }
 
