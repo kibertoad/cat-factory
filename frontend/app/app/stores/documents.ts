@@ -13,6 +13,7 @@ import type {
   SourceDocument,
 } from '~/types/domain'
 import { isConnectableSource } from '@cat-factory/contracts'
+import { useDocumentFreshness } from '~/composables/useDocumentFreshness'
 import { useSourceIntegration } from '~/composables/useSourceIntegration'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -55,6 +56,15 @@ export const useDocumentsStore = defineStore('documents', () => {
     prepend: true,
   })
   const loading = ref(false)
+
+  // The "is this still the current revision" half, in its own collaborator: a verdict is a
+  // statement about a moment rather than a property of a row, and `useDocumentFreshness` owns why
+  // the two must not merge.
+  const { refresh, freshnessFor, isRefreshing } = useDocumentFreshness({
+    refresh: (source, externalId) =>
+      api.refreshDocument(workspace.requireId(), { source, externalId }),
+    onRefreshed: upsertDoc,
+  })
 
   // Workspace+DocKind template / exemplar role links (WS1). Loaded lazily when the management
   // panel opens; the full list of role-tagged documents across kinds.
@@ -224,6 +234,9 @@ export const useDocumentsStore = defineStore('documents', () => {
     loadDocuments,
     resolveRef,
     importDocument,
+    refresh,
+    freshnessFor,
+    isRefreshing,
     search,
     plan,
     spawn,

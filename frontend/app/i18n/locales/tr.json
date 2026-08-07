@@ -4201,6 +4201,21 @@
       "imported": "\"{title}\" içe aktarıldı",
       "importFailed": "İçe aktarma başarısız"
     },
+    "freshness": {
+      "updated": "{when} tarihinde güncellendi",
+      "refresh": "Değişiklikleri denetle",
+      "unchanged": "Az önce denetlendi: güncel",
+      "reimported": "Daha yeni sürüm alındı",
+      "revision": "Revizyon {version}",
+      "notApplicable": "Bu kurulumda o kaynak için okuyucu yok, dolayısıyla karşılaştırılacak bir şey de yok.",
+      "gap": {
+        "not_connected": "Denetlenmedi: bu çalışma alanı artık kaynağa bağlı değil.",
+        "credentials_unreadable": "Denetlenmedi: bu kurulum kaynağın kimlik bilgilerini okuyamıyor.",
+        "unversioned": "Denetlenmedi: kaynak karşılaştırılacak bir revizyon yayınlamıyor.",
+        "source_unreachable": "Denetlenmedi: kaynağa ulaşılamadı."
+      },
+      "refreshFailed": "Değişiklikler denetlenemedi"
+    },
     "connect": {
       "title": "Kaynak bağla",
       "sourceFallback": "Kaynak",

@@ -66,7 +66,11 @@ function memoCache(): GroupCacheHandle<LinkedDocumentRefreshOutcome> {
       store.set(k, loaded)
       return loaded
     },
-    invalidate: async () => {},
+    // A REAL invalidate, because the manual-refresh path is defined by dropping the entry before
+    // it asks: a no-op here would pass that test for the wrong reason.
+    invalidate: async (key, group) => {
+      store.delete(`${group}:${key}`)
+    },
     invalidateGroup: async () => {},
     invalidateAll: async () => {},
   }
@@ -372,5 +376,37 @@ describe('LinkedDocumentRefreshService', () => {
 
     // The port promises a zippable result: a caller pairs these back onto the list it passed.
     expect(out.map((o) => o.record.externalId)).toEqual(['a', 'b', 'c'])
+  })
+
+  describe('refreshNow (a person asked, not a dispatch)', () => {
+    it('answers with the stored projection AND the verdict about it', async () => {
+      // The stored row is at v1 and the page has moved on, which is the case the action exists
+      // for: a designer edited the frame and wants the board to be holding that edit.
+      probeVersion.mockResolvedValue('v2')
+      reimport.mockResolvedValue(record({ sourceVersion: 'v2', title: 'Checkout v2' }))
+
+      const out = await service({ versionCache: memoCache() }).refreshNow(WS, 'figma', 'file1:1-2')
+
+      // Both halves: the row a surface re-renders, and the only thing that says whether it was
+      // confirmed current. The same row under a `confirmed` and an `unconfirmed` verdict is
+      // identical bytes and opposite facts.
+      expect(out.document.title).toBe('Checkout v2')
+      expect(out.freshness).toEqual({ status: 'confirmed', version: 'v2', reimported: true })
+    })
+
+    it('re-asks a source the cached verdict says is unreachable', async () => {
+      // The click IS the request for a new answer, and the commonest reason to click is that the
+      // last one reported an outage. Serving that from the 60s cache would report the very failure
+      // the person is retrying past, and no amount of clicking would clear it.
+      probeVersion.mockRejectedValueOnce(new Error('figma 429'))
+      const svc = service({ versionCache: memoCache() })
+
+      const [dispatched] = await svc.refresh(WS, [record()])
+      const manual = await svc.refreshNow(WS, 'figma', 'file1:1-2')
+
+      expect(dispatched?.freshness).toEqual({ status: 'unconfirmed', reason: 'source_unreachable' })
+      expect(manual.freshness).toEqual({ status: 'confirmed', version: 'v1', reimported: false })
+      expect(probeVersion).toHaveBeenCalledTimes(2)
+    })
   })
 })

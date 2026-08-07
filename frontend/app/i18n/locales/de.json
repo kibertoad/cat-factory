@@ -3818,6 +3818,21 @@
       "imported": "\"{title}\" importiert",
       "importFailed": "Import fehlgeschlagen"
     },
+    "freshness": {
+      "updated": "Aktualisiert am {when}",
+      "refresh": "Auf Änderungen prüfen",
+      "unchanged": "Soeben geprüft: aktuell",
+      "reimported": "Neuere Fassung übernommen",
+      "revision": "Revision {version}",
+      "notApplicable": "Diese Installation hat keinen Leser für diese Quelle, es gibt also nichts zum Abgleichen.",
+      "gap": {
+        "not_connected": "Nicht geprüft: dieser Workspace ist nicht mehr mit der Quelle verbunden.",
+        "credentials_unreadable": "Nicht geprüft: diese Installation kann die Zugangsdaten der Quelle nicht lesen.",
+        "unversioned": "Nicht geprüft: die Quelle veröffentlicht keine Revision zum Vergleich.",
+        "source_unreachable": "Nicht geprüft: die Quelle war nicht erreichbar."
+      },
+      "refreshFailed": "Prüfung auf Änderungen fehlgeschlagen"
+    },
     "connect": {
       "title": "Quelle verbinden",
       "sourceFallback": "Quelle",

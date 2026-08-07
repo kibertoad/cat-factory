@@ -14,10 +14,10 @@ import type {
   RefreshedDocument,
 } from '@cat-factory/kernel'
 import { describeError, noopLogger, noopOperationalMetrics } from '@cat-factory/kernel'
-import { isConnectableSource } from '@cat-factory/contracts'
+import { isConnectableSource, type RefreshedDocumentView } from '@cat-factory/contracts'
 import pMap from 'p-map'
 import type { DocumentConnectionService } from './DocumentConnectionService.js'
-import type { DocumentImportService } from './DocumentImportService.js'
+import { type DocumentImportService, toSourceDocument } from './DocumentImportService.js'
 import { probeCacheKey } from './documents.logic.js'
 
 // LinkedDocumentRefreshService: the {@link LinkedDocumentRefresher} implementation — the
@@ -103,6 +103,35 @@ export class LinkedDocumentRefreshService implements LinkedDocumentRefresher {
     return pMap(documents, (record) => this.refreshOne(workspaceId, record, connections), {
       concurrency: REFRESH_CONCURRENCY,
     })
+  }
+
+  /**
+   * Confirm ONE stored document because a PERSON asked, not because a dispatch did.
+   *
+   * Same ladder, one difference that is the whole reason it is a separate entry point: the cached
+   * verdict is dropped first. The cache exists so a burst of step dispatches costs one round trip,
+   * and it deliberately remembers a failure so an outage is not re-probed by every dispatch. Both
+   * are exactly wrong for a human clicking Refresh: the click IS the request for a new answer, and
+   * the most common reason to click is that the last answer said the source was unreachable. A
+   * refresh served from that cache would report the outage the person is retrying past.
+   *
+   * The fresh outcome is still STORED (the ladder runs through the cache as usual), so the
+   * dispatches that follow a manual refresh inherit it rather than re-asking the source.
+   */
+  async refreshNow(
+    workspaceId: string,
+    source: DocumentSourceKind,
+    externalId: string,
+  ): Promise<RefreshedDocumentView> {
+    const stored = await this.deps.importService.requireDocument(workspaceId, source, externalId)
+    await this.deps.versionCache?.invalidate(probeCacheKey(source, externalId), workspaceId)
+    const connections = await this.resolveConnections(workspaceId, [stored])
+    const { record, freshness } = await this.refreshOne(workspaceId, stored, connections)
+    // BOTH halves, because neither answers alone: the row carries the title/excerpt/`syncedAt` the
+    // caller re-renders, and only the verdict says whether it was confirmed current. An unchanged
+    // row under a `confirmed` verdict and the same row under an `unconfirmed` one are identical
+    // bytes and opposite facts.
+    return { document: toSourceDocument(record), freshness }
   }
 
   /**

@@ -3818,6 +3818,21 @@
       "imported": "Importato \"{title}\"",
       "importFailed": "Importazione non riuscita"
     },
+    "freshness": {
+      "updated": "Aggiornato il {when}",
+      "refresh": "Verifica le modifiche",
+      "unchanged": "Verificato ora: è aggiornato",
+      "reimported": "Recuperata la versione più recente",
+      "revision": "Revisione {version}",
+      "notApplicable": "Questa installazione non ha un lettore per quella sorgente, quindi non c'è nulla con cui confrontare.",
+      "gap": {
+        "not_connected": "Non verificato: questo workspace non è più collegato alla sorgente.",
+        "credentials_unreadable": "Non verificato: questa installazione non riesce a leggere le credenziali della sorgente.",
+        "unversioned": "Non verificato: la sorgente non pubblica alcuna revisione da confrontare.",
+        "source_unreachable": "Non verificato: la sorgente non è raggiungibile."
+      },
+      "refreshFailed": "Impossibile verificare le modifiche"
+    },
     "connect": {
       "title": "Collega sorgente",
       "sourceFallback": "Sorgente",

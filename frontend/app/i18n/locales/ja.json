@@ -4201,6 +4201,21 @@
       "imported": "\"{title}\" をインポートしました",
       "importFailed": "インポートに失敗しました"
     },
+    "freshness": {
+      "updated": "{when} に更新",
+      "refresh": "変更を確認",
+      "unchanged": "たった今確認しました: 最新です",
+      "reimported": "新しい版を取り込みました",
+      "revision": "リビジョン {version}",
+      "notApplicable": "このデプロイにはそのソースのリーダーがないため、照合できるものがありません。",
+      "gap": {
+        "not_connected": "未確認: このワークスペースはソースに接続されていません。",
+        "credentials_unreadable": "未確認: このデプロイはソースの認証情報を読み取れません。",
+        "unversioned": "未確認: ソースは照合できるリビジョンを公開していません。",
+        "source_unreachable": "未確認: ソースに接続できませんでした。"
+      },
+      "refreshFailed": "変更を確認できませんでした"
+    },
     "connect": {
       "title": "ソースを接続",
       "sourceFallback": "ソース",

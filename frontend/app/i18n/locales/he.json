@@ -4201,6 +4201,21 @@
       "imported": "\"{title}\" יובא",
       "importFailed": "הייבוא נכשל"
     },
+    "freshness": {
+      "updated": "עודכן ב-{when}",
+      "refresh": "בדיקת שינויים",
+      "unchanged": "נבדק כרגע: מעודכן",
+      "reimported": "נמשכה גרסה חדשה יותר",
+      "revision": "גרסה {version}",
+      "notApplicable": "לפריסה הזו אין קורא למקור הזה, ולכן אין מול מה להשוות.",
+      "gap": {
+        "not_connected": "לא נבדק: סביבת העבודה הזו כבר אינה מחוברת למקור.",
+        "credentials_unreadable": "לא נבדק: הפריסה הזו אינה יכולה לקרוא את פרטי הגישה של המקור.",
+        "unversioned": "לא נבדק: המקור אינו מפרסם גרסה להשוואה.",
+        "source_unreachable": "לא נבדק: לא ניתן היה להגיע למקור."
+      },
+      "refreshFailed": "לא ניתן היה לבדוק שינויים"
+    },
     "connect": {
       "title": "חבר מקור",
       "sourceFallback": "מקור",

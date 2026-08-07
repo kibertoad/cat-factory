@@ -164,6 +164,7 @@ All endpoints are workspace-scoped under `/workspaces/:workspaceId` and return
 | `POST /document-sources/:source/plan`         | Preview the board plan for `{ externalId }` (no writes)    |
 | `POST /document-sources/:source/spawn`        | Apply structure: `{ externalId, frameId? }`                |
 | `POST /documents/link`                        | Attach a doc to a block: `{ source, externalId, blockId }` |
+| `POST /documents/refresh`                     | Re-confirm one doc now: `{ source, externalId }`           |
 
 ### Who may call what: the tier split
 
@@ -174,7 +175,7 @@ touches rather than which controller serves it:
 | -------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /document-sources/:source/connect`, `DELETE …/connection`                                          | `integrations.manage` | Writes and clears the per-workspace source CREDENTIAL.                                                                                      |
 | `POST /document-role-links`, `POST /document-role-links/remove`                                          | `integrations.manage` | A per-DocKind template/exemplar tag decides what EVERY doc run in the board writes from: the fragment-library blast radius, not one task's. |
-| `resolve-ref`, `import`, `search`, `plan`, `spawn`, `POST /documents/link`                               | member tier           | Reaching for a page and putting it on a task is board authoring.                                                                            |
+| `resolve-ref`, `import`, `search`, `plan`, `spawn`, `POST /documents/link`, `POST /documents/refresh`    | member tier           | Reaching for a page and putting it on a task is board authoring.                                                                            |
 | every `GET` (`/document-sources`, `/document-sources/connections`, `/documents`, `/document-role-links`) | `workspace.read`      | Reads pass the admin gate by design.                                                                                                        |
 
 The member tier is enforced by the auth gate's own write floor (any non-GET requires `≥ member`),
@@ -287,6 +288,59 @@ pickers through `frontend/app/app/utils/sourcePicker.ts` (see
   derives its wording map from what the choices can carry. A source that one day gains a
   per-workspace toggle therefore fails the typecheck at this surface rather than rendering
   "Connect X" over something already connected.
+
+## Freshness: a stored document is a projection of a page someone keeps editing
+
+Import writes the projection once. Nothing used to look at the source again, so a run started a
+week later fed its agent the week-old copy with the run reading as perfectly healthy. For a
+requirements page that is an annoyance; for a design under active iteration it means the agent
+routinely builds the previous revision. Two readers close that, and they are deliberately
+different shapes because they are asked at different moments and can afford different costs.
+
+**The run asks on every dispatch.** `LinkedDocumentRefreshService` (the kernel
+`LinkedDocumentRefresher` port) sits on the linked-context resolution path and runs the ladder per
+document: a cheap `probeVersion` compared against `documents.source_version` (the token the stored
+body was fetched at), then a re-import only for what moved. The whole ladder's OUTCOME is cached
+(`AppCaches.linkedDocumentVersion`, 60s, grouped by workspace), so a pipeline's worth of step
+dispatches costs one round trip per document, concurrent dispatches dedupe onto one download, and a
+source that is DOWN is remembered as down instead of being re-asked by every dispatch for as long
+as the outage lasts. The verdict reaches the agent through kernel's `freshnessHeaderLines`, on the
+materialised `.cat-context/` header and in the in-prompt injection an inline kind gets instead of a
+checkout.
+
+**A person asks by clicking, and only then.** `POST /documents/refresh` →
+`LinkedDocumentRefreshService.refreshNow` runs the same ladder for one document and answers with
+the (possibly rewritten) row plus the verdict. Two differences from the dispatch path, both
+deliberate:
+
+- it DROPS the cached verdict first. The click is the request for a new answer, and the commonest
+  reason to click is that the last one reported an outage; serving that from the cache would report
+  the very failure the person is retrying past, and no amount of clicking would clear it. The fresh
+  outcome is still stored, so the dispatches that follow inherit it.
+- it is per DOCUMENT, and listing documents probes nothing. Confirming costs a round trip per page,
+  so a board-wide "refresh everything" is a rate limit waiting to happen, and paying it on every
+  panel open would put a whole-file Figma download behind a list read.
+
+**The verdict is a THREE-way answer, not a boolean**, and the vocabulary
+(`DocumentFreshness` / `DocumentFreshnessGap`) lives in `@cat-factory/contracts` because the agent
+and a human read the same conclusion: the engine renders the agent-facing warning from it, the SPA
+states it in the reader's own language off an exhaustive `Record` keyed by its members.
+`confirmed` names the revision (so "which revision did this run build against" is answerable
+afterwards), `not-applicable` renders nothing at all (an `upload` has no source to trail, so a
+warning would invent a problem), and `unconfirmed` names which of four gaps applies, because
+"reconnect the source" / "this deployment cannot read the credentials at all" (mothership mode,
+where the read fails permanently and by design) / "wait out the outage" / "this source has no
+revision" are four different fixes. Every gap also increments the `document.freshness_gap` counter,
+dimensioned by reason and source: each repeats per dispatch while it lasts, so the log line says
+which run and only the rate says whether it is spreading.
+
+**On the SPA, `syncedAt` and the verdict are two facts and stay two.** `syncedAt` is when the BODY
+was last written and moves only when a fetch changed something; the verdict is what the source said
+when someone last asked, and it exists only after a click. So an ABSENT verdict means "nobody has
+asked", never "unknown", and a document refreshed and found unchanged keeps its old `syncedAt`
+beside the confirmation rather than claiming a write that never happened
+(`components/documents/DocumentSyncState.vue`, on the imported-documents list and the task's
+context panel).
 
 ## A referenced context document reaches the agent, or the run breaks
 
@@ -401,6 +455,9 @@ generically, no per-source form is hard-coded in the frontend.
   `0005_confluence.sql`, migrating any live rows across before dropping them)
 - Tests: `test/integration/documents-*.spec.ts` with `FakeDocumentSourceProvider`
   and the `documentsDeps()` helper
+- Freshness: kernel `domain/document-freshness.ts` (the renderer) over the
+  `@cat-factory/contracts` vocabulary, `LinkedDocumentRefreshService` (both entry
+  points), and `components/documents/DocumentSyncState.vue` on the SPA
 - SPA: `frontend/app/app/components/documents/ContextDocumentPicker.vue` (+ its
   `.logic.ts` sibling for the ref pre-flight), with the source-selection rules it
   shares with the tracker pickers in `frontend/app/app/utils/sourcePicker.ts`
