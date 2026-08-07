@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   defaultBinaryGeneratorRegistry,
   defaultFoundationalServiceRegistry,
+  defaultPromptFragmentRegistry,
 } from '@cat-factory/kernel'
 import { resetRegistrationValidationGuard } from '@cat-factory/orchestration'
 import { createWorker } from '../src/index'
@@ -87,5 +88,49 @@ describe('createWorker', () => {
     await expect(
       (async () => worker.fetch!(new Request('https://x.test/health'), noEnv, noCtx))(),
     ).resolves.toBeTruthy()
+  })
+
+  it('reads the deployment DOCUMENT credentials off env, so a living standard boots', async () => {
+    // The regression this exists for: boot validation was handed the entry-newed registries alone,
+    // which carry no `deploymentDocumentResolver` because it is the one member derived from `env`,
+    // and a Worker has no `env` until a request arrives. Every `builtin`-tier fragment naming a
+    // living document therefore failed validation on a deployment that had configured the
+    // credentials correctly, and since the once-guard flips only after a clean pass, on EVERY
+    // request rather than once. The feature was unreachable on this facade.
+    const promptFragmentRegistry = defaultPromptFragmentRegistry()
+    promptFragmentRegistry.register({
+      id: 'org.api-guidelines',
+      version: '1.0.0',
+      title: 'Org API guidelines',
+      category: 'Org',
+      summary: 'How this org shapes APIs.',
+      body: 'The body registered in code, folded when the live page is unreachable.',
+      documentRef: { source: 'notion', externalId: 'page-1' },
+    })
+    const configured = { DOC_SOURCE_NOTION_API_TOKEN: 'secret-ntn' } as unknown as Env
+    const worker = createWorker({ overrides: { promptFragmentRegistry } })
+    await expect(
+      (async () => worker.fetch!(new Request('https://x.test/health'), configured, noCtx))(),
+    ).resolves.toBeTruthy()
+  })
+
+  it('still refuses that fragment when the deployment configured no such credentials', async () => {
+    // The counterpart, which is what makes the case above the resolver being READ rather than the
+    // check having gone soft. An unconfigured source leaves the reference rendered as live while
+    // every run folds the frozen body, so boot names the fragment instead.
+    const promptFragmentRegistry = defaultPromptFragmentRegistry()
+    promptFragmentRegistry.register({
+      id: 'org.api-guidelines',
+      version: '1.0.0',
+      title: 'Org API guidelines',
+      category: 'Org',
+      summary: 'How this org shapes APIs.',
+      body: 'The body registered in code.',
+      documentRef: { source: 'notion', externalId: 'page-1' },
+    })
+    const worker = createWorker({ overrides: { promptFragmentRegistry } })
+    await expect(
+      (async () => worker.fetch!(new Request('https://x.test/health'), noEnv, noCtx))(),
+    ).rejects.toThrow(/org\.api-guidelines/)
   })
 })

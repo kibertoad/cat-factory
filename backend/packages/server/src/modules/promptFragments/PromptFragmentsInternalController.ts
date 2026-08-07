@@ -132,7 +132,9 @@ export function promptFragmentsInternalController(): Hono<AppEnv> {
  * what identifies a document.
  */
 function declaredDocumentRefs(
-  registry: { all(): { documentRef?: { source: DocumentSourceKind; externalId: string } }[] } | undefined,
+  registry:
+    | { all(): { documentRef?: { source: DocumentSourceKind; externalId: string } }[] }
+    | undefined,
 ): Map<string, { source: DocumentSourceKind; externalId: string }> {
   const declared = new Map<string, { source: DocumentSourceKind; externalId: string }>()
   for (const fragment of registry?.all() ?? []) {

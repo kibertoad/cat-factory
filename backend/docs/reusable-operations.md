@@ -446,8 +446,7 @@ startLocal({
   promptFragmentRegistry,
   // Optional: this deployment's operations reference only fragments it registers itself, so an
   // unresolvable id is always a typo here. See "Boot validation" above.
-  escalateRegistrationWarning: (p: RegistrationProblem) =>
-    p.code === 'task_type_unknown_fragment',
+  escalateRegistrationWarning: (p: RegistrationProblem) => p.code === 'task_type_unknown_fragment',
   // …plus this deployment's ordinary boot options (port, database URL, and the rest).
 })
 ```

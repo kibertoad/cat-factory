@@ -1084,7 +1084,7 @@ export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
         // it is the one member derived from `env`, which a Worker only has once a request arrives.
         // Omitting it read as "this deployment configured no document credentials", so every
         // `builtin`-tier fragment naming a living document failed validation on a deployment that
-        // had configured them correctly — and since the once-guard flips only after a clean pass,
+        // had configured them correctly, and since the once-guard flips only after a clean pass,
         // it failed on every request rather than once.
         registries: { ...registries, ...deploymentDocumentDeps(env) },
         onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
@@ -1115,7 +1115,7 @@ export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
  * Report every deployment document source whose credentials are set but unusable, once per isolate.
  *
  * A Worker has no boot moment, so the report the two Node facades make while starting has to be
- * staged against the first request here — the same shape, and for the same reason, as the
+ * staged against the first request here: the same shape, and for the same reason, as the
  * once-guarded registration check it sits beside. Left ungated it would repeat on every request,
  * which is how an operator learns to filter out the one line naming the variable they mistyped.
  *

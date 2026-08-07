@@ -51,9 +51,7 @@ export function deploymentDocumentDeps(env: Env): Partial<CoreDependencies> {
  * cardinalities: the container build wants the resolver on every build and must stay silent, while
  * the report is a boot-shaped event this runtime has to stage for itself.
  */
-export function deploymentDocumentProblems(
-  env: Env,
-): { source: string; problem: string }[] {
+export function deploymentDocumentProblems(env: Env): { source: string; problem: string }[] {
   return resolveDeploymentDocumentResolver(deploymentEnvRecord(env)).problems
 }
 

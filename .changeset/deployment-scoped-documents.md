@@ -20,6 +20,13 @@ through a new `DeploymentDocumentResolver` port, version-probed and cached under
 deployment-wide group so a hundred workspaces folding one standard cost one fetch and one
 invalidation.
 
+The deployment's own credentials are read from the environment and nothing else. `DOCUMENT_SOURCES`
+governs which sources a WORKSPACE may connect, and `DOCUMENTS_ENABLED` and the connection encryption
+key govern whether tenant connections are stored at all; none of the three has any bearing on a
+standard the deployment configured centrally, whose credentials live in plaintext variables and are
+never persisted. So setting `DOC_SOURCE_NOTION_API_TOKEN` is the whole configuration, with no
+unrelated prerequisite to discover.
+
 `github` is the exception and it is declared, not inferred: its credential is a workspace's App
 installation, so the new `deploymentScoped` source trait is false for it and both boot validation
 and the provider refuse the scope. Boot now refuses only a `documentRef` this deployment cannot

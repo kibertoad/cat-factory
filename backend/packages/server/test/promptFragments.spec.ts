@@ -240,7 +240,10 @@ describe('mothership-mode deployment document bodies', () => {
     const { app, fetched } = mothershipWithDocuments([DOC_FRAGMENT])
     const { status, body } = await postRefs(app, [DOC_FRAGMENT.documentRef])
     expect(status).toBe(200)
-    expect(body.bodies['confluence:page-42']).toEqual({ body: 'live body of page-42', version: 'v9' })
+    expect(body.bodies['confluence:page-42']).toEqual({
+      body: 'live body of page-42',
+      version: 'v9',
+    })
     expect(fetched).toEqual(['confluence:page-42'])
   })
 
