@@ -16,7 +16,9 @@ const show = computed(() => !!setupUrl.value && !dismissed.value)
 
 <template>
   <Transition name="fade">
-    <div v-if="show" class="absolute inset-x-0 top-0 z-50 flex justify-center px-4 pt-4">
+    <!-- Positioning/stacking is owned by `BoardTopOverlays`; this renders only its card and
+         re-enables pointer events on it. -->
+    <div v-if="show" class="pointer-events-auto w-full max-w-3xl">
       <div
         class="w-full max-w-3xl rounded-2xl border-2 border-amber-500/70 bg-amber-950/95 p-5 shadow-2xl backdrop-blur"
         role="alert"

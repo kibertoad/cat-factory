@@ -1,15 +1,8 @@
 <script setup lang="ts">
 import BoardCanvas from '~/components/board/BoardCanvas.vue'
 import SideBar from '~/components/layout/SideBar.vue'
-import BoardToolbar from '~/components/layout/BoardToolbar.vue'
-import SpendWarningBanner from '~/components/layout/SpendWarningBanner.vue'
-import ConnectionStatusBanner from '~/components/layout/ConnectionStatusBanner.vue'
+import BoardTopOverlays from '~/components/layout/BoardTopOverlays.vue'
 import TranslationWarningBanner from '~/components/layout/TranslationWarningBanner.vue'
-import GitHubPatBanner from '~/components/layout/GitHubPatBanner.vue'
-import AiProvidersBanner from '~/components/layout/AiProvidersBanner.vue'
-import ProviderConfigBanner from '~/components/layout/ProviderConfigBanner.vue'
-import InfraSetupBanner from '~/components/layout/InfraSetupBanner.vue'
-import DefaultTestEnvBanner from '~/components/layout/DefaultTestEnvBanner.vue'
 // Always-mounted, fast-path surfaces (opened frequently during a run / board edits, or
 // store-driven so they must react from anywhere — kept eager for snappy open/close).
 import PipelineBuilder from '~/components/pipeline/PipelineBuilder.vue'
@@ -398,174 +391,138 @@ watch(
 </script>
 
 <template>
-  <div class="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100">
-    <!-- Non-English locale warning (unofficial translation); slim strip above everything. -->
+  <!-- A COLUMN, so the translation strip below takes its own height instead of covering the
+       row: page chrome that overlays the app is how the board's top controls came to be
+       buried. Everything else lives in the row beneath it. -->
+  <div class="flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-100">
+    <!-- Non-English locale warning (unofficial translation); slim full-width strip above
+         everything, in flow. -->
     <TranslationWarningBanner />
-    <!-- Local-mode setup prompt (missing GitHub PAT); floats over whatever is shown below. -->
-    <GitHubPatBanner />
-    <!-- Stacked advisory banners: one click-through column so concurrent prompts never draw on
-         top of each other (a fresh, unconfigured deployment can raise all three at once — no AI
-         model + no runner pool + no storage). The wrapper is `pointer-events-none`; each banner
-         re-enables pointer events on its own card, so the empty strip never intercepts clicks on
-         the board chrome underneath.
-         Anchored `top-16`, BELOW the centered BoardToolbar (`top-3` + its pill height), not at
-         `top-0`: these are standing advisories that can sit for weeks, and at `top-0` the column
-         drew over the toolbar (z-40 vs z-20), hiding the zoom/fit controls, which also left the
-         board-basics tour highlighting a control buried under the banner.
-         - AI-readiness (no usable model source, or default preset uses unavailable models).
-         - Infrastructure provider (env/runner-pool wired but missing mandatory config).
-         - Infra-setup (this deployment needs an executor / test env / storage the operator hasn't
-           defined yet, so a class of agents can't run).
-         - Default test environment (this BOARD has never chosen the provisioning mechanism its
-           new services should default to). Last in the column: it asks for a convenience default,
-           so it yields to the prompts about things that are outright broken. -->
-    <div
-      v-if="workspace.ready && !needsGitHubInstall && !githubProbePending"
-      class="pointer-events-none absolute inset-x-0 top-16 z-40 flex flex-col items-center gap-2 px-4"
-    >
-      <AiProvidersBanner />
-      <ProviderConfigBanner />
-      <InfraSetupBanner />
-      <DefaultTestEnvBanner />
-    </div>
+    <div class="relative flex min-h-0 flex-1">
+      <!-- Resolving whether the GitHub App is installed, before we decide what to show. -->
+      <div
+        v-if="workspace.ready && githubProbePending"
+        class="m-auto flex flex-col items-center gap-3 text-slate-400"
+      >
+        <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
+        <span class="text-sm">{{ $t('app.loading') }}</span>
+      </div>
 
-    <!-- Resolving whether the GitHub App is installed, before we decide what to show. -->
-    <div
-      v-if="workspace.ready && githubProbePending"
-      class="m-auto flex flex-col items-center gap-3 text-slate-400"
-    >
-      <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
-      <span class="text-sm">{{ $t('app.loading') }}</span>
-    </div>
+      <!-- App enabled but not installed on this workspace: hard onboarding gate. -->
+      <GitHubOnboarding v-else-if="workspace.ready && needsGitHubInstall" />
 
-    <!-- App enabled but not installed on this workspace: hard onboarding gate. -->
-    <GitHubOnboarding v-else-if="workspace.ready && needsGitHubInstall" />
-
-    <template v-else-if="workspace.ready">
-      <!-- Headless readiness marker for the e2e suite: reflects whether the real-time
-           WebSocket is actually connected (and thus subscribed + resynced). A live spec must
-           wait for this before driving a run, otherwise the run's first status events are
-           broadcast to a not-yet-subscribed browser and missed, leaving the card stuck on a
-           stale status until its assertion times out (the source of the e2e flakiness). Hidden
-           and inert; no visual or behavioural effect. -->
-      <span
-        data-testid="workspace-stream"
-        :data-connected="streamConnected ? 'true' : 'false'"
-        hidden
-      />
-      <SideBar />
-      <main class="relative min-w-0 flex-1">
-        <BoardCanvas />
-        <!-- Compact-viewport navbar trigger: the SideBar is an off-canvas drawer below
-             lg, so surface a hamburger to open it. Hidden on lg+ (static sidebar). -->
-        <!-- z-30 keeps the trigger above the centered BoardToolbar (z-20), whose
-             max-width can otherwise reach this corner on the narrowest viewports. -->
-        <UButton
-          class="absolute start-3 top-3 z-30 lg:hidden"
-          icon="i-lucide-menu"
-          color="neutral"
-          variant="soft"
-          size="sm"
-          :aria-label="ui.mobileNavOpen ? $t('nav.closeMenu') : $t('nav.openMenu')"
-          data-testid="mobile-nav-toggle"
-          @click="ui.toggleMobileNav()"
+      <template v-else-if="workspace.ready">
+        <!-- Headless readiness marker for the e2e suite: reflects whether the real-time
+             WebSocket is actually connected (and thus subscribed + resynced). A live spec must
+             wait for this before driving a run, otherwise the run's first status events are
+             broadcast to a not-yet-subscribed browser and missed, leaving the card stuck on a
+             stale status until its assertion times out (the source of the e2e flakiness). Hidden
+             and inert; no visual or behavioural effect. -->
+        <span
+          data-testid="workspace-stream"
+          :data-connected="streamConnected ? 'true' : 'false'"
+          hidden
         />
-        <BoardToolbar />
-        <SpendWarningBanner />
-        <ConnectionStatusBanner
-          :connected="streamConnected"
-          :ever-connected="streamEverConnected"
-          :connection-failed="streamConnectionFailed"
-        />
-        <InspectorPanel />
-        <!-- Code-split focus view. The fade lives here (not inside the component) so the
-             leave animation still plays when `focusBlockId` clears and the v-if unmounts
-             the chunk — an inner Transition would be torn down before it could run. -->
-        <Transition name="focus-fade">
-          <BlockFocusView v-if="ui.focusBlockId" />
-        </Transition>
-      </main>
+        <SideBar />
+        <main class="relative min-w-0 flex-1">
+          <BoardCanvas />
+          <!-- Toolbar, nav trigger and every advisory banner, in ONE stacked region that owns
+               their placement, so no two of them can cover each other. -->
+          <BoardTopOverlays
+            :connected="streamConnected"
+            :ever-connected="streamEverConnected"
+            :connection-failed="streamConnectionFailed"
+          />
+          <InspectorPanel />
+          <!-- Code-split focus view. The fade lives here (not inside the component) so the
+               leave animation still plays when `focusBlockId` clears and the v-if unmounts
+               the chunk — an inner Transition would be torn down before it could run. -->
+          <Transition name="focus-fade">
+            <BlockFocusView v-if="ui.focusBlockId" />
+          </Transition>
+        </main>
 
-      <!-- Always-mounted, fast-path surfaces. -->
-      <PipelineBuilder />
-      <DecisionModal />
-      <AgentStepDetail />
-      <StepResultViewHost />
-      <!-- Consumer-contributed top-level overlays (extension slice D). Renders nothing until a
-           consumer opens one via `ui.openOverlay` / `useAppOverlays().open(...)`. -->
-      <AppOverlayHost />
-      <AddTaskModal />
-      <ReviewFrictionDialog v-if="ui.reviewFrictionContext" />
-      <CreateInitiativeModal />
-      <CommandBar />
-      <PersonalCredentialModal />
-      <ConfirmDialog />
-      <KeyboardShortcutsHelp />
+        <!-- Always-mounted, fast-path surfaces. -->
+        <PipelineBuilder />
+        <DecisionModal />
+        <AgentStepDetail />
+        <StepResultViewHost />
+        <!-- Consumer-contributed top-level overlays (extension slice D). Renders nothing until a
+             consumer opens one via `ui.openOverlay` / `useAppOverlays().open(...)`. -->
+        <AppOverlayHost />
+        <AddTaskModal />
+        <ReviewFrictionDialog v-if="ui.reviewFrictionContext" />
+        <CreateInitiativeModal />
+        <CommandBar />
+        <PersonalCredentialModal />
+        <ConfirmDialog />
+        <KeyboardShortcutsHelp />
 
-      <!-- Lazy panels: mounted only while their ui open-flag is set, so each loads on
-           first open (its own chunk) rather than bloating the initial bundle. -->
-      <TaskSourceConnectModal v-if="ui.taskConnect" />
-      <TaskImportModal v-if="ui.taskImport" />
-      <BugHuntModal v-if="ui.bugHunt" />
-      <RecurringPipelineModal v-if="ui.addRecurringFrameId" />
-      <ObservabilityPanel v-if="ui.observabilityInstanceId" />
-      <OperatorDashboardPanel v-if="ui.operatorDashboardOpen" />
-      <ReportsPanel v-if="ui.reportsOpen" />
-      <KaizenPanel v-if="ui.kaizenScreenOpen" />
-      <DocumentSourceConnectModal v-if="ui.documentConnect" />
-      <DocumentImportModal v-if="ui.documentImport" />
-      <DocumentTemplatesModal v-if="ui.documentTemplates" />
-      <SpawnPreviewModal v-if="ui.spawnPreview" />
-      <BootstrapModal v-if="ui.bootstrapOpen" />
-      <AddServiceFromRepoModal v-if="ui.addServiceOpen" />
-      <GitHubPanel v-if="ui.githubOpen" />
-      <SlackPanel v-if="ui.slackOpen" />
-      <FragmentLibraryPanel v-if="ui.fragmentLibraryOpen" />
-      <FoundationalServicePanel v-if="ui.foundationalServicesOpen" />
-      <PipelineHealthModal v-if="ui.pipelineHealthOpen" />
-      <RiskPolicyHealthModal v-if="ui.riskPolicyHealthOpen" />
-      <ModelPresetHealthModal v-if="ui.modelPresetHealthOpen" />
-      <IntegrationsHub v-if="ui.integrationsOpen" />
-      <ModelProvidersHub v-if="ui.modelProvidersOpen" />
-      <PersonalSetupModal v-if="ui.personalSetupOpen" />
-      <WorkspaceSettingsPanel v-if="ui.workspaceSettingsOpen" />
-      <AccountSettingsPanel v-if="ui.accountSettingsOpen" />
-      <ObservabilityConnectionPanel v-if="ui.observabilityConnectionOpen" />
-      <ApiTokensPanel v-if="ui.apiTokensOpen" />
-      <InfrastructureWindow v-if="ui.infrastructureOpen" />
-      <EnvironmentSetupWizard v-if="ui.environmentWizardOpen" />
-      <ModelConfigurationPanel v-if="ui.modelConfigOpen" />
-      <LocalModelEndpointsPanel v-if="ui.localModelsOpen" />
-      <SandboxPanel v-if="ui.sandboxOpen" />
-      <UserSecretsSection v-if="ui.userSecretsOpen" />
-      <OpenRouterCatalogPanel v-if="ui.openRouterOpen" />
-      <VendorCredentialsModal v-if="ui.vendorCredentialsOpen" />
-      <AiProviderOnboardingModal v-if="ui.aiProviderSetupOpen" />
-      <AiPresetMismatchDialog v-if="ui.aiPresetMismatchOpen" />
-      <TutorialPrompt v-if="tutorial.promptOpen" />
-      <TutorialCatalogue v-if="tutorial.catalogueOpen" />
-      <TutorialOverlay v-if="tutorial.touring" />
-      <!-- Mounted off the PENDING id rather than off whether it may currently be SHOWN: the
-           component holds a suppressed offer (a tour is running, a tutorial window is open) and
-           renders it once the way is clear, which is the whole reason the offer survives the
-           moment it was raised in. -->
-      <TutorialNudge v-if="tutorial.pendingNudgeId" />
-    </template>
+        <!-- Lazy panels: mounted only while their ui open-flag is set, so each loads on
+             first open (its own chunk) rather than bloating the initial bundle. -->
+        <TaskSourceConnectModal v-if="ui.taskConnect" />
+        <TaskImportModal v-if="ui.taskImport" />
+        <BugHuntModal v-if="ui.bugHunt" />
+        <RecurringPipelineModal v-if="ui.addRecurringFrameId" />
+        <ObservabilityPanel v-if="ui.observabilityInstanceId" />
+        <OperatorDashboardPanel v-if="ui.operatorDashboardOpen" />
+        <ReportsPanel v-if="ui.reportsOpen" />
+        <KaizenPanel v-if="ui.kaizenScreenOpen" />
+        <DocumentSourceConnectModal v-if="ui.documentConnect" />
+        <DocumentImportModal v-if="ui.documentImport" />
+        <DocumentTemplatesModal v-if="ui.documentTemplates" />
+        <SpawnPreviewModal v-if="ui.spawnPreview" />
+        <BootstrapModal v-if="ui.bootstrapOpen" />
+        <AddServiceFromRepoModal v-if="ui.addServiceOpen" />
+        <GitHubPanel v-if="ui.githubOpen" />
+        <SlackPanel v-if="ui.slackOpen" />
+        <FragmentLibraryPanel v-if="ui.fragmentLibraryOpen" />
+        <FoundationalServicePanel v-if="ui.foundationalServicesOpen" />
+        <PipelineHealthModal v-if="ui.pipelineHealthOpen" />
+        <RiskPolicyHealthModal v-if="ui.riskPolicyHealthOpen" />
+        <ModelPresetHealthModal v-if="ui.modelPresetHealthOpen" />
+        <IntegrationsHub v-if="ui.integrationsOpen" />
+        <ModelProvidersHub v-if="ui.modelProvidersOpen" />
+        <PersonalSetupModal v-if="ui.personalSetupOpen" />
+        <WorkspaceSettingsPanel v-if="ui.workspaceSettingsOpen" />
+        <AccountSettingsPanel v-if="ui.accountSettingsOpen" />
+        <ObservabilityConnectionPanel v-if="ui.observabilityConnectionOpen" />
+        <ApiTokensPanel v-if="ui.apiTokensOpen" />
+        <InfrastructureWindow v-if="ui.infrastructureOpen" />
+        <EnvironmentSetupWizard v-if="ui.environmentWizardOpen" />
+        <ModelConfigurationPanel v-if="ui.modelConfigOpen" />
+        <LocalModelEndpointsPanel v-if="ui.localModelsOpen" />
+        <SandboxPanel v-if="ui.sandboxOpen" />
+        <UserSecretsSection v-if="ui.userSecretsOpen" />
+        <OpenRouterCatalogPanel v-if="ui.openRouterOpen" />
+        <VendorCredentialsModal v-if="ui.vendorCredentialsOpen" />
+        <AiProviderOnboardingModal v-if="ui.aiProviderSetupOpen" />
+        <AiPresetMismatchDialog v-if="ui.aiPresetMismatchOpen" />
+        <TutorialPrompt v-if="tutorial.promptOpen" />
+        <TutorialCatalogue v-if="tutorial.catalogueOpen" />
+        <TutorialOverlay v-if="tutorial.touring" />
+        <!-- Mounted off the PENDING id rather than off whether it may currently be SHOWN: the
+             component holds a suppressed offer (a tour is running, a tutorial window is open) and
+             renders it once the way is clear, which is the whole reason the offer survives the
+             moment it was raised in. -->
+        <TutorialNudge v-if="tutorial.pendingNudgeId" />
+      </template>
 
-    <!-- Backend unreachable / bootstrap failed -->
-    <div v-else-if="workspace.error" class="m-auto max-w-md p-8 text-center">
-      <UIcon name="i-lucide-plug-zap" class="mx-auto mb-3 h-10 w-10 text-amber-400" />
-      <h1 class="mb-1 text-lg font-semibold">{{ $t('app.backendUnreachable') }}</h1>
-      <p class="mb-4 text-sm text-slate-400">{{ workspace.error }}</p>
-      <UButton color="primary" icon="i-lucide-rotate-ccw" @click="workspace.init()">
-        {{ $t('common.retry') }}
-      </UButton>
-    </div>
+      <!-- Backend unreachable / bootstrap failed -->
+      <div v-else-if="workspace.error" class="m-auto max-w-md p-8 text-center">
+        <UIcon name="i-lucide-plug-zap" class="mx-auto mb-3 h-10 w-10 text-amber-400" />
+        <h1 class="mb-1 text-lg font-semibold">{{ $t('app.backendUnreachable') }}</h1>
+        <p class="mb-4 text-sm text-slate-400">{{ workspace.error }}</p>
+        <UButton color="primary" icon="i-lucide-rotate-ccw" @click="workspace.init()">
+          {{ $t('common.retry') }}
+        </UButton>
+      </div>
 
-    <!-- Initial load -->
-    <div v-else class="m-auto flex flex-col items-center gap-3 text-slate-400">
-      <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
-      <span class="text-sm">{{ $t('app.loadingBoard') }}</span>
+      <!-- Initial load -->
+      <div v-else class="m-auto flex flex-col items-center gap-3 text-slate-400">
+        <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
+        <span class="text-sm">{{ $t('app.loadingBoard') }}</span>
+      </div>
     </div>
   </div>
 </template>
