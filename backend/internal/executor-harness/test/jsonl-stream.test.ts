@@ -5,7 +5,7 @@ import {
   summarizePiRun,
   terminalErrorFromEvents,
   terminalRunError,
-} from '../src/pi.js'
+} from '../src/pi-reduction.js'
 
 // The bounds that keep an agent CLI's stream off the harness's event loop and out of its heap
 // (stuck-run audit F6). Both watchdog timers and the /health + /jobs poll endpoints run on the
@@ -48,6 +48,9 @@ describe('JsonlLineReader', () => {
     expect(lines).toEqual([{ line: '{"type":"a"}', final: false }])
   })
 
+  // The COST of that bound is pinned in `pi-reduction.test.ts`, which streams a real over-cap
+  // record through `runPi`: framing that scanned the accumulated buffer once per chunk flattened
+  // its rope every time, blocking the loop for ~6s on 32 MB, and those tests simply time out.
   it('drops a record that outgrows the cap and resynchronises on the next one', () => {
     const { lines, reader } = collect(64)
     reader.push(`{"pad":"${'x'.repeat(200)}"}\n{"type":"after"}\n`)

@@ -1,7 +1,7 @@
 import { opendir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { AgentJob, AgentResult } from './job.js'
-import type { PiRunStats } from './pi.js'
+import type { PiRunStats } from './pi-reduction.js'
 import type { RunOptions } from './runner.js'
 import {
   NEVER_ACTED_CAUSE,

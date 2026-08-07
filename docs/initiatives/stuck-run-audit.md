@@ -154,9 +154,10 @@ advertised "a container can never run forever" guarantee fails. Bounded
 only by the engine-side poll-failure tolerance → `release()`/destroy and, last, the reaper.
 **Fix (landed):** a shared `src/jsonl-stream.ts`: `JsonlLineReader` frames both CLIs' stdout
 and refuses to buffer a runaway record; `BoundedTail` replaces the whole-run stdout/stderr
-strings that were retained only to slice a tail off. `runPi` now retains the records it parses
-AS THEY STREAM and reduces those at close (`summarizeFromEvents` / `terminalErrorFromEvents`),
-so the two extra full-output passes are gone rather than chunked. See the Group D notes.
+strings that were retained only to slice a tail off. `runPi` FOLDS each record as it streams
+through `PiRunReducer` (`src/pi-reduction.ts`) instead of retaining them, so the two extra
+full-output passes are gone and the run's memory is O(largest record) rather than O(records).
+See the Group D notes.
 
 ### Medium
 
@@ -233,9 +234,9 @@ progress guard (now `src/progress-guard.ts`, and much richer than at audit time)
 observes `tool_execution_end`. A thinking-forever model
 never trips either and burns the whole budget (and the engine budget behind it).
 **Fix (landed):** a third watchdog, `RunnerLimits.toolSilenceMs` (`JOB_TOOL_SILENCE_MS`),
-armed only during the `agent` phase and reset by every completed tool call, failing the run
-under a NEW `no-tool-progress` harness failure cause. See the Group D notes for why it is a
-new cause rather than `inactivity-timeout`, and for the three choices that bound its
+armed by the agent stream that can reset it and beaten by every completed tool call, failing
+the run under a NEW `no-tool-progress` harness failure cause. See the Group D notes for why it
+is a new cause rather than `inactivity-timeout`, and for the choices that bound its
 wrong-kill risk.
 
 **F14: Resumed work branch with nothing ahead of base fails the run with GitHub's opaque
@@ -453,10 +454,30 @@ covers all three. Runner image `1.97.0`.
   claude-code/codex runner) had grown a byte-identical framing loop with the same unbounded
   buffer, so one definition of "how much of a child's output we hold" now serves both, for the
   same reason `ProgressGuard` already did.
-  - **Reuse the parsed records, don't chunk the re-parse.** The audit offered either. Retaining
-    what `processLine` already parsed removes BOTH close-time passes outright, and it is not a
-    second copy of the run, because it also lets the raw stdout/stderr strings go: every consumer
-    of those took a tail (2 KB / 1.5 KB / 500 B), so a `BoundedTail` is lossless for them.
+  - **Fold the records, don't retain them and don't chunk the re-parse.** The audit offered the
+    first two. Reducing what `processLine` parsed removes BOTH close-time passes outright, and it
+    also lets the raw stdout/stderr strings go: every consumer of those took a tail
+    (2 KB / 1.5 KB / 500 B), so a `BoundedTail` is lossless for them. Retaining the parsed
+    records instead — the first cut — bounded the framing and left the heap open, since a parsed
+    object is typically larger than the text it replaced. `PiRunReducer` keeps only what the
+    close-of-run answers read: the last terminal record, the one transcript all three reductions
+    scan back to, running counters, and a bounded tail of streamed assistant text. The
+    array-taking entry points offline tooling still uses are DEFINED in terms of the same
+    reducer, so the live and offline paths cannot drift.
+  - **Framing scans the CHUNK, never the buffer.** `buffer += chunk` is a cheap rope in V8, but
+    any search over it flattens the rope, so scanning the buffer once per chunk costs
+    O(record) per chunk — quadratic in a runaway record, on the very loop this bound protects.
+    Measured at ~6s of solid blocking for one 32 MB record: the cap bounded the memory and
+    handed back the stall in its place.
+  - **A dropped record must not be able to certify a run.** The terminal `agent_end` is both the
+    largest legitimate record and the one that decides whether an exit-0 run actually FAILED, so
+    it is the likeliest casualty of the cap and the costliest. With it dropped the terminal-error
+    check finds no failure from having seen nothing at all, and a hard-failed run resolves green
+    — the exact case that check exists to prevent. `runPi` now refuses to certify a clean exit
+    that saw no terminal record while the reader dropped one, under `no-usable-output`.
+  - **The subscription stream reports its drops too.** `streamCli` counted them and said nothing,
+    so an oversized record there cost the run its progress, trajectory and that turn's telemetry
+    with no evidence it had happened.
   - **The cap is on the RECORD, not on the leftover buffer.** The first cut only checked what was
     still buffered after framing, so a record that arrived whole inside one chunk sailed past it:
     the bound would have depended on how the OS split the reads. Caught by a test that pushes an
@@ -471,10 +492,32 @@ covers all three. Runner image `1.97.0`.
 - **F13**: `RunnerLimits.toolSilenceMs`, a third watchdog beside inactivity and the cap. Three
   choices bound the wrong-kill risk this obviously creates, and each is the reason a simpler
   version was rejected:
-  - **Armed only during the `agent` phase** (`AGENT_PHASE`, named rather than spelled per site).
-    Clone, dependency install and push complete no tool calls by nature and carry their own
-    per-command timeouts; a globally-armed timer would kill them. Each repair loop's return to
-    `agent` starts a fresh window.
+  - **Armed by the agent STREAM, not by the `agent` phase label.** The window is only meaningful
+    while something able to reset it is running, and only the runner knows whether its CLI
+    reports completed tool calls. Keying it on the phase looked equivalent and was not: `agent`
+    is a telemetry breadcrumb several sites mark for work that completes no tool calls at all
+    (a Codex pass, which emits no `ToolSpan`; a tool-less inline completion; the label restored
+    around a repair loop's shell commands), so a phase-armed window spent most of its time armed
+    over things that could only let it expire. Each runner opens its own window around its CLI
+    and closes it on exit (`ToolSilenceWatchdog`, `RunOptions.beginToolWindow`), which makes
+    "armed" and "can beat" the same fact rather than two call sites agreeing. A repair loop's
+    next pass opens a fresh window; the work between passes is outside the watchdog entirely.
+  - **The reset is tool ACTIVITY, not the trajectory.** `onSpan` is an observability opt-in and
+    `runCodex` produces no spans at all, so each runner beats the window where it already
+    recognises a completed tool call: Pi's `tool_execution_end`, claude-code's `tool_result`
+    turn, codex's tool/command/exec events.
+  - **A caller with no tool loop wires no window**, and says so: `handleInline` documents the
+    omission, because a window an inline one-shot could never beat can only ever expire.
+  - **Derived from `JOB_MAX_DURATION_MS` (half), not a constant**, per the harness rule in
+    CLAUDE.md: a fixed 30 minutes sits past the entire budget of a deployment running 20-minute
+    jobs, i.e. is silently disabled exactly where it is configured tightest.
+  - **The gone-quiet case is kept with inactivity at the FIRE SITE, not by the clamp.** The
+    default window is still floored at `JOB_INACTIVITY_MS`, but that floor cannot order the two:
+    they anchor on different events (last completed tool call vs last byte of output), so the
+    tool-silence anchor is always the earlier one and equal windows have it firing first — and an
+    explicit `JOB_TOOL_SILENCE_MS` is not floored at all. The watchdog therefore fires only when
+    output arrived DURING the window that elapsed, which is exactly what `no-tool-progress`
+    claims; a window that passed in silence re-arms and leaves the kill to inactivity.
   - **Derived from `JOB_MAX_DURATION_MS` (half), not a constant**, per the harness rule in
     CLAUDE.md: a fixed 30 minutes sits past the entire budget of a deployment running 20-minute
     jobs, i.e. is silently disabled exactly where it is configured tightest.

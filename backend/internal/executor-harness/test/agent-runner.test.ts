@@ -954,3 +954,147 @@ describe.skipIf(!unix)('runClaudeCode failure reporting', () => {
     expect(message).toMatch(/push rejected for/)
   })
 })
+
+// Stuck-run audit F13. The tool-silence window is opened by the CLI runner itself and beaten
+// from where each stream reports tool activity — NOT from `onSpan`. That distinction is the
+// finding: `runCodex` builds no `ToolCallTracker` and emits no spans at all, so a span-keyed
+// window would have force-failed every codex pass longer than the window while it worked.
+describe.runIf(unix)('the tool-silence window each runner opens', () => {
+  /** Record the window's lifecycle for one run. */
+  function recorder() {
+    const events: string[] = []
+    return {
+      events,
+      beginToolWindow: () => {
+        events.push('open')
+        return {
+          toolCompleted: () => events.push('beat'),
+          close: () => events.push('close'),
+        }
+      },
+    }
+  }
+
+  it('is beaten by codex tool activity, which produces no spans at all', async () => {
+    fakeCli('codex', [
+      JSON.stringify({ type: 'exec_command_end', exit_code: 0 }),
+      JSON.stringify({ type: 'agent_message', message: 'done' }),
+    ])
+    const spans: unknown[] = []
+    const { events, beginToolWindow } = recorder()
+    await runCodex({
+      cwd,
+      model: 'gpt-5.5-codex',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+      onSpan: (span) => spans.push(span),
+      beginToolWindow,
+    })
+    // The premise of the finding, asserted rather than assumed.
+    expect(spans).toEqual([])
+    expect(events).toEqual(['open', 'beat', 'close'])
+  })
+
+  it('is beaten by the claude-code turn that carries a tool_result', async () => {
+    fakeCli('claude', [
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { path: 'a' } }],
+        },
+      }),
+      JSON.stringify({
+        type: 'user',
+        message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] },
+      }),
+      JSON.stringify({ type: 'result', result: 'done' }),
+    ])
+    const { events, beginToolWindow } = recorder()
+    await runClaudeCode({
+      cwd,
+      model: 'sonnet',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+      beginToolWindow,
+    })
+    expect(events).toEqual(['open', 'beat', 'close'])
+  })
+
+  it('is not beaten by a plain user turn that carries no tool result', async () => {
+    // "The model sent a user turn" is not "a tool call completed"; treating it as one would
+    // hand the watchdog a reset for work that did nothing.
+    fakeCli('claude', [
+      JSON.stringify({ type: 'user', message: { content: [{ type: 'text', text: 'continue' }] } }),
+      JSON.stringify({ type: 'result', result: 'done' }),
+    ])
+    const { events, beginToolWindow } = recorder()
+    await runClaudeCode({
+      cwd,
+      model: 'sonnet',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+      beginToolWindow,
+    })
+    expect(events).toEqual(['open', 'close'])
+  })
+
+  it('closes the window even when the CLI fails', async () => {
+    failingCli('claude', [JSON.stringify({ type: 'result', is_error: true, result: 'boom' })], 1)
+    const { events, beginToolWindow } = recorder()
+    await expect(
+      runClaudeCode({
+        cwd,
+        model: 'sonnet',
+        systemPrompt: 'SYS',
+        userPrompt: 'USER',
+        ambientAuth: true,
+        beginToolWindow,
+      }),
+    ).rejects.toThrow()
+    expect(events).toEqual(['open', 'close'])
+  })
+})
+
+// Stuck-run audit F6. `runPi` reports the records its reader refused to buffer; this path did
+// not, so an oversized record cost the run its progress, its trajectory and that turn's
+// telemetry with nothing to say it had happened.
+describe.runIf(unix)('oversized-record reporting on the subscription stream', () => {
+  it('warns once, with a count, when the reader dropped a record', async () => {
+    const warnings: { msg: string; fields?: Record<string, unknown> }[] = []
+    // The padding is generated INSIDE the fake rather than embedded in its source: the cap is
+    // 32 MB, and a script literal that size costs more to write and parse than the rest of this
+    // suite put together.
+    const pad = "JSON.stringify({ type: 'pad', pad: 'x'.repeat(33 * 1024 * 1024) })"
+    const done = "JSON.stringify({ type: 'result', result: 'done' })"
+    writeFileSync(
+      join(binDir, 'claude'),
+      `#!/usr/bin/env node\nprocess.stdin.resume()\nprocess.stdin.on('data', () => {})\n` +
+        `process.stdout.write(${pad} + '\\n')\n` +
+        `process.stdout.write(${done} + '\\n')\n` +
+        `process.stdout.end(() => process.exit(0))\n`,
+      { mode: 0o755 },
+    )
+    await runClaudeCode({
+      cwd,
+      model: 'sonnet',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+      log: {
+        debug: () => {},
+        info: () => {},
+        warn: (msg: string, fields?: Record<string, unknown>) => warnings.push({ msg, fields }),
+        error: () => {},
+        child: () => {
+          throw new Error('unused')
+        },
+      } as never,
+    })
+    const dropped = warnings.filter((w) => w.msg.includes('oversized'))
+    expect(dropped).toHaveLength(1)
+    expect(dropped[0]!.fields).toMatchObject({ command: 'claude', oversizedLines: 1 })
+  })
+})

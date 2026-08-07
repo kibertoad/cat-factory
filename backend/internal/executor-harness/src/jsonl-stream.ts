@@ -36,17 +36,35 @@ export const MAX_JSONL_LINE_CHARS = 32 * 1024 * 1024
  */
 export class BoundedTail {
   private text = ''
+  private total = 0
 
   constructor(private readonly maxChars: number) {}
 
   push(chunk: string): void {
     this.text += chunk
+    this.total += chunk.length
     if (this.text.length > this.maxChars * 2) this.text = this.text.slice(-this.maxChars)
   }
 
   /** The last `maxChars` characters seen. */
   toString(): string {
     return this.text.length > this.maxChars ? this.text.slice(-this.maxChars) : this.text
+  }
+
+  /** Everything ever pushed, whether or not it is still retained. */
+  get totalChars(): number {
+    return this.total
+  }
+
+  /**
+   * Characters dropped off the FRONT because the tail is bounded; 0 while everything still fits.
+   *
+   * A caller that renders the tail to a human owes them this: a bounded tail is the opposite of a
+   * prefix, so a reader who assumes one concludes the producer stopped where the text begins.
+   * Diagnostic quotes (a stderr tail) need no such note — being a tail is what they are for.
+   */
+  get droppedChars(): number {
+    return this.total - this.toString().length
   }
 }
 
@@ -80,29 +98,39 @@ export class JsonlLineReader {
 
   /** Feed one stdout chunk, emitting every complete record it finishes. */
   push(text: string): void {
-    this.buffer += text
-    let nl = this.buffer.indexOf('\n')
-    while (nl !== -1) {
-      const raw = this.buffer.slice(0, nl)
-      this.buffer = this.buffer.slice(nl + 1)
-      nl = this.buffer.indexOf('\n')
+    // Framing scans the incoming CHUNK, never the accumulated buffer. `buffer += chunk` is a
+    // cheap rope in V8 and `.length` reads off it in constant time, but ANY search over it
+    // flattens the rope — so scanning the buffer once per chunk costs O(record) per chunk, i.e.
+    // quadratic in a runaway record, paid on the very event loop this class exists to keep
+    // answering polls. Measured, a 32 MB unterminated record cost ~6s of solid blocking that
+    // way: the cap bounded the memory and handed back the stall in its place.
+    let rest = text
+    for (;;) {
+      const nl = rest.indexOf('\n')
+      if (nl === -1) break
       if (this.skipping) {
         // The newline that ends an oversized record ends the skip with it: everything buffered
         // for that record is already gone, and what follows is a fresh one.
         this.skipping = false
-      } else if (raw.length > this.maxLineChars) {
+      } else {
+        // The only place the buffer is materialised, and only for a record that COMPLETED —
+        // which the branch below has already kept under the cap.
+        const raw = this.buffer + rest.slice(0, nl)
+        this.buffer = ''
         // The cap is on the RECORD, not on the leftover buffer: a record that arrived whole
         // inside one chunk was never buffered across pushes, and dropping it only when it
         // straddles a chunk boundary would make the bound depend on how the OS split the reads.
-        this.dropped++
-      } else {
-        this.onLine(raw.trim(), false)
+        if (raw.length > this.maxLineChars) this.dropped++
+        else this.onLine(raw.trim(), false)
       }
+      rest = rest.slice(nl + 1)
     }
+    if (this.skipping) return
+    this.buffer += rest
     if (this.buffer.length > this.maxLineChars) {
       this.buffer = ''
       // Count the record once, however many chunks it goes on to spill.
-      if (!this.skipping) this.dropped++
+      this.dropped++
       this.skipping = true
     }
   }

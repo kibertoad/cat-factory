@@ -6,6 +6,7 @@ import type { SliceReview } from './subagents.js'
 import type { ObservedMcpServer } from './agent-capabilities.js'
 import type { HarnessCallMetric, TodoProgress, ToolSpan } from './pi.js'
 import { log, type Logger } from './logger.js'
+import { ToolSilenceWatchdog, type ToolProgressWindow } from './tool-silence.js'
 import {
   type FailureCause,
   failureCauseOf,
@@ -33,6 +34,22 @@ export interface RunOptions {
   onProgress?: (progress: TodoProgress) => void
   /** Receives one compact {@link ToolSpan} per completed tool call (observability). */
   onSpan?: (span: ToolSpan) => void
+  /**
+   * Opens the tool-silence window (stuck-run audit F13) for ONE agent stream, returning the
+   * handle that stream beats on every completed tool call and closes when it ends.
+   *
+   * Called by the agent-CLI runners themselves rather than by the phase marker, because the
+   * window is only meaningful while something able to RESET it is running and only the runner
+   * knows whether its CLI reports completed tool calls at all. A caller that runs no tool loop
+   * (the inline one-shot completion) simply does not forward this, which is a statement, not an
+   * omission: the run stays bounded by the inactivity and max-duration watchdogs, and a window
+   * nothing could ever beat would only be able to expire.
+   *
+   * Absent ⇒ no window is opened and this watchdog is silent for that work. It fails toward NOT
+   * killing on purpose: this audit exists as much to stop recovery machinery ending healthy runs
+   * as to bound wedged ones, and the wall-clock cap is underneath either way.
+   */
+  beginToolWindow?: () => ToolProgressWindow
   /** Receives the forward-looking follow-up / question items the Coder streamed since the last poll. */
   onFollowUp?: (items: FollowUpLine[]) => void
   /**
@@ -267,13 +284,6 @@ interface JobEntry<TResult extends JobResultBase> extends JobView<TResult> {
   abort?: (reason: string) => void
 }
 
-/**
- * The phase label every mode marks around its agent pass (`opts.onPhase('agent')`), and the only
- * one the tool-silence watchdog is armed for. Named rather than spelled at each site so the
- * watchdog's arming condition and the handlers' marking cannot drift apart silently.
- */
-export const AGENT_PHASE = 'agent'
-
 /** Watchdog windows that bound every job. Tunable via the container's env. */
 export interface RunnerLimits {
   /** Hard ceiling on total job wall-clock before it's force-failed. */
@@ -290,15 +300,17 @@ export interface RunnerLimits {
    */
   coldStartMs: number
   /**
-   * Stuck-run audit F13: force-fail the job if, while the AGENT phase is running, no tool call
-   * completes for this long. The gap the other two watchdogs structurally cannot see — a model
-   * that keeps talking (or thinking out loud) resets the inactivity timer on every chunk while
-   * completing nothing, so the only remaining bound was the full wall-clock cap and the engine's
+   * Stuck-run audit F13: force-fail the job if a running agent stream completes no tool call for
+   * this long. The gap the other two watchdogs structurally cannot see — a model that keeps
+   * talking (or thinking out loud) resets the inactivity timer on every chunk while completing
+   * nothing, so the only remaining bound was the full wall-clock cap and the engine's
    * ~70-minute poll budget behind it.
    *
-   * Armed ONLY during the agent phase, so the activity-silent phases (clone, dependency install,
-   * push) are outside it by construction: those legitimately complete no tool calls, and they
-   * are bounded by their own per-command timeouts. Set to 0 to disable.
+   * Armed only for as long as a stream that REPORTS completed tool calls is running (see
+   * {@link RunOptions.beginToolWindow}), so the activity-silent stretches — clone, dependency
+   * install, push, a validation loop's check commands — are outside it by construction: they
+   * legitimately complete no tool calls, and they are bounded by their own per-command timeouts.
+   * Set to 0 to disable.
    */
   toolSilenceMs: number
 }
@@ -345,11 +357,14 @@ export function loadRunnerLimits(env: NodeJS.ProcessEnv = process.env): RunnerLi
  * 30 minutes would sit past the whole budget of a deployment that runs 20-minute jobs, i.e. be
  * silently disabled).
  *
- * Clamped to at least the inactivity window because the two must not race: inactivity owns the
- * gone-quiet case and has the clearer diagnostic for it, so a tool-silence kill firing FIRST
- * would relabel an ordinary hang as a rabbit-hole. That ordering also means a genuinely silent
- * run always trips inactivity, which is why this watchdog needs no "but is it chatty?" test —
- * by the time it can fire, output has been arriving all along.
+ * Floored at the inactivity window so the default never races the gone-quiet diagnostic more
+ * often than it has to. The floor is a sizing choice, NOT the thing that keeps the two watchdogs
+ * apart: they anchor on different events (the last completed tool call vs the last byte of
+ * output), so the tool-silence anchor is always the earlier of the two and equal windows would
+ * still have it firing first. What actually keeps this watchdog off a hang is the expiry test in
+ * {@link ToolSilenceWatchdog}, which fires only when output arrived DURING the window that
+ * elapsed — and which also holds for an operator who sets `JOB_TOOL_SILENCE_MS` below
+ * `JOB_INACTIVITY_MS`, where no default-side clamp applies at all.
  */
 function toolSilenceDefault(maxDurationMs: number, inactivityMs: number): number {
   return Math.max(Math.round(maxDurationMs / 2), inactivityMs)
@@ -521,25 +536,6 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
 
     const jobLog = log.child({ jobId: entry.id, ...this.describe(job) })
 
-    // Stuck-run audit F13: the third watchdog, and the only one that can see a model which
-    // keeps TALKING while completing nothing — its output resets the inactivity timer on every
-    // chunk, and it is nowhere near the wall-clock cap. Armed only while the agent phase runs,
-    // and reset by every completed tool call.
-    let toolSilence: ReturnType<typeof setTimeout> | undefined
-    const clearToolSilence = (): void => {
-      clearTimeout(toolSilence)
-      toolSilence = undefined
-    }
-    const armToolSilence = (): void => {
-      clearToolSilence()
-      if (this.limits.toolSilenceMs <= 0) return
-      toolSilence = setTimeout(() => {
-        // First watchdog to fire wins the reason (see `resetInactivity` below).
-        killReason ??= 'no-tool-progress'
-        controller.abort(new Error('no tool progress'))
-      }, this.limits.toolSilenceMs)
-    }
-
     // Stuck-run breadcrumb: the coarse phase the handler is in, per-phase wall-clock, and
     // the last completed tool — so an inactivity kill can say WHERE it hung instead of a
     // bare "likely hung", and the finish/fail log carries the phase-timing breakdown.
@@ -555,11 +551,6 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
       // (cloning / running the agent / pushing) — the same marker drives the failure
       // breadcrumb. A terminal `done`/`failed` is set by the caller below.
       entry.phase = next
-      // The tool-silence window belongs to the AGENT: clone, dependency install and push
-      // legitimately complete no tool calls and carry their own per-command timeouts. Each
-      // re-entry (a validation- or reproduction-repair loop returns here) starts a fresh window.
-      if (next === AGENT_PHASE) armToolSilence()
-      else clearToolSilence()
     }
     let lastTool: { name: string; at: number } | undefined
 
@@ -584,6 +575,21 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
     // spoken yet" test and, on a failure, the difference between a run that died mid-work and one
     // that never got going at all.
     let lastActivityAt: number | undefined
+
+    // Stuck-run audit F13: the third watchdog, and the only one that can see a model which keeps
+    // TALKING while completing nothing — its output resets the inactivity timer on every chunk,
+    // and it is nowhere near the wall-clock cap. It is armed by the agent stream itself rather
+    // than by the phase marker (see `RunOptions.beginToolWindow`) and reads `lastActivityAt` at
+    // expiry, which is what keeps the gone-quiet case with the inactivity watchdog that owns it.
+    const toolSilence = new ToolSilenceWatchdog({
+      windowMs: this.limits.toolSilenceMs,
+      lastActivityAt: () => lastActivityAt,
+      onExpired: () => {
+        // First watchdog to fire wins the reason (see `resetInactivity` above).
+        killReason ??= 'no-tool-progress'
+        controller.abort(new Error('no tool progress'))
+      },
+    })
 
     // ADR 0026 D4: a one-shot cold-start watchdog. If the job produces no activity within
     // `coldStartMs`, record a structured diagnostic (a likely onboarding/auth wedge) so it
@@ -621,9 +627,8 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
         onSpan: (span) => {
           entry.spanBuffer.push(span)
           lastTool = { name: span.tool, at: span.endedAt }
-          // A completed tool call IS the progress this watchdog measures.
-          if (phase === AGENT_PHASE) armToolSilence()
         },
+        beginToolWindow: () => toolSilence.open(),
         onFollowUp: (items) => {
           entry.followUpBuffer.push(...items)
         },
@@ -698,7 +703,7 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
       clearTimeout(inactivity)
       clearTimeout(cap)
       clearTimeout(coldStart)
-      clearToolSilence()
+      toolSilence.stop()
       entry.abort = undefined
       entry.heartbeatAt = Date.now()
     }
