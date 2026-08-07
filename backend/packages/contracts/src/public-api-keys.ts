@@ -64,20 +64,51 @@ export type PublicApiScope = v.InferOutput<typeof publicApiScopeSchema>
  * would be an integrator's own text breaking a line-oriented log or a table row on whichever
  * surface renders it next.
  *
- * The class names its members one by one rather than using `\p{C}`, because this pattern SHIPS:
- * it lands in `docs/openapi.json`, which third parties feed to their own codegen and validators,
- * and a Unicode PROPERTY escape needs a regex flag many of them do not set.
+ * The refusal is TWO checks, split by what can be PUBLISHED rather than by what it means.
+ *
+ * {@link EXTERNAL_IDENTITY_CONTROL_CLASS} is the half that ships: it lands in `docs/openapi.json`
+ * as this field's `pattern`, which third parties feed to their own codegen and validators, so it
+ * is spelled in the one escape syntax every flavour we publish an SDK for agrees on. `\xHH` is
+ * valid in ECMA-262, Go's RE2, PCRE, Python and Java alike, where `\p{C}` needs a flag many of
+ * them do not set and `\uHHHH` (which this class first carried) is a PARSE ERROR in RE2 and PCRE.
+ * A pattern naming U+2028 that way does not fail one validation, it fails to compile at all, which
+ * is a broken client rather than a rejected value.
+ *
+ * The two separators cannot be spelled portably at all (`\u2028` breaks RE2 and PCRE, `\x{2028}`
+ * breaks ECMA-262 and Python), so they are refused by a `v.check`, which emits no `pattern`. The
+ * published schema is therefore a NECESSARY condition and not a sufficient one: a third-party
+ * validator admits two code points this server then answers 422 for. The trade is deliberate and
+ * this is the right way round, because an under-strict published pattern costs one caller one
+ * clear refusal where an uncompilable one costs every Go and PCRE consumer their whole client.
  */
+const EXTERNAL_IDENTITY_CONTROL_CLASS =
+  // The C0 controls, DEL, and the C1 controls. The lint guards a pattern that matches control
+  // characters by ACCIDENT; here refusing them is the whole rule, which is why the class names
+  // them one by one. C1 is named as a RANGE because an enumeration reaches for U+0085 (NEL) and
+  // silently admits the other 31 members, each of which renders as its own kind of damage on a
+  // surface that echoes this value.
+  // eslint-disable-next-line no-control-regex
+  /^[^\x00-\x1f\x7f\x80-\x9f]+$/
+
+/**
+ * U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR: line breaks to every renderer that
+ * matters, and unspellable in a portable `pattern`, so refused off the wire schema (see above).
+ */
+const EXTERNAL_IDENTITY_SEPARATORS = /[\u2028\u2029]/
+
 export const publicApiExternalIdentitySchema = v.pipe(
   v.string(),
   v.trim(),
   v.minLength(1),
   v.maxLength(200),
   v.regex(
-    // The lint guards a pattern that matches control characters by ACCIDENT; here refusing them
-    // is the whole rule, which is why the class names them one by one.
-    // eslint-disable-next-line no-control-regex
-    /^[^\u0000-\u001f\u007f\u0085\u2028\u2029]+$/,
+    EXTERNAL_IDENTITY_CONTROL_CLASS,
+    'externalIdentity must not contain control characters or line breaks',
+  ),
+  // One message for both halves: the SPLIT is about what a published pattern can express, never
+  // about what a caller did wrong, so a caller must not have to learn which half refused them.
+  v.check(
+    (value) => !EXTERNAL_IDENTITY_SEPARATORS.test(value),
     'externalIdentity must not contain control characters or line breaks',
   ),
 )

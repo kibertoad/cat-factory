@@ -1188,17 +1188,33 @@ It is echoed in three places, which together are the whole feature:
 - on the key resource (`POST`/`GET /api/v1/keys`, and the app's key list),
 - on `GET /api/v1/me`, so a subsystem handed a credential can discover which identity it holds
   rather than being told twice,
-- on **every run that key starts**: `externalIdentity` on `GET /api/v1/tasks/:taskId/run` and on
-  the job resource (`POST`/`GET /api/v1/jobs`), `null` for a run started from the app, by a
-  schedule, or by a key with no identity.
+- on **every run that key starts**: `externalIdentity` on the run resource
+  (`GET /api/v1/tasks/:taskId/run`) and on the job resource (`GET /api/v1/jobs`,
+  `GET /api/v1/jobs/:id`, `POST /api/v1/jobs/:id/cancel`, and the two SSE run streams), `null` for
+  a run started from the app, by a schedule, or by a key with no identity. The 202 that
+  `POST /api/v1/jobs` answers with is the accepted-job envelope (`jobId`, `status`, `links`) and
+  carries no run fields at all, identity included: follow `links.self` for the resource.
 
 So an integration that mints one key per person gets real per-person attribution without keeping a
-keyId table of its own. Two properties are worth relying on:
+keyId table of its own. Three properties are worth relying on:
 
 - **The run's copy is pinned when it starts, not looked up when you read it.** Revoking the key
   (what you do when someone leaves) does not erase who a finished run was for, and reading a page
   of runs costs no key reads.
 - **A retry keeps it.** A re-drive is the same work for the same requester, whoever pressed retry.
+- **A key that has an identity of its own only sees runs started for THAT identity.** Every run
+  projection carries `externalIdentityWithheld` beside the value, and `true` there means the run
+  does have an identity your key may not read. It is never `true` for a run that simply names
+  nobody, so the two stay distinguishable: a withheld attribution is one the platform is holding,
+  not one it never had. A key minted with no identity (your provisioning key, or one a member
+  minted in the app) reads every run's, which is the mapping this feature exists to give you, so
+  do the mapping from the provisioner rather than from the per-person keys. Your own key's
+  identity is on `GET /api/v1/me`.
+
+  The rule is what keeps one-key-per-person from handing each person the roster of everyone else:
+  the identity is often an email, and workspace reach is otherwise shared. It compares the stored
+  bytes exactly, with no case folding or trimming, because the value is opaque everywhere else
+  too.
 
 For attribution that actually _governs_ a run (role-scoped merge policy, submission allow-lists),
 mint per-user keys and keep them per-user: `externalIdentity` is provenance you supplied, not an

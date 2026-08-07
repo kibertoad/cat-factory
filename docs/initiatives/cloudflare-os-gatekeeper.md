@@ -123,9 +123,9 @@ An opaque `externalIdentity` on `POST /api/v1/keys`, echoed on the key resource 
 detail, so an OS deployment can map a run back to the person whose per-user key started it
 without keeping its own keyId table. Shipped as an additive field on both runtimes' key rows
 (`external_identity`, D1 0086 ⇄ Drizzle), echoed on the key resource, on `GET /api/v1/me` and on
-BOTH run projections (`publicRun`, `publicJob`), OpenAPI 1.29.0.
+BOTH run projections (`publicRun`, `publicJob`), OpenAPI 1.30.0.
 
-Three decisions worth carrying forward:
+Four decisions worth carrying forward:
 
 - **The run PINS its own copy at admission; nothing joins back to the key.** An integration
   revokes a per-user key the day that person leaves, which is exactly when the mapping is still
@@ -136,6 +136,15 @@ Three decisions worth carrying forward:
 - **A retry keeps the identity, and never re-takes it from whoever drove the re-drive.** Same
   work, same requester: re-pinning would attribute the run to the operator who pressed retry, or
   (from a sweeper, which presents no key) to nobody.
+- **A key that HAS an identity reads it back only on its own runs.** One key per person is the
+  shape this slice is for, and without a rule it hands every person's key the roster of everyone
+  else, off a value that is routinely an email. A key with no identity (the gatekeeper's own
+  provisioning key, or one a member minted in the app) still reads every run's, which is where the
+  mapping is meant to be done. The projections carry `externalIdentityWithheld` beside the value
+  rather than blanking it, because `null` already means "this run names nobody" and the two are
+  different facts: a withholding the platform does not state reads as an attribution it never had.
+  It costs no lookup, both values being in hand already (the run's pin, and the calling key's own
+  identity, which rides the authenticated context).
 - **It is never inherited from the provisioning key.** A provisioner mints for many identities, so
   the obvious default would name the integration itself on every run it starts for anyone, which
   is the answer this field exists to improve on.

@@ -14,6 +14,7 @@ import org.jspecify.annotations.Nullable;
  * @param currentStep the {@code currentStep} field.
  * @param error Always present; {@code null} when the server has no value for it.
  * @param externalIdentity Always present; {@code null} when the server has no value for it.
+ * @param externalIdentityWithheld the {@code externalIdentityWithheld} field.
  * @param pullRequest Always present; {@code null} when the server has no value for it.
  * @param runId the {@code runId} field.
  * @param status the {@code status} field.
@@ -31,6 +32,8 @@ public record PublicRun(
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("externalIdentity") @Nullable String externalIdentity,
+
+    @JsonProperty("externalIdentityWithheld") Boolean externalIdentityWithheld,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("pullRequest") @Nullable RunPullRequest pullRequest,
@@ -60,6 +63,7 @@ public record PublicRun(
         private @Nullable Double currentStep;
         private @Nullable RunError error;
         private @Nullable String externalIdentity;
+        private @Nullable Boolean externalIdentityWithheld;
         private @Nullable RunPullRequest pullRequest;
         private @Nullable String runId;
         private @Nullable RunStatus status;
@@ -87,6 +91,12 @@ public record PublicRun(
         /** Set {@code externalIdentity}. */
         public Builder externalIdentity(@Nullable String externalIdentity) {
             this.externalIdentity = externalIdentity;
+            return this;
+        }
+
+        /** Set {@code externalIdentityWithheld}. */
+        public Builder externalIdentityWithheld(@Nullable Boolean externalIdentityWithheld) {
+            this.externalIdentityWithheld = externalIdentityWithheld;
             return this;
         }
 
@@ -122,7 +132,7 @@ public record PublicRun(
 
         /** Build the {@link PublicRun}. */
         public PublicRun build() {
-            return new PublicRun(createdAt, currentStep, error, externalIdentity, pullRequest, runId, status, steps, taskId);
+            return new PublicRun(createdAt, currentStep, error, externalIdentity, externalIdentityWithheld, pullRequest, runId, status, steps, taskId);
         }
     }
 }

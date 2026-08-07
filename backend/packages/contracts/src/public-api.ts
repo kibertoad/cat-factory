@@ -99,8 +99,35 @@ export type PublicJobResult = v.InferOutput<typeof publicJobResultSchema>
  * integration does when a person leaves, precisely when the mapping is still wanted); reading a
  * run costs no key lookup, so a page of runs is not a page of key reads; and a run keeps naming
  * the identity that STARTED it rather than whatever a re-minted key says today.
+ *
+ * **Not every key sees every run's identity**, so `null` alone would be ambiguous and this field
+ * never travels without {@link publicRunExternalIdentityWithheldSchema}. See that field for the
+ * rule and why it is a rule at all.
  */
 export const publicRunExternalIdentitySchema = v.nullable(v.string())
+
+/**
+ * Whether this run HAS an identity that the reading key may not see, which is the one thing a
+ * bare `null` cannot say.
+ *
+ * The rule the flag reports: **a key that carries an `externalIdentity` of its own sees the
+ * identity only on the runs started for THAT identity; a key with none sees every run's.** A key
+ * bearing an identity is one person's credential, and this feature exists for the deployment that
+ * mints exactly that, one per person. Echoing the pinned value to all of them would hand every
+ * person's key the roster of everyone else, and the value is routinely an email. A key with no
+ * identity is the provisioner itself (or one minted in the app by a workspace member who can
+ * already read the board), which is the caller the mapping was built for.
+ *
+ * Decided from the two values already in hand, the run's pin and the calling key's own, so the
+ * rule costs the projection no lookup and a page of runs stays a page of runs.
+ *
+ * `true` means WITHHELD, never "none": a run nobody named still answers `false`, and so does a run
+ * whose identity you are being shown. Absent and withheld render the same only if a surface lets
+ * them, and a caller that read a withheld run as an unattributed one would conclude the platform
+ * lost an attribution it is in fact holding. Your own key's identity is on `GET /api/v1/me`, which
+ * is what makes the rule checkable rather than merely stated.
+ */
+export const publicRunExternalIdentityWithheldSchema = v.boolean()
 
 /** A public job resource — the external view of a headless pipeline run. */
 export const publicJobSchema = v.object({
@@ -110,6 +137,9 @@ export const publicJobSchema = v.object({
   createdAt: v.number(),
   /** Who this run was started for ({@link publicRunExternalIdentitySchema}). */
   externalIdentity: publicRunExternalIdentitySchema,
+  /** Whether an identity exists on this run that your key may not read
+   *  ({@link publicRunExternalIdentityWithheldSchema}). */
+  externalIdentityWithheld: publicRunExternalIdentityWithheldSchema,
   /** Present once the run reaches `succeeded`; null while running or on failure. */
   result: v.nullable(publicJobResultSchema),
   /** Present when `status` is `failed`; null otherwise. */
@@ -507,6 +537,9 @@ export const publicRunSchema = v.object({
   steps: v.array(publicRunStepSchema),
   /** Who this run was started for ({@link publicRunExternalIdentitySchema}). */
   externalIdentity: publicRunExternalIdentitySchema,
+  /** Whether an identity exists on this run that your key may not read
+   *  ({@link publicRunExternalIdentityWithheldSchema}). */
+  externalIdentityWithheld: publicRunExternalIdentityWithheldSchema,
   /** The PR the run opened, once one exists; null otherwise. */
   pullRequest: v.nullable(v.object({ url: v.string(), branch: v.nullable(v.string()) })),
   /** Present when `status` is `failed` (the failure kind + message); null otherwise. */

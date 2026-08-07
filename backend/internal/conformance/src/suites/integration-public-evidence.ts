@@ -576,5 +576,72 @@ function defineKeyProvisioningCases(harness: ConformanceHarness): void {
       )
       expect(run.body.externalIdentity).toBeNull()
     })
+
+    it('withholds one person key identity from another, and says so rather than blanking it', async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createOrgWorkspace({ seed: true })
+      const wsId = workspace.id
+      const adminAuth = await mintKey(app, wsId, 'admin')
+
+      // The deployment this feature exists for: one key per person, minted by a provisioner.
+      const mintFor = async (identity: string) => {
+        const minted = await app.call<{ key: PublicApiKey; secret: string }>(
+          'POST',
+          '/api/v1/keys',
+          { label: `for ${identity}`, scope: 'write', externalIdentity: identity },
+          adminAuth,
+        )
+        expect(minted.status).toBe(201)
+        return { authorization: `Bearer ${minted.body.secret}` }
+      }
+      const adaAuth = await mintFor(IDENTITY)
+      const bobAuth = await mintFor('os-user:bob@example.com')
+
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Coder only',
+        agentKinds: ['coder'],
+      })
+      expect(
+        (
+          await app.call(
+            'POST',
+            '/api/v1/tasks/task_login/start',
+            { pipelineId: pipeline.body.id },
+            adaAuth,
+          )
+        ).status,
+      ).toBe(202)
+
+      type RunView = { externalIdentity: string | null; externalIdentityWithheld: boolean }
+      const readRun = (auth: Record<string, string>) =>
+        app.call<RunView>('GET', '/api/v1/tasks/task_login/run', undefined, auth)
+
+      // Ada reads her own run whole.
+      const asAda = await readRun(adaAuth)
+      expect(asAda.status).toBe(200)
+      expect(asAda.body).toMatchObject({
+        externalIdentity: IDENTITY,
+        externalIdentityWithheld: false,
+      })
+
+      // Bob's key reaches the same run (the workspace grant is unchanged and deliberate) but not
+      // the identity on it, which is the whole leak: without the rule, every per-person key reads
+      // back the roster of every other person, and that value is routinely an email.
+      const asBob = await readRun(bobAuth)
+      expect(asBob.status).toBe(200)
+      expect(asBob.body).toMatchObject({
+        externalIdentity: null,
+        externalIdentityWithheld: true,
+      })
+
+      // And the provisioner still sees it, because the mapping is what it mints these keys for.
+      // Asserted on the SAME run as the refusal above: the two answers differ only by the reading
+      // key, so a facade that lost the pin cannot pass both halves by answering null throughout.
+      const asProvisioner = await readRun(adminAuth)
+      expect(asProvisioner.body).toMatchObject({
+        externalIdentity: IDENTITY,
+        externalIdentityWithheld: false,
+      })
+    })
   })
 }
