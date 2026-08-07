@@ -100,10 +100,17 @@ if (databaseUrl) {
     },
     async forgetSources(workspaceIds) {
       // What retention and an ordinary board tidy-up do over time: the ledger rows, the runs a
-      // live read joins through, and the imported tickets it resolves a ref from.
+      // live read joins through, and the imported tickets it resolves a ref from. The BOARDS
+      // stay: `forgetBoards` is the other case, and the rewrite must tell them apart.
       await db.delete(tokenUsage).where(inArray(tokenUsage.workspace_id, workspaceIds))
       await db.delete(agentRuns).where(inArray(agentRuns.workspace_id, workspaceIds))
       await db.delete(tasks).where(inArray(tasks.workspace_id, workspaceIds))
+    },
+    async forgetBoards(workspaceIds) {
+      // The workspace-delete cascade: every workspace-scoped table (`token_usage` among them)
+      // and then the root row. `spend_days` is deliberately NOT in that list.
+      await this.forgetSources(workspaceIds)
+      await db.delete(workspaces).where(inArray(workspaces.id, workspaceIds))
     },
   }
   defineSpendRollupSuite(

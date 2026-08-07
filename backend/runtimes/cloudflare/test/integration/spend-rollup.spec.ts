@@ -94,7 +94,8 @@ const seed: SpendRollupSeed = {
   },
   async forgetSources(workspaceIds) {
     // What retention and an ordinary board tidy-up do over time: the ledger rows, the runs a
-    // live read joins through, and the imported tickets it resolves a ref from.
+    // live read joins through, and the imported tickets it resolves a ref from. The BOARDS
+    // stay: `forgetBoards` is the other case, and the rewrite must tell them apart.
     const marks = placeholders(workspaceIds.length)
     await env.DB.batch([
       env.DB.prepare(`DELETE FROM token_usage WHERE workspace_id IN (${marks})`).bind(
@@ -105,6 +106,15 @@ const seed: SpendRollupSeed = {
       ),
       env.DB.prepare(`DELETE FROM tasks WHERE workspace_id IN (${marks})`).bind(...workspaceIds),
     ])
+  },
+  async forgetBoards(workspaceIds) {
+    // The workspace-delete cascade: every workspace-scoped table (`token_usage` among them)
+    // and then the root row. `spend_days` is deliberately NOT in that list.
+    await this.forgetSources(workspaceIds)
+    const marks = placeholders(workspaceIds.length)
+    await env.DB.prepare(`DELETE FROM workspaces WHERE id IN (${marks})`)
+      .bind(...workspaceIds)
+      .run()
   },
 }
 

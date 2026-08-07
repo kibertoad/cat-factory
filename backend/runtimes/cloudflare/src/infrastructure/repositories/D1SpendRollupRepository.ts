@@ -1,4 +1,4 @@
-import type { ReportSpendDimension } from '@cat-factory/contracts'
+import { type ReportSpendDimension, lastCompleteRollupDay } from '@cat-factory/contracts'
 import {
   SPEND_DAYS_ROLLUP,
   type ReportRange,
@@ -112,9 +112,21 @@ export class D1SpendRollupRepository implements SpendRollupRepository {
     // `DO UPDATE` and would sit there double-counting for the LIFE of the table, which here
     // means forever. `batch()` runs both in one implicit transaction, so a concurrent report
     // read never observes the window mid-rewrite and renders the gap as a quiet fortnight.
+    //
+    // The rewrite reaches only boards that STILL EXIST, because a rewrite may only delete
+    // what it can reproduce. `token_usage` IS in the workspace-delete cascade and this table
+    // deliberately is not (`WORKSPACE_CASCADE_SPECIAL_TABLES`), so for a deleted board the
+    // re-fold below reads nothing and a bare window DELETE would quietly reclaim the very
+    // rows the exclusion exists to keep: every day of it still inside the trailing rewrite
+    // window at the moment the board went. Once the board is gone the ledger can never speak
+    // for those buckets again, which is exactly what makes them final.
     const [, inserted] = await this.db.batch([
       this.db
-        .prepare('DELETE FROM spend_days WHERE day_start >= ? AND day_start < ?')
+        .prepare(
+          `DELETE FROM spend_days
+           WHERE day_start >= ? AND day_start < ?
+             AND workspace_id IN (SELECT id FROM workspaces)`,
+        )
         .bind(from, to),
       this.db
         .prepare(
@@ -165,7 +177,14 @@ export class D1SpendRollupRepository implements SpendRollupRepository {
         .bind(DAY_MS, DAY_MS, from, to),
       // The sweep's coverage, in the SAME batch (hence the same transaction) as the rewrite it
       // describes, and forward-only so a catch-up pass over an older window cannot present a
-      // current rollup as a stalled one. `through_day` is the last day actually covered.
+      // current rollup as a stalled one.
+      //
+      // `through_day` is the last day this pass covered COMPLETELY, which is not the last day
+      // it wrote: `to` is rounded UP to a day edge so today's partial spend is folded rather
+      // than deferred, and today keeps accruing after the sweep returns. Stamping the day
+      // `to` lands in would advertise a bucket still filling as finished, and the panel's
+      // "complete through <date>" would then name the one day guaranteed to be short. See
+      // `lastCompleteRollupDay`.
       this.db
         .prepare(
           `INSERT INTO platform_rollup_state (rollup, through_day, updated_at) VALUES (?, ?, ?)
@@ -173,7 +192,7 @@ export class D1SpendRollupRepository implements SpendRollupRepository {
              through_day = MAX(platform_rollup_state.through_day, excluded.through_day),
              updated_at = MAX(platform_rollup_state.updated_at, excluded.updated_at)`,
         )
-        .bind(SPEND_DAYS_ROLLUP, to - DAY_MS, toEpochMs),
+        .bind(SPEND_DAYS_ROLLUP, lastCompleteRollupDay(toEpochMs), toEpochMs),
     ])
     return inserted?.meta.changes ?? 0
   }

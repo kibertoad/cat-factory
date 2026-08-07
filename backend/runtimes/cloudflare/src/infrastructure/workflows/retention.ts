@@ -22,7 +22,7 @@ import type {
 import {
   RUN_DAY_ROLLUP_LOOKBACK_MS,
   createRetentionPass,
-  spendRollupWindow,
+  materializeSpendRollup,
 } from '@cat-factory/orchestration'
 
 /** Recurring-pipeline run history is kept ~1 week (the inspector's window). */
@@ -191,12 +191,16 @@ export async function sweepRetention({
     // pass that pruned first would drop spend that had never been rolled up. It resumes from
     // its own watermark rather than a fixed lookback, because a day missed here is missing
     // from the only durable record of it, permanently, and this facade sweeps once a day, so
-    // a couple of skipped crons is a real gap. See `spendRollupWindow`.
-    spendDaysRolledUp: await pass.materialize('spend_days', async () => {
-      const watermark = await spendRollupRepository.spendRollupWatermark()
-      const { from, to } = spendRollupWindow(watermark, now)
-      return spendRollupRepository.rollupSpendDays(from, to)
-    }),
+    // a couple of skipped crons is a real gap. Its catch-up horizon is derived from the SAME
+    // `tokenUsageMs` the prune two lines down uses, so the walk never steps over a day the
+    // ledger still holds. See `spendRollupWindow`.
+    spendDaysRolledUp: await materializeSpendRollup(
+      pass,
+      spendRollupRepository,
+      now,
+      policy.tokenUsageMs,
+      logger,
+    ),
     tokenUsage: await pass.prune('token_usage', policy.tokenUsageMs, now, (c) =>
       tokenUsageRepository.deleteOlderThan(c),
     ),

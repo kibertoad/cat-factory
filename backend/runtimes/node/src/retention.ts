@@ -25,7 +25,7 @@ import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import {
   RUN_DAY_ROLLUP_LOOKBACK_MS,
   createRetentionPass,
-  spendRollupWindow,
+  materializeSpendRollup,
   sweepBinaryArtifactRetention,
 } from '@cat-factory/orchestration'
 import type { Logger, RetentionConfig, SweepHealthTracker } from '@cat-factory/server'
@@ -161,12 +161,16 @@ export async function sweepRetention(
     // FIRST, and before the ledger prune below: the durable rollup folds `token_usage`, so a
     // pass that pruned first would drop spend that had never been rolled up. It resumes from
     // its own watermark rather than a fixed lookback, because a day missed here is missing
-    // from the only durable record of it, permanently. See `spendRollupWindow`.
-    spendDaysRolledUp: await pass.materialize('spend_days', async () => {
-      const watermark = await repos.spendRollupRepository.spendRollupWatermark()
-      const { from, to } = spendRollupWindow(watermark, now)
-      return repos.spendRollupRepository.rollupSpendDays(from, to)
-    }),
+    // from the only durable record of it, permanently, and its catch-up horizon is derived
+    // from the SAME `tokenUsageMs` the prune two lines down uses, so the walk never steps over
+    // a day the ledger still holds. See `spendRollupWindow`.
+    spendDaysRolledUp: await materializeSpendRollup(
+      pass,
+      repos.spendRollupRepository,
+      now,
+      retention.tokenUsageMs,
+      logger,
+    ),
     tokenUsage: await pass.prune('token_usage', retention.tokenUsageMs, now, (c) =>
       repos.tokenUsageRepository.deleteOlderThan(c),
     ),

@@ -128,6 +128,15 @@ export type WorkspaceScopedTable = (typeof WORKSPACE_SCOPED_TABLES)[number]
  * this table lives in the main store, so it has to be named here rather than excluded by
  * living in another database. The frozen labels it carries (board name, block title, repo
  * name) therefore outlive the board.
+ *
+ * Naming it here is only half of keeping it, and the other half lives in
+ * `SpendRollupRepository.rollupSpendDays`: the rollup REWRITES a trailing window by deleting
+ * it and re-folding `token_usage`, which IS in the list above. A rewrite that deleted its
+ * window unconditionally would therefore reclaim the deleted board's most recent days on the
+ * sweep's own schedule, with no further operator action, and this exclusion would hold in name
+ * only. The rewrite is bounded to workspaces that still exist for exactly that reason, so a
+ * table added here has to answer the same question: what re-derives it, and can that
+ * re-derivation still see the board?
  */
 export const WORKSPACE_CASCADE_SPECIAL_TABLES = [
   'workspace_services',

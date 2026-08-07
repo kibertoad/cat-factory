@@ -231,6 +231,20 @@ describe('sweepRetention', () => {
     expect(cutoffs.spendRollup).toEqual([now - 10 * DAY, now])
   })
 
+  it('bounds the spend-rollup catch-up by the SAME ledger window this pass prunes to', async () => {
+    // The catch-up horizon and the ledger prune have to be the same number, or the sweep
+    // steps over days its own next statement is about to delete. Asserted at the facade
+    // because this is the wiring: the walk is pure and cannot know the deployment's window,
+    // so a facade that forgot to thread it would silently fall back to a fixed 90 days and
+    // lose every day between there and the retention edge.
+    const { repos, cutoffs } = fakeRepos()
+    repos.spendRollupRepository.spendRollupWatermark = async () => now - 300 * DAY
+    await sweepRetention(repos, policy({ tokenUsageMs: 395 * DAY }), now)
+
+    expect(cutoffs.spendRollup?.[0]).toBe(now - 300 * DAY)
+    expect(cutoffs.tokenUsage).toBe(now - 395 * DAY)
+  })
+
   it('backfills the durable spend rollup on a deployment that has never run one', async () => {
     // 90 days, the longest report window it serves: starting at "today" would under-report
     // that window for a quarter while looking complete, and the per-pass span caps the query.

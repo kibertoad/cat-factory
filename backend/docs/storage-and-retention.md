@@ -226,11 +226,41 @@ provider:model, billing, vendor)`. A run writes hundreds of ledger rows and a ha
   already spent is an account-level fact, and reclaiming it would shrink last quarter's numbers
   retroactively and silently. The frozen labels (board name, block title, repo name) therefore
   outlive the board, which is the same trade the audit log makes.
+  - Staying out of the cascade is only half of that. The rewrite below would have finished the
+    job on the sweep's own schedule, with no further operator action: `token_usage` IS
+    cascaded, so for a deleted board the re-fold reads nothing, and a window DELETE would have
+    reclaimed every frozen row still inside the trailing window. **So the rewrite reaches only
+    workspaces that still exist**, which is the general rule that a rewrite may only delete
+    what it can reproduce. A live board whose ledger was pruned and a deleted board look
+    identical to the fold and are opposites here: the first is still there to be asked and is
+    answering "nothing"; the second can never be re-folded again, which is what makes its rows
+    final.
+  - What is genuinely lost is the deleted board's spend **since the last completed rollup
+    day**, at most one sweep interval: those ledger rows go with the cascade before any pass
+    saw them. Recovering it would mean folding the board's un-rolled days inside the delete
+    itself, which is not done today.
 - **The pass resumes from its own watermark**, unlike the run rollup's fixed lookback, because
   a day missed here is missing from the only durable record of it. Each pass is capped
   (`SPEND_DAY_ROLLUP_MAX_SPAN_MS`) so a wide catch-up is several queries rather than one
   unbounded `GROUP BY`, and the first pass on a deployment backfills 90 days so the longest
   report window is not under-reported for a quarter while looking complete.
+  - **The catch-up horizon is `TOKEN_USAGE_RETENTION_DAYS`, not that 90-day backfill.** The two
+    answer different questions. The backfill bounds how much history a deployment ADOPTS on its
+    first pass, a judgement call; a resumed pass has no such choice, because every day since the
+    watermark is one this deployment already committed to recording and the ledger still holds
+    it (the prune runs in this same sweep, so a sweep that was down pruned nothing either).
+    Capping the resume at 90 days stepped over months of still-readable days and then advanced
+    the high-water mark straight past the hole.
+  - Past the ledger's retention there is nothing left to fold, so that is where the walk stops,
+    and the pass **logs the span it gave up on** (`spend_days`, warn). A high-water mark
+    structurally cannot represent a hole, so that line is the only notice the loss ever gets.
+- **`rolledUpThrough` is the last COMPLETE day**, never the newest day written. A sweep firing
+  at noon folds today's spend so far, because deferring the partial day would leave the newest
+  bucket missing outright, but today goes on accruing after the pass returns. Stamping it would
+  present the one bucket guaranteed to be short as finished, under a panel that reads "complete
+  through <date>". The reader measures lag against the same day boundary (`lastCompleteRollupDay`
+  in `@cat-factory/contracts`, shared with the SPA), so the verdict does not swing with the hour
+  the report happened to be opened.
 - **It runs BEFORE the ledger prune in the same sweep.** Ordering is a correctness property:
   the rollup reads `token_usage`, so a pass that pruned first would drop spend that had never
   been rolled up.

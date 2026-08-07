@@ -37,6 +37,26 @@ export type ReportWindow = v.InferOutput<typeof reportWindowSchema>
 export const reportSpendSourceSchema = v.picklist(['ledger', 'daily-rollup'])
 export type ReportSpendSource = v.InferOutput<typeof reportSpendSourceSchema>
 
+/** One UTC day in milliseconds: the grain the durable spend rollup is materialised at. */
+export const ROLLUP_DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * The newest UTC day that is COMPLETE at `atEpochMs` (its midnight, epoch ms): the day
+ * before the one `atEpochMs` falls in, and `atEpochMs` itself when that is exactly midnight.
+ *
+ * Both sides of the wire have to agree about this, which is why it lives here rather than in
+ * either of them. The WRITER uses it to stamp `rolledUpThrough`: a sweep firing at noon has
+ * folded only part of today, so recording today would present a bucket still accruing as a
+ * finished one, and the panel's "complete through <date>" would name a day that is missing up
+ * to a day of spend. The READER uses it to judge how far behind the rollup is, and it can only
+ * do that against the newest day the sweep COULD have covered by now: measuring against the
+ * wall clock instead makes the same healthy rollup read as fresh in the morning and stale by
+ * the evening, purely from the time of day the report was opened.
+ */
+export function lastCompleteRollupDay(atEpochMs: number): number {
+  return Math.floor(atEpochMs / ROLLUP_DAY_MS) * ROLLUP_DAY_MS - ROLLUP_DAY_MS
+}
+
 /**
  * What a SPEND breakdown groups by. `model` keys on the canonical `provider:model`
  * id; `agentKind` on the metered call's agent kind; the rest resolve through the

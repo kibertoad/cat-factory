@@ -5,7 +5,7 @@
 // cross-runtime conformance suite asserts the two agree with each other AND with the
 // ledger-side `ReportsRepository` they stand in for on the long windows.
 
-import type { ReportSpendDimension } from '@cat-factory/contracts'
+import { type ReportSpendDimension, lastCompleteRollupDay } from '@cat-factory/contracts'
 import {
   SPEND_DAYS_ROLLUP,
   type ReportRange,
@@ -14,9 +14,9 @@ import {
   type ReportSpendTrendBucket,
   type SpendRollupRepository,
 } from '@cat-factory/kernel'
-import { type SQL, and, eq, gte, lt, sql } from 'drizzle-orm'
+import { type SQL, and, eq, gte, inArray, lt, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
-import { platformRollupState, spendDays } from '../../db/schema.js'
+import { platformRollupState, spendDays, workspaces } from '../../db/schema.js'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -82,6 +82,14 @@ export class DrizzleSpendRollupRepository implements SpendRollupRepository {
     // means forever. Both statements ride ONE transaction, so a concurrent report read never
     // observes the window mid-rewrite and renders the gap as a quiet fortnight.
     //
+    // The rewrite reaches only boards that STILL EXIST, because a rewrite may only delete
+    // what it can reproduce. `token_usage` IS in the workspace-delete cascade and this table
+    // deliberately is not (`WORKSPACE_CASCADE_SPECIAL_TABLES`), so for a deleted board the
+    // re-fold below reads nothing and a bare window DELETE would quietly reclaim the very rows
+    // the exclusion exists to keep: every day of it still inside the trailing rewrite window
+    // at the moment the board went. Once the board is gone the ledger can never speak for
+    // those buckets again, which is exactly what makes them final.
+    //
     // Every join below is provably 1:1 with a ledger row: `workspaces`, `services`, `blocks`
     // and `github_repos` on their primary keys, and the two sub-selects pre-aggregated to one
     // row per service / per `(workspace, block)` for the same fan-out reason the ledger-side
@@ -92,7 +100,13 @@ export class DrizzleSpendRollupRepository implements SpendRollupRepository {
     return await this.db.transaction(async (tx) => {
       await tx
         .delete(spendDays)
-        .where(and(gte(spendDays.day_start, from), lt(spendDays.day_start, to)))
+        .where(
+          and(
+            gte(spendDays.day_start, from),
+            lt(spendDays.day_start, to),
+            inArray(spendDays.workspace_id, tx.select({ id: workspaces.id }).from(workspaces)),
+          ),
+        )
       const res = await tx.execute(sql`
         INSERT INTO spend_days (
           workspace_id, day_start, execution_id, agent_kind, provider, model, billing, vendor,
@@ -156,14 +170,22 @@ export class DrizzleSpendRollupRepository implements SpendRollupRepository {
       `)
       // The sweep's coverage, recorded INSIDE the same transaction as the rewrite it
       // describes, and forward-only so a catch-up pass over an older window cannot present a
-      // current rollup as a stalled one. `through_day` is the last day actually covered.
+      // current rollup as a stalled one.
+      //
+      // `through_day` is the last day this pass covered COMPLETELY, which is not the last day
+      // it wrote: `to` is rounded UP to a day edge so today's partial spend is folded rather
+      // than deferred, and today keeps accruing after the sweep returns. Stamping the day `to`
+      // lands in would advertise a bucket still filling as finished, and the panel's "complete
+      // through <date>" would then name the one day guaranteed to be short. See
+      // `lastCompleteRollupDay`.
+      const throughDay = lastCompleteRollupDay(toEpochMs)
       await tx
         .insert(platformRollupState)
-        .values({ rollup: SPEND_DAYS_ROLLUP, through_day: to - DAY_MS, updated_at: toEpochMs })
+        .values({ rollup: SPEND_DAYS_ROLLUP, through_day: throughDay, updated_at: toEpochMs })
         .onConflictDoUpdate({
           target: platformRollupState.rollup,
           set: {
-            through_day: sql`greatest(${platformRollupState.through_day}, ${to - DAY_MS})`,
+            through_day: sql`greatest(${platformRollupState.through_day}, ${throughDay})`,
             updated_at: sql`greatest(${platformRollupState.updated_at}, ${toEpochMs})`,
           },
         })

@@ -1,4 +1,4 @@
-import type { ReportSpendDimension } from '@cat-factory/contracts'
+import { type ReportSpendDimension, lastCompleteRollupDay } from '@cat-factory/contracts'
 import type {
   ReportRange,
   ReportScope,
@@ -30,11 +30,21 @@ const DAY = 24 * 60 * 60 * 1000
  */
 export interface SpendRollupSeed extends ReportsSeed {
   /**
-   * Delete the ledger rows, run rows and imported tickets of the given workspaces: the
-   * ledger pruned to its window, a run reaped, an issue re-imported. Everything the live read
-   * resolves attribution through, gone.
+   * Delete the ledger rows, run rows and imported tickets of the given workspaces, LEAVING
+   * the boards themselves: the ledger pruned to its window, a run reaped, an issue
+   * re-imported. Everything the live read resolves attribution through, gone.
    */
   forgetSources(workspaceIds: string[]): Promise<void>
+  /**
+   * Delete the `workspaces` rows too, as the workspace-delete cascade does. The distinction
+   * from {@link forgetSources} is the whole point of a separate helper and not a detail: a
+   * live board whose ledger was pruned and a board that no longer exists look identical to
+   * the fold (both produce no rows) and must be treated as OPPOSITES by the rewrite. The
+   * first is a board the ledger can still speak for and is authoritatively saying "nothing";
+   * the second can never be re-folded again, which is what makes its rolled-up rows final and
+   * what `WORKSPACE_CASCADE_SPECIAL_TABLES` promises about this table.
+   */
+  forgetBoards(workspaceIds: string[]): Promise<void>
 }
 
 /** Every spend dimension, so a new one cannot be added to one source and forgotten in the other. */
@@ -131,8 +141,9 @@ export function defineSpendRollupSuite(
     it('REWRITES the window rather than accumulating it', async () => {
       // An upsert is not a rewrite, and this table is never pruned, so a bucket the new result
       // set no longer produces would double-count for the life of the deployment. Rolling the
-      // same window twice must be a no-op, and a ledger row that disappears must take its
-      // money with it.
+      // same window twice must be a no-op, and a ledger row that disappears from a board that
+      // still EXISTS must take its money with it: the board is there to be asked, and its
+      // answer is now "nothing".
       const { reports, rollup } = makeRepos()
       const seed = makeSeed()
       const { account, ws, wsB } = await seedFixture(seed)
@@ -145,6 +156,59 @@ export function defineSpendRollupSuite(
       await rollup.rollupSpendDays(dayRange.since, dayRange.until)
       expect(await rollup.spendByDimension(scopeOf(account), 'model', dayRange)).toEqual([])
       expect(await reports.spendByDimension(scopeOf(account), 'model', dayRange)).toEqual([])
+    })
+
+    it('FREEZES a deleted board rather than rewriting rows it can never reproduce', async () => {
+      // The other half of the rewrite rule, and the one the cascade depends on. `token_usage`
+      // IS reclaimed when a board is deleted and this table deliberately is not, so a rewrite
+      // that deleted its window unconditionally would re-fold nothing and silently reclaim
+      // every frozen row of that board still inside the trailing window, which is its most
+      // RECENT history: the days a reader is likeliest to open. The sweep runs on its own
+      // schedule, so this happens with no further operator action at all.
+      const { rollup } = makeRepos()
+      const seed = makeSeed()
+      const { account, ws, wsB } = await seedFixture(seed)
+      await rollup.rollupSpendDays(dayRange.since, dayRange.until)
+      const before = new Map(
+        await Promise.all(
+          DIMENSIONS.map(
+            async (d) => [d, await rollup.spendByDimension(scopeOf(account), d, dayRange)] as const,
+          ),
+        ),
+      )
+
+      // The board is gone, exactly as `WorkspaceRepository.delete` leaves things.
+      await seed.forgetBoards([ws, wsB])
+      // …and the sweep keeps sweeping. This is the pass that used to erase it.
+      await rollup.rollupSpendDays(dayRange.since, dayRange.until)
+
+      for (const dimension of DIMENSIONS) {
+        expectSameBreakdown(
+          await rollup.spendByDimension(scopeOf(account), dimension, dayRange),
+          before.get(dimension) ?? [],
+        )
+      }
+    })
+
+    it('keeps a deleted board in the account scope, which no `workspaces` join could', async () => {
+      // The scope rides the row's OWN frozen `account_id`. That is a different code path from
+      // the ledger's `workspaces` sub-select, and the difference is only observable once the
+      // board row is gone: a sub-select would drop the account's own history the moment a
+      // board was tidied up, which is the retroactive shrink this table exists to prevent.
+      const { rollup } = makeRepos()
+      const seed = makeSeed()
+      const { account, ws, wsB } = await seedFixture(seed)
+      await rollup.rollupSpendDays(dayRange.since, dayRange.until)
+      await seed.forgetBoards([ws, wsB])
+
+      const byWorkspace = await rollup.spendByDimension(scopeOf(account), 'workspace', dayRange)
+      expect(byWorkspace.map((r) => r.key)).toContain(ws)
+      // Narrowing to the deleted board still works: the filter is on the frozen column too.
+      expect(
+        (await rollup.spendByDimension(scopeOf(account, ws), 'workspace', dayRange)).map(
+          (r) => r.key,
+        ),
+      ).toEqual([ws])
     })
 
     it('bucketises the trend on rolled-up days and zero-fills nothing', async () => {
@@ -209,6 +273,22 @@ export function defineSpendRollupSuite(
     it('writes nothing for an empty or inverted window', async () => {
       const { rollup } = makeRepos()
       expect(await rollup.rollupSpendDays(2 * DAY, DAY)).toBe(0)
+    })
+
+    it('stops the coverage marker at the last COMPLETE day, not the day it wrote', async () => {
+      // A sweep firing mid-day folds today's spend so far, because `to` rounds UP to a day
+      // edge and deferring the partial day would leave the newest bucket missing entirely.
+      // But today keeps accruing after the pass returns, so naming it as covered advertises
+      // the one bucket guaranteed to be short as a finished one, and the panel's "complete
+      // through <date>" would then point at the single day it is wrong about, while a report
+      // opened a minute later reads as fully up to date.
+      //
+      // Deliberately the newest window any test in this suite rolls, so the forward-only
+      // marker makes this an EXACT assertion whatever order the cases run in.
+      const { rollup } = makeRepos()
+      const midday = 400 * DAY + DAY / 2
+      await rollup.rollupSpendDays(midday - DAY, midday)
+      expect(await rollup.spendRollupWatermark()).toBe(lastCompleteRollupDay(midday))
     })
   })
 }

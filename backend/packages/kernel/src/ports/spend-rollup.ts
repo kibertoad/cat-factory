@@ -53,18 +53,29 @@ export interface SpendRollupRepository {
    * quiet day, and permanent here in a way it is not in a pruned table), and a ledger row that
    * arrives late for a day already rolled up would be lost to the aggregate that outlives it.
    *
+   * The rewrite reaches only workspaces that STILL EXIST, and that bound is what makes this
+   * table's exclusion from the workspace-delete cascade real rather than nominal. `token_usage`
+   * IS cascaded, so once a board is deleted the fold reads nothing for it: a rewrite that
+   * deleted the window unconditionally would reclaim every frozen row of that board still
+   * inside the trailing window, which is the last few days of its history and the part a
+   * reader is most likely to look at. The general rule the bound states is that a rewrite may
+   * only delete what it can reproduce.
+   *
    * The pass also records its coverage under {@link SPEND_DAYS_ROLLUP} in the same
    * transaction, forward-only, so {@link spendRollupWatermark} describes the rows that exist.
    */
   rollupSpendDays(fromEpochMs: number, toEpochMs: number): Promise<number>
   /**
-   * The newest UTC day the rollup SWEEP has covered (epoch ms, midnight), or null when no pass
-   * has ever completed. Read from the sweep's own recorded coverage, deployment-scoped, for
-   * the reasons on `PlatformMetricsRepository.dailyRollupWatermark`.
+   * The newest COMPLETE UTC day the rollup SWEEP has covered (epoch ms, midnight), or null
+   * when no pass has ever completed. Read from the sweep's own recorded coverage,
+   * deployment-scoped, for the reasons on `PlatformMetricsRepository.dailyRollupWatermark`.
    *
-   * The reader NEEDS it: this rollup is a day behind on the facade whose sweep is a daily
-   * cron, so a report served from it without saying how far it reaches would present a missing
-   * day of spend as a cheap one.
+   * COMPLETE is the load-bearing word, and it is why the pass stamps `lastCompleteRollupDay`
+   * rather than the newest day it wrote. A pass folds the day it runs in as well, but that day
+   * goes on accruing after the sweep returns, so reporting it would present the one bucket
+   * guaranteed to be short as a finished one. The reader NEEDS the distinction: this rollup is
+   * a day behind on the facade whose sweep is a daily cron, and a report served from it
+   * without saying how far it reaches would render a missing day of spend as a cheap one.
    */
   spendRollupWatermark(): Promise<number | null>
   /**

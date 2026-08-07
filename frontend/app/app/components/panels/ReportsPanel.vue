@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
+import { lastCompleteRollupDay } from '@cat-factory/contracts'
 import type {
   ReportActivityDimension,
   ReportActivityRow,
@@ -94,13 +95,22 @@ const DAY_MS = 24 * 60 * 60 * 1000
 // How the window's SPEND half was answered. The long (TCO) windows read the durable
 // cost-attribution rollup, which is only as fresh as the last retention sweep, so a rollup
 // that has materialised NOTHING must not render as a quiet quarter and one whose watermark is
-// well behind `now` must not render its empty tail as thrift. Same three states, and the same
-// day of slack, as the operator dashboard's daily run rollup.
+// well behind `now` must not render its empty tail as thrift. Same three states as the
+// operator dashboard's daily run rollup.
+//
+// The lag is measured against `lastCompleteRollupDay(generatedAt)`, NOT against `generatedAt`
+// itself, because that is what `rolledUpThrough` counts in: the newest day the sweep could
+// possibly have finished by now. Measuring against the wall clock instead compares a day
+// boundary with an instant, so the very same healthy rollup drifts from ~0h of apparent lag
+// just after midnight to ~24h just before the next one, and any fixed threshold then turns the
+// hour the report happened to be opened into a health verdict. One whole missed day of slack
+// is deliberate: the sweep is a daily cron on one facade, so a single skipped firing is a
+// hiccup the next pass heals, while two in a row is the wedge worth naming.
 const rollupState = computed<'none' | 'stale' | 'current' | null>(() => {
   const v = view.value
   if (!v || v.source !== 'daily-rollup') return null
   if (v.rolledUpThrough == null) return 'none'
-  return v.generatedAt - v.rolledUpThrough > 2 * DAY_MS ? 'stale' : 'current'
+  return lastCompleteRollupDay(v.generatedAt) - v.rolledUpThrough > DAY_MS ? 'stale' : 'current'
 })
 
 const maxTrend = computed(() => maxOf(view.value?.trend.points ?? [], trendMagnitude))
