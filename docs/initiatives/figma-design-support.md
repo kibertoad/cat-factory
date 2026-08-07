@@ -288,7 +288,8 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
       `DocumentSourceKind` rather than the wide origin: a 200 carrying `not-applicable` would
       leave a caller unable to tell "this document has no source" from "the check ran and found
       nothing to compare", which is the distinction the whole vocabulary exists to keep.
-- [x] **Name the revision a run BUILT against.** (PR pending)
+- [x] **Name the revision a run BUILT against.**
+      ([#1807](https://github.com/kibertoad/cat-factory/pull/1807))
       `step.contextDocuments` records each linked document a dispatch put in front of its agent
       with the verdict that dispatch reached, written through the `StepObservations` seam that
       already gates `selectedFragmentIds` and `validationConfigUnreadable`. That seam, not a new
