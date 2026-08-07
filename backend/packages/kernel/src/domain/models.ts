@@ -687,8 +687,13 @@ export function familyForModelId(id: string | undefined | null): ModelFamily | n
   if (model) return model.family ?? null
   const or = parseOpenRouterModelId(id)
   if (or) {
-    const vendor = or.model.split('/', 1)[0]?.toLowerCase()
-    return vendor ? (OPENROUTER_SLUG_FAMILY[vendor] ?? null) : null
+    // The vendor prefix is everything before the FIRST slash; a slug carrying no slash at
+    // all is its own prefix, and is unclassified unless the map happens to name it. Sliced
+    // rather than split so there is no absent-element case to guard: `parseOpenRouterModelId`
+    // has already refused an empty slug, so a prefix always exists.
+    const slash = or.model.indexOf('/')
+    const vendor = (slash === -1 ? or.model : or.model.slice(0, slash)).toLowerCase()
+    return OPENROUTER_SLUG_FAMILY[vendor] ?? null
   }
   return null
 }
@@ -709,7 +714,10 @@ export function isAllowedByFamilyPolicy(
   const trusted = !!effectiveProvider && policy.trustedProviders.includes(effectiveProvider)
   if (trusted) return true
   const family = familyForModelId(id)
-  const listed = family !== null && policy.families.includes(family)
+  // UNCLASSIFIED: there is no membership to test either way, so the MODE decides on its own.
+  // A blocklist has nothing to match, an allowlist has nothing to prove.
+  if (family === null) return policy.mode === 'blocklist'
+  const listed = policy.families.includes(family)
   return policy.mode === 'blocklist' ? !listed : listed
 }
 
@@ -1089,6 +1097,21 @@ const VENDOR_BY_SUBSCRIPTION_REF: Map<string, SubscriptionVendor> = (() => {
 })()
 
 /**
+ * Whether a ref runs on a SUBSCRIPTION harness: a vendor CLI the executor drives with a
+ * leased or ambient credential (`claude-code` / `codex`), as opposed to Pi (the platform's
+ * own agent harness, reached through the ordinary metered LLM route) or no harness at all,
+ * which Pi is also the default for.
+ *
+ * Stated once because three decisions turn on it and two of them spell it as the negation
+ * of the third. A ref carrying `harness: 'pi'` is the case the two spellings must agree
+ * about: it names a harness, so a bare truthiness test would route it down the
+ * subscription path and ask for a token no Pi run has.
+ */
+export function runsOnSubscriptionHarness(ref: ModelRef): boolean {
+  return ref.harness !== undefined && ref.harness !== 'pi'
+}
+
+/**
  * The subscription vendor a harness ref belongs to (ANY vendor — `claude` / `codex` / `glm` /
  * `kimi` / `deepseek`), or undefined for a non-subscription (Pi / absent-harness) ref. Matched
  * by the catalog's subscription refs, so it stays in step with {@link MODEL_CATALOG} rather than
@@ -1098,7 +1121,7 @@ const VENDOR_BY_SUBSCRIPTION_REF: Map<string, SubscriptionVendor> = (() => {
  * which injects the token + base URL exactly like the container coding path).
  */
 export function subscriptionVendorForRef(ref: ModelRef): SubscriptionVendor | undefined {
-  if (!ref.harness || ref.harness === 'pi') return undefined
+  if (!runsOnSubscriptionHarness(ref)) return undefined
   return VENDOR_BY_SUBSCRIPTION_REF.get(`${ref.provider}:${ref.model}`)
 }
 
@@ -1135,7 +1158,7 @@ export function isAmbientNativeVendor(
  * as an inline CLI call (local ambient inline execution).
  */
 export function nativeVendorForRef(ref: ModelRef): SubscriptionVendor | undefined {
-  if (!ref.harness || ref.harness === 'pi') return undefined
+  if (!runsOnSubscriptionHarness(ref)) return undefined
   if (ref.harness === 'codex') return 'codex'
   if (ref.harness === 'claude-code' && ref.provider === 'anthropic') return 'claude'
   return undefined
@@ -1159,7 +1182,7 @@ export function isModelUsableInline(
 ): boolean {
   const ref = resolveModelRef(id, caps)
   if (!ref) return false
-  if (ref.harness && ref.harness !== 'pi') return runsInline?.(ref) ?? false
+  if (runsOnSubscriptionHarness(ref)) return runsInline?.(ref) ?? false
   return isModelUsable(id, caps)
 }
 

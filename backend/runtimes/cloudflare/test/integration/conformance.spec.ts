@@ -16,6 +16,7 @@ import {
   makeIncorporatedReview,
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
+  makeToolServerDispatchProbe,
   mintSession,
 } from '@cat-factory/conformance'
 import { env } from 'cloudflare:test'
@@ -242,6 +243,17 @@ const harness: ConformanceHarness = {
           describe: (kind) => svc.describe(kind as never),
         }
       },
+      // The tool-server (MCP) dispatch resolution over this facade's own composed
+      // capability-credential chain. The injected agent-kind registry is threaded in for the same
+      // reason the user-secret probe threads its own: the suite's declarations live on THAT
+      // instance, and a rebuilt container's default registry declares nothing to resolve.
+      toolServerDispatch: () =>
+        makeToolServerDispatchProbe(
+          buildContainer(env, {
+            agentExecutor: new FakeAgentExecutor(),
+            ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
+          }),
+        ),
       packageRegistries: () => {
         const svc = buildContainer(env, { agentExecutor: new FakeAgentExecutor() })
           .packageRegistries?.service

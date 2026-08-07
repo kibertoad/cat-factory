@@ -1,4 +1,6 @@
-import type { AgentRunContext } from '@cat-factory/kernel'
+import type { AgentRunContext, RunnerJobResult } from '@cat-factory/kernel'
+import { coerceBlueprintService, coerceSpecDoc } from '../../repo-ops/render.js'
+import { summaryOr } from './built-in-results.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 
 // ---------------------------------------------------------------------------
@@ -11,10 +13,10 @@ import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 // `ExecutionService`), and `toRunResult` coerces the returned JSON into the engine's
 // `blueprintService` / `spec` channel.
 //
-// They were two of the built-in container kinds still rendered by the bespoke
-// `buildMigratedBuiltInBody` switch in `@cat-factory/server`; migrating them onto the public
-// `registerAgentKind` seam (the refactoring-candidates.md #5 strangler) is what lets that switch
-// shed its cases. Their kind ids are DEFINED here, next to the definition, and re-exported by
+// They were the second slice of the agent-kind strangler (refactoring-candidates.md #5), which
+// has since finished: every built-in container kind is a registration now (the rest live in
+// ./built-in-container), and the job-body switch they were migrating off is deleted. Their kind
+// ids are DEFINED here, next to the definition, and re-exported by
 // orchestration's `ci.logic.ts` for the engine's existing call sites — the same pattern the
 // inline reviewer/brainstorm ids use (agents can't import orchestration, so the definition owns
 // the id). `systemPromptFor` supplies the role prompt + the surface-driven directives
@@ -215,6 +217,44 @@ export function specWriterUserPrompt(context: AgentRunContext): string {
   ].join('\n')
 }
 
+/**
+ * The Blueprinter's reply as the engine's `blueprintService` channel (the board reconcile plus
+ * `blueprintPostOp`'s render + commit). A nameless/garbage tree coerces to null and the channel is
+ * left unset, so the step still records its prose output and nothing is committed over.
+ */
+function blueprintsResult(result: RunnerJobResult) {
+  const service = coerceBlueprintService(result.custom, '')
+  return {
+    output: summaryOr(result, 'Service blueprint updated.'),
+    ...(service ? { blueprintService: service } : {}),
+  }
+}
+
+/**
+ * The spec-writer's reply as the engine's `spec` channel (strict validation plus `specPostOp`'s
+ * shard + commit).
+ *
+ * `noBusinessSpecs` is checked FIRST so a model that returned both the flag and a stray baseline
+ * echo never commits over the baseline: a purely TECHNICAL task has no business requirements, the
+ * writer says so, and the engine reads the flag to infer the block's `technical` label. Otherwise
+ * the doc must carry its OWN `service` name (no repo-name rescue); a nameless/garbage doc coerces
+ * to null, leaving the channel unset, so there is no ingest and no commit.
+ */
+function specWriterResult(result: RunnerJobResult) {
+  const custom = result.custom as Record<string, unknown> | null
+  if (custom && typeof custom === 'object' && custom.noBusinessSpecs === true) {
+    return {
+      output: summaryOr(result, 'No business requirements to specify — this is a technical task.'),
+      noBusinessSpecs: true,
+    }
+  }
+  const spec = coerceSpecDoc(result.custom, '')
+  return {
+    output: summaryOr(result, 'Service specification updated.'),
+    ...(spec ? { spec } : {}),
+  }
+}
+
 export const SPEC_BLUEPRINT_AGENT_KINDS: AgentKindDefinition[] = [
   // The Blueprinter runs as a read-only structured explore, cloning the PR branch when one is
   // open, else the repo's default branch (the generic `pr`-clone resolution), returning ONLY the
@@ -229,6 +269,7 @@ export const SPEC_BLUEPRINT_AGENT_KINDS: AgentKindDefinition[] = [
       clone: { branch: 'pr' },
       output: { kind: 'structured', shapeHint: BLUEPRINT_SHAPE_HINT },
     },
+    mapStructuredResult: blueprintsResult,
     presentation: {
       label: 'Blueprinter',
       icon: 'i-lucide-map',
@@ -253,6 +294,7 @@ export const SPEC_BLUEPRINT_AGENT_KINDS: AgentKindDefinition[] = [
       clone: { branch: 'work' },
       output: { kind: 'structured', shapeHint: SPEC_SHAPE_HINT, failOnUnusableFinal: true },
     },
+    mapStructuredResult: specWriterResult,
     presentation: {
       label: 'Spec Writer',
       icon: 'i-lucide-clipboard-list',

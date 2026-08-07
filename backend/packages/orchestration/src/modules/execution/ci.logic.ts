@@ -65,17 +65,21 @@ export const REPRO_TEST_AGENT_KIND = 'repro-test'
 // existing internal call sites, exactly as the gate/helper + inline-reviewer kinds are.
 export { BLUEPRINTS_AGENT_KIND, SPEC_WRITER_AGENT_KIND } from '@cat-factory/agents'
 
-/** The agent kind of the container agent that scores a PR for the merge decision. */
-export const MERGER_AGENT_KIND = 'merger'
-
-/**
- * The agent kind of the API/general tester gate step (formerly `tester`): a container
- * agent that runs the project's tests (local docker-compose infra or an ephemeral env)
- * and returns a structured report. On a withheld greenlight the engine loops the `fixer`
- * agent with the report and re-tests — mirroring the CI gate / ci-fixer loop. The UI
- * tester ({@link UI_TESTER_AGENT_KIND}) is its browser-driven, screenshot-capturing sibling.
- */
-export const TESTER_AGENT_KIND = 'tester-api'
+// The remaining built-in CONTAINER kinds are real `registerAgentKind` entries too now (the last
+// slice of the agent-kind strangler, `docs/internal/refactoring-candidates.md` #5), so their ids
+// are DEFINED beside those definitions in `@cat-factory/agents`
+// (`kinds/built-in-container.ts`) — agents can't import orchestration, so the definition owns the
+// id — and re-exported here for the engine's existing internal call sites:
+//
+// - `merger` scores a PR's complexity/risk/impact for the merge decision; the ENGINE merges.
+// - `tester-api` is the API/general tester gate step: it runs the project's tests (local
+//   docker-compose infra or an ephemeral env) and returns a structured report. On a withheld
+//   greenlight the engine loops the `fixer` with the report and re-tests, mirroring the CI gate /
+//   ci-fixer loop. `tester-ui` ({@link UI_TESTER_AGENT_KIND}) is its browser-driven sibling.
+// - `analysis` is the read-only agent that opens the tech-debt recurring pipeline: it inspects
+//   the repo and emits a prioritized markdown report (no commits).
+export { ANALYSIS_AGENT_KIND, MERGER_AGENT_KIND, TESTER_AGENT_KIND } from '@cat-factory/agents'
+import { TESTER_AGENT_KIND } from '@cat-factory/agents'
 
 /**
  * The agent kind of the UI tester gate step: like {@link TESTER_AGENT_KIND} but it drives
@@ -98,13 +102,6 @@ export const TESTER_KINDS: readonly string[] = [TESTER_AGENT_KIND, UI_TESTER_AGE
 export function isTesterKind(kind: string): boolean {
   return kind === TESTER_AGENT_KIND || kind === UI_TESTER_AGENT_KIND
 }
-
-/**
- * The agent kind of the read-only code-analysis agent that opens the tech-debt
- * recurring pipeline: it inspects the repo and emits a prioritized markdown report
- * (no commits). Reuses the generic container run path — no special engine handling.
- */
-export const ANALYSIS_AGENT_KIND = 'analysis'
 
 /**
  * The agent kind of the special `tracker` step: a non-LLM step that files a GitHub

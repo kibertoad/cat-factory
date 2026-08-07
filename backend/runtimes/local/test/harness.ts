@@ -16,6 +16,7 @@ import {
   makeReadyClarityReview,
   makeIncorporatedReview,
   makeOnboardingProbe,
+  makeToolServerDispatchProbe,
   makeReadyReviewWithOpenItem,
   mintSession,
 } from '@cat-factory/conformance'
@@ -33,6 +34,7 @@ import {
   createDrizzleRepositories,
   migrate,
 } from '@cat-factory/node-server'
+import type { ServerContainer } from '@cat-factory/server'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries } from '@cat-factory/integrations'
@@ -535,7 +537,33 @@ export function makeConformanceApp(
     accountSettingsRepository: () => new DrizzleAccountSettingsRepository(db),
     seedService,
     getService,
+    ...containerServiceProbes(container),
+  }
+}
+
+/**
+ * The optional per-container service probes, split out of the app factory so its size stays inside
+ * the per-function budget. Each is undefined when this facade did not wire the service, which is
+ * how the suite skips an assertion rather than failing it on a deployment shape that legitimately
+ * lacks the store.
+ */
+function containerServiceProbes(
+  container: ServerContainer,
+): Pick<
+  ConformanceApp,
+  | 'onboarding'
+  | 'toolServerDispatch'
+  | 'localModelEndpoints'
+  | 'openRouterCatalog'
+  | 'userSecrets'
+  | 'userSettings'
+> {
+  return {
     onboarding: () => makeOnboardingProbe(container),
+    // The tool-server (MCP) dispatch resolution over this facade's own composed
+    // capability-credential chain: the half no HTTP route can show, since credential values are
+    // write-only on the wire and the resolution happens inside a job body.
+    toolServerDispatch: () => makeToolServerDispatchProbe(container),
     localModelEndpoints: () => {
       const svc = container.localModelEndpoints
       if (!svc) return undefined

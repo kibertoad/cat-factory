@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   MAX_CATALOG_OPERATIONS,
   MAX_CONTRACT_BODY_CHARS,
+  describeFoundationalProblem,
   detectContractFormat,
+  indexContractOperations,
   indexOpenApiOperations,
   indexToadContractOperations,
+  isOpenApiDocument,
   isContractCandidatePath,
   isContractModulePath,
   parseFoundationalDeclaration,
@@ -534,5 +537,294 @@ describe('validateFoundationalDefinition', () => {
       'invalid_openapi_document',
       'duplicate_contract_id',
     ])
+  })
+})
+
+describe('isOpenApiDocument', () => {
+  it('accepts a 3.x document written as JSON and as YAML', () => {
+    expect(isOpenApiDocument(OPENAPI_YAML)).toBe(true)
+    expect(isOpenApiDocument(JSON.stringify({ openapi: '3.1.0', paths: {} }))).toBe(true)
+  })
+
+  it('refuses a version that is not 3.x, which is a DIFFERENT shape, not a dialect', () => {
+    // A Swagger 2.0 document would index to zero operations while looking registered.
+    expect(isOpenApiDocument(JSON.stringify({ swagger: '2.0', paths: {} }))).toBe(false)
+    expect(isOpenApiDocument(JSON.stringify({ openapi: '2.0', paths: {} }))).toBe(false)
+    expect(isOpenApiDocument(JSON.stringify({ openapi: '4.0.0', paths: {} }))).toBe(false)
+    expect(isOpenApiDocument(JSON.stringify({ openapi: 3, paths: {} }))).toBe(false)
+    expect(isOpenApiDocument(JSON.stringify({ paths: {} }))).toBe(false)
+  })
+
+  it('refuses a document that parses to something other than an object', () => {
+    expect(isOpenApiDocument('[1, 2, 3]')).toBe(false)
+    expect(isOpenApiDocument('just a string')).toBe(false)
+    expect(isOpenApiDocument('')).toBe(false)
+    expect(isOpenApiDocument('null')).toBe(false)
+  })
+
+  it('is a recognition MISS rather than an error on unparseable text', () => {
+    expect(isOpenApiDocument('openapi: 3.0.0\n  bad: [indent\n')).toBe(false)
+  })
+})
+
+describe('indexOpenApiOperations: the remaining shapes', () => {
+  const index = (doc: unknown) => indexOpenApiOperations(JSON.stringify(doc))
+
+  it('indexes nothing when the document declares no paths, or a paths key that is not a map', () => {
+    expect(index({ openapi: '3.0.0' })).toEqual({ operations: [], omitted: 0 })
+    expect(index({ openapi: '3.0.0', paths: 'nope' })).toEqual({ operations: [], omitted: 0 })
+    expect(index({ openapi: '3.0.0', paths: {} })).toEqual({ operations: [], omitted: 0 })
+  })
+
+  it('skips a path item that is not an object rather than failing the whole index', () => {
+    expect(index({ openapi: '3.0.0', paths: { '/a': null, '/b': { get: {} } } })).toEqual({
+      operations: ['GET /b'],
+      omitted: 0,
+    })
+  })
+
+  it('reads every HTTP method the spec defines, and nothing that is not one', () => {
+    const item = {
+      get: {},
+      put: {},
+      post: {},
+      delete: {},
+      patch: {},
+      head: {},
+      options: {},
+      trace: {},
+      // Not operations: shared metadata on the path item.
+      parameters: [],
+      summary: 'x',
+    }
+    expect(index({ openapi: '3.0.0', paths: { '/a': item } }).operations).toEqual([
+      'DELETE /a',
+      'GET /a',
+      'HEAD /a',
+      'OPTIONS /a',
+      'PATCH /a',
+      'POST /a',
+      'PUT /a',
+      'TRACE /a',
+    ])
+  })
+
+  it('reports zero omitted for a list that fits exactly at the cap', () => {
+    const paths: Record<string, unknown> = {}
+    for (let i = 0; i < MAX_CATALOG_OPERATIONS; i++)
+      paths[`/p${String(i).padStart(3, '0')}`] = { get: {} }
+    const indexed = indexOpenApiOperations(JSON.stringify({ openapi: '3.0.0', paths }))
+    expect(indexed.operations).toHaveLength(MAX_CATALOG_OPERATIONS)
+    expect(indexed.omitted).toBe(0)
+  })
+})
+
+describe('indexContractOperations', () => {
+  it('dispatches on the FORMAT, so every write site indexes a document the same way', () => {
+    expect(indexContractOperations('openapi', OPENAPI_YAML)).toEqual(
+      indexOpenApiOperations(OPENAPI_YAML),
+    )
+    expect(indexContractOperations('toad-contract', TOAD_MODULE)).toEqual(
+      indexToadContractOperations(TOAD_MODULE),
+    )
+  })
+
+  it('indexes nothing for a format it cannot read, which is not "declares nothing"', () => {
+    // `lokalise-api-contract` is a TypeScript format with no static reader; an empty index here
+    // is the platform saying it could not look, and the catalog renders that as its own state.
+    expect(indexContractOperations('lokalise-api-contract', TOAD_MODULE)).toEqual({
+      operations: [],
+      omitted: 0,
+    })
+  })
+})
+
+describe('indexToadContractOperations: the path forms it can and cannot read', () => {
+  const contract = (method: string, resolver: string) =>
+    [
+      'export const c = defineApiContract({',
+      `  method: '${method}',`,
+      `  pathResolver: ${resolver},`,
+      '})',
+    ].join('\n')
+
+  it('reads a plain string resolver in either quote style', () => {
+    expect(indexToadContractOperations(contract('get', "() => '/files'")).operations).toEqual([
+      'GET /files',
+    ])
+    expect(indexToadContractOperations(contract('post', '() => "/files"')).operations).toEqual([
+      'POST /files',
+    ])
+  })
+
+  it('renders a `${param}` hole as the `{param}` template OpenAPI uses', () => {
+    expect(
+      indexToadContractOperations(contract('get', '({ id }) => `/files/${id}`')).operations,
+    ).toEqual(['GET /files/{id}'])
+    expect(
+      indexToadContractOperations(contract('get', '(p) => `/files/${p.fileId}/meta`')).operations,
+    ).toEqual(['GET /files/{p.fileId}/meta'])
+  })
+
+  it('refuses a path that is not rooted, rather than emitting a relative one', () => {
+    expect(indexToadContractOperations(contract('get', "() => 'files'"))).toEqual({
+      operations: [],
+      omitted: 1,
+    })
+    expect(indexToadContractOperations(contract('get', '() => `files/${id}`'))).toEqual({
+      operations: [],
+      omitted: 1,
+    })
+  })
+
+  it('counts a declaration whose METHOD it cannot read', () => {
+    const dynamic = [
+      'export const c = defineApiContract({',
+      '  method: verb,',
+      "  pathResolver: () => '/files',",
+      '})',
+    ].join('\n')
+    expect(indexToadContractOperations(dynamic)).toEqual({ operations: [], omitted: 1 })
+  })
+
+  it('upper-cases the method however the source spelled it', () => {
+    expect(indexToadContractOperations(contract('DeLeTe', "() => '/files'")).operations).toEqual([
+      'DELETE /files',
+    ])
+  })
+
+  it('reports the shortfall across MANY declarations, not just the last', () => {
+    const source = [
+      contract('get', "() => '/a'"),
+      contract('post', '() => `/b/${x ? 1 : 2}`'),
+      contract('put', "() => '/c'"),
+    ].join('\n\n')
+    expect(indexToadContractOperations(source)).toEqual({
+      operations: ['GET /a', 'PUT /c'],
+      omitted: 1,
+    })
+  })
+
+  it('stops one declaration’s scan at the NEXT anchor, so fields cannot leak across', () => {
+    // The first contract names no path; the second's must not be borrowed for it.
+    const source = [
+      'export const a = defineApiContract({',
+      "  method: 'get',",
+      '})',
+      'export const b = defineApiContract({',
+      "  method: 'post',",
+      "  pathResolver: () => '/b',",
+      '})',
+    ].join('\n')
+    expect(indexToadContractOperations(source)).toEqual({ operations: ['POST /b'], omitted: 1 })
+  })
+})
+
+describe('parseFoundationalDeclaration: the remaining line shapes', () => {
+  const known = ['file-storage', 'notifications']
+
+  it('strips list markers and backticks, and folds case', () => {
+    const output = [
+      '```foundational-services',
+      '* `File-Storage`',
+      '-   NOTIFICATIONS',
+      '```',
+    ].join('\n')
+    expect(parseFoundationalDeclaration(output, known)).toEqual({
+      declared: ['file-storage', 'notifications'],
+      unknown: [],
+    })
+  })
+
+  it('reports a repeated id ONCE, whichever side it lands on', () => {
+    const output = '```foundational-services\nfile-storage\n- file-storage\nbus\n`bus`\n```'
+    expect(parseFoundationalDeclaration(output, known)).toEqual({
+      declared: ['file-storage'],
+      unknown: ['bus'],
+    })
+  })
+
+  it('ignores blank lines inside the block', () => {
+    const output = '```foundational-services\n\nfile-storage\n   \n```'
+    expect(parseFoundationalDeclaration(output, known)).toEqual({
+      declared: ['file-storage'],
+      unknown: [],
+    })
+  })
+
+  it('distinguishes an EMPTY block from an absent one only by what it declares', () => {
+    // Both answer "nothing", which is the point: `none` and an empty block are the agent
+    // having answered, and neither may be recorded as an unknown service.
+    expect(parseFoundationalDeclaration('```foundational-services\n```', known)).toEqual({
+      declared: [],
+      unknown: [],
+    })
+    expect(parseFoundationalDeclaration('```foundational-services\nNone\n```', known)).toEqual({
+      declared: [],
+      unknown: [],
+    })
+  })
+
+  it('resolves against the ids it was GIVEN, not against a fixed list', () => {
+    expect(parseFoundationalDeclaration('```foundational-services\nbus\n```', ['bus'])).toEqual({
+      declared: ['bus'],
+      unknown: [],
+    })
+    expect(parseFoundationalDeclaration('```foundational-services\nbus\n```', [])).toEqual({
+      declared: [],
+      unknown: ['bus'],
+    })
+  })
+})
+
+describe('describeFoundationalProblem', () => {
+  it('names the offending id in every problem it can, so a registrant knows what to fix', () => {
+    expect(
+      describeFoundationalProblem({ reason: 'duplicate_contract_id', contractId: 'api' }),
+    ).toContain("'api'")
+    const invalid = describeFoundationalProblem({
+      reason: 'invalid_openapi_document',
+      contractId: 'api',
+    })
+    expect(invalid).toContain("'api'")
+    expect(invalid).toContain('OpenAPI 3.x')
+
+    const unreferenced = describeFoundationalProblem({
+      reason: 'contract_library_not_referenced',
+      format: 'toad-contract',
+      expected: '@toad-contracts/core',
+      contractIds: ['a', 'b'],
+    })
+    expect(unreferenced).toContain('toad-contract')
+    expect(unreferenced).toContain('@toad-contracts/core')
+    expect(unreferenced).toContain('a, b')
+
+    const nearMiss = describeFoundationalProblem({
+      reason: 'capability_tag_near_miss',
+      capability: 'File_Storage',
+      expected: 'file-storage',
+    })
+    expect(nearMiss).toContain('File_Storage')
+    expect(nearMiss).toContain('file-storage')
+  })
+
+  it('describes every problem the validator can raise, distinctly', () => {
+    const problems: Parameters<typeof describeFoundationalProblem>[0][] = [
+      { reason: 'duplicate_contract_id', contractId: 'api' },
+      { reason: 'invalid_openapi_document', contractId: 'api' },
+      {
+        reason: 'contract_library_not_referenced',
+        format: 'toad-contract',
+        expected: '@toad-contracts/core',
+        contractIds: ['api'],
+      },
+      { reason: 'capability_tag_near_miss', capability: 'x', expected: 'y' },
+    ]
+    const described = problems.map(describeFoundationalProblem)
+    expect(new Set(described).size).toBe(described.length)
+    for (const text of described) {
+      expect(text).not.toContain('undefined')
+      expect(text.trim()).not.toBe('')
+    }
   })
 })

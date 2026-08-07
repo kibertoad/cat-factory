@@ -83,7 +83,11 @@ describe('agent-kind registry', () => {
     registry.register({ kind: 'org-repo', systemPrompt: 'repo', requiresContainer: true })
     expect(registry.requiresContainer('org-inline')).toBe(false)
     expect(registry.requiresContainer('org-repo')).toBe(true)
-    expect(registry.requiresContainer('coder')).toBe(false) // built-in, not registered
+    // A BUILT-IN container kind answers the same way, off the same declaration: since the
+    // agent-kind strangler finished, `coder` is an ordinary registration declaring a
+    // `container-coding` surface, not an entry in a hard-coded set beside the registry.
+    expect(registry.requiresContainer('coder')).toBe(true)
+    expect(registry.requiresContainer('requirements-reviewer')).toBe(false)
   })
 
   it('applies surface-driven directives so an author need not reason about them', () => {
@@ -462,13 +466,16 @@ describe('validateRegistrations', () => {
 // three concerns together pushed one describe past the function-size ratchet.
 //
 // "Declared for" includes ASSIGNED capabilities: `assignToolServers('coder', …)` is the recommended
-// way to attach a server to a built-in, and no built-in is a registry entry, so validation walks
+// way to attach a server to a kind without redefining it, so validation walks
 // `kindsWithCapabilities()` rather than `all()`.
 describe('agent-capability validation: reach and scoping', () => {
   let registry: AgentKindRegistry
   let gates: GateRegistry
   beforeEach(() => {
-    registry = new AgentKindRegistry()
+    // The BUILT-INS are pre-loaded here, not a bare registry: the assignment path's whole point is
+    // attaching a capability to a kind like `coder`, and validation has to see its container
+    // surface to judge whether the declaration can take effect.
+    registry = defaultAgentKindRegistry()
     gates = defaultGateRegistry()
   })
 
@@ -617,10 +624,10 @@ describe('agent-capability validation: reach and scoping', () => {
     })
 
     it('does NOT call a built-in container kind inline', () => {
-      // `registry.requiresContainer` answers false for a kind it has no registration for, so a
-      // naive container check would warn about `coder` — the single most likely assignment target —
-      // as an inline kind whose tool servers can never take effect. The check goes through
-      // `runsInContainer`, which knows the built-in container set.
+      // `coder` is the single most likely assignment target, and a check that only looked at a
+      // kind's own capability declaration would warn about it as an inline kind whose tool servers
+      // can never take effect. The check goes through `runsInContainer`, which reads the container
+      // surface off the kind's registration.
       registry.registerToolServer({ id: 'issues', transport: { kind: 'stdio', command: 'x' } })
       registry.registerSkill({ id: 'house', name: 'house', description: 'd', instructions: 'i' })
       registry.assignToolServers('coder', ['issues'])

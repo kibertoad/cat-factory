@@ -785,3 +785,188 @@ describe('SpendService.record — the persisted row', () => {
     expect(dynamicPricesFor).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('SpendService with no optional repository wired', () => {
+  const NOW = Date.UTC(2026, 6, 17, 9, 30)
+  const svc = (over: Record<string, unknown> = {}) =>
+    new SpendService({
+      tokenUsageRepository: fakeTokenUsage(),
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: { ...DEFAULT_SPEND_PRICING, accountMonthlyLimitCap: 80, userMonthlyLimitCap: 40 },
+      ...over,
+    })
+
+  it('resolves each tier from the operator cap alone rather than reaching for a repository', async () => {
+    // A deployment can wire the ledger without the account/user stores; the tiers must still
+    // resolve, from the cap alone, instead of dereferencing a repository that is not there.
+    expect((await svc().accountStatus('acc'))?.costLimit).toBe(80)
+    expect((await svc().userStatus('usr'))?.costLimit).toBe(40)
+    expect(await svc().isOverBudget('ws', { accountId: 'acc', userId: 'usr' })).toBe(false)
+  })
+
+  it('serves the base pricing for every workspace a batch forecast asks about', async () => {
+    // `forecastWorkspaces` resolves pricing for MANY ids at once; with no settings store every
+    // one of them must come back on the base table, not be dropped from the result.
+    const spend = new Map([
+      ['ws1', { costEstimate: 90, firstSeenAt: NOW - 5 * 24 * 60 * 60 * 1000 }],
+      ['ws2', { costEstimate: 10, firstSeenAt: NOW - 5 * 24 * 60 * 60 * 1000 }],
+    ])
+    const service = svc({
+      tokenUsageRepository: {
+        ...fakeTokenUsage(),
+        meteredSpendByWorkspaceSince: async () => spend,
+      } as unknown as TokenUsageRepository,
+    })
+    const forecasts = await service.forecastWorkspaces(['ws1', 'ws2'], NOW)
+    expect([...forecasts.keys()].sort()).toEqual(['ws1', 'ws2'])
+    for (const f of forecasts.values()) {
+      expect(f.costLimit).toBe(DEFAULT_SPEND_PRICING.monthlyLimit)
+      expect(f.currency).toBe(DEFAULT_SPEND_PRICING.currency)
+    }
+  })
+
+  it('is a no-op to invalidate a limit when no cache is wired', async () => {
+    await expect(svc().invalidateAccountLimit('acc')).resolves.toBeUndefined()
+    await expect(svc().invalidateUserLimit('usr')).resolves.toBeUndefined()
+  })
+
+  it('falls back to the cap when the repository has no row for the id', async () => {
+    // A brand-new account/user has no settings row at all; that is "nothing configured", not a
+    // crash, and the cap alone must still activate the tier.
+    const service = svc({
+      accountRepository: { get: async () => undefined } as unknown as AccountRepository,
+      userSettingsRepository: { get: async () => null } as unknown as UserSettingsRepository,
+    })
+    expect((await service.accountStatus('acc'))?.costLimit).toBe(80)
+    expect((await service.userStatus('usr'))?.costLimit).toBe(40)
+  })
+})
+
+describe('SpendService tier statuses: the remaining verdict edges', () => {
+  const NOW = Date.UTC(2026, 6, 17, 9, 30)
+  const at = (costEstimate: number) => ({ inputTokens: 1, outputTokens: 1, costEstimate })
+
+  const svc = (accountSpend: number, userSpend: number) =>
+    new SpendService({
+      tokenUsageRepository: {
+        ...fakeTokenUsage(),
+        totalsSinceForAccount: async () => at(accountSpend),
+        totalsSinceForUser: async () => at(userSpend),
+      } as unknown as TokenUsageRepository,
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: DEFAULT_SPEND_PRICING,
+      accountRepository: {
+        get: async () => ({ spendMonthlyLimit: 500 }),
+      } as unknown as AccountRepository,
+      userSettingsRepository: {
+        get: async () => ({ spendMonthlyLimit: 200 }),
+      } as unknown as UserSettingsRepository,
+    })
+
+  it('counts spend AT the limit as exceeded on the account AND the user tier', async () => {
+    expect((await svc(500, 200).accountStatus('acc'))?.exceeded).toBe(true)
+    expect((await svc(500, 200).userStatus('usr'))?.exceeded).toBe(true)
+    // One cent under is not exceeded: the boundary is inclusive, not approximate.
+    expect((await svc(499.99, 199.99).accountStatus('acc'))?.exceeded).toBe(false)
+    expect((await svc(499.99, 199.99).userStatus('usr'))?.exceeded).toBe(false)
+  })
+
+  it('reports an active tier that is nowhere near its limit as not exceeded', async () => {
+    const account = await svc(1, 1).accountStatus('acc')
+    expect(account).toMatchObject({ costLimit: 500, costSpent: 1, exceeded: false })
+    expect((await svc(1, 1).userStatus('usr'))?.exceeded).toBe(false)
+  })
+
+  it('prices a preloaded user limit without reading the settings row again', async () => {
+    const get = vi.fn(async () => ({ spendMonthlyLimit: 200 }))
+    const service = new SpendService({
+      tokenUsageRepository: {
+        ...fakeTokenUsage(),
+        totalsSinceForUser: async () => at(200),
+      } as unknown as TokenUsageRepository,
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: DEFAULT_SPEND_PRICING,
+      userSettingsRepository: { get } as unknown as UserSettingsRepository,
+    })
+    const status = await service.userStatus('usr', { configuredLimit: 200 })
+    expect(status).toMatchObject({ costLimit: 200, exceeded: true })
+    expect(get).not.toHaveBeenCalled()
+  })
+})
+
+describe('SpendService.isOverBudget: what it declines to ask', () => {
+  const NOW = Date.UTC(2026, 6, 17, 9, 30)
+
+  it('does not read an INACTIVE tier’s ledger at all', async () => {
+    // No configured limit and no operator cap means there is no ceiling to compare against, so
+    // the period query for that tier is a round trip bought for an answer that cannot change.
+    const totalsSinceForAccount = vi.fn(async () => ({
+      inputTokens: 0,
+      outputTokens: 0,
+      costEstimate: 10_000,
+    }))
+    const totalsSinceForUser = vi.fn(async () => ({
+      inputTokens: 0,
+      outputTokens: 0,
+      costEstimate: 10_000,
+    }))
+    const service = new SpendService({
+      tokenUsageRepository: {
+        ...fakeTokenUsage(),
+        totalsSinceForAccount,
+        totalsSinceForUser,
+      } as unknown as TokenUsageRepository,
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: DEFAULT_SPEND_PRICING,
+      accountRepository: {
+        get: async () => ({ spendMonthlyLimit: null }),
+      } as unknown as AccountRepository,
+      userSettingsRepository: {
+        get: async () => ({ spendMonthlyLimit: null }),
+      } as unknown as UserSettingsRepository,
+    })
+    expect(await service.isOverBudget('ws', { accountId: 'acc', userId: 'usr' })).toBe(false)
+    expect(totalsSinceForAccount).not.toHaveBeenCalled()
+    expect(totalsSinceForUser).not.toHaveBeenCalled()
+  })
+})
+
+describe('SpendService forecast windows', () => {
+  const NOW = Date.UTC(2026, 6, 17, 9, 30)
+
+  it('reads the burn-rate window BACKWARDS from now, for workspaces and accounts alike', async () => {
+    // The window is trailing: a forward one selects rows that do not exist yet, so every burn
+    // rate would be zero and no overrun would ever be projected.
+    const workspaceSince: number[] = []
+    const accountSince: number[] = []
+    const service = new SpendService({
+      tokenUsageRepository: {
+        ...fakeTokenUsage(),
+        meteredSpendByWorkspaceSince: async (_ids: string[], since: number) => {
+          workspaceSince.push(since)
+          return new Map()
+        },
+        meteredSpendByAccountSince: async (_ids: string[], since: number) => {
+          accountSince.push(since)
+          return new Map()
+        },
+      } as unknown as TokenUsageRepository,
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: DEFAULT_SPEND_PRICING,
+    })
+    await service.forecastWorkspaces(['ws'], NOW)
+    await service.forecastAccounts(['acc'], NOW)
+    for (const since of [...workspaceSince, ...accountSince]) {
+      expect(since).toBeLessThanOrEqual(NOW)
+    }
+    // The period read and the window read are DIFFERENT points, or the window measures the
+    // whole period and the rate is the period average rather than the recent one.
+    expect(new Set(workspaceSince).size).toBe(2)
+    expect(new Set(accountSince).size).toBe(2)
+  })
+})

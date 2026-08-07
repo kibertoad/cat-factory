@@ -1505,6 +1505,22 @@
         "reduced": "What reduced effectiveness",
         "obstacles": "Key obstacles"
       },
+      "toolServers": {
+        "heading": "Tool servers (MCP)",
+        "dispatchedAs": "Resolved for the {agent} agent this step dispatched.",
+        "allTools": "Every tool this server exposes.",
+        "narrowed": "Narrowed to: {tools}",
+        "reason": {
+          "harnessUnsupported": "was not available: the agent CLI this step ran on has no MCP client.",
+          "transportUnsupported": "was not available: the agent CLI this step ran on cannot reach this kind of server.",
+          "missingSecret": "was not available: a credential it needs is not set for this board.",
+          "reservedSecret": "was not available: it asks for a variable the platform's own configuration owns, so the declaration has to change.",
+          "oauthNotConnected": "was not available: nobody has connected this board to it yet.",
+          "oauthTokenFailed": "was not available: the connection stopped producing an access token.",
+          "overBudget": "was not available: this agent declares more tool servers than one run carries.",
+          "unknown": "was not available ({reason})."
+        }
+      },
       "adherence": {
         "heading": "Best-practice adherence",
         "headingHint": "The best-practice standards folded into this reviewer's prompt, and how closely it judged the change to follow each one.",
