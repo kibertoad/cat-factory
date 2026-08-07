@@ -58,7 +58,6 @@ a tracker document](../../CLAUDE.md).
 - [Pre-PR validation checks](./pre-pr-validation.md)
 - [Pre-dispatch input gate](./pre-dispatch-input-gate.md)
 - [Ralph loop task type](./ralph-loop.md)
-- [Reusable operations (parameterized canned units of work)](./reusable-operations.md)
 - [Service acceptance criteria](./service-acceptance-criteria.md)
 - [Shared clarification-item abstraction](./clarification-items.md)
 - [Headless clarification loop](./headless-clarification-loop.md)
@@ -124,7 +123,6 @@ track work that is not ours to land:
 - [Email as a NotificationChannel](./email-notification-channel.md)
 - [Figma design support and the designer workflow](./figma-design-support.md)
 - [MCP support maturation](./mcp-maturation.md)
-- [Public API additions (the parked-decision surface)](./public-api-additions.md)
 
 ### Engineering hygiene
 

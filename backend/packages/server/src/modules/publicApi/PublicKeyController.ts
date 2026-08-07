@@ -18,8 +18,9 @@ import { authorize, refuse } from './publicApiAuth.js'
 // `PublicApiKeyService` so the per-workspace cap, the one-way secret hash and the revocation
 // cascade cannot differ by surface.
 //
-// The gap it closes is the one the outbound webhook had (`docs/initiatives/
-// public-api-additions.md`, C1): a deployment whose operator is headless could drive every part
+// The gap it closes is the one the outbound webhook had
+// (`backend/docs/adr/0043-public-decision-surface.md`): a deployment whose operator is headless
+// could drive every part
 // of this API except the act of GETTING a key, so an integration provisioning per-tenant or
 // per-environment credentials had to route a human through the browser for each one.
 //

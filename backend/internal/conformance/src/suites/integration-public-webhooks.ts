@@ -13,7 +13,7 @@ import type { ConformanceHarness } from '../harness.js'
 // the signing secret write-only on the way back out. A facade that wired the repository but not the
 // controller fails here instead of shipping a push feature only a browser can turn on.
 //
-// See docs/initiatives/public-api-additions.md (slice C1).
+// See backend/docs/adr/0043-public-decision-surface.md.
 
 const ENDPOINT = '/api/v1/notification-webhook'
 

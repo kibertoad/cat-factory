@@ -355,8 +355,9 @@ export interface RetentionConfig {
   rateLimitMs: number
   commitMs: number
   /**
-   * LLM observability sink (full per-call prompt/response). Heavy, and only useful
-   * for recent debugging, so it is pruned aggressively (default 3 days).
+   * LLM observability sink (full per-call prompt/response). Heavy, so the window trades disk
+   * against how far back a post-mortem can reach; default 14 days, because most investigations
+   * start after the run they are about has stopped being recent.
    */
   llmCallMetricsMs: number
   /**
