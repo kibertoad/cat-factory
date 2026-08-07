@@ -74,10 +74,11 @@ top-level files are the domain contracts.
   verification report (`pr-report.ts`, composed in orchestration) and the run OUTCOME summary
   (`composeRunOutcome`, rendered by the SPA card and served at `GET /api/v1/runs/:runId/outcome`).
   `run-evidence.ts` holds every rule they BOTH state: `isTesterKind`, which tester step a section
-  reports on, the verdict index across every tester step, the spec join, the regression rule and the
-  tallies. They lived on each side once and had already drifted on two axes (which testers count,
-  and what `not_covered` is counted over), so the same run printed different numbers depending on
-  whether you read the pull request or the app. What each surface still owns is presentation and its
+  reports on, the verdict index across every tester step, the spec join, the regression rule, the
+  tallies, the verdicts the join could not place, and `runSpecBranch` (the run's own branch, else
+  the repo default). They lived on each side once and had already drifted on three axes (which
+  testers count, what `not_covered` is counted over, and which BRANCH the spec is read from), so
+  the same run printed different numbers depending on whether you read the pull request or the app. What each surface still owns is presentation and its
   own absence policy: the report writes prose onto a parsed host surface, the summary emits
   machine-readable `gap` codes the SPA maps to translated copy.
 

@@ -94,7 +94,15 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   that package's `run-evidence.ts`. Both read one run's block and `spec/` through the shared
   `RunEvidenceLoader`, because sharing composition rules while reading the evidence twice would move
   the drift one layer down rather than removing it; `runOutcome.parity.test.ts` pins that the two
-  count one run identically. The step-selection
+  count one run identically. The loader reads the RUN's branch (`runSpecBranch`), and serves that
+  same read to the SPA card over `GET /workspaces/:ws/executions/:executionId/spec`: the card
+  composes locally so it can react to pushed updates, and fetching the SERVICE's default-branch spec
+  instead showed every requirement the run itself added as "not checked". On its way out over
+  `/api/v1` the summary goes through `runOutcome.boundary.ts`, which scrubs and bounds it (the
+  report has always done the same for the same text on its way onto a pull request) and names every
+  drop in `truncations`; the counts are computed before any cap. `RunEvidenceReads` owns the three
+  read paths resolved by run id, so nothing forms a second opinion about what "this run" is. The
+  step-selection
   rule both halves share lives under both in `prReport.steps.ts`, beside `absentNote`, the ONE
   renderer for an absent section's note (through `hostMarkdown`, since a note now names a pull
   request and `owner/repo#12` is a reference the host resolves). Every untrusted value it
