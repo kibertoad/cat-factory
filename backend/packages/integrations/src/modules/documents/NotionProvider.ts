@@ -165,7 +165,7 @@ export class NotionProvider implements DocumentSourceProvider {
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
-    _workspaceId: string,
+    _workspaceId: string | null,
   ): Promise<DocumentContent> {
     const page = await this.get<PageResponse>(
       credentials,
@@ -192,7 +192,7 @@ export class NotionProvider implements DocumentSourceProvider {
   async probeVersion(
     credentials: DocumentCredentials,
     externalId: string,
-    _workspaceId: string,
+    _workspaceId: string | null,
   ): Promise<string> {
     const page = await this.get<PageResponse>(
       credentials,

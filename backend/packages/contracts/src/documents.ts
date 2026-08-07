@@ -82,6 +82,23 @@ export interface DocumentSourceTraits {
    * pinned source's own URL.
    */
   readonly hostPinned: boolean
+  /**
+   * The source's credentials are SELF-CONTAINED, so a deployment can configure one centrally and
+   * the provider will authenticate with it alone.
+   *
+   * The trait that decides whether a source can back a DEPLOYMENT-scoped document (the living
+   * standard a code-registered prompt fragment names). It is false for exactly one reason, and
+   * `github` is the case: its credential is not a bag at all but the WORKSPACE's own App
+   * installation, resolved per read (`resolveImplicitConnection`, `resolveInstallationId`). There
+   * is no deployment-wide value to configure, and picking a tenant's installation to read on the
+   * whole deployment's behalf is the cross-tenant fetch this trait exists to refuse.
+   *
+   * Declared here rather than inferred from whether a provider happens to ignore its `workspaceId`
+   * argument: that is an implementation detail one refactor away from changing silently, and the
+   * consequence of getting it wrong is one tenant's credential fetching text into another's
+   * prompts.
+   */
+  readonly deploymentScoped: boolean
 }
 
 /**
@@ -89,12 +106,14 @@ export interface DocumentSourceTraits {
  * `Record` fails to compile until it is named here, and there is no default to fall into.
  */
 const DOCUMENT_SOURCE_TRAITS: Record<DocumentSourceKind, DocumentSourceTraits> = {
-  confluence: { design: false, hostPinned: false },
-  notion: { design: false, hostPinned: false },
-  github: { design: false, hostPinned: true },
-  figma: { design: true, hostPinned: true },
-  zeplin: { design: true, hostPinned: true },
-  linear: { design: false, hostPinned: true },
+  confluence: { design: false, hostPinned: false, deploymentScoped: true },
+  notion: { design: false, hostPinned: false, deploymentScoped: true },
+  // The one source whose credential is a WORKSPACE's App installation rather than a bag a
+  // deployment could configure. See `DocumentSourceTraits.deploymentScoped`.
+  github: { design: false, hostPinned: true, deploymentScoped: false },
+  figma: { design: true, hostPinned: true, deploymentScoped: true },
+  zeplin: { design: true, hostPinned: true, deploymentScoped: true },
+  linear: { design: false, hostPinned: true, deploymentScoped: true },
 }
 
 /**
@@ -109,6 +128,19 @@ export function isDesignSource(origin: DocumentOrigin): boolean {
 /** Whether a source's `parseRef` is pinned to its own host. See {@link DocumentSourceTraits}. */
 export function isHostPinnedSource(source: DocumentSourceKind): boolean {
   return DOCUMENT_SOURCE_TRAITS[source].hostPinned
+}
+
+/**
+ * Whether a DEPLOYMENT can configure this source centrally, so a code-registered prompt fragment
+ * may name a living document from it. See {@link DocumentSourceTraits.deploymentScoped}.
+ */
+export function isDeploymentScopedSource(source: DocumentSourceKind): boolean {
+  return DOCUMENT_SOURCE_TRAITS[source].deploymentScoped
+}
+
+/** Every source a deployment may configure centrally, in picklist order. */
+export function deploymentScopedSources(): DocumentSourceKind[] {
+  return documentSourceKindSchema.options.filter(isDeploymentScopedSource)
 }
 
 /**

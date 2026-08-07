@@ -80,6 +80,11 @@ export const PLATFORM_RESERVED_ENV_PREFIXES: readonly string[] = [
   'CORS_',
   'DB_',
   'DECISION_',
+  // The deployment's own document-source credentials (`DOC_SOURCE_<SOURCE>_<FIELD>`), which back
+  // the living document a code-registered prompt fragment names. A family rather than exact names:
+  // the variables are DERIVED from each provider's declared credential fields, so a new source
+  // adds variables no list here could have named in advance.
+  'DOC_SOURCE_',
   'EMAIL_SYSTEM_',
   'ENVIRONMENTS_',
   'EXECUTION_',

@@ -114,7 +114,6 @@ import {
   selectAgentExecutor,
   type WorkerExecutorDeps,
   selectDeployDeps,
-  selectDocumentsDeps,
   selectEmailInvitationDeps,
   selectEnvironmentsDeps,
   selectFragmentLibraryDeps,
@@ -132,6 +131,7 @@ import {
   selectWorkRunner,
 } from './container.js'
 import { selectRecurringDeps } from './container-tracker-deps.js'
+import { selectDocumentsDeps } from './container-documents-deps'
 import { selectGitHubDeps } from './github-deps.js'
 import type { D1Database } from '@cloudflare/workers-types'
 import { buildExternalNotificationChannel, selectSlackDeps } from './container-notification-deps'

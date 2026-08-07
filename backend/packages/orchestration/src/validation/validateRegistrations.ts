@@ -3,6 +3,7 @@ import { INLINE_ENGINE_SYSTEM_PROMPTS, runsInContainer } from '@cat-factory/agen
 import type {
   AgentKind,
   BinaryGeneratorRegistry,
+  DeploymentDocumentResolver,
   FoundationalServiceRegistry,
   GateRegistry,
   InitiativePresetRegistry,
@@ -38,6 +39,7 @@ import {
   binaryGeneratorDefinitionIssues,
   descriptorConditionHasPredicate,
   duplicatedDescriptorSectionCaptions,
+  isDeploymentScopedSource,
   foundationalServiceDefinitionIssues,
   isEnvVariableName,
   isNamespacedId,
@@ -163,6 +165,15 @@ export interface ValidatedRegistries {
    * never arrives.
    */
   promptFragments?: PromptFragmentSource
+  /**
+   * How this deployment reads its OWN documents, or absent when it configured none.
+   *
+   * What turns the `documentRef` check below from a blanket refusal into a real one: a
+   * code-registered fragment may name a living document exactly when the deployment can resolve
+   * it, and only this can say whether it can. Named as the CONTAINER names it, like every other
+   * member here.
+   */
+  deploymentDocumentResolver?: DeploymentDocumentResolver
 }
 
 /** Options for {@link collectRegistrationProblems} / {@link validateRegistrations}. */
@@ -313,55 +324,66 @@ export function collectRegistrationProblems(
 }
 
 /**
- * Section 10 of {@link collectRegistrationProblems}: a code-registered prompt fragment that carries
- * a `documentRef`.
+ * Section 10 of {@link collectRegistrationProblems}: a code-registered prompt fragment whose
+ * `documentRef` THIS deployment cannot resolve.
  *
- * The registration is ACCEPTED today, faithfully carried through the catalog merge with
- * `docViaWorkspaceId: null`, put on the wire, and rendered by the library UI with a
- * `fragments.catalog.live` badge NAMING the source. And then `resolveDocumentBody` refuses it:
- * `entry.tier === 'builtin'` short-circuits before any resolution. Every code-registered fragment
- * lands on that tier, so the reference is preserved everywhere it is visible and honoured nowhere,
- * and the surface most confident about it is the one telling a human the body is live.
+ * A code registration lands on the `builtin` tier, whose documents are read with credentials the
+ * DEPLOYMENT configures (`DOC_SOURCE_<SOURCE>_*`), not with any tenant's connection. So the
+ * question boot has to answer is not "is a builtin documentRef allowed" but "can this deployment
+ * serve it", and there are exactly two ways it cannot:
  *
- * An ERROR rather than a warning, because it is a dead seam rather than a degraded one: no
- * configuration a deployment can reach makes the reference resolve, and the failure it produces is
- * a lie rather than an omission.
+ * - **The source can never be deployment-scoped.** `github` docs authenticate with a WORKSPACE's
+ *   App installation, so there is no deployment-wide credential to configure and picking a
+ *   tenant's would be the cross-tenant fetch the trait refuses. No configuration fixes it.
+ * - **The deployment configured nothing for that source.** Fixable, and the message says how.
  *
- * The refusal is deliberately NOT "honour it at builtin tier", which is what the report that
- * surfaced this asked for, and the reason is the CREDENTIAL HOME rather than the scope of the
- * registration, which is correctly deployment-wide. Every document source authenticates per
- * WORKSPACE: `DocumentContentResolverService` reads `requireConnection(workspaceId, source)`, the
- * one provider storing no credentials rides `resolveImplicitConnection(workspaceId)` (the
- * WORKSPACE's App installation), and `fetchDocument` takes a workspace besides. So honouring it
- * here would make the engine PICK a tenant to fetch through on behalf of a fragment every tenant
- * folds: one workspace's stored credential pulling text into every other workspace's prompts, and
- * ONE deployment-wide document keyed under N per-workspace cache groups. That is the exact fan-out
- * the existing guard already refuses for the account tier.
+ * An ERROR in both cases rather than a warning, and the reason has not changed: the ref is carried
+ * through the catalog merge, put on the wire, and rendered by the library UI with a
+ * `fragments.catalog.live` badge NAMING the source, while `resolveDocumentBody` serves the
+ * registered body. Accepted everywhere it is visible and honoured nowhere, with the surface most
+ * confident about it telling a human the body is live. Unlike an unresolvable fragment ID this is
+ * FULLY knowable from the registration plus this process's own configuration, which is the bar
+ * every severity here is set by.
  *
- * A deployment-scoped source is coherent and simply does not exist yet; it needs an owner tier below
- * `account`, an env-configured credential home, and a mothership `/internal/*` read of the resolved
- * BODY (the credential lives on the mothership and `ENCRYPTION_KEY` never reaches a laptop). Three
- * decisions that have to be taken together, which is why it is an initiative rather than a field on
- * a registration. Scoped in `backend/docs/reusable-operations.md` → "Not yet done".
+ * A MOTHERSHIP-mode node is judged the same way and correctly: its resolver is the remote one,
+ * whose `configured` answers for the mothership's environment rather than the laptop's.
  */
 function checkPromptFragments(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
   const registry = opts.registries.promptFragmentRegistry
   if (!registry) return []
-  return registry
-    .all()
-    .filter((fragment) => fragment.documentRef)
-    .map((fragment) => ({
-      severity: 'error' as const,
+  const resolver = opts.registries.deploymentDocumentResolver
+  const problems: RegistrationProblem[] = []
+  for (const fragment of registry.all()) {
+    const ref = fragment.documentRef
+    if (!ref) continue
+    // The TRAIT is asked first and independently of the resolver, because the two answer different
+    // questions: whether this source CAN be deployment-scoped is a fact about the source, and
+    // whether it IS configured is a fact about this process. Asking the resolver first would let a
+    // resolver that answers `configured` too generously admit a registration no configuration can
+    // make work, and the trait is the only thing that can refuse it.
+    const scopable = isDeploymentScopedSource(ref.source)
+    if (scopable && resolver?.configured(ref.source)) continue
+    // Two causes, two remedies, so two messages. Reporting them as one would send an operator who
+    // chose an impossible source hunting for a variable that does not exist.
+    const cause = scopable
+      ? `this deployment has configured no ${ref.source} credentials, so it cannot read the ` +
+        `document. Set the DOC_SOURCE_${ref.source.toUpperCase()}_* variables ` +
+        `(docs/environment-variables.md)`
+      : `document source "${ref.source}" cannot be configured deployment-wide at all: its ` +
+        `credential is a WORKSPACE's, not the deployment's, so serving one document to every ` +
+        `workspace would mean spending one tenant's credential on all of them`
+    problems.push({
+      severity: 'error',
       code: 'fragment_document_ref_unsupported',
       message:
-        `Prompt fragment "${fragment.id}" is registered in code with a documentRef, which is ` +
-        `carried through the catalog and rendered as a live source but is never resolved: a ` +
-        `code-registered fragment lands on the "builtin" tier, and no document source has a ` +
-        `deployment-scoped credential yet, so live resolution needs a connection workspace this ` +
-        `registration has none of. Register the body inline instead, or create the fragment at the ` +
-        `ACCOUNT tier (POST the fragment with its documentRef and a fetch-via workspace), which is ` +
-        `the supported path to an org-wide living document.`,
-    }))
+        `Prompt fragment "${fragment.id}" is registered in code with a documentRef, but ${cause}. ` +
+        `Left as is the reference is carried through the catalog and rendered as a live source ` +
+        `while every run folds the registered body instead. Fix the configuration, register the ` +
+        `body inline, or create the fragment at the ACCOUNT tier (POST it with its documentRef and ` +
+        `a fetch-via workspace).`,
+    })
+  }
+  return problems
 }
 
 /**

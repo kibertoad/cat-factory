@@ -78,8 +78,9 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
   async fetchDocument(
     _credentials: DocumentCredentials,
     externalId: string,
-    workspaceId: string,
+    scope: string | null,
   ): Promise<DocumentContent> {
+    const workspaceId = this.requireWorkspaceScope(scope)
     const id = githubDocsLogic.parseGitHubDocExternalId(externalId)
     if (!id) {
       throw new ValidationError(`"${externalId}" is not a valid GitHub doc reference`)
@@ -132,8 +133,9 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
   async probeVersion(
     _credentials: DocumentCredentials,
     externalId: string,
-    workspaceId: string,
+    scope: string | null,
   ): Promise<string> {
+    const workspaceId = this.requireWorkspaceScope(scope)
     const id = githubDocsLogic.parseGitHubDocExternalId(externalId)
     if (!id) {
       throw new ValidationError(`"${externalId}" is not a valid GitHub doc reference`)
@@ -200,6 +202,28 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
    * owned by someone else that a hosted App can still read), which is a legitimate thing to
    * link. Reachability is decided by the token, not by matching the owner string.
    */
+  /**
+   * Narrow a read's scope to a WORKSPACE, refusing the deployment scope (`null`).
+   *
+   * This is the whole reason this source's `deploymentScoped` trait is false. Its credential IS a
+   * workspace's App installation, so serving a deployment-wide read would mean picking one
+   * tenant's installation to fetch on every tenant's behalf. Boot validation refuses such a
+   * registration before a run can reach here; this is the second door, for a caller that resolved
+   * a source some other way. It refuses rather than substituting, which is why the port spells the
+   * deployment scope `null` instead of a sentinel id this method could not tell from a real one.
+   */
+  private requireWorkspaceScope(workspaceId: string | null): string {
+    if (workspaceId === null) {
+      throw new ValidationError(
+        "GitHub docs cannot serve a deployment-scoped read: its credential is a WORKSPACE's " +
+          'App installation, not a value a deployment configures centrally. Use a source whose ' +
+          'credentials are self-contained (Confluence, Notion, Linear, Figma, Zeplin), or create ' +
+          'the fragment at the account tier with a fetch-via workspace.',
+      )
+    }
+    return workspaceId
+  }
+
   private async resolveInstallationId(workspaceId: string): Promise<number> {
     const installation = await this.deps.installations.getByWorkspace(workspaceId)
     if (!installation) {

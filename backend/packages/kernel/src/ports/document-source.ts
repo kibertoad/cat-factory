@@ -108,11 +108,18 @@ export interface DocumentSourceProvider {
    * per-workspace out-of-band (e.g. the GitHub App/PAT, which ignores `credentials`)
    * MUST scope the read to that workspace's own installation so a crafted `externalId`
    * can't reach another tenant's repo — the same tenant-scoping `search` performs.
+   *
+   * **`null` is the DEPLOYMENT scope**: the read is on behalf of the whole deployment, using
+   * credentials it configured centrally, and there is no tenant to scope to. A provider whose
+   * `deploymentScoped` trait is false MUST refuse it rather than substitute a workspace, because
+   * the substitute would be one tenant's credential serving every tenant. `null` is used rather
+   * than a sentinel id precisely so that refusal is possible: a fake workspace id would look
+   * exactly like a real one to the provider that had to reject it.
    */
   fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
-    workspaceId: string,
+    workspaceId: string | null,
   ): Promise<DocumentContent>
   /**
    * Cheaply read the page's current version token — the {@link DocumentContent.version}
@@ -120,12 +127,13 @@ export interface DocumentSourceProvider {
    * download or Markdown conversion). MUST be strictly cheaper than `fetchDocument`,
    * so the caching seam can bump a cached body's TTL when the token is unchanged
    * instead of re-fetching. Returns `''` when the source exposes no version. Scoped to
-   * `workspaceId` for the same tenant-isolation reason as {@link fetchDocument}.
+   * `workspaceId` for the same tenant-isolation reason as {@link fetchDocument}, `null`
+   * included.
    */
   probeVersion(
     credentials: DocumentCredentials,
     externalId: string,
-    workspaceId: string,
+    workspaceId: string | null,
   ): Promise<string>
   /**
    * Search the source's catalogue by free text and return lean hits (no body).
@@ -166,6 +174,48 @@ export interface DocumentContentResolver {
    * same unreachable/not-connected conditions as {@link fetch}.
    */
   probeVersion(workspaceId: string, source: DocumentSourceKind, externalId: string): Promise<string>
+}
+
+/**
+ * The cache group every DEPLOYMENT-scoped document body is held under.
+ *
+ * ONE group for the whole deployment, which is the point: a deployment-wide document keyed per
+ * workspace would be fetched N times and could never be invalidated in fewer than N calls, so the
+ * group is a fact about the document's OWNER rather than about the reader. Deliberately not a
+ * workspace-shaped id, so it cannot collide with one.
+ */
+export const DEPLOYMENT_DOCUMENT_CACHE_GROUP = 'deployment'
+
+/**
+ * Live, read-only access to a document the DEPLOYMENT owns, authenticated with credentials the
+ * deployment configured centrally rather than any tenant's connection.
+ *
+ * The sibling of {@link DocumentContentResolver}, and separate from it because the difference is
+ * not a nullable argument but a different CREDENTIAL HOME: this one reads deployment configuration,
+ * serves exactly the sources whose `deploymentScoped` trait is true, and caches under one
+ * deployment-wide group. Keeping them apart is what lets a caller ask "can the deployment itself
+ * serve this document" without a workspace in hand, which is precisely the question a
+ * code-registered (`builtin`-tier) prompt fragment's `documentRef` poses.
+ *
+ * In MOTHERSHIP mode this is remote: the credentials live in the mothership's environment and
+ * never reach a node, so the node reads the resolved BODY over `/internal/*`. Like every other
+ * such read, a failure THROWS rather than answering empty.
+ */
+export interface DeploymentDocumentResolver {
+  /**
+   * Whether this deployment has credentials configured for `source`, so a caller can tell an
+   * unconfigured source from an unreachable one WITHOUT spending a fetch.
+   *
+   * Boot validation is the reader that matters: it refuses a code-registered `documentRef` whose
+   * source the deployment cannot serve, and it must be able to distinguish that from a source it
+   * can serve but whose page is momentarily unreachable, which is a run-time degradation and not a
+   * misconfiguration.
+   */
+  configured(source: DocumentSourceKind): boolean
+  /** Fetch the document's current content; throws when unconfigured or unreachable. */
+  fetch(source: DocumentSourceKind, externalId: string): Promise<DocumentContent>
+  /** Cheaply probe the current version token; throws on the same conditions as {@link fetch}. */
+  probeVersion(source: DocumentSourceKind, externalId: string): Promise<string>
 }
 
 /**

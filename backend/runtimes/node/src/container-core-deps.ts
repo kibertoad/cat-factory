@@ -5,6 +5,7 @@
 // adds no cost to a deployment that never uses EKS.
 import {
   ConfluenceProvider,
+  buildDeploymentDocumentResolver,
   FigmaProvider,
   ZeplinProvider,
   GitHubDocsProvider,
@@ -802,8 +803,21 @@ function selectNodeDocumentsDeps(
     providers.push(new GitHubDocsProvider({ githubClient, installations, logger }))
   }
   if (providers.length === 0) return {}
+  // The DEPLOYMENT's own document credentials, read from this process's environment (never from a
+  // tenant's stored connection) so a code-registered prompt fragment may name a living standard.
+  // A source whose variables are present but unusable is REPORTED and left unconfigured, which
+  // makes boot validation refuse any fragment naming it rather than let it fold a stale body.
+  const deployment = buildDeploymentDocumentResolver(providers, process.env)
+  for (const { source, problem } of deployment.problems) {
+    logger.warn(
+      'Deployment-wide document-source credentials are set but unusable, so this source cannot ' +
+        'back a code-registered prompt fragment',
+      { source, problem },
+    )
+  }
   return {
     documentSourceProviders: providers,
+    ...(deployment.resolver ? { deploymentDocumentResolver: deployment.resolver } : {}),
     documentConnectionRepository: new DrizzleDocumentConnectionRepository(
       db,
       new WebCryptoSecretCipher({

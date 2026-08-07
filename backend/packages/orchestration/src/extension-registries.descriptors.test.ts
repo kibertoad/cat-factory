@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
-import type { CustomTaskType } from '@cat-factory/kernel'
+import type { CustomTaskType, DocumentSourceKind } from '@cat-factory/kernel'
 import type {
   DescriptorField,
   InitiativePresetDescriptor,
@@ -28,7 +28,11 @@ import {
 // they share `descriptorFormProblems` as their checker.
 
 describe('deployment-registered prompt fragments', () => {
-  const collect = (fragments: Parameters<PromptFragmentRegistry['register']>[0][]) => {
+  const collect = (
+    fragments: Parameters<PromptFragmentRegistry['register']>[0][],
+    /** The sources THIS deployment has configured credentials for. */
+    configuredSources: DocumentSourceKind[] = [],
+  ) => {
     const promptFragmentRegistry = defaultPromptFragmentRegistry()
     for (const f of fragments) promptFragmentRegistry.register(f)
     return collectRegistrationProblems({
@@ -36,6 +40,11 @@ describe('deployment-registered prompt fragments', () => {
         agentKindRegistry: defaultAgentKindRegistry(),
         gateRegistry: defaultGateRegistry(),
         promptFragmentRegistry,
+        deploymentDocumentResolver: {
+          configured: (source) => configuredSources.includes(source),
+          fetch: () => Promise.reject(new Error('not used')),
+          probeVersion: () => Promise.reject(new Error('not used')),
+        },
       },
     })
   }
@@ -47,30 +56,62 @@ describe('deployment-registered prompt fragments', () => {
     summary: 'How this org shapes APIs.',
     body: 'Plural nouns.',
   }
+  const notionRef = { source: 'notion' as const, externalId: 'page-1' }
 
   it('accepts a fragment whose body is registered inline', () => {
     expect(collect([inline])).toEqual([])
   })
 
-  it('REFUSES a code-registered documentRef, which is carried, rendered live, and never resolved', () => {
-    // The dead seam: `builtinToEntry` carries the ref into the resolved entry, `entryToFragment`
-    // puts it on the wire, the library UI renders a "live from <source>" badge naming it, and
-    // `resolveDocumentBody` then short-circuits on `entry.tier === 'builtin'`. Every code
-    // registration lands on that tier, so the reference is preserved everywhere it is visible and
-    // honoured nowhere, and the surface most confident about it is the one telling a human the
-    // body is live.
-    //
-    // An ERROR rather than a warning because there is no deployment state in which it starts
-    // resolving, and what it produces is a lie rather than an omission.
-    const problems = collect([
-      { ...inline, documentRef: { source: 'github' as const, externalId: 'org/repo:g.md' } },
-    ])
+  it('ACCEPTS a documentRef the deployment has credentials for', () => {
+    // The capability itself: a code-registered fragment may name a LIVING document, because a
+    // deployment-scoped credential home exists for it. Refusing here was right only while the
+    // reference could never resolve.
+    expect(collect([{ ...inline, documentRef: notionRef }], ['notion'])).toEqual([])
+  })
+
+  it('REFUSES a documentRef whose source this deployment configured no credentials for', () => {
+    // Fixable, so the message names the variables rather than the shape of the mistake. Still an
+    // ERROR and not a warning: it is fully knowable from the registration plus this process's own
+    // configuration, which is the bar every severity here is set by.
+    const problems = collect([{ ...inline, documentRef: notionRef }])
     expect(problems.map((p) => p.code)).toEqual(['fragment_document_ref_unsupported'])
     expect(problems[0]?.severity).toBe('error')
-    // The message names the two paths that DO work, because "this is refused" without them just
+    expect(problems[0]?.message).toContain('DOC_SOURCE_NOTION_')
+  })
+
+  it('REFUSES a documentRef on a source that can never be deployment-scoped, with a DIFFERENT reason', () => {
+    // `github` docs authenticate with a WORKSPACE's App installation, so there is no
+    // deployment-wide credential to configure and no variable to set. Reporting this with the
+    // "configure the variables" message would send an operator hunting for one that cannot exist,
+    // which is why the two causes are two messages. Claiming it IS configured changes nothing,
+    // because no configuration is a way out.
+    const problems = collect(
+      [{ ...inline, documentRef: { source: 'github' as const, externalId: 'org/repo:g.md' } }],
+      ['github'],
+    )
+    expect(problems.map((p) => p.code)).toEqual(['fragment_document_ref_unsupported'])
+    expect(problems[0]?.message).toContain('cannot be configured deployment-wide')
+    expect(problems[0]?.message).not.toContain('DOC_SOURCE_GITHUB_')
+    // The two paths that DO work are still named, because "this is refused" without them just
     // moves the dead end.
     expect(problems[0]?.message).toContain('inline')
     expect(problems[0]?.message).toContain('ACCOUNT tier')
+  })
+
+  it('REFUSES a documentRef when the deployment wired NO resolver at all', () => {
+    // The unconfigured deployment, which is every deployment that never set a DOC_SOURCE_ variable:
+    // the absent resolver and a resolver answering `configured: false` must reach the same verdict,
+    // or the refusal would depend on how the facade happened to wire an absent capability.
+    const promptFragmentRegistry = defaultPromptFragmentRegistry()
+    promptFragmentRegistry.register({ ...inline, documentRef: notionRef })
+    const problems = collectRegistrationProblems({
+      registries: {
+        agentKindRegistry: defaultAgentKindRegistry(),
+        gateRegistry: defaultGateRegistry(),
+        promptFragmentRegistry,
+      },
+    })
+    expect(problems.map((p) => p.code)).toEqual(['fragment_document_ref_unsupported'])
   })
 })
 
