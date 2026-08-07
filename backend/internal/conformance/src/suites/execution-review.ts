@@ -19,7 +19,8 @@ export function defineExecutionReviewConformance(harness: ConformanceHarness): v
   describe('execution engine', () => {
     registerSpecIngestAndSteeringTests(harness)
     registerRequirementsGateTests(harness)
-    registerCompanionAndMergerTests(harness)
+    registerCompanionAndFailureTests(harness)
+    registerMergerDecisionTests(harness)
     registerCompanionCapTests(harness)
   })
   registerReviewStoreConcurrencyTests(harness)
@@ -337,13 +338,13 @@ function registerRequirementsGateTests(harness: ConformanceHarness): void {
 }
 
 /**
- * The producer/companion review gates, the agent-failure classification the SPA keys its
- * remedies off, and the merger's route-to-human-review policy.
+ * The producer/companion review gates and the agent-failure classification the SPA keys its
+ * remedies off. The merger's own decision policy sits in `registerMergerDecisionTests`.
  *
  * Registered from the suite above; split out purely to keep each function within the
  * per-function line budget. Every test is unchanged.
  */
-function registerCompanionAndMergerTests(harness: ConformanceHarness): void {
+function registerCompanionAndFailureTests(harness: ConformanceHarness): void {
   it('passes a companion gate when the rating clears the threshold', async () => {
     // A companion step grades the prior producer; at/above its threshold the run
     // proceeds. `reviewer` is the coder's companion, so ['coder','reviewer'] runs the
@@ -499,7 +500,16 @@ function registerCompanionAndMergerTests(harness: ConformanceHarness): void {
     const coderStep = exec.steps.find((s) => s.agentKind === 'coder')!
     expect(coderStep.container?.status).toBe('errored')
   })
+}
 
+/**
+ * The MERGER's decision: which policy governed the run, and what the recorded reason names as
+ * the thing that held the pull request back.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerMergerDecisionTests(harness: ConformanceHarness): void {
   it('routes a merger PR to human review when the assessment is unexplained (empty rationale)', async () => {
     // Engine guard: auto-merge only on a CREDIBLE within-threshold assessment. Scores
     // within every ceiling but an EMPTY rationale (the shape a merger that failed to
@@ -511,6 +521,9 @@ function registerCompanionAndMergerTests(harness: ConformanceHarness): void {
     })
     const { workspace } = await app.createWorkspace()
     const wsId = workspace.id
+    // `createWorkspace` seeded the preset library, so `Balanced` governs and the credibility
+    // backstop is what holds the PR back. On an unseeded workspace the fallback would refuse it
+    // one rung higher up the ladder (`auto_merge_disabled`) and this would pass for that reason.
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Build + merger',
       agentKinds: ['coder', 'merger'],
@@ -559,6 +572,9 @@ function registerCompanionAndMergerTests(harness: ConformanceHarness): void {
     })
     const { workspace } = await app.createWorkspace()
     const wsId = workspace.id
+    // `createWorkspace` seeded the preset library, so the run resolves the `Balanced` DEFAULT
+    // rather than the unconfigured-deployment fallback, which auto-merges nothing. That fallback
+    // has its own case below.
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Build + merger + trailing gate',
       agentKinds: ['coder', 'merger', 'ci'],
@@ -606,8 +622,8 @@ function registerCompanionAndMergerTests(harness: ConformanceHarness): void {
     })
     const { workspace } = await app.createWorkspace()
     const wsId = workspace.id
-    // Listing the catalog lazily seeds the built-ins so `mp_manual_review` is a real row the
-    // task can pin (the resolver reads it back via the repository, which does not self-seed).
+    // `mp_manual_review` is a real row the task can pin (the resolver reads it back via the
+    // repository, which does not self-seed); read it back to prove the seed landed.
     const presets = await app.call<RiskPolicy[]>('GET', `/workspaces/${wsId}/risk-policies`)
     expect(presets.body.some((p) => p.id === 'mp_manual_review')).toBe(true)
     // Pin the human-review-only preset on the task.
@@ -642,6 +658,60 @@ function registerCompanionAndMergerTests(harness: ConformanceHarness): void {
     expect(decision.reason).toBe('auto_merge_disabled')
     expect(decision.thresholds?.presetName).toBe('Manual review only')
     expect(decision.thresholds?.autoMergeEnabled).toBe(false)
+  })
+
+  it('auto-merges nothing when the workspace has no merge policy at all, and says so by name', async () => {
+    // The UNRESOLVED posture (`FALLBACK_RISK_POLICY`). `mergePresets: false` is the whole
+    // arrangement: nothing seeds the library, so no row is seeded and nothing — task pin or
+    // workspace default — resolves. The previous fallback was `Balanced` itself, which meant a
+    // deployment that had configured no merge policy still landed pull requests on a model's own
+    // scores; it now refuses instead.
+    //
+    // Driven end-to-end rather than as a resolver unit test because the resolver is injected a
+    // preset directly: only the full path (no seed → repository returns null → fallback →
+    // `MergeResolver`) can show that the absence reaches the decision at all.
+    const app = harness.makeApp({
+      confidence: 1,
+      // Maximally mergeable: 0/0/0 with a real rationale would auto-merge under `Balanced`.
+      mergeAssessment: {
+        complexity: 0,
+        risk: 0,
+        impact: 0,
+        rationale: 'Trivial, well-tested change.',
+      },
+    })
+    const { workspace } = await app.createWorkspace({ mergePresets: false })
+    const wsId = workspace.id
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Build + merger',
+      agentKinds: ['coder', 'merger'],
+    })
+    const start = await app.call<ExecutionInstance>(
+      'POST',
+      `/workspaces/${wsId}/blocks/task_login/executions`,
+      { pipelineId: pipeline.body.id },
+    )
+    expect(start.status).toBe(201)
+    const ticked = await app.drive(wsId)
+    const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+    const task = snap.blocks.find((b) => b.id === 'task_login')!
+    expect(task.status).toBe('pr_ready')
+    expect(task.status).not.toBe('done')
+    const exec = ticked.find((e) => e.blockId === 'task_login')!
+    const decision = exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
+      outcome?: string
+      reason?: string
+      thresholds?: { presetName?: string; autoMergeEnabled?: boolean }
+    }
+    expect(decision.outcome).toBe('awaiting_review')
+    expect(decision.thresholds?.autoMergeEnabled).toBe(false)
+    // The refusal must NOT read as a preset the workspace could go and edit: `Manual review only`
+    // is a row somebody chose, this is the absence of any choice, and the two need opposite
+    // remedies (edit that preset / configure a policy at all). Both halves say so — the reason
+    // the SPA maps to copy, and the name the banner interpolates.
+    expect(decision.reason).toBe('no_policy_configured')
+    expect(decision.reason).not.toBe('auto_merge_disabled')
+    expect(decision.thresholds?.presetName).toBe('No merge policy configured')
   })
 
   it('routes to human review when a task pinned to a strict preset gets an over-threshold assessment', async () => {

@@ -344,6 +344,22 @@ also means the shipped default posture is worth stating plainly:
 > for a repo, pin the `Manual review only` preset or add class floors. This is a one-line
 > configuration, not a code change.
 
+A second constant sits behind that one, and it is deliberately NOT the same policy.
+`FALLBACK_RISK_POLICY` governs a run when NO preset resolves at all: no preset library is wired,
+or the workspace's default row has not been seeded. It auto-merges nothing, so a deployment that
+has configured no merge policy lands no pull request on a model's own scores. `Balanced` is a row
+an operator could have read and changed; the fallback is the absence of any such row, and absence
+of evidence is not evidence that auto-merging is wanted. The decision it records names itself
+rather than borrowing `Manual review only`: its own reason (`no_policy_configured`, which the SPA
+maps to its own copy) beside its own `presetName`. The two refuse on the same rung of the merge
+ladder and need opposite remedies, so a reader sent to edit the preset that held their PR back
+must not go looking for one they never had.
+
+Preset seeding is lazy (the first `list()`, which every board load performs), so the fallback is
+reachable for a workspace nobody has opened yet — a run started from the public API or a schedule
+fire against a brand-new board. It fails safe and self-heals on the next board load; the recorded
+reason is what tells an operator which of the two states they are in.
+
 ## Layer 5: agent text is untrusted on every rendered surface (mechanism)
 
 Everything the agent writes that reaches a parsed surface is treated as hostile:

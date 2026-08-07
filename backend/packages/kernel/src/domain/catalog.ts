@@ -109,6 +109,40 @@ export const DEFAULT_RISK_POLICY = {
 } as const
 
 /**
+ * The merge policy a run falls back to when NO preset resolves at all: no preset library is
+ * wired, or the workspace's default row has not been seeded yet. Deliberately NOT
+ * {@link DEFAULT_RISK_POLICY}, which the two constants having identical fields would make it.
+ *
+ * They answer different questions. `Balanced` is a policy someone can read, edit and pin, and
+ * shipping it as the seeded default is defensible precisely because a workspace holding it has a
+ * ROW an operator could have changed. This constant governs a run when no such row exists, and
+ * "nobody has stated a merge policy" is not evidence that auto-merging is wanted: it is the
+ * absence of evidence, the same reading `resolveMergeClassRule` takes for an unreadable diff.
+ * Landing a pull request is also the one outcome nothing in the UI can take back afterwards, so
+ * the unresolved case REFUSES: every PR raises `merge_review` (`no_policy_configured`, its own
+ * reason precisely so it cannot read as a preset somebody chose) until a real preset resolves.
+ * A deployment that wants the historical posture seeds its presets, which every wired facade
+ * does on the first `list()` — the read every board load performs.
+ *
+ * The ceilings are pinned to 0 for the reason `mp_manual_review` pins them there: they are never
+ * consulted while auto-merge is off, and the decision banner renders them, so leaving `Balanced`'s
+ * ceilings on a decision no ceiling took part in would send a reader to edit a threshold that had
+ * nothing to do with it. Every OTHER knob is inherited, because the rest are BUDGETS (CI-fixer
+ * attempts, reviewer iterations, watch windows) rather than postures: an unconfigured deployment
+ * should still run its gates the usual number of times, it just may not land the result on its own.
+ */
+export const FALLBACK_RISK_POLICY = {
+  ...DEFAULT_RISK_POLICY,
+  // Named for what it IS, never borrowing `Balanced`: the name reaches the decision banner, and a
+  // run governed by no row must not report a preset the workspace could go and look at.
+  name: 'No merge policy configured',
+  maxComplexity: 0,
+  maxRisk: 0,
+  maxImpact: 0,
+  autoMergeEnabled: false,
+} as const
+
+/**
  * The built-in presets ship with NO per-class rules: every class falls back to the score
  * ceilings, so the default policy is byte-for-byte the historical behaviour. Widening a class
  * to `always` is an operator decision the workspace makes once its per-class track record

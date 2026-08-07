@@ -107,6 +107,7 @@ export { bugHuntScore, parseBugHuntVerdicts, rankBugCandidates } from './domain/
 export {
   BLOCK_TYPE_LABEL,
   DEFAULT_RISK_POLICY,
+  FALLBACK_RISK_POLICY,
   DEFAULT_MERGE_CLASS_RULES,
   RISK_POLICY_SEEDS,
   seedRiskPolicies,

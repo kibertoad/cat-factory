@@ -15,6 +15,11 @@ export {
 } from './harness.js'
 export { FakeRepoBootstrapper } from './FakeRepoBootstrapper.js'
 export {
+  seedMergePresets,
+  type CreateWorkspaceOptions,
+  type MergePresetSeedOptions,
+} from './seedMergePresets.js'
+export {
   makeFakeCi,
   makeFakeMergeability,
   makeFakeReleaseHealth,

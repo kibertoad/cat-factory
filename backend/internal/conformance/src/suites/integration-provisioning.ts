@@ -24,7 +24,10 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
   describe('merge presets', () => {
     it('seeds the built-in catalog, enforces the single-default invariant, and guards the default', async () => {
       const { call, createWorkspace } = harness.makeApp()
-      const { workspace } = await createWorkspace()
+      // `mergePresets: false`, because LAZY SEEDING is this case's subject: the harness normally
+      // seeds on create (as a board load does), which would make the list below read back a
+      // catalog somebody else had already written.
+      const { workspace } = await createWorkspace({ mergePresets: false })
       const base = `/workspaces/${workspace.id}/risk-policies`
 
       // First list lazily seeds the whole built-in catalog: Balanced (default, auto-merge on)

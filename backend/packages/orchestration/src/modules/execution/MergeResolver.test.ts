@@ -18,7 +18,11 @@ const INSTANCE: ExecutionInstance = {
   pipelineName: 'Build',
 } as ExecutionInstance
 
+// A real workspace preset, so it carries an id: the resolver reads the id's ABSENCE as "no
+// preset resolved, this is the built-in fallback" and names that refusal differently. An id-less
+// fixture would put every case below on the unconfigured path.
 const PRESET = {
+  id: 'mp_balanced',
   name: 'Balanced',
   maxComplexity: 0.5,
   maxRisk: 0.4,
@@ -99,6 +103,48 @@ describe('MergeResolver.resolveMergerStep', () => {
     const decision = await resolver.resolveMergerStep('ws', INSTANCE, assessment())
     expect(decision).toMatchObject({ outcome: 'awaiting_review', reason: 'auto_merge_disabled' })
     expect(finalizeMerge).not.toHaveBeenCalled()
+  })
+
+  it('names an UNCONFIGURED deployment apart from a preset that asks for review', async () => {
+    // Same rung of the ladder, opposite remedies. The built-in fallback is the one policy with no
+    // id (no workspace has a row for it), and reporting it as `auto_merge_disabled` would send the
+    // reader hunting for a preset to edit that their deployment never had.
+    const { resolver, finalizeMerge } = makeResolver({
+      preset: {
+        name: 'No merge policy configured',
+        maxComplexity: 0,
+        maxRisk: 0,
+        maxImpact: 0,
+        autoMergeEnabled: false,
+      },
+    })
+    const decision = await resolver.resolveMergerStep('ws', INSTANCE, assessment())
+    expect(decision).toMatchObject({
+      outcome: 'awaiting_review',
+      reason: 'no_policy_configured',
+    })
+    expect(decision?.thresholds.presetName).toBe('No merge policy configured')
+    expect(finalizeMerge).not.toHaveBeenCalled()
+  })
+
+  it('keeps the unconfigured refusal below a dry run and a submission bar', async () => {
+    // The fallback does not climb the ladder: it refuses on the master-switch rung, so a run that
+    // was ALSO sandboxed still reports `dry_run` — the reason a reader has to act on first.
+    const { resolver } = makeResolver({
+      preset: {
+        name: 'No merge policy configured',
+        maxComplexity: 0,
+        maxRisk: 0,
+        maxImpact: 0,
+        autoMergeEnabled: false,
+      },
+    })
+    const decision = await resolver.resolveMergerStep(
+      'ws',
+      { ...INSTANCE, mode: 'dry_run' },
+      assessment(),
+    )
+    expect(decision?.reason).toBe('dry_run')
   })
 
   it('routes to review as `no_rationale` when the scores lack an explanation', async () => {
@@ -279,7 +325,9 @@ describe('MergeResolver replay safety', () => {
       executionId: 'exec_1',
       decision: 'auto_merged',
       assessment: assessment(),
-      riskPolicyId: null,
+      // The resolved preset's row id, so a decision can be read back in the policy context it was
+      // made under. Null only where no preset resolved at all (the built-in fallback).
+      riskPolicyId: 'mp_balanced',
       riskPolicyName: 'Balanced',
       classification: { changeClass: 'source', fileCount: 2 },
     })

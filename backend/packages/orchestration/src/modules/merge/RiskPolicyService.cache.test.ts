@@ -127,7 +127,7 @@ describe('RiskPolicyService risk-policy cache coherence', () => {
   it('lazy first-use seed (list) invalidates the warmed null default', async () => {
     // A gate can resolve `default` on a never-listed workspace and cache the null; the very
     // first `list()` seeds the built-in catalog, and its invalidation must drop that warm null
-    // so the next gate reads the freshly-seeded default rather than the DEFAULT_RISK_POLICY
+    // so the next gate reads the freshly-seeded default rather than the FALLBACK_RISK_POLICY
     // fallback. (Pins the `ensureSeeded` invalidation the other cases only cover transitively.)
     const repo = fakeRepo()
     const service = makeService(repo, caches.riskPolicy)

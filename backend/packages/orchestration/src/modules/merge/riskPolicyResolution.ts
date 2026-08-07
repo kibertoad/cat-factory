@@ -1,11 +1,11 @@
 import type { GroupCacheHandle, RiskPolicy, RiskPolicyCacheValue } from '@cat-factory/kernel'
 import type { RiskPolicyRepository } from '@cat-factory/kernel'
-import { DEFAULT_RISK_POLICY } from '@cat-factory/kernel'
+import { FALLBACK_RISK_POLICY } from '@cat-factory/kernel'
 import type { ResolvedRunRiskPolicy } from '../execution/policy-types.js'
 
 // ---------------------------------------------------------------------------
 // WHICH merge-threshold preset governs a task: its own pick, else the workspace default, else the
-// built-in `DEFAULT_RISK_POLICY`.
+// built-in `FALLBACK_RISK_POLICY` — which does NOT auto-merge (see the constant).
 //
 // One implementation, because two readers depend on the answer being the SAME one: the engine
 // resolves it to make the merge decision, and the board's preset-SELECTION guard resolves it to
@@ -47,8 +47,9 @@ export function cachedRiskPolicyRead(
  * Resolve the preset governing `riskPolicyId` in a workspace.
  *
  * An ABSENT repository is not a hole to guard: with no preset library there is nothing for a task
- * to point at, so every task in the deployment is governed by {@link DEFAULT_RISK_POLICY}, whose
- * role layer is empty and therefore holds nobody to anything.
+ * to point at, so every task in the deployment is governed by {@link FALLBACK_RISK_POLICY}, whose
+ * role layer is empty and therefore holds nobody to anything — and which auto-merges nothing, so
+ * the deployment that configured no policy lands no PR without a human.
  */
 export async function resolveRiskPolicy(input: {
   repository: RiskPolicyRepository | undefined
@@ -57,7 +58,7 @@ export async function resolveRiskPolicy(input: {
   read?: RiskPolicyRead
 }): Promise<ResolvedRunRiskPolicy> {
   const { repository, workspaceId, riskPolicyId } = input
-  if (!repository) return DEFAULT_RISK_POLICY
+  if (!repository) return FALLBACK_RISK_POLICY
   const read = input.read ?? directRiskPolicyRead
   if (riskPolicyId) {
     const picked = await read(`picked:${riskPolicyId}`, () =>
@@ -65,5 +66,5 @@ export async function resolveRiskPolicy(input: {
     )
     if (picked) return picked
   }
-  return (await read('default', () => repository.getDefault(workspaceId))) ?? DEFAULT_RISK_POLICY
+  return (await read('default', () => repository.getDefault(workspaceId))) ?? FALLBACK_RISK_POLICY
 }

@@ -631,6 +631,12 @@ export const mergeDecisionSchema = v.object({
    *  - `within_thresholds`: auto-merged; every axis at/below the preset ceiling.
    *  - `exceeded_thresholds`: review; one or more axes over the ceiling (`exceededAxes`).
    *  - `auto_merge_disabled`: review; the preset routes every PR to a human.
+   *  - `no_policy_configured`: review; NO preset resolved at all — no preset library is wired, or
+   *    the workspace's default row has not been seeded — so the run fell back to the built-in
+   *    `FALLBACK_RISK_POLICY`, which auto-merges nothing. Kept apart from `auto_merge_disabled`
+   *    because the remedies have nothing in common: that one names a preset somebody chose and is
+   *    fixed by editing it, while this one says the deployment has stated no merge policy, and a
+   *    reader sent looking for the preset that held their PR back would not find one.
    *  - `no_rationale`: review; the merger returned scores but no rationale, so the verdict
    *    can't be trusted to auto-merge (the assessment IS present, just not credible).
    *  - `no_assessment`: review; the merger produced no parseable assessment at all.
@@ -664,6 +670,7 @@ export const mergeDecisionSchema = v.object({
     'within_thresholds',
     'exceeded_thresholds',
     'auto_merge_disabled',
+    'no_policy_configured',
     'no_rationale',
     'no_assessment',
     'merge_failed',

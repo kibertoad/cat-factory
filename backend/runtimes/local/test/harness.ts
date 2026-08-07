@@ -18,6 +18,8 @@ import {
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
   mintSession,
+  seedMergePresets,
+  type CreateWorkspaceOptions,
 } from '@cat-factory/conformance'
 import {
   type DrizzleDb,
@@ -380,9 +382,8 @@ export function makeConformanceApp(
   const callBinary = (method: string, path: string, extraHeaders?: Record<string, string>) =>
     callBinaryThrough(app, method, path, extraHeaders)
 
-  async function createWorkspace(options: { name?: string; seed?: boolean } = {}) {
-    return (await call<WorkspaceSnapshot>('POST', '/workspaces', options)).body
-  }
+  const createWorkspace = async (o: CreateWorkspaceOptions = {}) =>
+    seedMergePresets(call, o, (await call<WorkspaceSnapshot>('POST', '/workspaces', o)).body)
 
   // Org-scoped workspace via the container's services (dev-open has no signed-in user,
   // so the HTTP account flow can't create the owning org). Mirrors the Node helper.

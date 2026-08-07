@@ -85,6 +85,13 @@ interface MergePrecedenceInput {
   submissionAllowed: boolean
   /** The preset's master switch. */
   autoMergeEnabled: boolean
+  /**
+   * A real preset resolved (block pin or workspace default). False means the run fell back to the
+   * built-in `FALLBACK_RISK_POLICY` — the ONLY policy with no id, which is why the id's absence is
+   * the signal rather than a guess. It never changes WHAT the ladder decides, only what the
+   * refusal is called: the fallback already carries `autoMergeEnabled: false`.
+   */
+  policyConfigured: boolean
   /** The class rule as narrowed by the initiator's role. */
   effectiveRule: MergeClassRule
   /** The role's entry is what produced `effectiveRule` (it is stricter than the base rule). */
@@ -117,7 +124,8 @@ interface MergePrecedenceVerdict {
  *      WHO started the run. What separates it from a `never` class rule is that it also refuses
  *      the MANUAL merge, so it is a bar on landing rather than a demand for review.
  *   3. `autoMergeEnabled: false`, the master switch. "Manual review only" stays manual and a
- *      class rule can NEVER override it.
+ *      class rule can NEVER override it. The unconfigured fallback refuses on this same rung, and
+ *      is reported as `no_policy_configured` rather than borrowing the preset's name.
  *   4. The class rule AS NARROWED BY THE INITIATOR'S ROLE: `always` merges regardless of the
  *      scores, and regardless of the rationale backstop, because an explicit operator policy
  *      keyed on a DETERMINISTIC backend classification outranks the agent's self-report; `never`
@@ -151,7 +159,12 @@ function resolveMergePrecedence(input: MergePrecedenceInput): MergePrecedenceVer
 function reviewReasonFor(input: MergePrecedenceInput): MergeDecision['reason'] {
   if (input.dryRun) return 'dry_run'
   if (!input.submissionAllowed) return 'submission_not_allowed'
-  if (!input.autoMergeEnabled) return 'auto_merge_disabled'
+  // Same rung, two names. A deployment that stated no merge policy and a preset that states
+  // "always ask a human" both refuse here, and sending the first reader to edit a preset they do
+  // not have is the misattribution this whole ladder exists to avoid.
+  if (!input.autoMergeEnabled) {
+    return input.policyConfigured ? 'auto_merge_disabled' : 'no_policy_configured'
+  }
   if (input.effectiveRule === 'never') {
     return input.narrowedByRole ? 'role_requires_review' : 'class_requires_review'
   }
@@ -320,6 +333,9 @@ export class MergeResolver {
       dryRun,
       submissionAllowed,
       autoMergeEnabled: preset.autoMergeEnabled,
+      // No id ⇒ the built-in fallback governed (see `MergeThresholds.id`), which is the one
+      // policy no workspace has a row for.
+      policyConfigured: preset.id !== undefined,
       effectiveRule,
       narrowedByRole,
       hasAssessment: assessment !== null,
