@@ -4,7 +4,7 @@ import { useUiStore } from '~/stores/ui'
 
 /**
  * The expansion gate combines two independent grants (hover at any zoom, the deep zoom
- * bands otherwise). Both `TaskPipelineMini` (what renders) and `DraggableTask` (what
+ * bands otherwise). Both `TaskPipelineMini` (what renders) and `LaneTask` (what
  * stacks on top) read `isExpanded`, so these cases pin the rule they share.
  *
  * Zoom is set through the ui store's raw `zoom`, the same value the board canvas writes;

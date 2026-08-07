@@ -1,5 +1,5 @@
 import type { BlockEditAuthority, ReparentInput } from '@cat-factory/contracts'
-import { BLOCK_LEVEL_RUNS_PIPELINES } from '@cat-factory/contracts'
+import { BLOCK_LEVEL_RUNS_PIPELINES, moduleNameInContainer } from '@cat-factory/contracts'
 import type {
   Block,
   BlockRepository,
@@ -91,6 +91,14 @@ export function createBoardReparentWrite(deps: BoardReparentDeps) {
     // A task inherits its enclosing frame's type, so a move re-stamps it (no-op when unchanged
     // or when the destination isn't a resolvable frame). Non-task blocks keep their own type.
     const movedType: BlockType = block.level === 'task' && destFrame ? destFrame.type : block.type
+    // The declared module follows the destination container, for the same reason the type follows
+    // the destination frame: both are facts about where the task now lives, not about the task.
+    // Left alone, a task dragged out of a module keeps naming it, and the board's fallback (the
+    // declared name, for a task whose module block does not exist yet) files the card straight
+    // back under the module it was just dragged out of. `moduleNameInContainer` is the rule the
+    // SPA predicts the same answer from. Empty clears the column, like every other clearable field.
+    const movedModule =
+      block.level === 'task' ? moduleNameInContainer(parent) : (block.moduleName ?? '')
 
     // Same physical home (the common case, incl. two of the workspace's own services): move in
     // place and re-stamp `service_id`, the physical scope key that decides which boards render
@@ -102,6 +110,7 @@ export function createBoardReparentWrite(deps: BoardReparentDeps) {
         parentId: input.parentId,
         position: input.position,
         ...(movedType !== block.type ? { type: movedType } : {}),
+        ...(movedModule !== (block.moduleName ?? '') ? { moduleName: movedModule } : {}),
       })
       if (deps.serviceRepository) {
         const destService = await deps.serviceForContainer(destBlocks, parent)
@@ -163,7 +172,13 @@ export function createBoardReparentWrite(deps: BoardReparentDeps) {
     for (const b of subtree) {
       const moved =
         b.id === id
-          ? { ...b, parentId: input.parentId, position: input.position, type: movedType }
+          ? {
+              ...b,
+              parentId: input.parentId,
+              position: input.position,
+              type: movedType,
+              moduleName: movedModule,
+            }
           : b
       await deps.blockRepository.insert(parentHome, moved, destService)
       const exec = await deps.executionRepository.getByBlock(blockHome, b.id)

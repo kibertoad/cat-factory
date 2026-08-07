@@ -2,6 +2,7 @@
 import { useBoardFlow, BOARD_MIN_ZOOM, BOARD_MAX_ZOOM } from '~/composables/useBoardFlow'
 import NotificationsInbox from '~/components/layout/NotificationsInbox.vue'
 import IconButton from '~/components/common/IconButton.vue'
+import LaneViewControl from '~/components/board/LaneViewControl.vue'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -215,6 +216,9 @@ const decisionItems = computed(() =>
         >
       </UButton>
     </UDropdownMenu>
+
+    <!-- how every frame's swimlanes are ordered + grouped (an override; advanced tier) -->
+    <LaneViewControl />
 
     <!-- in-org sharing: add an existing org service to this board (mount = board.write) -->
     <UDropdownMenu

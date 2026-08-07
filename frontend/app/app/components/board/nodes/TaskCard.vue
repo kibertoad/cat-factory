@@ -86,6 +86,7 @@ const prLabel = computed(() =>
  * by hand, with no pull request and no run, is that task.
  */
 const uiMode = useUiModeStore()
+const laneView = useLaneViewStore()
 const outcomeReadable = computed(() => {
   const block = task.value
   if (!block) return false
@@ -102,6 +103,17 @@ const outcomeReadable = computed(() => {
  */
 const showPrChip = computed(
   () => Boolean(pr.value) && (uiMode.isAdvanced || !outcomeReadable.value),
+)
+
+/**
+ * The module chip, dropped while the swimlanes are GROUPED by module.
+ *
+ * Written as the invariant ("the card names its module wherever nothing else does") for the same
+ * reason `showPrChip` is: the surface that carries the other half is itself conditional, and two
+ * predicates that have to agree by coincidence eventually do not.
+ */
+const showModuleChip = computed(
+  () => Boolean(task.value?.moduleName) && laneView.groupKey !== 'module',
 )
 function openOutcome() {
   ui.openOutcome(props.taskId, task.value?.executionId ?? null)
@@ -505,9 +517,11 @@ function selectTask() {
       </template>
     </div>
 
-    <!-- structural metadata: assigned module -->
+    <!-- Structural metadata: assigned module. Dropped while the lanes are GROUPED by module,
+         where the group header above the card already names it — two chips saying the same thing
+         cost a row of card height each and add nothing. -->
     <div
-      v-if="task.moduleName"
+      v-if="showModuleChip"
       class="mt-2 flex flex-wrap items-center gap-1 border-t border-slate-800 pt-2"
     >
       <span

@@ -1053,6 +1053,15 @@
           "advisory": "Segnalazione (registra, mai in pausa)",
           "off": "Disattivato (salta il controllo)"
         }
+      },
+      "doneLane": {
+        "heading": "Colonna «Completato»",
+        "body": "Quanto lavoro completato la colonna «Completato» di ogni servizio mantiene in vista. Entrambi i limiti nascondono solo le schede: un’attività nascosta resta sulla board, resta ricercabile e resta nel totale della colonna.",
+        "maxItems": "Schede mostrate",
+        "zeroHint": "Le attività completate saranno conteggiate ma mai elencate.",
+        "ageToggle": "Nascondi anche le attività completate da tempo",
+        "days": "Conserva (giorni)",
+        "hidesOnlyHint": "Non viene eliminato nulla. Le attività senza data di completamento registrata non vengono mai nascoste per anzianità."
       }
     },
     "localModelEndpoints": {
@@ -1669,11 +1678,12 @@
       "title": "Struttura",
       "hint": "Dove risiede questa attivita' nel suo servizio e quali standard di coding seguono i suoi agenti.",
       "module": "Modulo",
-      "modulePlaceholder": "ad es. Sessioni (creato durante l'implementazione se nuovo)",
-      "moduleHint": "Il modulo del servizio a cui appartiene questa attivita'. Digita un nome; un modulo che non esiste ancora viene creato quando l'attivita' viene implementata.",
+      "modulePlaceholder": "Scegli o digita un modulo",
+      "moduleHint": "Il modulo del servizio a cui appartiene questa attività; la board raggruppa le colonne in base a esso. Un modulo che non esiste ancora viene creato quando l’attività viene implementata.",
       "bestPractices": "Best practice",
       "bestPracticesEmpty": "Nessuna. Gli agenti seguono le loro linee guida predefinite.",
-      "bestPracticesHint": "Frammenti di best practice integrati nei prompt degli agenti di questa attivita', in aggiunta agli standard a livello di servizio."
+      "bestPracticesHint": "Frammenti di best practice integrati nei prompt degli agenti di questa attivita', in aggiunta agli standard a livello di servizio.",
+      "moduleNone": "Nessun modulo"
     },
     "runSettings": {
       "title": "Impostazioni di esecuzione",
@@ -3053,6 +3063,71 @@
       "label": "Epic",
       "activeCount": "{count} attive",
       "noTasksYet": "Ancora nessuna attività"
+    },
+    "lanes": {
+      "viewTitle": "Disponi",
+      "resetView": "Ripristina i valori predefiniti",
+      "notStarted": {
+        "label": "Non iniziato",
+        "empty": "Non c’è nulla in attesa di essere preso."
+      },
+      "inProgress": {
+        "label": "In corso",
+        "empty": "Nessuna esecuzione in corso."
+      },
+      "needsYou": {
+        "label": "Richiede te",
+        "empty": "Non c’è nulla in attesa di te."
+      },
+      "done": {
+        "label": "Completato",
+        "empty": "Ancora nulla di completato.",
+        "hiddenByCap": "+{count} non mostrate",
+        "hiddenByAge": "+{count} oltre la finestra di conservazione",
+        "undated": "{count} senza data registrata",
+        "allWithheld": "Le attività completate vengono conteggiate qui ma non elencate, secondo le impostazioni di questa board."
+      },
+      "reason": {
+        "unstarted": "Pronta per iniziare",
+        "dependencies": "In attesa di una dipendenza",
+        "running": "In esecuzione",
+        "backgroundReview": "Revisione in background",
+        "decision": "Serve una decisione",
+        "approval": "Serve un’approvazione",
+        "failed": "Esecuzione fallita",
+        "budgetPaused": "In pausa per il budget di spesa",
+        "prAwaitingMerge": "Pull request in attesa di merge",
+        "parked": "In attesa di una persona",
+        "unclassified": "Stato non riconosciuto",
+        "merged": "Unita"
+      },
+      "sort": {
+        "heading": "Ordina per",
+        "smart": "Consigliato per colonna",
+        "title": "Titolo (A–Z)",
+        "oldest_activity": "Le più silenziose per prime",
+        "newest_activity": "Attività più recente",
+        "longest_wait": "In attesa da più tempo",
+        "severity_desc": "Gravità (dalla più alta)",
+        "impact_desc": "Impatto stimato (dal più alto)",
+        "task_type": "Tipo di attività"
+      },
+      "group": {
+        "heading": "Raggruppa per",
+        "none": "Nessun raggruppamento",
+        "module": "Modulo",
+        "task_type": "Tipo di attività",
+        "initiative": "Iniziativa",
+        "epic": "Epica",
+        "blocking_reason": "Cosa serve",
+        "catchAll": {
+          "module": "Nessun modulo",
+          "task_type": "Nessun tipo",
+          "initiative": "Fuori da un’iniziativa",
+          "epic": "Fuori da un’epica",
+          "blocking_reason": "Non classificato"
+        }
+      }
     }
   },
   "contextAttachments": {

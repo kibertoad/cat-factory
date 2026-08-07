@@ -80,6 +80,12 @@ export interface BlockRow {
   width: number | null
   height: number | null
   status: string
+  /**
+   * Epoch ms the block last entered `done`. Optional on the row (added by a later
+   * migration) and nullable in the column, so an old block reads as "no recorded
+   * completion date" rather than as one that completed at the epoch.
+   */
+  completed_at?: number | null
   progress: number
   depends_on: string
   execution_id: string | null
@@ -427,6 +433,22 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
     },
   },
   enumField('status', blockStatusSchema, 'blocks'),
+  // Read and inserted through the field table like any other column, but with NO patch
+  // direction: `completedAt` is derived from the status a patch sets, by the repository
+  // (see `blockCompletionStamp`). `BlockPatch` excludes it, so nothing can reach here.
+  //
+  // A null column reads as an ABSENT key, like every other optional field, rather than as an
+  // explicit `null`. Both spell "no recorded completion date" to a consumer, and matching the
+  // siblings keeps the wire shape uniform.
+  {
+    read: (row, out) => {
+      if (row.completed_at != null) out.completedAt = row.completed_at
+    },
+    insert: (b, out) => {
+      out.completed_at = b.completedAt ?? null
+    },
+    patch: () => {},
+  },
   scalarField('progress'),
   // `dependsOn` is a required (always-present) JSON array, unlike the optional JSON fields.
   {
@@ -453,7 +475,10 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   optField('initiativeId', { clearOnEmpty: true }),
   optBoolIntField('autoStartDependents'),
   optField('confidence'),
-  optField('moduleName'),
+  // The declared module; an empty string detaches the task from it, like `epicId`/`initiativeId`
+  // above. A picker and a reparent can both clear it now, and storing `''` rather than NULL would
+  // leave two spellings of "no module" for every reader to remember to handle.
+  optField('moduleName', { clearOnEmpty: true }),
   optJsonField('fragmentIds'),
   // Service-level selection (frame blocks). Insert keeps a truthy value verbatim; patch
   // treats an empty array as "clear it" (length check), so the two directions differ.
@@ -645,6 +670,32 @@ export function blockInsertValues(block: Block): Record<string, unknown> {
 /** Map a domain patch onto `{ column: value }` pairs for an UPDATE. */
 export function blockPatchToColumns(patch: BlockPatch): Record<string, unknown> {
   return blockMapper.toPatch(patch)
+}
+
+/**
+ * What a block patch should do to `completed_at`.
+ *
+ * - `none` — the patch does not touch `status`, so the stamp is left exactly as it is.
+ * - `stampIfUnset` — the patch marks the block `done`. FIRST WRITE WINS: the durable
+ *   drivers replay, and several call sites mark a task done (the merge resolver, the run
+ *   state machine, the initiative loop), so an unconditional write would push the date
+ *   forward every time one of them re-ran and quietly age a task back into the Done lane.
+ * - `clear` — the patch moves the block OFF `done`, which is what a reset-and-rerun does.
+ *   Clearing is what lets the next completion stamp itself afresh, so the lane dates the
+ *   attempt that actually landed rather than the one that was thrown away.
+ *
+ * The two repositories render this verdict in their own SQL (D1 and Drizzle each express
+ * "keep the existing value" differently), but the rule itself lives here so they cannot
+ * drift; `defineConformanceSuite` asserts the behaviour against both.
+ */
+export type BlockCompletionStamp =
+  | { kind: 'none' }
+  | { kind: 'clear' }
+  | { kind: 'stampIfUnset'; at: number }
+
+export function blockCompletionStamp(patch: BlockPatch, now: number): BlockCompletionStamp {
+  if (patch.status === undefined) return { kind: 'none' }
+  return patch.status === 'done' ? { kind: 'stampIfUnset', at: now } : { kind: 'clear' }
 }
 
 export interface PipelineRow {

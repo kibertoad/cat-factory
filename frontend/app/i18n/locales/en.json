@@ -538,6 +538,71 @@
       "label": "Epic",
       "activeCount": "{count} active",
       "noTasksYet": "No tasks yet"
+    },
+    "lanes": {
+      "viewTitle": "Arrange",
+      "resetView": "Reset to defaults",
+      "notStarted": {
+        "label": "Not started",
+        "empty": "Nothing waiting to be picked up."
+      },
+      "inProgress": {
+        "label": "In progress",
+        "empty": "No runs in flight."
+      },
+      "needsYou": {
+        "label": "Needs you",
+        "empty": "Nothing is waiting on you."
+      },
+      "done": {
+        "label": "Done",
+        "empty": "Nothing finished yet.",
+        "hiddenByCap": "+{count} not shown",
+        "hiddenByAge": "+{count} beyond the retention window",
+        "undated": "{count} with no recorded date",
+        "allWithheld": "Finished tasks are counted here but not listed, per this board settings."
+      },
+      "reason": {
+        "unstarted": "Ready to start",
+        "dependencies": "Waiting on a dependency",
+        "running": "Running",
+        "backgroundReview": "Reviewing in the background",
+        "decision": "Decision needed",
+        "approval": "Approval needed",
+        "failed": "Run failed",
+        "budgetPaused": "Paused by the spend budget",
+        "prAwaitingMerge": "Pull request awaiting merge",
+        "parked": "Waiting on a human",
+        "unclassified": "Unrecognised status",
+        "merged": "Merged"
+      },
+      "sort": {
+        "heading": "Sort by",
+        "smart": "Recommended per lane",
+        "title": "Title (A–Z)",
+        "oldest_activity": "Quietest first",
+        "newest_activity": "Most recently active",
+        "longest_wait": "Longest waiting",
+        "severity_desc": "Severity (highest first)",
+        "impact_desc": "Estimated impact (highest first)",
+        "task_type": "Task type"
+      },
+      "group": {
+        "heading": "Group by",
+        "none": "No grouping",
+        "module": "Module",
+        "task_type": "Task type",
+        "initiative": "Initiative",
+        "epic": "Epic",
+        "blocking_reason": "What it needs",
+        "catchAll": {
+          "module": "No module",
+          "task_type": "No type",
+          "initiative": "Not in an initiative",
+          "epic": "Not in an epic",
+          "blocking_reason": "Unclassified"
+        }
+      }
     }
   },
   "contextAttachments": {
@@ -1192,11 +1257,12 @@
       "title": "Structure",
       "hint": "Where this task lives in its service and which coding standards its agents follow.",
       "module": "Module",
-      "modulePlaceholder": "e.g. Sessions (created on implement if new)",
-      "moduleHint": "The service module this task belongs to. Type a name; a module that does not exist yet is created when the task is implemented.",
+      "modulePlaceholder": "Pick or type a module",
+      "moduleHint": "The service module this task belongs to; the board groups lanes by it. A module that doesn't exist yet is created when the task is implemented.",
       "bestPractices": "Best practices",
       "bestPracticesEmpty": "None. Agents follow their default guidance.",
-      "bestPracticesHint": "Best-practice fragments folded into the prompts of this task's agents, on top of the service-level standards."
+      "bestPracticesHint": "Best-practice fragments folded into the prompts of this task's agents, on top of the service-level standards.",
+      "moduleNone": "No module"
     },
     "runSettings": {
       "title": "Run settings",
@@ -3698,6 +3764,15 @@
           "advisory": "Advisory (record, never park)",
           "off": "Off (skip the check)"
         }
+      },
+      "doneLane": {
+        "heading": "Done lane",
+        "body": "How much finished work each service frame's Done lane keeps in view. Both caps hide cards only: an aged-out task stays on the board, stays searchable, and stays in the lane's total.",
+        "maxItems": "Cards shown",
+        "zeroHint": "Finished tasks will be counted but never listed.",
+        "ageToggle": "Also hide tasks completed long ago",
+        "days": "Keep for (days)",
+        "hidesOnlyHint": "Nothing is deleted. Tasks with no recorded completion date are never hidden by age."
       }
     },
     "localModelEndpoints": {

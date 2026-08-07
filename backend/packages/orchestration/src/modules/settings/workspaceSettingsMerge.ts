@@ -30,6 +30,14 @@ export function mergeWorkspaceSettings(
     publishPrVerificationReport:
       patch.publishPrVerificationReport ?? current.publishPrVerificationReport,
     artifactRetentionDays: patch.artifactRetentionDays ?? current.artifactRetentionDays,
+    // `??` is right here even though `0` is a meaningful value ("count the finished tasks,
+    // render none"): nullish coalescing passes `0` through, where `||` would silently
+    // reinstate the stored cap and make that setting unselectable.
+    doneLaneMaxItems: patch.doneLaneMaxItems ?? current.doneLaneMaxItems,
+    doneLaneRetentionDays:
+      patch.doneLaneRetentionDays !== undefined
+        ? patch.doneLaneRetentionDays
+        : current.doneLaneRetentionDays,
     kaizenEnabled: patch.kaizenEnabled ?? current.kaizenEnabled,
     delegateAgentsToRunnerPool:
       patch.delegateAgentsToRunnerPool ?? current.delegateAgentsToRunnerPool,

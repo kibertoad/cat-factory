@@ -108,6 +108,12 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // Retention window (days) for binary artifacts (UI screenshots + reference designs)
   // before the cleanup sweep deletes them. Default 14; mirrors the D1 column.
   artifact_retention_days: integer('artifact_retention_days').notNull().default(14),
+  // How many completed tasks the board's "Done" swimlane renders, newest first. Default 20;
+  // 0 is valid and means "count them, show none". Mirrors the D1 column.
+  done_lane_max_items: integer('done_lane_max_items').notNull().default(20),
+  // How many days a completed task stays in the "Done" swimlane. Default 14; NULLABLE, where
+  // null means "no age cap" — a setting an operator can pick, so it is not `.notNull()`.
+  done_lane_retention_days: integer('done_lane_retention_days').default(14),
   // Per-workspace toggle for the Kaizen agent (post-run grading). On by default; integer
   // 0/1 to match the SQLite store.
   kaizen_enabled: integer('kaizen_enabled').notNull().default(1),

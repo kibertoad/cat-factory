@@ -53,6 +53,8 @@ export function defineWorkspaceSettingsSuite(
           spendMonthlyLimit: 12.5,
           defaultProvisionType: 'custom',
           defaultProvisionManifestId: 'acme-preview',
+          doneLaneMaxItems: 75,
+          doneLaneRetentionDays: 90,
           metadata: { gameId: 'zork', region: 'eu' },
         }),
       )
@@ -72,8 +74,28 @@ export function defineWorkspaceSettingsSuite(
         spendMonthlyLimit: 12.5,
         defaultProvisionType: 'custom',
         defaultProvisionManifestId: 'acme-preview',
+        doneLaneMaxItems: 75,
+        doneLaneRetentionDays: 90,
         metadata: { gameId: 'zork', region: 'eu' },
       })
+    })
+
+    // The Done swimlane's two caps have a falsy and a null value that both MEAN something,
+    // and either store coercing one would change what the board renders: `0` is "count the
+    // finished tasks, show none" (not "fall back to the default 20"), and a null retention
+    // is "no age cap" (not "14 days"). A `||` in a mapper is all it takes to lose either.
+    it('round-trips a zero Done-lane cap and a null retention without coercing them', async () => {
+      const repo = makeRepo()
+      const { a } = ids()
+      await repo.upsert(a, settings({ doneLaneMaxItems: 0, doneLaneRetentionDays: null }))
+
+      const stored = await repo.get(a)
+      expect(stored?.doneLaneMaxItems).toBe(0)
+      expect(stored?.doneLaneRetentionDays).toBeNull()
+      // The batched read maps the same way as the point read.
+      const batched = (await repo.listByWorkspaceIds([a])).get(a)
+      expect(batched?.doneLaneMaxItems).toBe(0)
+      expect(batched?.doneLaneRetentionDays).toBeNull()
     })
 
     // The custom-metadata bag is a JSON column on both stores, and an EMPTY one is the common

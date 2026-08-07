@@ -107,8 +107,14 @@ export interface ServiceRehome {
 /**
  * Fields of a block that may be patched. Excludes `id`; the `parentId`/`position`
  * structural move is just another patch, kept honest by the adapter.
+ *
+ * `completedAt` is excluded too, and for a different reason: it is DERIVED by the
+ * repository from the status this patch sets (see `blockCompletionStamp`), so the
+ * several places that mark a task `done` cannot each remember to stamp it — and one
+ * of them eventually would not. Excluding it here makes handing one in a typecheck
+ * failure rather than a write the repository silently overrules.
  */
-export type BlockPatch = Partial<Omit<Block, 'id'>>
+export type BlockPatch = Partial<Omit<Block, 'id' | 'completedAt'>>
 
 export interface BlockRepository {
   listByWorkspace(workspaceId: string): Promise<Block[]>

@@ -18,9 +18,12 @@ depending on the layer: there is one entity, not three:
 
 Both are in `backend/packages/contracts/src/primitives.ts`:
 
-- **Block level**: `blockLevelSchema = ['frame', 'module', 'task', 'epic']`. A "service" on
-  the board is a block with `level: 'frame'`, `parentId: null`; modules are sub-frames; **tasks
-  are the leaves**. (See `CLAUDE.md` → "Board / service / repo-linkage model".)
+- **Block level**: `blockLevelSchema = ['frame', 'module', 'task', 'epic', 'initiative']`. A
+  "service" on the board is a block with `level: 'frame'`, `parentId: null`; modules are
+  sub-frames; **tasks are the leaves**. A module no longer renders as a box on the board: its
+  tasks appear in the enclosing frame's status swimlanes, grouped by module name, so `module` is
+  a structural parent rather than a visual container. (See `CLAUDE.md` → "Board / service /
+  repo-linkage model".)
 - **Block type**: `blockTypeSchema`, a _separate_ axis (`taskType` field) chosen by the human
   at creation; drives the card's icon/badge and which pipeline runs.
 

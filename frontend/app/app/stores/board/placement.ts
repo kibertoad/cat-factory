@@ -1,4 +1,5 @@
 import type { UpdateBlockInput } from '@cat-factory/contracts'
+import { moduleNameInContainer } from '@cat-factory/contracts'
 import { useServicesStore } from '~/stores/services'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { createBoardDependencies } from './dependencies'
@@ -39,9 +40,14 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
     // block in the wrong container (a structural lie that survives until re-hydrate).
     const prevParentId = b.parentId
     const prevPosition = b.position
+    const prevModuleName = b.moduleName
     const name = b.title
     b.parentId = newParentId
     b.position = position
+    // The server re-stamps a moved task's declared module from its new container, so predict the
+    // same answer here: without it the card lands in the lane group it was dragged OUT of and
+    // jumps to the right one when the response arrives.
+    if (b.level === 'task') b.moduleName = moduleNameInContainer(parent)
     try {
       upsert(
         await api.reparentBlock(useWorkspaceStore().requireId(), id, {
@@ -70,6 +76,7 @@ export function createBoardPlacement(ctx: BoardWriteContext) {
     } catch (e) {
       b.parentId = prevParentId
       b.position = prevPosition
+      b.moduleName = prevModuleName
       // A cross-home drag can be refused on merge-preset grounds, which is a condition the mover
       // can act on rather than a fault. The backend sends the machine-readable reason and no
       // translated prose, so map it here; anything else keeps the raw message as the last resort.

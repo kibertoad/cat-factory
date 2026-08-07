@@ -8,7 +8,7 @@ import { useUiStore } from '~/stores/ui'
  *
  * Two independent grants, both written every frame by the board driver
  * (`useTaskExpansion`) and combined HERE so the render (`TaskPipelineMini`) and the
- * stacking (`DraggableTask`) can never disagree about which cards are expanded:
+ * stacking (`LaneTask`) can never disagree about which cards are expanded:
  *
  *  - HOVER — the card under the pointer expands at ANY zoom level. Pointing at a task
  *    is asking what it is doing right now, and that answer used to be reachable only

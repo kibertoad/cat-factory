@@ -931,8 +931,6 @@ and [`storage-and-retention.md`](./backend/docs/storage-and-retention.md). Remot
 
 ## Board / service / repo-linkage model
 
-- A "service" is a `Block` with `level: 'frame'`, `parentId: null`. Modules are sub-frames; tasks are
-  leaves.
 - **A Block carries no repo fields.** Repo↔block linkage lives in the `github_repos` projection via its
   `block_id` column, and **execution resolves the repo at runtime** via
   `resolveRepoTarget(workspaceId, blockId)`, which walks the block's ancestry to the enclosing service
@@ -945,18 +943,20 @@ and [`storage-and-retention.md`](./backend/docs/storage-and-retention.md). Remot
   the engine from that same ancestry walk (kernel's `describeOwnService`). It is a DISCRIMINATED result,
   not a nullable one, and "not under a service" is RENDERED rather than omitted: a bare task title names
   no software, so a silent omission reads like a task whose product is obvious and the model supplies one
-  (see the requirements-review flow entry). The inline reviewers resolve the same thing through
-  `IterativeReviewService.resolveOwnService`.
+  (see the requirements-review flow entry). Inline reviewers use `IterativeReviewService.resolveOwnService`.
 - **A service frame's board POSITION (and any size override) lives on its `WorkspaceMount`, not on the
   Block**, because one shared service sits at a different spot on every board that mounts it: `moveBlock`
   writes the mount and the frame block row's own `position` is frozen at creation. **Every frame-returning
   read therefore projects through kernel's `applyMountLayout`**: the snapshot and each single-block
   `BoardService` mutation response alike. Skipping it is silent: nothing fails, the SPA just upserts the
-  authoritative block a mutation returned and the frame JUMPS to coordinates no board shows it at (the
-  resize path is where users hit this, because a `size`-only edit is the one frame patch with no other
-  visible effect).
-- Drag-drop: `useBlockDrag.ts` → `POST /blocks/:id/reparent` → `BoardService.reparent()`. Tasks move into
-  frames or modules, modules into frames; frames cannot nest (`canReparent` in `board.logic.ts`).
+  authoritative block a mutation returned and the frame JUMPS to coordinates no board shows it at.
+- **A TASK carries no position at all: it is laid out in a status SWIMLANE** derived from its status plus
+  its run's park/failure state, so a drag only REPARENTS (`useBlockDrag.ts` `positioned: false` →
+  `BoardService.reparent()`; tasks into frames or modules, modules into frames, frames never nest per
+  `canReparent`), and a module renders no box (its tasks group by module name in the lanes). Trap: a lane
+  is a CLAIM, so a status the TYPE forbids but the DATABASE still holds must land in a NAMED lane, never
+  `undefined`, or the card leaves the board with nothing left to say it existed.
+  [Doc](./frontend/app/README.md#task-swimlanes).
 
 ## End-to-end (assembled-product) coverage
 

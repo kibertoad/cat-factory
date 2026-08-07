@@ -484,6 +484,71 @@
       "label": "Épica",
       "activeCount": "{count} activas",
       "noTasksYet": "Aún no hay tareas"
+    },
+    "lanes": {
+      "viewTitle": "Organizar",
+      "resetView": "Restablecer los valores predeterminados",
+      "notStarted": {
+        "label": "Sin empezar",
+        "empty": "Nada esperando a que se tome."
+      },
+      "inProgress": {
+        "label": "En curso",
+        "empty": "No hay ejecuciones en marcha."
+      },
+      "needsYou": {
+        "label": "Te necesita",
+        "empty": "Nada espera por ti."
+      },
+      "done": {
+        "label": "Terminado",
+        "empty": "Aún no hay nada terminado.",
+        "hiddenByCap": "+{count} sin mostrar",
+        "hiddenByAge": "+{count} fuera del periodo de conservación",
+        "undated": "{count} sin fecha registrada",
+        "allWithheld": "Las tareas terminadas se cuentan aquí, pero no se listan, según los ajustes de este tablero."
+      },
+      "reason": {
+        "unstarted": "Lista para empezar",
+        "dependencies": "Esperando una dependencia",
+        "running": "En ejecución",
+        "backgroundReview": "Revisando en segundo plano",
+        "decision": "Se necesita una decisión",
+        "approval": "Se necesita aprobación",
+        "failed": "La ejecución falló",
+        "budgetPaused": "Pausada por el presupuesto de gasto",
+        "prAwaitingMerge": "Pull request pendiente de fusión",
+        "parked": "Esperando a una persona",
+        "unclassified": "Estado no reconocido",
+        "merged": "Fusionada"
+      },
+      "sort": {
+        "heading": "Ordenar por",
+        "smart": "Recomendado por columna",
+        "title": "Título (A–Z)",
+        "oldest_activity": "Las más silenciosas primero",
+        "newest_activity": "Actividad más reciente",
+        "longest_wait": "Las que esperan más tiempo",
+        "severity_desc": "Gravedad (mayor primero)",
+        "impact_desc": "Impacto estimado (mayor primero)",
+        "task_type": "Tipo de tarea"
+      },
+      "group": {
+        "heading": "Agrupar por",
+        "none": "Sin agrupar",
+        "module": "Módulo",
+        "task_type": "Tipo de tarea",
+        "initiative": "Iniciativa",
+        "epic": "Épica",
+        "blocking_reason": "Qué necesita",
+        "catchAll": {
+          "module": "Sin módulo",
+          "task_type": "Sin tipo",
+          "initiative": "Fuera de una iniciativa",
+          "epic": "Fuera de una épica",
+          "blocking_reason": "Sin clasificar"
+        }
+      }
     }
   },
   "contextAttachments": {
@@ -1105,11 +1170,12 @@
       "title": "Estructura",
       "hint": "Dónde vive esta tarea dentro de su servicio y qué estándares de código siguen sus agentes.",
       "module": "Módulo",
-      "modulePlaceholder": "p. ej. Sesiones (creado al implementar si es nuevo)",
-      "moduleHint": "El módulo del servicio al que pertenece esta tarea. Escribe un nombre; un módulo que aún no existe se crea cuando la tarea se implementa.",
+      "modulePlaceholder": "Elige o escribe un módulo",
+      "moduleHint": "El módulo del servicio al que pertenece esta tarea; el tablero agrupa las columnas por él. Un módulo que aún no existe se crea cuando se implementa la tarea.",
       "bestPractices": "Buenas prácticas",
       "bestPracticesEmpty": "Ninguna. Los agentes siguen su guía predeterminada.",
-      "bestPracticesHint": "Fragmentos de buenas prácticas incorporados a los prompts de los agentes de esta tarea, además de los estándares a nivel de servicio."
+      "bestPracticesHint": "Fragmentos de buenas prácticas incorporados a los prompts de los agentes de esta tarea, además de los estándares a nivel de servicio.",
+      "moduleNone": "Sin módulo"
     },
     "runSettings": {
       "title": "Ajustes de ejecución",
@@ -3435,6 +3501,15 @@
           "advisory": "Aviso (registrar, nunca detener)",
           "off": "Desactivado (omitir la comprobación)"
         }
+      },
+      "doneLane": {
+        "heading": "Columna «Terminado»",
+        "body": "Cuánto trabajo terminado mantiene a la vista la columna «Terminado» de cada servicio. Ambos límites solo ocultan tarjetas: una tarea oculta sigue en el tablero, sigue siendo buscable y sigue contando en el total de la columna.",
+        "maxItems": "Tarjetas mostradas",
+        "zeroHint": "Las tareas terminadas se contarán, pero nunca se listarán.",
+        "ageToggle": "Ocultar también las tareas terminadas hace tiempo",
+        "days": "Conservar (días)",
+        "hidesOnlyHint": "No se elimina nada. Las tareas sin fecha de finalización registrada nunca se ocultan por antigüedad."
       }
     },
     "localModelEndpoints": {

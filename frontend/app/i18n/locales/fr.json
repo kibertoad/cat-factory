@@ -484,6 +484,71 @@
       "label": "Épopée",
       "activeCount": "{count} actives",
       "noTasksYet": "Pas encore de tâches"
+    },
+    "lanes": {
+      "viewTitle": "Organiser",
+      "resetView": "Rétablir les valeurs par défaut",
+      "notStarted": {
+        "label": "Pas commencé",
+        "empty": "Rien n'attend d'être pris en charge."
+      },
+      "inProgress": {
+        "label": "En cours",
+        "empty": "Aucune exécution en cours."
+      },
+      "needsYou": {
+        "label": "Vous attend",
+        "empty": "Rien ne vous attend."
+      },
+      "done": {
+        "label": "Terminé",
+        "empty": "Rien de terminé pour le moment.",
+        "hiddenByCap": "+{count} non affichées",
+        "hiddenByAge": "+{count} au-delà de la période de conservation",
+        "undated": "{count} sans date enregistrée",
+        "allWithheld": "Les tâches terminées sont comptées ici mais pas listées, conformément aux réglages de ce tableau."
+      },
+      "reason": {
+        "unstarted": "Prête à démarrer",
+        "dependencies": "En attente d’une dépendance",
+        "running": "En cours d’exécution",
+        "backgroundReview": "Relecture en arrière-plan",
+        "decision": "Décision requise",
+        "approval": "Approbation requise",
+        "failed": "Exécution en échec",
+        "budgetPaused": "Mise en pause par le budget de dépenses",
+        "prAwaitingMerge": "Pull request en attente de fusion",
+        "parked": "En attente d’une personne",
+        "unclassified": "Statut non reconnu",
+        "merged": "Fusionnée"
+      },
+      "sort": {
+        "heading": "Trier par",
+        "smart": "Recommandé par colonne",
+        "title": "Titre (A–Z)",
+        "oldest_activity": "Les plus silencieuses d’abord",
+        "newest_activity": "Activité la plus récente",
+        "longest_wait": "En attente depuis le plus longtemps",
+        "severity_desc": "Gravité (la plus élevée d’abord)",
+        "impact_desc": "Impact estimé (le plus élevé d’abord)",
+        "task_type": "Type de tâche"
+      },
+      "group": {
+        "heading": "Grouper par",
+        "none": "Aucun groupement",
+        "module": "Module",
+        "task_type": "Type de tâche",
+        "initiative": "Initiative",
+        "epic": "Épopée",
+        "blocking_reason": "Ce qu’il faut",
+        "catchAll": {
+          "module": "Aucun module",
+          "task_type": "Aucun type",
+          "initiative": "Hors initiative",
+          "epic": "Hors épopée",
+          "blocking_reason": "Non classé"
+        }
+      }
     }
   },
   "contextAttachments": {
@@ -1105,11 +1170,12 @@
       "title": "Structure",
       "hint": "Où vit cette tâche dans son service et quelles normes de code ses agents suivent.",
       "module": "Module",
-      "modulePlaceholder": "ex. Sessions (créé lors de l'implémentation s'il est nouveau)",
-      "moduleHint": "Le module du service auquel cette tâche appartient. Saisissez un nom ; un module qui n'existe pas encore est créé lors de l'implémentation de la tâche.",
+      "modulePlaceholder": "Choisissez ou saisissez un module",
+      "moduleHint": "Le module du service auquel appartient cette tâche ; le tableau groupe les colonnes par module. Un module qui n’existe pas encore est créé lors de l’implémentation de la tâche.",
       "bestPractices": "Bonnes pratiques",
       "bestPracticesEmpty": "Aucune. Les agents suivent leurs consignes par défaut.",
-      "bestPracticesHint": "Fragments de bonnes pratiques ajoutés aux prompts des agents de cette tâche, en plus des normes au niveau du service."
+      "bestPracticesHint": "Fragments de bonnes pratiques ajoutés aux prompts des agents de cette tâche, en plus des normes au niveau du service.",
+      "moduleNone": "Aucun module"
     },
     "runSettings": {
       "title": "Paramètres d'exécution",
@@ -3435,6 +3501,15 @@
           "advisory": "Indicatif (enregistrer, jamais mettre en pause)",
           "off": "Désactivé (ignorer la vérification)"
         }
+      },
+      "doneLane": {
+        "heading": "Colonne « Terminé »",
+        "body": "La quantité de travail terminé que la colonne « Terminé » de chaque service garde visible. Les deux limites masquent seulement des cartes : une tâche masquée reste sur le tableau, reste trouvable et reste comptée dans le total de la colonne.",
+        "maxItems": "Cartes affichées",
+        "zeroHint": "Les tâches terminées seront comptées mais jamais listées.",
+        "ageToggle": "Masquer aussi les tâches terminées depuis longtemps",
+        "days": "Conserver (jours)",
+        "hidesOnlyHint": "Rien n’est supprimé. Les tâches sans date d’achèvement enregistrée ne sont jamais masquées en raison de leur ancienneté."
       }
     },
     "localModelEndpoints": {

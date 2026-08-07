@@ -8,6 +8,7 @@
  * nodes in. Sizes are the frame's rendered pixel footprint (see
  * {@link useBlockQueries.containerSize}).
  */
+import { frameContentSize } from '~/utils/laneGeometry'
 
 export interface Point {
   x: number
@@ -23,11 +24,15 @@ export interface FrameRect extends Point {
 export const FRAME_GAP = 48
 
 /**
- * Footprint of a freshly-added, empty service frame in flow-space. Mirrors the
- * empty-frame floor in {@link useBlockQueries.contentSize} (w 360, inner h 220) so a
- * placement decision made BEFORE the block exists matches how it will actually render.
+ * Footprint of a freshly-added, empty service frame in flow-space.
+ *
+ * DERIVED from the lane geometry rather than restated, because a placement decision is made
+ * BEFORE the block exists and so cannot measure it: the numbers here and the ones the frame
+ * renders at have to be the same numbers, or a new service is dropped on top of a neighbour it
+ * was placed to clear. A hand-copied pair went stale exactly that way when the frame's floor
+ * changed underneath it.
  */
-export const EMPTY_FRAME_SIZE = { w: 360, h: 220 }
+export const EMPTY_FRAME_SIZE = frameContentSize({ hasChildren: false, initiatives: 0 })
 
 /**
  * Footprint of an epic grouping node in flow-space. Epics are top-level board nodes
