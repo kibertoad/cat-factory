@@ -14,8 +14,8 @@ cycle is left and when it resets**.
 
 Today two token pipelines exist and neither answers those questions:
 
-- **`llm_call_metrics`** (telemetry): rich per-call rows, but **per-execution only**,
-  **3-day retention**, no cross-run/model/vendor rollup.
+- **`llm_call_metrics`** (telemetry): rich per-call rows, but **per-execution only**, pruned to
+  **`LLM_CALL_METRICS_RETENTION_DAYS`** (14 by default), no cross-run/model/vendor rollup.
 - **`token_usage` / `SpendService`** (spend ledger): durable (~395 d) with real
   per-workspace/account/user rollups and per-model cost, **but subscription-harness usage
   is deliberately excluded** (subscriptions are `quotaBased`, not budget-metered), so it

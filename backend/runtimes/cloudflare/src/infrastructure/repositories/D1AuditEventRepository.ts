@@ -48,6 +48,13 @@ export class D1AuditEventRepository implements AuditEventRepository {
       .run()
   }
 
+  async deleteOlderThan(cutoff: number): Promise<number> {
+    // By AGE and nothing else — no account, actor or action predicate — so the retention sweep
+    // cannot be turned into a way to remove the record of one particular thing.
+    const result = await this.db.prepare('DELETE FROM audit_events WHERE at < ?').bind(cutoff).run()
+    return result.meta.changes ?? 0
+  }
+
   async listByAccount(
     accountId: string,
     options?: { cursor?: string | null; limit?: number },

@@ -48,8 +48,8 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   (attach the requirements documents a task is built against, imported from a connected source or
   uploaded whole, with the task rolled back if an attachment does not land). See
   `docs/initiatives/headless-clarification-loop.md`,
-  `docs/initiatives/public-api-additions.md` and
-  `backend/docs/adr/0030-public-api-surface.md`.
+  `backend/docs/adr/0030-public-api-surface.md` and
+  `backend/docs/adr/0043-public-decision-surface.md`.
 - `modules/toolServers/`: the tool-server (MCP) **operability** surface, `secrets.manage`-gated
   read included. `declaredToolServers.ts` projects every registration non-secretly (unioning the
   walk over `kindsWithCapabilities()` with `allToolServers()`, so a registration attached to NO

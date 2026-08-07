@@ -70,6 +70,8 @@ function build(options: {
       memberRoleOf: async () => options.role ?? 'admin',
     },
     accountService: { rolesFor: async () => ['member'] },
+    // `verifySession` checks the bearer's generation against the user row on every request.
+    userService: { sessionGeneration: async () => 0, refreshSessionGeneration: async () => 0 },
     mcpOAuth: {
       readAuthorizationRequest: async (state: string | null) =>
         state && options.request === undefined
@@ -116,6 +118,8 @@ async function bearer(userId: string): Promise<string> {
     // Epoch MILLISECONDS: the signer compares `exp` against `Date.now()` directly, so a
     // seconds-based claim reads as expired and every staged session silently becomes a 401.
     exp: Date.now() + 3_600_000,
+    // The session generation the bearer is valid under; the fake store answers 0 for every user.
+    gen: 0,
   })
 }
 

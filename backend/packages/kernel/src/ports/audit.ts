@@ -101,27 +101,52 @@ export interface AuditEventPage {
 }
 
 /**
- * Persistence for the append-only audit log.
+ * The READ seam the viewer depends on: one page of an account's log.
  *
- * **Append-only means append-only**: there is no update and no delete here. The retention
- * sweep is a later slice and will add its own method; until then, nothing in the platform can
- * rewrite or remove a recorded event, which is the property that makes the log worth reading.
- *
- * Reads are PAGINATED from the start. An audit table only grows, so the unbounded `SELECT`
- * that is merely untidy on a young deployment is the one that times out on the deployment
- * that has been running long enough to have something worth auditing.
+ * Split from the repository for the same reason {@link AuditRecorder} is split from it, and in the
+ * opposite direction. A controller serving the admin viewer needs to READ and must never be handed
+ * the ability to append (which would put a forged actor one typo away), just as an audited domain
+ * service needs to WRITE and has no business paginating the log. Two narrow seams over one store
+ * is what keeps each caller's capability equal to its job.
  */
-export interface AuditEventRepository {
-  /** Append one event. */
-  append(event: AuditEventRecord): Promise<void>
+export interface AuditLogReader {
   /**
    * One page of an account's events, newest first. `cursor` continues a previous page;
    * absent starts at the newest. `limit` bounds the page.
+   *
+   * PROPAGATES a store failure, unlike the write seam, and the asymmetry is deliberate: an
+   * unreachable store and an account that has genuinely recorded nothing are opposite facts, and
+   * an admin shown an empty page for the first has been told the reverse of the truth.
    */
   listByAccount(
     accountId: string,
     options?: { cursor?: string | null; limit?: number },
   ): Promise<AuditEventPage>
+}
+
+/**
+ * Persistence for the append-only audit log.
+ *
+ * **Append-only means append-only**: there is no update here, and the ONLY delete is the retention
+ * sweep below, which removes by AGE and by nothing else. Nothing in the platform can rewrite a
+ * recorded event or remove a chosen one, which is the property that makes the log worth reading.
+ *
+ * Reads are PAGINATED from the start. An audit table only grows, so the unbounded `SELECT`
+ * that is merely untidy on a young deployment is the one that times out on the deployment
+ * that has been running long enough to have something worth auditing.
+ */
+export interface AuditEventRepository extends AuditLogReader {
+  /** Append one event. */
+  append(event: AuditEventRecord): Promise<void>
+  /**
+   * Delete every event older than `cutoff` (epoch ms), returning how many rows went.
+   *
+   * The single exception to append-only, and it is bounded to age deliberately: there is no
+   * predicate here for an account, an actor or an action, so nothing can use the retention sweep
+   * to remove the record of one inconvenient thing. The count is returned so the sweeper can
+   * report what it reclaimed rather than logging that it ran.
+   */
+  deleteOlderThan(cutoff: number): Promise<number>
 }
 
 /**

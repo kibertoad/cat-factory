@@ -53,7 +53,8 @@ Two fidelity holes in what the agent reads:
 
 ### 3. Context is frozen at import time
 
-**Closed on the RUN path by Track C slice 1**; the SPA half (slice 2) is not.
+**Closed on the RUN path by Track C slice 1 and on the SPA by slice 2**; what remains is naming
+the revision a FINISHED run built against (the split-out item below).
 
 `probeVersion` was implemented on every provider and had exactly one caller: the fragment-library
 body cache (`FragmentLibraryService.resolveDocumentBody`). Nothing on the run path re-probed or
@@ -242,18 +243,60 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
       revision" are four different fixes. The same renderer serves BOTH surfaces: the materialised
       `.cat-context/` header and the in-prompt injection an inline kind gets instead of a checkout,
       because an inline judge or reviewer scoring against a stale design is the same failure as a
-      container agent building from one. Every gap also increments `document.freshness_gap`
+      container agent building from one. Every gap a DISPATCH found also increments `document.freshness_gap`
       (dimensioned by reason and source), because each of these repeats per dispatch while it lasts,
-      so the log line says which run and only the rate says whether it is spreading. Best-effort by
+      so the log line says which run and only the rate says whether it is spreading. A gap a PERSON
+      found does not: the counter measures runs handed a copy the source has moved past, and a click
+      hands nothing to anyone. Best-effort by
       port contract (it never throws), and the readability refusal now runs on the REFRESHED records,
       because a page emptied since import is the case most worth refusing, including in the
       REQUIREMENTS REVIEW, the first step of the default pipelines and the one a human signs off on,
       which resolves its attachments through the same refresher for the same reason the initiative
       interviewer does.
-- [ ] **Staleness on the surface.** The SPA document rows and the task context panel show
-      `syncedAt` and a refresh action (member-tier, per Track A); the outcome/report side names
-      the design version a run actually built against, so "built from the old rev" is diagnosable
-      after the fact.
+- [x] **Staleness on the surface.** ([#1782](https://github.com/kibertoad/cat-factory/pull/1782))
+      The imported-documents list and the task context panel show `syncedAt` beside a
+      member-tier refresh action (`POST /documents/refresh` →
+      `LinkedDocumentRefreshService.refreshNow`, the same ladder a dispatch runs). The
+      verdict VOCABULARY moved to `@cat-factory/contracts` in the same change, because this
+      is the point at which a human reads the conclusion the agent reads and the backend does
+      not localize prose; kernel keeps only the agent-facing renderer.
+      Four things this had to get right, each of which the obvious shape gets wrong.
+      **The manual path DROPS the cached verdict before it asks, and puts back only a SUCCESS**: the
+      60s cache exists so a pipeline's dispatches cost one round trip and so an outage is remembered
+      rather than re-probed, and both are exactly wrong for a click, whose commonest cause is that
+      the last answer said the source was unreachable. Served from the cache, the button would
+      report the failure the person is retrying past and no amount of clicking would clear it. The
+      asymmetry on the way back out is what keeps that safe: re-caching what one click found would
+      let a person retrying past a flaky source install an `unreachable` verdict every dispatch
+      reads for the rest of the window, so the manual loader RETHROWS (a loader that throws caches
+      nothing) while a dispatch's returns the failure as a value.
+      **A moved REVISION is not a changed document.** The confirmed verdict carries a three-member
+      `change` rather than a `reimported` boolean, because a whole-file source moves its token on
+      any edit anywhere in the file, including frames a given document does not cover:
+      `revision_only` is the common case, and calling it `reimported` would tell a person their own
+      edit had landed. The token-only write records the token and leaves `syncedAt` where it was,
+      for the same reason.
+      **`syncedAt` and the verdict stay TWO facts.** `syncedAt` is when the body was last
+      WRITTEN, and a refresh that finds nothing changed writes nothing, so folding the check into
+      the stamp would either claim a write that never happened or leave a `confirmed` badge on a
+      row the source has since moved past. An absent verdict therefore means "nobody has asked",
+      never "unknown": listing documents deliberately probes nothing, since confirming costs a
+      round trip per page and a board-wide sweep is a rate limit waiting to happen. Both facts
+      render WITH their time, and a verdict is scoped to the BOARD it was asked on, since the same
+      file can be imported into two of them.
+      **The refresh is refused for an `upload` at the SCHEMA**, by taking the narrow
+      `DocumentSourceKind` rather than the wide origin: a 200 carrying `not-applicable` would
+      leave a caller unable to tell "this document has no source" from "the check ran and found
+      nothing to compare", which is the distinction the whole vocabulary exists to keep.
+- [ ] **Name the revision a run BUILT against.** The verdict is computed per dispatch and
+      rendered into the agent's context, and nothing persists it, so "this run built from the old
+      rev" is unanswerable once the run is over. It needs a per-step record at dispatch (the
+      `recordDispatchAttribution` archetype: the poll path rebuilds the handle from the step
+      alone and cannot re-derive what dispatch resolved), folded onto the outcome surface and the
+      PR verification report, which composes only from state already in memory and may not
+      re-probe. Split out of the slice above because the persistence question is the whole job
+      and answering it badly (re-probing at compose time) would make the report disagree with the
+      run it describes.
 
 ### Track D: pixels
 
@@ -328,8 +371,10 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
       form still open rather than a toast over a task that already exists without its context.
       Model: [`document-sources.md`](../../backend/docs/document-sources.md).
 - [ ] **Coverage for the designer path.** An e2e spec for attach-document-to-task and one for the
-      start-from-design flow once Track A lands (live-push assertions per the e2e rules), plus
-      unit specs for `stores/documents.ts`, which currently has none.
+      start-from-design flow once Track A lands (live-push assertions per the e2e rules). The
+      `stores/documents.ts` half started with Track C slice 2, which added the store's first
+      specs (the refresh reconcile, the verdict map, the in-flight flag); the connect / import /
+      link actions are still unspecced.
 
 ## Gotchas the survey surfaced (read before building)
 
@@ -338,11 +383,14 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
   `serviceFragmentIds` by id only. Anything that should reach a run automatically needs its own
   deterministic rule at prompt assembly (`withDesignContextFragment` is the worked example), not an
   `appliesTo` edit.
-- **`probeVersion` now has TWO callers with different cache shapes, and they must stay separate.**
-  The fragment-library body cache (`fragmentDocumentBody`) caches the BODY and uses the probe as its
-  self-verification; the run path (`linkedDocumentVersion`) caches the PROBE itself and re-imports on
-  a change. Collapsing them into one entry would put a whole-file Figma download on the critical path
-  of any dispatch that missed, which is the cost the run path exists to avoid.
+- **`probeVersion` now has TWO cache shapes, and they must stay separate.** The fragment-library
+  body cache (`fragmentDocumentBody`) caches the BODY and uses the probe as its self-verification;
+  the freshness path (`linkedDocumentVersion`) caches the PROBE itself and re-imports on a change.
+  Collapsing them into one entry would put a whole-file Figma download on the critical path of any
+  dispatch that missed, which is the cost the freshness path exists to avoid. The freshness path has
+  two ENTRY points sharing that one cache, and the second exists because of how it treats it: a
+  dispatch reads the cache, a person's click drops the entry first (`refreshNow`), since the click
+  is the request for a new answer.
 - **`documents.source_version` is what makes "unchanged" provable.** A NULL means "cannot be proven
   current", never "no version" alone, and it is part of the idempotent-reimport comparison even
   though nothing reads it downstream: skip that and a file whose version moved without its Markdown

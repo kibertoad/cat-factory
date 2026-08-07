@@ -338,6 +338,32 @@ export class DrizzleUserRepository implements UserRepository {
       .where(eq(userIdentities.user_id, userId))
     return rows.map(rowToIdentity)
   }
+
+  async sessionGeneration(userId: string): Promise<number | null> {
+    // The ONE column, not the whole row: this is the per-request read behind session
+    // verification, so it stays as narrow as the store can make it.
+    const [row] = await this.db
+      .select({ generation: users.session_generation })
+      .from(users)
+      .where(eq(users.id, userId))
+    return row ? row.generation : null
+  }
+
+  async bumpSessionGeneration(userId: string): Promise<number> {
+    // `session_generation + 1` evaluated by the database and RETURNED, never read-modify-written
+    // here: two concurrent revocations would otherwise read the same value and write the same
+    // successor, and a bump racing a mint could hand back a generation the row never held.
+    const [row] = await this.db
+      .update(users)
+      .set({ session_generation: sql`${users.session_generation} + 1` })
+      .where(eq(users.id, userId))
+      .returning({ generation: users.session_generation })
+    if (!row) {
+      // Matching no row is not success: an offboarding caller must hear that it withdrew nothing.
+      throw new Error(`Cannot revoke sessions for unknown user '${userId}'`)
+    }
+    return row.generation
+  }
 }
 
 function rowToInvitation(row: typeof accountInvitations.$inferSelect): AccountInvitationRecord {
@@ -599,6 +625,13 @@ export class DrizzleAuditEventRepository implements AuditEventRepository {
     // No conflict clause: an id collision is an id-generator bug, and quietly folding one append
     // onto another would lose an audited action, the one outcome this table exists to prevent.
     await this.db.insert(auditEvents).values(auditEventColumns(event))
+  }
+
+  async deleteOlderThan(cutoff: number): Promise<number> {
+    // By AGE and nothing else — no account, actor or action predicate — so the retention sweep
+    // cannot be turned into a way to remove the record of one particular thing.
+    const result = await this.db.delete(auditEvents).where(lt(auditEvents.at, cutoff))
+    return result.rowCount ?? 0
   }
 
   async listByAccount(

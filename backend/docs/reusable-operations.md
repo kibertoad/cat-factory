@@ -18,8 +18,8 @@ The vehicle is the existing **custom task type**, carrying three things instead 
 A task type carrying only `presentation` is still just a work-item classification (a badge and
 a card). The three fields above are what turn it into an operation.
 
-> The design record, including the alternatives rejected and the slices still open, is
-> [`docs/initiatives/reusable-operations.md`](../../docs/initiatives/reusable-operations.md), and
+> The design record, including the alternatives rejected and what is deliberately left open, is
+> [ADR 0042](./adr/0042-reusable-operations.md), and
 > [ADR 0040](./adr/0040-deployment-extension-seam-reachability.md) records what an org build outside
 > this repo could not reach when it registered one against the published packages.
 > Related: [`custom-agents.md`](./custom-agents.md) (the extension trust model these
@@ -552,7 +552,7 @@ foundational-services catalog via its trait), then the coder, the tester and the
 
 ## Not yet done
 
-Tracked in [`docs/initiatives/reusable-operations.md`](../../docs/initiatives/reusable-operations.md):
+Each with its warrant bar stated in [ADR 0042](./adr/0042-reusable-operations.md):
 
 - **A `detect` prefill probe** (the initiative-preset mirror), deferred: operation forms carry
   per-case BUSINESS input, which no repo probe can prefill.

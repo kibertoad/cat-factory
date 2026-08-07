@@ -13,7 +13,7 @@ export interface WorkspaceCommandContext {
   api: ReturnType<typeof useApi>
   workspaceId: Ref<string | null>
   workspaces: Ref<WorkspaceListItem[]>
-  hydrate: (snapshot: WorkspaceSnapshot, boardSince?: number) => void
+  hydrate: (snapshot: WorkspaceSnapshot) => void
   /** Open one of the active account's boards, creating one when it has none. */
   resolveActiveBoard: () => Promise<void>
 }

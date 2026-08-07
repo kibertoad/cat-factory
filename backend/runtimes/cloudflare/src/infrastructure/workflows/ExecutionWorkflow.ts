@@ -16,6 +16,7 @@ import type { Env } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'
 import { logger } from '../observability/logger'
+import { withWorkflowLogExport } from './logExport'
 import { buildWorkflowRuntime } from './runtime'
 import type { ExecutionWorkflowParams } from './WorkflowsWorkRunner'
 
@@ -174,11 +175,16 @@ async function driveGatePollLoop(
  * already-completed LLM call.
  */
 export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflowParams> {
-  override async run(
-    event: WorkflowEvent<ExecutionWorkflowParams>,
-    step: WorkflowStep,
-  ): Promise<void> {
-    const { workspaceId, executionId } = event.payload
+  override run(event: WorkflowEvent<ExecutionWorkflowParams>, step: WorkflowStep): Promise<void> {
+    // The wake's logging bracket. It matters most HERE: this driver parks on `waitForEvent` for
+    // as long as a human takes to answer, so the wake that dispatched a step and the wake that
+    // settles it are different isolates, and only a drain in front of each suspension gets the
+    // first one's lines out. See `./logExport.ts`.
+    return withWorkflowLogExport(this.env, step, (step) => this.drive(event.payload, step))
+  }
+
+  private async drive(params: ExecutionWorkflowParams, step: WorkflowStep): Promise<void> {
+    const { workspaceId, executionId } = params
     // Bind the run's correlation ONCE, the way `BootstrapWorkflow`/`EnvConfigRepairWorkflow`
     // already do and `driveExecution` does on the Node side. Re-spreading the ids per call is
     // how a nested emit ends up with none of them (observability-logging-gaps.md, A3).
