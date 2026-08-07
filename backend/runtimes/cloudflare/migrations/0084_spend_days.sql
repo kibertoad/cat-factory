@@ -23,7 +23,7 @@
 -- maps '' back to the unattributed bucket at the read boundary, exactly as `platform_run_days`
 -- does with `failure_kind`. LABEL columns stay nullable, because "no name" and "the empty
 -- name" are the same absence there and the wire shape reports a nullable label.
-CREATE TABLE IF NOT EXISTS spend_days (
+CREATE TABLE spend_days (
   workspace_id TEXT NOT NULL,
   day_start INTEGER NOT NULL,
   -- The run the calls belong to; '' when the ledger row carried no execution id or the run
@@ -64,9 +64,9 @@ CREATE TABLE IF NOT EXISTS spend_days (
 );
 
 -- The read's access path: one account's (optionally one board's) buckets over a day window.
-CREATE INDEX IF NOT EXISTS idx_spend_days_account ON spend_days (account_id, day_start);
+CREATE INDEX idx_spend_days_account ON spend_days (account_id, day_start);
 -- The rewrite's access path: each pass DELETEs its whole day window across every workspace
 -- before re-inserting it (an upsert is not a rewrite: see the repository).
-CREATE INDEX IF NOT EXISTS idx_spend_days_day ON spend_days (day_start);
+CREATE INDEX idx_spend_days_day ON spend_days (day_start);
 -- Per-run lookup (the finest TCO axis), independent of when the run happened.
-CREATE INDEX IF NOT EXISTS idx_spend_days_execution ON spend_days (workspace_id, execution_id);
+CREATE INDEX idx_spend_days_execution ON spend_days (workspace_id, execution_id);
