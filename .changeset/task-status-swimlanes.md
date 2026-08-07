@@ -32,6 +32,14 @@ re-stamped the type it inherits from its frame: a task dragged out of a module n
 naming it, and one dragged into another service no longer carries a module name that service does
 not own.
 
+Two layout consequences of the bigger frame, both of which ate clicks rather than merely looking
+untidy. The sample board a new workspace is seeded with is spaced for a populated frame now: its
+old 540x500 grid was authored when a frame was a small free canvas, and the one seeded service with
+tasks grew a fifth of its width underneath its neighbour, covering that neighbour's cards. And the
+inspector panel sits BELOW the board toolbar on wide viewports instead of beside it: the toolbar is
+centred and grows with its contents, so the swimlane view control was the width at which its end
+reached the panel's corner and the panel began swallowing clicks on the notifications bell.
+
 New persisted state: `blocks.completed_at` (both runtimes), stamped by the block repository when a
 block enters `done` and cleared when it leaves, so the Done lane can age a task out of view. It is
 NOT backfilled, and a task without it is exempt from the age cap rather than treated as ancient.

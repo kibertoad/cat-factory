@@ -8,6 +8,30 @@ import type { Block, Pipeline, StepGateConfig, StepGating, StepOptions } from '.
 // are keyed by (workspace_id, id) every workspace gets its own copy, so reusing
 // these ids across workspaces is safe.
 
+/**
+ * The 3x2 grid the sample services are laid out on.
+ *
+ * A service frame is sized by the SPA's LANE GEOMETRY, not by this file, and the pitch has to
+ * clear a POPULATED frame (~744 x ~601 in flow space) rather than the empty one most of these
+ * start as: any of them becomes populated the moment someone adds a task, and a frame that grows
+ * into its neighbour covers that neighbour's cards. Overlapping frames are not merely untidy,
+ * they eat clicks — a card underneath another frame cannot be pressed at all.
+ *
+ * These were 540 x 500, spacing authored when a frame was a small free canvas, and the swimlanes
+ * outgrew them: the seeded Auth Service (the one service with tasks) ran a fifth of its width
+ * under Core Database, which sat on top of its "needs you" lane. `frames-clear.spec.ts` asserts
+ * the rendered result rather than these numbers, since only the assembled product knows the real
+ * footprint.
+ */
+const SEED_GRID_X = 800
+const SEED_GRID_Y = 660
+const SEED_ORIGIN = { x: 80, y: 80 }
+
+/** Top-left of the sample grid's cell at `col`,`row`. */
+function seedCell(col: number, row: number): { x: number; y: number } {
+  return { x: SEED_ORIGIN.x + col * SEED_GRID_X, y: SEED_ORIGIN.y + row * SEED_GRID_Y }
+}
+
 export function seedBlocks(): Block[] {
   const base = (b: Partial<Block> & Pick<Block, 'id' | 'title' | 'type' | 'position'>): Block => ({
     description: '',
@@ -25,7 +49,7 @@ export function seedBlocks(): Block[] {
       id: 'blk_frontend',
       title: 'Web Frontend',
       type: 'frontend',
-      position: { x: 80, y: 80 },
+      position: seedCell(0, 0),
       description: 'Customer-facing SPA consuming the API gateway.',
       status: 'planned',
     }),
@@ -33,7 +57,7 @@ export function seedBlocks(): Block[] {
       id: 'blk_api',
       title: 'API Gateway',
       type: 'api',
-      position: { x: 620, y: 80 },
+      position: seedCell(1, 0),
       description: 'Single entrypoint; routing, rate limiting, auth checks.',
       status: 'planned',
     }),
@@ -41,7 +65,7 @@ export function seedBlocks(): Block[] {
       id: 'blk_payments',
       title: 'Payments (External)',
       type: 'external',
-      position: { x: 1160, y: 80 },
+      position: seedCell(2, 0),
       description: 'Third-party payment provider integration.',
       status: 'planned',
     }),
@@ -49,7 +73,7 @@ export function seedBlocks(): Block[] {
       id: 'blk_auth',
       title: 'Auth Service',
       type: 'service',
-      position: { x: 80, y: 580 },
+      position: seedCell(0, 1),
       description: 'Issues and validates sessions and access tokens.',
       status: 'ready',
     }),
@@ -57,7 +81,7 @@ export function seedBlocks(): Block[] {
       id: 'blk_db',
       title: 'Core Database',
       type: 'database',
-      position: { x: 620, y: 580 },
+      position: seedCell(1, 1),
       description: 'Primary relational store for users, accounts and orders.',
       status: 'done',
       progress: 1,
@@ -66,7 +90,7 @@ export function seedBlocks(): Block[] {
       id: 'blk_queue',
       title: 'Notification Queue',
       type: 'queue',
-      position: { x: 1160, y: 580 },
+      position: seedCell(2, 1),
       description: 'Async fan-out for emails and push notifications.',
       status: 'planned',
     }),

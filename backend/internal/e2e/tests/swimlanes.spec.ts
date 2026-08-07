@@ -4,6 +4,7 @@ import {
   RUN_TERMINAL_TIMEOUT,
   createSimplePipeline,
   readBlockStatus,
+  setFakeProfile,
   startRun,
   taskCard,
 } from './helpers'
@@ -81,8 +82,30 @@ test.describe('task swimlanes', () => {
     const card = taskCard(page, 'task_login')
     await expect(card).toBeVisible({ timeout: LIVE_TIMEOUT })
 
-    // A merger ends the pipeline, and the seeded fakes report high confidence, so the task
-    // auto-merges and lands `done`.
+    // What the Done lane already holds. The seed ships a merged task of its own (`task_session`,
+    // inside a module of this same service, which the lanes flatten into the frame), so the count
+    // asserted below is a TRANSITION this test causes rather than a total it owns. Pinning the
+    // total instead just re-pins the seed, and fails the next time the sample board gains a task.
+    const doneCount = taskCard(page, 'blk_auth').getByTestId('lane-count-done')
+    const before = Number(await doneCount.textContent())
+
+    // Drive the run STRAIGHT to a landed merge. The default fake parks a human decision on step 0
+    // and reports no merge assessment, so without this the run stops at `blocked` and the card
+    // never leaves the live lanes — which is the assertion below, passing for the wrong reason at
+    // best and (as it did) hanging for 45s at worst. What this spec is about is where a DONE card
+    // renders, so the run is given nothing to stop for rather than being driven through the
+    // decision modal, which `notifications.spec` already covers.
+    await setFakeProfile(request, workspaceId, {
+      decisionOnSteps: [],
+      mergeAssessment: {
+        complexity: 0.3,
+        risk: 0.3,
+        impact: 0.3,
+        // Non-empty by necessity: the engine refuses to auto-merge an assessment that explains
+        // nothing, whatever its scores (`MergeResolver`'s credibility backstop).
+        rationale: 'e2e: three files touched behind an existing flag, covered by tests',
+      },
+    })
     const pipeline = await createSimplePipeline(request, workspaceId, ['coder', 'merger'])
     await startRun(request, workspaceId, 'task_login', pipeline.id)
 
@@ -98,7 +121,7 @@ test.describe('task swimlanes', () => {
     // COLLAPSED. This is the regression the Done lane was added for — a merged task used to leave
     // the board with nothing left to say the service had ever completed anything.
     const frame = taskCard(page, 'blk_auth')
-    await expect(frame.getByTestId('lane-count-done')).toHaveText('1', { timeout: LIVE_TIMEOUT })
+    await expect(doneCount).toHaveText(String(before + 1), { timeout: LIVE_TIMEOUT })
 
     // Opening it brings the card back, in the Done lane this time.
     await frame.getByTestId('done-lane-toggle').click()

@@ -297,10 +297,19 @@ const showOriginalDescription = ref(false)
 </script>
 
 <template>
+  <!-- On lg+ the panel is a rail in the board pane's end corner, and it sits BELOW the
+       BoardToolbar rather than beside it (`top-16`, clearing the toolbar's `top-3` pill). The
+       toolbar is centred and grows with its contents, so at some width its end reaches this
+       corner — and the panel, painting later at the same `z-20`, then covers the toolbar's last
+       controls and EATS THEIR CLICKS: the click lands on the panel and no handler runs, which
+       reads as a dead button rather than as two overlapping boxes. Adding the swimlane view
+       control was the width that finally did it, to the notifications bell. Sitting the panel
+       under the chrome fixes the whole class rather than buying room for one more control, and
+       needs no left/right arithmetic to stay correct under RTL. -->
   <div
     v-if="block && statusMeta && typeMeta"
     data-testid="inspector-panel"
-    class="fixed inset-x-0 bottom-0 z-20 overflow-hidden rounded-t-2xl border border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:absolute lg:inset-x-auto lg:bottom-auto lg:end-4 lg:top-4 lg:w-80 lg:rounded-2xl"
+    class="fixed inset-x-0 bottom-0 z-20 overflow-hidden rounded-t-2xl border border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur lg:absolute lg:inset-x-auto lg:bottom-auto lg:end-4 lg:top-16 lg:w-80 lg:rounded-2xl"
   >
     <div class="h-1.5 w-full" :style="{ backgroundColor: statusMeta.color }" />
     <!-- A tall task (execution steps + scenarios + docs) can overflow the
@@ -309,7 +318,7 @@ const showOriginalDescription = ref(false)
          On compact viewports the panel is a bottom sheet capped to the visible
          height (dvh excludes mobile browser chrome). -->
     <div
-      class="max-h-[80dvh] space-y-4 overflow-y-auto overscroll-contain px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:max-h-[calc(100vh-5rem)]"
+      class="max-h-[80dvh] space-y-4 overflow-y-auto overscroll-contain px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:max-h-[calc(100vh-7rem)]"
     >
       <!-- header -->
       <div class="flex items-start justify-between gap-2">
