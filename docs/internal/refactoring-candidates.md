@@ -9,106 +9,16 @@ disruption to existing code, not just effort. That ordering doubles as a recomme
 sequence: land the contained, low-risk wins first and work down toward the structural
 ones.
 
-| #   | Candidate                                       | Area           | Impact    | Effort | Status                                     |
-| --- | ----------------------------------------------- | -------------- | --------- | ------ | ------------------------------------------ |
-| 5   | Finish the manifest-driven agent-kind registry  | Backend engine | High      | Medium | in progress                                |
-| 6   | Module registry for the orchestration container | Backend DI     | High      | High   | registry + split landed; DI-graph deferred |
-| 7   | Shared base repositories (D1 ⇄ Drizzle)         | Cross-runtime  | High      | High   | todo                                       |
-| 8   | Shared container builder (Node ⇄ Cloudflare)    | Cross-runtime  | Very high | High   | todo                                       |
+| #   | Candidate                                       | Area          | Impact    | Effort | Status                                     |
+| --- | ----------------------------------------------- | ------------- | --------- | ------ | ------------------------------------------ |
+| 6   | Module registry for the orchestration container | Backend DI    | High      | High   | registry + split landed; DI-graph deferred |
+| 7   | Shared base repositories (D1 ⇄ Drizzle)         | Cross-runtime | High      | High   | todo                                       |
+| 8   | Shared container builder (Node ⇄ Cloudflare)    | Cross-runtime | Very high | High   | todo                                       |
 
 See [Recently landed](#recently-landed) at the bottom for candidates that have since
 shipped and were removed from the active list.
 
 ---
-
-## 5. Finish the manifest-driven agent-kind registry (strangler work)
-
-**Files:** `backend/packages/server/src/agents/jobBody.ts` (**440 lines**, holds the
-remaining `switch (context.agentKind)` in `buildBespokeKindBody`) and
-`backend/packages/server/src/agents/containerAgentResult.ts` (**285 lines**, holds the
-remaining `toRunResult` `agentKind === …` chain). The dispatcher itself
-(`ContainerAgentExecutor.ts`) is down to **975 lines** (from ~1,795).
-
-**Problem.** The generic seam is now in place: a registered kind (custom _or_ migrated
-built-in) that declares an `agent` step dispatches through `registeredAgentStep` →
-`buildRegisteredAgentBody` with **no per-kind case**, and `ContainerAgentExecutor` builds
-one shared `common` body + resolves auth once. But the built-in kinds are still the holdout,
-in **two parallel switches**:
-
-- `buildMigratedBuiltInBody` (`jobBody.ts`): a `switch (context.agentKind)` with the 7
-  remaining built-in cases (`CI_FIXER`, `FIXER`, `CONFLICT_RESOLVER`, `MERGER`, `ON_CALL`,
-  `TESTER`, `UI_TESTER`) building kind-specific job bodies + system prompts. (`BLUEPRINTS` +
-  `SPEC_WRITER` are now real `registerAgentKind` entries: see the slice note below.)
-- `toRunResult` (`containerAgentResult.ts`): an `if (agentKind === …)` chain coercing job
-  output into domain shapes (`blueprintService`, `spec`, `mergeAssessment`, `onCallAssessment`,
-  `testReport`, …) for those same kinds.
-
-`CLAUDE.md` still flags this as unfinished strangler work: _"the built-in agents are not yet
-migrated to this model; their rendering still lives in the harness."_
-
-**Approach.** Convert the remaining built-ins onto the same `registerAgentKind` seam the
-generic path already uses (a definition carrying `systemPrompt`, `buildJobBody`, and
-`toRunResult`) one kind at a time (parity-gated, image-bumped per conversion per
-`CLAUDE.md`), then delete each bespoke `switch`/`if` branch. Both switches collapse into
-registry lookups keyed off one source of truth as the last kind migrates.
-
-**Why high-impact.** Removes a documented architectural debt, lets a deployment override
-built-in prompts via the public seam, and means a new kind is a registration, not edits to
-two switches. The seam and the generic path already exist, so the remaining work is the
-per-kind migration: moderately intrusive (it touches the dispatch hot path) but each step
-is small and independently shippable.
-
-**Status (further along than first written).** The bespoke _harness_ handlers are already
-gone: every built-in kind now synthesizes an `AgentStepSpec` and dispatches through the ONE
-generic `buildRegisteredAgentBody` path (see `buildMigratedBuiltInBody` in `jobBody.ts`) with
-`kind:'agent'`, no per-kind harness endpoint, no image bump per conversion. What remains are
-two thin _backend_ switches: `buildMigratedBuiltInBody` (built-in kind → its synthesized spec
-
-- system/user prompt) and the `toRunResult` `agentKind === …` coercion chain
-  (`containerAgentResult.ts`). The final step of this candidate is to fold those two into
-  registry lookups off a single `registerAgentKind`-style definition per built-in (carrying its
-  `buildJobBody` + `toRunResult`), so the switches collapse and a deployment can override a
-  built-in's prompt through the public seam.
-
-**Slice landed: the initiative planning kinds are now real registrations.** The first two
-built-ins whose ids live in `@cat-factory/kernel` (`initiative-analyst` / `initiative-planner`)
-are migrated onto the public `registerAgentKind` seam: their role/user prompts moved from
-`@cat-factory/server`'s `prompts.ts` down into `@cat-factory/agents`
-(`agents/kinds/initiative.ts`), and each is registered with an `agent` `AgentStepSpec`
-(`container-explore`, base-branch clone; the planner structured). The generic
-`registry.agentStep(...)` path in `buildKindBody` now renders their job body, so **both cases
-were deleted from `buildMigratedBuiltInBody`**, and the pair were removed from
-`CompositeAgentExecutor`'s hard-coded `CONTAINER_KINDS` set (container routing now follows from
-`registry.requiresContainer()`). Their `systemPrompt`/`userPrompt` resolve through
-`systemPromptFor`/`userPromptFor` like any registered kind, so the surface directives
-(READ_ONLY_GUARDRAIL / FINAL_ANSWER_IN_REPLY) are applied centrally instead of hand-embedded.
-This is the reference shape for the remaining built-ins.
-
-**Slice landed: `blueprints` + `spec-writer` are now real registrations.** The two
-structured-explore + render-post-op built-ins are migrated the same way: their prompts +
-per-kind user builders moved from `@cat-factory/server`'s `prompts.ts` into
-`@cat-factory/agents` (`agents/kinds/spec-blueprints.ts`), and, because agents can't import
-orchestration, their kind-id constants moved down beside the definitions and are re-exported
-by orchestration's `ci.logic.ts` (the pattern the inline-reviewer ids already use). Each is
-registered as a read-only structured `container-explore` kind (blueprints clones the PR
-branch; spec-writer clones the per-block work branch with `failOnUnusableFinal`), so **both
-cases were deleted from `buildMigratedBuiltInBody`** and the pair removed from
-`CompositeAgentExecutor`'s `CONTAINER_KINDS`. Their `toRunResult` coercion still keys off
-their id (→ `blueprintService`/`spec`), and their deterministic render/commit post-ops stay
-in the engine's built-in `BUILT_IN_POST_OPS` map (their commit branch is resolved specially
-in `RunDispatcher.builtInRepoOpBranch`, which the generic clone resolution does not match), so
-engine behaviour is unchanged. Routing their prompts through `systemPromptFor`/`userPromptFor`
-newly applies the central surface directives + declared traits (blueprints now carries the
-read-only guardrail + its `spec-aware` guidance; spec-writer the guardrail; both fold the
-block's fragments): the enrichment the old bespoke constant bypassed.
-
-Still to do: the remaining orchestration-id built-ins (`ci-fixer`/`fixer`/`conflict-resolver`/
-`merger`/`on-call`/`tester`/`ui-tester`), whose prompts also need repo/`parts` context the
-registry `userPrompt(context)` seam does not yet carry (so migrating them needs a seam
-extension first; the blocker `blueprints`/`spec-writer` did not hit, as their builders need
-only `AgentRunContext`), and folding the `toRunResult` coercion chain onto the definitions (the
-planner's + blueprints'/spec-writer's coercions still key off their ids in
-`containerAgentResult.ts`).
 
 ## 6. Module registry for the orchestration container: **landed (registry + split); DI-graph deferred**
 
@@ -226,6 +136,39 @@ drift guard, the per-package `AGENTS.md` orientation layer, `docs/glossary.md`, 
 ## Recently landed
 
 Removed from the active list because they have shipped. Kept here as a short audit trail.
+
+### 5. Finish the manifest-driven agent-kind registry ✅
+
+**Every container agent kind the platform ships is now an ordinary `registerAgentKind` entry.**
+Both switches this candidate named are deleted: `buildMigratedBuiltInBody`'s
+`switch (context.agentKind)` in `jobBody.ts` (the implementer / read-only explorers / in-place
+fixers / conflict-resolver / merger / on-call / testers), and the `agentKind === …` coercion chain
+in `containerAgentResult.ts`. `buildKindBody` is one line — compose the prompt, resolve the step
+spec off the registry, build the generic body — and `coerceCustomResult` is one registry lookup.
+The two hard-coded Sets that shadowed the registry (`CONTAINER_AGENT_KINDS`,
+`MULTI_REPO_FANOUT_BUILTIN_KINDS`) went with them: "does this kind need a checkout" and "does it
+fan out across peer repos" are read off the kind's own declaration now.
+
+**The blocker was the seam, exactly as recorded.** These kinds' prompts have to name a BRANCH, and
+`AgentRunContext` describes the work rather than the checkout. Kernel gained
+`AgentDispatchContext` (`baseBranch` / `workBranch` / `multiRepo`), passed to a kind's own
+`userPrompt` on a container dispatch and absent for an inline caller, plus a `userPromptSuffix`
+form for a kind (the on-call agent) whose text is a closing instruction on top of the generic
+prompt rather than a replacement for it. The rest of what the switch encoded became declarative
+knobs on `AgentStepSpec` that a deployment's own kind wants too: `clone.requirePr` /
+`clone.prFallback` / `clone.mergeBase`, `testInfra`, `image`, `localWrites`, and a
+`standardsDelivery: 'none'` tier for a kind that judges rather than produces.
+
+**Parity was gated on the existing snapshot suite** (`test/containerAgentJobBody.spec.ts` drives
+every kind through the public `startJob` and diffs the whole body). Every body came out
+byte-identical bar one intended change: `merger` and `on-call` were bypassing the shared prompt
+chain, so they now receive the effort-report guidance and — the actual bug — the skill and
+tool-server sections a deployment's `assignSkills('merger', …)` had always been silently dropped
+from.
+
+Still open from this candidate's neighbourhood: the inline `merger` step resolver is deliberately
+NOT externalized (it owns terminal block status and executes a policy-gated real merge, so it
+keeps engine-internal access rather than the minimal public `ResolverContext`).
 
 ### 1. Shared OpenAI-compatible provider registry ✅
 

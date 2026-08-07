@@ -40,7 +40,12 @@ An agent kind DECLARES capabilities; the platform resolves them per dispatch.
   login, and on the facade-wired credential resolver: none of which the runtime-neutral engine
   knows. The result splits in two: the non-secret
   `toolServers` / `unavailableToolServers` projection folded onto the prompt context (and therefore
-  into the agent-context snapshot), and the secret-bearing `mcpServers` job-body field.
+  into the agent-context snapshot), and the secret-bearing `mcpServers` job-body field. _Later:_
+  the non-secret projection's home is now `PipelineStep.toolServers`, stamped with the DISPATCHED
+  kind and recorded on every container dispatch. The snapshot's `extras` copy is deprecated and
+  served until the window in [`public-api.md`](../public-api.md) closes; the snapshot is gated
+  behind prompt recording and pruned on the telemetry retention window, so it was never a home for
+  something a person is meant to read. Model: [`mcp-tool-servers.md`](../mcp-tool-servers.md).
 - **Credentials** are declared BY NAME (`secretKeys`) and resolved through the new kernel
   `ToolSecretResolver` port. Both facades wire `createEnvToolSecretResolver` (read off the
   deployment's own environment) by default.

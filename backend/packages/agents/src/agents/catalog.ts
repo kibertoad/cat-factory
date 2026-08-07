@@ -1,4 +1,4 @@
-import type { AgentKind } from '@cat-factory/kernel'
+import type { AgentDispatchContext, AgentKind } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
 import {
   acceptanceSystemPrompt,
@@ -166,11 +166,17 @@ function applySurfaceDirectives(
   kind: AgentKind,
   registry: AgentKindRegistry,
 ): string {
-  const surface = registry.agentStep(kind)?.surface
+  const step = registry.agentStep(kind)
+  const surface = step?.surface
   // True only when the base prompt is the one from the registry — i.e. no built-in track claimed
   // this kind. A built-in-track-owned id (even if also registered) already got the directive.
   const usedRegisteredPrompt = prompt === registry.systemPrompt(kind)
-  const needsGuardrail = isReadOnlyAgentKind(kind) || surface === 'container-explore'
+  // `localWrites` is the explore kind that legitimately writes inside its own working tree (a
+  // tester installs dependencies and runs a suite). The surface still means "never pushes"; the
+  // guardrail's wording ("must not create files") does not, and reads to that agent as a refusal
+  // to run the suite. See {@link AgentStepSpec.localWrites}.
+  const needsGuardrail =
+    isReadOnlyAgentKind(kind) || (surface === 'container-explore' && !step?.localWrites)
   const needsFinalAnswer =
     usedRegisteredPrompt && (surface === 'inline' || surface === 'container-explore')
   let result = prompt
@@ -252,21 +258,46 @@ function withRevision(prompt: string, context: AgentRunContext): string {
   return lines.join('\n')
 }
 
+/** How a caller wants the user prompt rendered. See {@link userPromptFor}. */
+export interface AgentUserPromptOptions {
+  /**
+   * The caller has a filesystem and has already written the run's context files onto it, so
+   * linked context renders as an index pointing at them rather than folding their bodies in.
+   */
+  materialized?: boolean
+  /**
+   * The resolved checkout this dispatch creates, for the kinds whose own prompt names a branch.
+   * Absent for every inline caller (which has no checkout), so a builder that reads it must
+   * phrase itself without one rather than invent a branch name.
+   */
+  dispatch?: AgentDispatchContext
+}
+
 /**
  * Build the user prompt from the block context and the run so far. `opts.materialized`
  * (set by the container executor) renders linked context as a summary index pointing at
  * the on-disk files; the default (inline executors) injects the bodies into the prompt.
+ * `opts.dispatch` carries the resolved checkout facts (base/work branch, multi-repo) for the
+ * kinds whose own prompt has to name a branch; absent for every inline caller, which has no
+ * checkout to describe.
  */
 export function userPromptFor(
   context: AgentRunContext,
   registry: AgentKindRegistry,
-  opts: { materialized?: boolean } = {},
+  opts: AgentUserPromptOptions = {},
 ): string {
-  return withInjectedContext(
-    withRevision(buildBaseUserPrompt(context, registry, opts), context),
-    context,
-    opts,
-  )
+  const { prompt, suffix } = buildBaseUserPrompt(context, registry, opts)
+  // The kind's closing instruction is applied OUTSIDE both wrappers, not folded into the base
+  // prompt: `userPromptSuffix` exists to be the last thing the agent reads (the `on-call` kind's
+  // "respond with ONLY a JSON object" is the shape), and both wrappers append. Folded in earlier,
+  // a revision re-run would end on the reviewer's feedback and an inline run on a context-file
+  // dump, leaving the reply-shape instruction buried mid-prompt.
+  return withSuffix(withInjectedContext(withRevision(prompt, context), context, opts), suffix)
+}
+
+/** Append a kind's closing task instructions ({@link buildBaseUserPrompt}'s `suffix`), if any. */
+function withSuffix(prompt: string, suffix: string | undefined): string {
+  return suffix ? `${prompt}\n\n${suffix}` : prompt
 }
 
 /**
@@ -302,7 +333,7 @@ const MAX_INJECTED_CONTEXT_CHARS = 320_000
 function withInjectedContext(
   prompt: string,
   context: AgentRunContext,
-  opts: { materialized?: boolean },
+  opts: AgentUserPromptOptions,
 ): string {
   if (opts.materialized) return prompt
   const files = (context.injectedContextFiles ?? []).filter((f) => !isStandardsContextFile(f.path))
@@ -335,14 +366,28 @@ function withInjectedContext(
   return lines.join('\n')
 }
 
+/**
+ * The prompt body, plus the kind's closing instructions carried OUT rather than folded in.
+ *
+ * The split is what lets {@link userPromptFor} apply the suffix outside `withRevision` /
+ * `withInjectedContext`: a suffix appended here would stop being last the moment either wrapper
+ * fires. Only the generic block-context branch produces one — a standard phase owns its whole
+ * template, and a kind supplying its own `userPrompt` replaces the generic prompt outright.
+ */
+interface BaseUserPrompt {
+  prompt: string
+  suffix?: string
+}
+
 function buildBaseUserPrompt(
   context: AgentRunContext,
   registry: AgentKindRegistry,
-  opts: { materialized?: boolean } = {},
-): string {
+  opts: AgentUserPromptOptions = {},
+): BaseUserPrompt {
   // Standard phases get their built-out, templated user prompt.
   const phase = phaseForKind(context.agentKind)
-  if (phase) return renderStandardUserPrompt(phase, context, opts)
+  if (phase) return { prompt: renderStandardUserPrompt(phase, context, opts) }
+  const dispatch = opts.dispatch
 
   // A registered custom kind may supply its own user prompt; otherwise it falls through
   // to the generic block-context prompt below, like any other non-standard-phase kind. Even a
@@ -355,12 +400,14 @@ function buildBaseUserPrompt(
   // matters most for them: an org's reusable operation typically runs on that org's OWN kinds,
   // which are exactly the kinds that author their own user prompt. Miss it and the parameters
   // vanish for the runs the whole feature exists to serve.
-  const registered = registry.userPrompt(context)
+  const registered = registry.userPrompt(context, dispatch)
   if (registered !== undefined) {
     const prepended = [initiativePresetSection(context), customTaskTypeSection(context)]
       .filter(Boolean)
       .map((section) => section.trimStart())
-    return prepended.length ? `${prepended.join('\n\n')}\n\n${registered}` : registered
+    return {
+      prompt: prepended.length ? `${prepended.join('\n\n')}\n\n${registered}` : registered,
+    }
   }
 
   const { block, pipelineName, priorOutputs, decisions, resolvedDecision } = context
@@ -418,7 +465,13 @@ function buildBaseUserPrompt(
     }
   }
   lines.push('', 'Produce your contribution. Be concise and concrete.')
-  return lines.join('\n')
+  // A kind's ADDITIVE closing instructions (see `AgentKindDefinition.userPromptSuffix`) — the
+  // shape for a kind that needs everything above (the run's evidence, the prior agents' output)
+  // plus its own task framing. Returned BESIDE the prompt rather than pushed onto `lines`, so
+  // `userPromptFor` can append it after the revision/injected-context wrappers and it genuinely
+  // ends the prompt.
+  const suffix = registry.userPromptSuffix(context, dispatch)
+  return { prompt: lines.join('\n'), ...(suffix ? { suffix } : {}) }
 }
 
 /**

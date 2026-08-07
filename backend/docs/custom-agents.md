@@ -150,12 +150,12 @@ pipelineRegistry.register({
 ```
 
 **A variant is deliberately NOT a kind, and that is the whole safety property.** A kind id is what
-every engine decision keys off: the harness dispatch shape, the read-only guardrail, companion
-targeting, gatability, multi-repo fan-out, the merger's terminal status, the SPA's palette entry
-and result view, and the built-in kinds are not registry entries yet (see Status / scope), so a
-brand-new id silently misses every switch that has not been migrated. It would not fail; it would
-dispatch down the generic path and quietly do the wrong thing. Because a varied step records the
-BASE kind, every one of those decisions is byte-for-byte what that kind always did.
+every engine decision keys off: the dispatch shape, the read-only guardrail, companion targeting,
+gatability, multi-repo fan-out, the merger's terminal status, the SPA's palette entry and result
+view. A brand-new id gets the DEFAULTS for every one of those, and defaults are answers, not
+absences: it would not fail, it would dispatch as a work-branch implementer and quietly do the
+wrong thing. Because a varied step records the BASE kind, every one of those decisions is
+byte-for-byte what that kind always did.
 
 The corollary: **a variation that needs different BEHAVIOUR is a different kind**, and belongs on
 `register` above. If you find yourself wanting a variant to clone differently, return a different
@@ -291,7 +291,7 @@ What matters from THIS doc's altitude:
   `ToolSecretResolver` port; the VALUE rides the job body's dedicated `mcpServers` field only,
   never `AgentRunContext`, a prompt, or the telemetry snapshot. A workspace's own stored value
   wins over the deployment's environment, per key
-  ([`capability-credential-store.md`](../../docs/initiatives/capability-credential-store.md)).
+  ([ADR 0041](./adr/0041-capability-credential-store.md)).
 - **A declared server that cannot be wired for a run is STATED to the agent** (a closed reason
   vocabulary rendered in the prompt's tool-server section) and recorded on the run's context
   snapshot, never silently dropped.
@@ -509,8 +509,32 @@ repo-writing agent ships with **zero** harness changes.
 - The extension framework (the three-stage model, the registry seams, live pre/post-op
   execution wired symmetrically across all three facades, the data-driven palette + the
   generic result view) is in place and covered by the cross-runtime conformance suite.
-- **The built-in agents (blueprints/spec-writer/coder/merger/…) are NOT yet migrated** to
-  this model: their rendering still lives in the executor-harness today. Converting them
-  one at a time behind the harness acceptance suite + smoketests, and then deleting the
-  bespoke harness handlers, is the remaining strangler work (it must be parity-gated and
-  image-bumped per conversion, which is why it is sequenced as its own follow-up).
+- **The built-in agents run on this model too.** Every container kind the platform ships
+  (`coder`, the testers, the fixers, the conflict-resolver, `merger`, `on-call`, the read-only
+  explorers, `blueprints`, `spec-writer`, the initiative kinds) is an ordinary
+  `registerAgentKind` entry declaring the same `AgentStepSpec` a deployment's own kind
+  declares. There is no `switch (agentKind)` in the dispatch path and none in the harness: the
+  harness is one generic `agent` kind, and WHAT each agent does is data the backend carries in
+  the job body. The practical consequences:
+  - **A deployment can attach a capability to any built-in.** `assignSkills('coder', …)` and
+    `assignToolServers('merger', …)` reach the prompt of every kind, where `merger` and
+    `on-call` used to bypass the shared prompt chain and silently drop them.
+  - **A new kind is a registration, not an image bump.** The clone/PR/infra vocabulary the
+    built-ins use is the public one: `clone.requirePr` and `clone.prFallback` (an in-place
+    fixer with no PR to fix), `clone.mergeBase` (a resolver that merges base in first),
+    `testInfra` (stand the service's test dependencies up), `image: 'ui'` (the browser image),
+    `localWrites` (an explore kind that writes in its own tree, so the read-only guardrail
+    would misread as a refusal to run), and `standardsDelivery: 'none'` (a kind that judges
+    rather than produces).
+  - **A kind's own prompt can name a branch.** `userPrompt` receives an `AgentDispatchContext`
+    (`baseBranch` / `workBranch` / `multiRepo`) on a container dispatch, and `userPromptSuffix`
+    appends to the generic block-context prompt instead of replacing it. A suffix ENDS the
+    prompt: it is applied after the human's revision feedback and after any folded-in context
+    files, both of which append too, so a reply-shape instruction stays the last thing read.
+  - **A built-in's structured reply reaches its engine channel through `mapStructuredResult`**
+    on the definition (`mergeAssessment`, `testReport`, `spec`, …). A kind that declares none
+    surfaces its parsed JSON on `result.custom`, which is what a custom kind's post-op reads.
+- What the built-ins still keep that a registered kind does not: their ROLE prompts, which are
+  owned by the shipped tracks (`baseSystemPromptFor`) rather than restated on the definition,
+  and their palette entries, which are first-class in the SPA's own catalog rather than
+  projected through `customAgentKinds`.

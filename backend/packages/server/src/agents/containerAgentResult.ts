@@ -7,29 +7,17 @@ import type {
   RunnerJobView,
   StreamedFollowUp,
 } from '@cat-factory/kernel'
-import { INITIATIVE_PLANNER_AGENT_KIND } from '@cat-factory/kernel'
-import {
-  BLUEPRINTS_AGENT_KIND,
-  coerceBlueprintService,
-  coerceInitiativePlan,
-  coerceSpecDoc,
-  SPEC_WRITER_AGENT_KIND,
-} from '@cat-factory/agents'
-import {
-  MERGER_AGENT_KIND,
-  ON_CALL_AGENT_KIND,
-  TESTER_AGENT_KIND,
-  UI_TESTER_AGENT_KIND,
-} from '@cat-factory/orchestration'
+import { type AgentKindRegistry, summaryOr } from '@cat-factory/agents'
 
 /**
  * Runner-output → engine-result normalisation for {@link ContainerAgentExecutor}.
  *
- * Extracted verbatim from `ContainerAgentExecutor.ts` (no behaviour change): these are the
- * pure functions that turn a finished {@link RunnerJobResult} into the engine's
- * {@link AgentRunResult}, including the kind-aware coercions (blueprint / spec / merge /
- * on-call / test) that used to live in the bespoke harness handlers. The output boundary
- * of the executor, kept as a self-contained, independently-testable unit.
+ * These are the pure functions that turn a finished {@link RunnerJobResult} into the engine's
+ * {@link AgentRunResult}. The KIND-AWARE half (blueprint / spec / merge / on-call / test) used to
+ * be an `agentKind === …` chain here, the second of the two switches the agent-kind strangler set
+ * out to delete; it is now one registry lookup, because every built-in declares its own
+ * `mapStructuredResult` beside its dispatch shape. The output boundary of the executor, kept as a
+ * self-contained, independently-testable unit.
  */
 
 /**
@@ -44,9 +32,15 @@ import {
  * from the agent's sentinel file) is attached to EVERY mapped result — it is orthogonal to
  * the kind-specific channels — so the engine records it on the step for run details.
  */
-export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentRunResult {
+export function toRunResult(
+  result: RunnerJobResult,
+  agentKind: string | undefined,
+  registry: AgentKindRegistry,
+): AgentRunResult {
   const mapped =
-    result.custom !== undefined ? coerceCustomResult(result, agentKind) : mapPushOrPrResult(result)
+    result.custom !== undefined
+      ? coerceCustomResult(result, agentKind, registry)
+      : mapPushOrPrResult(result)
   // The pre-PR validation report is orthogonal to the kind-specific channels (like
   // `effortReport`), so attach it to EVERY mapped result: on the success path it is the captured
   // proof the checkout was green BEFORE the PR opened — the whole point of the feature. A failed
@@ -67,91 +61,22 @@ export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentR
 }
 
 /**
- * Coerce a structured `agent` job's parsed `custom` JSON into the engine's {@link AgentRunResult},
- * KIND-AWARE — the conservative coercion that used to live in the bespoke harness handlers
- * (blueprint/spec/merge/on-call/test) now runs backend-side, so the engine's resolvers/gates see
- * `blueprintService`/`spec`/`mergeAssessment`/`onCallAssessment`/`testReport` exactly as before.
- * Any other kind (a registered custom kind) surfaces the raw JSON as `custom` for its post-op to
- * coerce/render from. Called only when `result.custom !== undefined`.
+ * Coerce a structured `agent` job's parsed `custom` JSON into the engine's {@link AgentRunResult}.
+ *
+ * ONE registry lookup, no kind chain: a built-in whose reply the engine reads through a typed
+ * channel it acts on (`mergeAssessment` gates the real merge, `testReport` greenlights the run or
+ * loops the fixer, `spec` is sharded into the repo) declares that mapping on its own registration,
+ * beside the dispatch shape that produced the reply. Every other kind — a deployment's own
+ * structured explore agent, and any built-in with no engine channel — surfaces the raw JSON as
+ * `custom` for its post-op to render from. Called only when `result.custom !== undefined`.
  */
-/** The job summary trimmed, or a kind-specific fallback when the model returned none. */
-function summaryOr(result: RunnerJobResult, fallback: string): string {
-  return result.summary?.trim() || fallback
-}
-
 function coerceCustomResult(
   result: RunnerJobResult,
   agentKind: string | undefined,
+  registry: AgentKindRegistry,
 ): AgentRunResult {
-  // Blueprinter: coerce into `blueprintService` (board reconcile + `blueprintPostOp`
-  // render/commit). A nameless/garbage tree coerces to null ⇒ left unset.
-  if (agentKind === BLUEPRINTS_AGENT_KIND) {
-    const service = coerceBlueprintService(result.custom, '')
-    return {
-      output: summaryOr(result, 'Service blueprint updated.'),
-      ...(service ? { blueprintService: service } : {}),
-    }
-  }
-  // Spec-writer: coerce into `spec` (engine strict-validate + `specPostOp` shard/commit).
-  // The doc must carry its OWN `service` name (no repo-name rescue — backwards-compat is a
-  // non-goal); a nameless/garbage doc coerces to null ⇒ left unset (no ingest, no commit).
-  if (agentKind === SPEC_WRITER_AGENT_KIND) {
-    // A purely TECHNICAL task has no business requirements to specify: the writer signals
-    // `noBusinessSpecs` and we leave the baseline spec untouched (NO `spec` channel, so
-    // `specPostOp` commits nothing). The engine reads the flag to infer the block's
-    // `technical` label (with the spec-companion's corroboration). Checked first so a
-    // model that returned both the flag and a stray baseline echo never commits over it.
-    const custom = result.custom as Record<string, unknown> | null
-    if (custom && typeof custom === 'object' && custom.noBusinessSpecs === true) {
-      return {
-        output: summaryOr(
-          result,
-          'No business requirements to specify — this is a technical task.',
-        ),
-        noBusinessSpecs: true,
-      }
-    }
-    const spec = coerceSpecDoc(result.custom, '')
-    return {
-      output: summaryOr(result, 'Service specification updated.'),
-      ...(spec ? { spec } : {}),
-    }
-  }
-  // Initiative planner: coerce into `initiativePlan` (the engine's strict parse +
-  // ingest into the `initiatives` entity). A structureless/garbage plan coerces to
-  // null ⇒ left unset (no ingest — the step still records its prose output).
-  if (agentKind === INITIATIVE_PLANNER_AGENT_KIND) {
-    const plan = coerceInitiativePlan(result.custom)
-    return {
-      output: summaryOr(result, 'Initiative plan drafted.'),
-      ...(plan ? { initiativePlan: plan } : {}),
-    }
-  }
-  if (agentKind === MERGER_AGENT_KIND) {
-    return {
-      output: summaryOr(result, 'Pull request assessed.'),
-      mergeAssessment: coerceMergeAssessment(result.custom, result.summary),
-    }
-  }
-  if (agentKind === ON_CALL_AGENT_KIND) {
-    return {
-      output: summaryOr(result, 'Release regression investigated.'),
-      onCallAssessment: coerceOnCallAssessment(result.custom, result.summary),
-    }
-  }
-  // Tester: coerce into `testReport` (greenlight-or-loop the fixer; the conservative
-  // greenlight/blocking rule the harness `/test` handler applied now runs in
-  // `coerceTestReport`, re-applied defensively by the TesterController).
-  if (agentKind === TESTER_AGENT_KIND || agentKind === UI_TESTER_AGENT_KIND) {
-    return {
-      output: summaryOr(result, 'Testing complete.'),
-      testReport: coerceTestReport(result.custom, result.summary),
-      // The in-container docker-compose stand-up record (local-infra tester) — forwarded so
-      // the engine can persist its captured logs on the Tester step. Harness-produced, so
-      // no coercion; the TesterController validates it defensively before persisting.
-      ...(result.infraSetup ? { infraSetup: result.infraSetup } : {}),
-    }
-  }
+  const mapStructured = agentKind ? registry.mapStructuredResult(agentKind) : undefined
+  if (mapStructured) return mapStructured(result)
   return {
     output: summaryOr(result, 'Agent run complete.'),
     custom: result.custom,
@@ -247,152 +172,6 @@ function prNumberFromUrl(url: string): number | undefined {
   if (!match) return undefined
   const n = Number(match[1])
   return Number.isFinite(n) ? n : undefined
-}
-
-/**
- * Clamp a value to a 0..1 number, defaulting to `fallback` for anything that is not a
- * finite number (or a non-empty numeric string). Crucially, `null`, `''`, `false` and `[]`
- * fall back rather than coercing to `0` — `Number()` turns all of them into a finite `0`,
- * which would silently make a garbage merger score read as "trivial/safe" and defeat the
- * conservative-on-garbage default that replaces the harness's old `diffExaminable` guard.
- */
-function clamp01(value: unknown, fallback: number): number {
-  const n =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string' && value.trim() !== ''
-        ? Number(value)
-        : Number.NaN
-  if (!Number.isFinite(n)) return fallback
-  return Math.min(1, Math.max(0, n))
-}
-
-/** First non-empty of the agent's rationale or run summary (capped), else a stable default. */
-function coerceRationale(rationale: unknown, summary: string | undefined): string {
-  if (typeof rationale === 'string' && rationale.trim()) return rationale
-  if (summary?.trim()) return summary.slice(0, 2000)
-  return 'No rationale provided.'
-}
-
-/**
- * Coerce a migrated `merger` agent's structured JSON into the engine's merge assessment.
- * This is the conservative coercion the harness `/merge` handler used to do: a missing or
- * garbage score defaults to 1 (severe → routes to human review rather than a silent
- * auto-merge), and the rationale falls back to the agent's summary. The harness's extra
- * container-side `diffExaminable` guard (force 1/1/1 when the base diff was unreadable) is
- * not reproducible backend-side; the conservative-on-garbage default covers the same risk.
- */
-function coerceMergeAssessment(raw: unknown, summary: string | undefined): unknown {
-  const o = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
-  return {
-    complexity: clamp01(o.complexity, 1),
-    risk: clamp01(o.risk, 1),
-    impact: clamp01(o.impact, 1),
-    rationale: coerceRationale(o.rationale, summary),
-  }
-}
-
-/**
- * Coerce a migrated `on-call` agent's structured JSON into the engine's release-regression
- * assessment — the conservative coercion the harness `/on-call` handler used to do: a
- * missing confidence defaults to 0 (don't imply the PR is at fault without evidence) and a
- * missing recommendation defaults to `hold` (a human decides).
- */
-function coerceOnCallAssessment(raw: unknown, summary: string | undefined): unknown {
-  const o = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
-  const evidence = Array.isArray(o.evidence)
-    ? o.evidence.filter((e): e is string => typeof e === 'string')
-    : []
-  return {
-    culpritConfidence: clamp01(o.culpritConfidence, 0),
-    recommendation:
-      o.recommendation === 'revert' || o.recommendation === 'monitor' ? o.recommendation : 'hold',
-    rationale: coerceRationale(o.rationale, summary),
-    evidence,
-  }
-}
-
-const TEST_SEVERITIES = new Set(['low', 'medium', 'high', 'critical'])
-const TEST_STATUSES = new Set(['passed', 'failed', 'skipped'])
-
-/**
- * Coerce a migrated `tester` agent's structured JSON into the engine's {@link TestReport} —
- * the conservative coercion the harness `/test` handler used to do, defaulting every field
- * safely so a malformed reply still parses (the engine strict-validates it). Crucially a
- * greenlight is honoured ONLY when no BLOCKING (high/critical) concern is open, so a model
- * that greenlights with an open blocker can't auto-pass; low/medium concerns are advisory.
- * The engine's TesterController re-applies this rule defensively.
- */
-function coerceTestReport(raw: unknown, summary: string | undefined): unknown {
-  const o = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>
-  const outcomes = Array.isArray(o.outcomes)
-    ? (o.outcomes as unknown[])
-        .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
-        .map((x) => ({
-          name: typeof x.name === 'string' ? x.name : '(unnamed)',
-          status: TEST_STATUSES.has(x.status as string) ? (x.status as string) : 'skipped',
-          ...(typeof x.detail === 'string' && x.detail ? { detail: x.detail } : {}),
-        }))
-    : []
-  const concerns = Array.isArray(o.concerns)
-    ? (o.concerns as unknown[])
-        .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
-        .map((x) => ({
-          title: typeof x.title === 'string' ? x.title : '(concern)',
-          detail: typeof x.detail === 'string' ? x.detail : '',
-          severity: TEST_SEVERITIES.has(x.severity as string) ? (x.severity as string) : 'medium',
-        }))
-    : []
-  const blocking = concerns.some((c) => c.severity === 'high' || c.severity === 'critical')
-  const environment =
-    o.environment === 'local' || o.environment === 'ephemeral' ? o.environment : undefined
-  // The UI tester reports the screenshots it captured + uploaded (artifact ids); keep
-  // only the well-formed entries (a view name + an artifact id), passing the optionals
-  // through. Absent/empty for the API tester.
-  const screenshots = Array.isArray(o.screenshots)
-    ? (o.screenshots as unknown[])
-        .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
-        .filter((x) => typeof x.view === 'string' && typeof x.artifactId === 'string')
-        .map((x) => ({
-          view: x.view as string,
-          artifactId: x.artifactId as string,
-          ...(typeof x.hash === 'string' && x.hash ? { hash: x.hash } : {}),
-          ...(typeof x.width === 'number' ? { width: x.width } : {}),
-          ...(typeof x.height === 'number' ? { height: x.height } : {}),
-          ...(typeof x.referenceArtifactId === 'string' && x.referenceArtifactId
-            ? { referenceArtifactId: x.referenceArtifactId }
-            : {}),
-        }))
-    : []
-  // An abort signal: the Tester reported it can't run a meaningful test at all (its env never
-  // came up, a dependency is missing). Carry the reason through and force the greenlight off —
-  // an abort is never release-ready, and the engine routes it to a human instead of the fixer.
-  // The presence of the `abort` object IS the signal: never let a blank/oversized `reason`
-  // downgrade that intent back into a (pointless) fixer loop, so fall back to a generic reason
-  // and cap it like `summary` (the reason is shown to the human + stored on the step verbatim).
-  const abortRaw = (typeof o.abort === 'object' && o.abort !== null ? o.abort : null) as Record<
-    string,
-    unknown
-  > | null
-  const abortReason = abortRaw
-    ? (typeof abortRaw.reason === 'string' && abortRaw.reason.trim()
-        ? abortRaw.reason.trim()
-        : 'the Tester could not run a meaningful test'
-      ).slice(0, 2000)
-    : undefined
-  return {
-    greenlight: o.greenlight === true && !blocking && !abortReason,
-    summary:
-      typeof o.summary === 'string' && o.summary ? o.summary : (summary?.slice(0, 2000) ?? ''),
-    tested: Array.isArray(o.tested)
-      ? (o.tested as unknown[]).filter((t): t is string => typeof t === 'string')
-      : [],
-    outcomes,
-    concerns,
-    ...(environment ? { environment } : {}),
-    ...(screenshots.length ? { screenshots } : {}),
-    ...(abortReason ? { abort: { reason: abortReason } } : {}),
-  }
 }
 
 /**

@@ -3,6 +3,15 @@ import { defaultAgentKindRegistry } from './registry.js'
 import { CODE_AWARE_TRAIT, DOC_AWARE_TRAIT, hasTrait, traitsFor } from './traits.js'
 import { BLUEPRINTS_AGENT_KIND, SPEC_WRITER_AGENT_KIND } from './spec-blueprints.js'
 import { ENVIRONMENT_ANALYST_KIND } from './environment-analyst.js'
+import {
+  ANALYSIS_AGENT_KIND,
+  BUSINESS_DOCUMENTER_AGENT_KIND,
+  MERGER_AGENT_KIND,
+  MOCKER_AGENT_KIND,
+  PLAYWRIGHT_AGENT_KIND,
+  TESTER_AGENT_KIND,
+} from './built-in-container.js'
+import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
 
 // Only `code-aware` and `doc-aware` actually FOLD the task's selected fragments into the agent's
 // system prompt (`AgentContextBuilder.resolveFragments` gates on exactly those two: technical
@@ -15,10 +24,11 @@ import { ENVIRONMENT_ANALYST_KIND } from './environment-analyst.js'
 // The guard therefore enforces the FOLD, not merely "some context trait": a kind that clones a repo
 // either folds fragments (code-aware/doc-aware) or is on the explicit, justified opt-out list below.
 //
-// Scoped to REGISTERED kinds (the `registerAgentKind` extension seam — where new kinds, incl.
-// deployment-authored ones, are added). Built-in non-registered kinds get their traits from
-// `STANDARD_AGENT_TRAITS`; the spec-aware-only built-ins there (merger, testers, mocker, …) are
-// out of this guard's scope by design and are not repo-cloning extension kinds.
+// The guard covers EVERY container kind, built-in and deployment-authored alike. It used to be
+// scoped to registered kinds only, with a blanket "the spec-aware-only built-ins (merger, testers,
+// mocker, …) are out of scope by design" carve-out in this comment; now that every built-in is a
+// real registration, that carve-out is gone and each of those kinds states its own reason below.
+// A blanket exemption in prose is exactly the shape this guard exists to refuse.
 const FRAGMENT_FOLD_TRAITS = [CODE_AWARE_TRAIT, DOC_AWARE_TRAIT]
 
 // Registered kinds that clone a repo but INTENTIONALLY fold no fragments, each with its reason.
@@ -34,6 +44,27 @@ const FRAGMENT_FOLD_OPT_OUT = new Set<string>([
   // shape rather than applying coding standards, so the task's best-practice fragments are not
   // relevant to its output — it deliberately folds none.
   BLUEPRINTS_AGENT_KIND,
+  // Scores a diff's complexity / risk / impact. It JUDGES rather than produces, and a house coding
+  // standard has no bearing on how risky a change is — the same reason it declares
+  // `standardsDelivery: 'none'`, which is the stronger statement of this exemption.
+  MERGER_AGENT_KIND,
+  // The testers RUN the service's suite and report what they observed. They are `spec-aware`, so
+  // they read the in-repo spec that IS the contract under test; best-practice fragments describe
+  // how code should be WRITTEN, which is not what a test run judges.
+  TESTER_AGENT_KIND,
+  UI_TESTER_AGENT_KIND,
+  // Builds WireMock stubs from the upstream contracts, and authors end-to-end tests from the
+  // acceptance criteria: both work from the spec (they are `spec-aware`) rather than from the
+  // service's code-style standards.
+  MOCKER_AGENT_KIND,
+  PLAYWRIGHT_AGENT_KIND,
+  // These two READ code and write prose about it (the domain-rules docs; the tech-debt report), and
+  // shipped folding nothing. The exemption records that shipped behaviour rather than endorsing it:
+  // both have a defensible claim on `code-aware` (an audit against the house standards is arguably
+  // the whole point of the tech-debt report), and changing it is a prompt change on its own terms,
+  // not a side effect of registering the kinds. Revisit deliberately.
+  BUSINESS_DOCUMENTER_AGENT_KIND,
+  ANALYSIS_AGENT_KIND,
 ])
 
 describe('registered container kinds fold the task fragments', () => {
