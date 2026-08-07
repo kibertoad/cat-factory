@@ -147,6 +147,14 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   suppression read PROPAGATES its failures where the snapshot's read of the same rows is
   best-effort: this one decides whether a row is written. See
   `backend/docs/reusable-operations.md`.
+- `board/reparentWrite.ts`: moving a block into a new container, split from `BoardService` because
+  the cross-home case is a migration rather than a layout write: it carries the subtree's rows and
+  executions to the destination service's home, re-stamps the service scope key, prunes the edges
+  that then dangle, and (the reason it takes a `BlockEditAuthority`) refuses a move whose destination
+  library would drop a role-scoped merge restriction the mover is under. A `riskPolicyId` resolves
+  against the workspace that HOMES the task, so a cross-home drag re-decides the policy without
+  touching the field; a same-home move re-decides nothing and reads no preset. See
+  `backend/docs/adr/0037-role-scoped-merge-policy.md`.
 - `taskTypes/TaskTypeSuppressionService.ts`: which registered REUSABLE OPERATIONS a workspace
   offers, and the admin surface for hiding one. Tombstones, so absence is the default and a newly
   registered operation reaches every board until somebody hides it. `suppressedTaskTypeIds` is the

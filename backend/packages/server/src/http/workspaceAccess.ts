@@ -1,4 +1,9 @@
-import { UNATTRIBUTED_BLOCK_EDITOR, type BlockEditActor } from '@cat-factory/contracts'
+import {
+  UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+  UNATTRIBUTED_BLOCK_EDITOR,
+  type BlockEditActor,
+  type BlockEditAuthority,
+} from '@cat-factory/contracts'
 import {
   ForbiddenError,
   resolveWorkspaceAccess,
@@ -98,21 +103,59 @@ export function requirePermission<E extends AppEnv>(
 }
 
 /**
- * The authority a BOARD EDIT is made under, as the auth gate already resolved it (ADR 0037).
+ * The authority a BOARD EDIT is made under, resolvable in whichever workspace the write actually
+ * decides in (ADR 0037).
  *
- * A total accessor for the same reason `runInitiatorRole` is one: a task's `riskPolicyId` decides
+ * A total accessor for the same reason `runInitiatorRole` is one: a block's `riskPolicyId` decides
  * which roles its runs sandbox and how their auto-merge is narrowed, so re-pointing it is judged
- * against the editor rather than waved through as a preference, and a route that read the two
- * facts itself would be a second place to get the dev-open `null` wrong.
+ * against the editor rather than waved through as a preference, and a route that read the facts
+ * itself would be a second place to get the dev-open `null` wrong.
  *
- * With auth disabled the gate resolves no access object, and this returns the unattributed editor
- * rather than inventing one: there is no tier whose restrictions could be dropped, which is the
- * same reading a run started under dev-open gets when it pins no `initiatedByRole`.
+ * It resolves PER WORKSPACE rather than handing back the acting board's answer, because a board
+ * write does not always decide on the board it was addressed to. A board mounts services homed in
+ * other workspaces, and every write on one lands at that home: the row is written there, its
+ * preset resolves against that library, and a run on it is admitted through that board under the
+ * role the editor holds there. A single pre-resolved actor made the guard read one workspace's
+ * policies against another's roles, which refuses and admits by turns for reasons neither
+ * workspace states.
+ *
+ * The acting board costs nothing (the gate already published its resolution); any other workspace
+ * goes through the SAME `loadWorkspaceAccess` the gate uses, memoised per request so a subtree
+ * spanning two homes reads each once. A workspace the caller cannot see resolves to the
+ * unattributed editor: no tier there means no run of theirs is ever admitted under its policies,
+ * so none of its restrictions is theirs to drop.
+ *
+ * With auth disabled the gate resolves no access object, and every workspace returns the
+ * unattributed editor rather than an invented tier, the same reading a run started under dev-open
+ * gets when it pins no `initiatedByRole`.
  */
-export function blockEditActor<E extends AppEnv>(c: Context<E>): BlockEditActor {
-  const access = c.get('workspaceAccess')
-  if (!access) return UNATTRIBUTED_BLOCK_EDITOR
-  return { role: access.role, managesPolicy: access.permissions.has('settings.manage') }
+export function blockEditAuthority<E extends AppEnv>(c: Context<E>): BlockEditAuthority {
+  const acting = c.get('workspaceAccess')
+  const user = c.get('user')
+  if (!acting || !user) return UNATTRIBUTED_BLOCK_EDIT_AUTHORITY
+  const container = c.get('container')
+  const userId = user.id
+  const resolved = new Map<string, Promise<BlockEditActor>>()
+  return {
+    in(workspaceId) {
+      if (workspaceId === acting.workspaceId) {
+        return Promise.resolve({
+          role: acting.role,
+          managesPolicy: acting.permissions.has('settings.manage'),
+        })
+      }
+      let pending = resolved.get(workspaceId)
+      if (!pending) {
+        pending = loadWorkspaceAccess(container, workspaceId, userId).then((access) =>
+          access?.allowed
+            ? { role: access.role, managesPolicy: access.permissions.has('settings.manage') }
+            : UNATTRIBUTED_BLOCK_EDITOR,
+        )
+        resolved.set(workspaceId, pending)
+      }
+      return pending
+    },
+  }
 }
 
 /**

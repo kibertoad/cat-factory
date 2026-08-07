@@ -2716,7 +2716,12 @@
       "archived": "Archiviato \"{name}\"",
       "restored": "Ripristinato \"{name}\"",
       "archiveFailed": "Impossibile archiviare il servizio",
-      "restoreFailed": "Impossibile ripristinare il servizio"
+      "restoreFailed": "Impossibile ripristinare il servizio",
+      "moveRefused": {
+        "relaxes_role_sandbox": "Le esecuzioni di questa attività sono isolate per il tuo ruolo dove si trova ora, mentre il criterio di merge che la governerebbe a destinazione non lo è. Chiedi a un’amministrazione dello spazio di lavoro di spostarla.",
+        "relaxes_role_submission_allowlist": "Il criterio di merge a destinazione ti permetterebbe di unire tipi di modifica che qui ti sono preclusi. Chiedi a un’amministrazione dello spazio di lavoro di spostarla.",
+        "relaxes_role_class_rule": "Il criterio di merge a destinazione unisce automaticamente modifiche che qui devi revisionare. Chiedi a un’amministrazione dello spazio di lavoro di spostarla."
+      }
     },
     "repoTypes": {
       "service": "Servizio",

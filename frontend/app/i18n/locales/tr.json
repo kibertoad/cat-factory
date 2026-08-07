@@ -147,7 +147,12 @@
       "archived": "\"{name}\" arşivlendi",
       "restored": "\"{name}\" geri yüklendi",
       "archiveFailed": "Hizmet arşivlenemedi",
-      "restoreFailed": "Hizmet geri yüklenemedi"
+      "restoreFailed": "Hizmet geri yüklenemedi",
+      "moveRefused": {
+        "relaxes_role_sandbox": "Bu görevin çalıştırmaları şu anki yerinde rolün için yalıtılmış, taşıdığın yerde geçerli olacak birleştirme ilkesi ise değil. Taşıması için bir çalışma alanı yöneticisine başvur.",
+        "relaxes_role_submission_allowlist": "Taşıdığın yerdeki birleştirme ilkesi, burada sana kapalı olan değişiklik türlerini birleştirmene izin verirdi. Taşıması için bir çalışma alanı yöneticisine başvur.",
+        "relaxes_role_class_rule": "Taşıdığın yerdeki birleştirme ilkesi, burada incelemekle yükümlü olduğun değişiklikleri otomatik birleştiriyor. Taşıması için bir çalışma alanı yöneticisine başvur."
+      }
     },
     "repoTypes": {
       "service": "Servis",

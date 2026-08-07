@@ -2716,7 +2716,12 @@
       "archived": "Archiviert: „{name}“",
       "restored": "Wiederhergestellt: „{name}“",
       "archiveFailed": "Dienst konnte nicht archiviert werden",
-      "restoreFailed": "Dienst konnte nicht wiederhergestellt werden"
+      "restoreFailed": "Dienst konnte nicht wiederhergestellt werden",
+      "moveRefused": {
+        "relaxes_role_sandbox": "Die Ausführungen dieser Aufgabe laufen an ihrem jetzigen Ort für deine Rolle isoliert, die Merge-Richtlinie am Zielort jedoch nicht. Bitte eine Workspace-Administration, sie zu verschieben.",
+        "relaxes_role_submission_allowlist": "Die Merge-Richtlinie am Zielort würde dich Änderungsarten mergen lassen, die dir hier verwehrt sind. Bitte eine Workspace-Administration, sie zu verschieben.",
+        "relaxes_role_class_rule": "Die Merge-Richtlinie am Zielort merged Änderungen automatisch, die du hier prüfen musst. Bitte eine Workspace-Administration, sie zu verschieben."
+      }
     },
     "repoTypes": {
       "service": "Service",
