@@ -16,12 +16,18 @@
 // exactly one), and its menu doubles as the "add a tracker" affordance: attaching a
 // context issue is where a missing integration is discovered, and the connect modal
 // opens over the caller's form rather than navigating away from it.
-import type { DropdownMenuItem } from '@nuxt/ui'
+import { useId } from 'vue'
 import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import type { SourceTask, TaskSearchResult, TaskSourceKind } from '~/types/domain'
 import { apiErrorReason } from '~/composables/api/errors'
 import EmptyState from '~/components/common/EmptyState.vue'
-import { buildSourceChoices, reconcileSource } from '~/utils/taskSources'
+import {
+  type AddSourceLabels,
+  buildSourceChoices,
+  menuIsPickable,
+  reconcileSource,
+  sourceMenuItems,
+} from '~/utils/sourcePicker'
 
 const props = defineProps<{
   /** contextKeys already staged by the caller, so they're filtered out / not re-offered. */
@@ -83,30 +89,32 @@ watch(
   },
 )
 
+/** Wording per add action, exhaustive over what a TRACKER menu can carry. */
+const ADD_LABEL: AddSourceLabels<'connect' | 'enable'> = {
+  connect: (label) => t('tasks.picker.connectSource', { label }),
+  enable: (label) => t('tasks.picker.enableSource', { label }),
+}
+
 // Two-tier menu: pick an offered tracker, or add one that isn't offered yet.
-const sourceMenu = computed<DropdownMenuItem[][]>(() =>
-  buildSourceChoices(tasks.sources, source.value).map((group) =>
-    group.map((choice) =>
-      choice.action === 'select'
-        ? {
-            label: choice.label,
-            icon: choice.icon,
-            trailingIcon: choice.active ? 'i-lucide-check' : undefined,
-            onSelect: () => {
-              source.value = choice.source
-            },
-          }
-        : {
-            label:
-              choice.action === 'enable'
-                ? t('tasks.picker.enableSource', { label: choice.label })
-                : t('tasks.picker.connectSource', { label: choice.label }),
-            icon: 'i-lucide-plug',
-            onSelect: () => addSource(choice.source),
-          },
-    ),
-  ),
+const sourceChoices = computed(() => buildSourceChoices(tasks.sources, source.value))
+const sourceMenu = computed(() =>
+  sourceMenuItems(sourceChoices.value, {
+    onSelect: (s) => {
+      source.value = s
+    },
+    onAdd: addSource,
+    addLabel: ADD_LABEL,
+  }),
 )
+/** One entry decides nothing, so the tracker is named as a label rather than as a dead control. */
+const sourcePickable = computed(() => menuIsPickable(sourceChoices.value))
+
+// The trigger's own content is the tracker NAME, which says nothing about what the name means, so
+// the visible "Source" caption is joined to it as the accessible name ("Source GitHub"). Per
+// instance, because this picker and the import modal's copy can be mounted at the same time and a
+// hard-coded id would make one trigger claim the other's caption.
+const sourceLabelId = useId()
+const sourceTriggerId = useId()
 const searchable = computed(() => descriptor.value?.searchable ?? false)
 
 const query = ref('')
@@ -277,24 +285,40 @@ onMounted(() => {
 
 <template>
   <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-900/40 p-2">
-    <!-- Which tracker is being searched, always visible, plus the trackers the user
-         could add from here (each opens the connect modal over the caller's form). -->
+    <!-- Which tracker is being searched, always visible, plus the trackers the user could add from
+         here (each opens the connect modal over the caller's form). With a single entry there is
+         nothing to decide, so the tracker is named as plain text: a chevron opening a one-item menu
+         promises a choice that isn't there. `id` labels the trigger, whose own content is the
+         tracker name rather than what that name means. -->
     <div class="flex items-center gap-1.5">
-      <span class="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <span
+        :id="sourceLabelId"
+        class="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+      >
         {{ t('tasks.picker.sourceLabel') }}
       </span>
-      <UDropdownMenu :items="sourceMenu" :content="{ side: 'bottom', align: 'start' }">
+      <UDropdownMenu
+        v-if="sourcePickable"
+        :items="sourceMenu"
+        :content="{ side: 'bottom', align: 'start' }"
+      >
         <UButton
+          :id="sourceTriggerId"
           color="neutral"
           variant="soft"
           size="xs"
           :icon="icon"
           trailing-icon="i-lucide-chevron-down"
           class="max-w-full"
+          :aria-labelledby="`${sourceLabelId} ${sourceTriggerId}`"
         >
           <span class="truncate">{{ descriptor?.label ?? t('tasks.picker.noSource') }}</span>
         </UButton>
       </UDropdownMenu>
+      <span v-else class="flex min-w-0 items-center gap-1 text-xs text-slate-300">
+        <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0" />
+        <span class="truncate">{{ descriptor?.label ?? t('tasks.picker.noSource') }}</span>
+      </span>
     </div>
 
     <UInput

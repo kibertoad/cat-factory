@@ -258,6 +258,36 @@ Two consequences of running the fetch first, both about not overstating what the
   no `parseRef` to pre-flight, so the add-task form's body pre-fetch is its warning: it records the
   cause instead of swallowing it.
 
+### The picker names its source, and is the route to adding one
+
+`ContextDocumentPicker` also decides WHICH source it is reading, and that selector is the surface
+where the tier split above becomes visible copy. The selection rules are shared with the tracker
+pickers through `frontend/app/app/utils/sourcePicker.ts` (see
+[`bug-hunt.md`](./bug-hunt.md) for the tracker side).
+
+- **The source in use is always on screen**, single source or not, because which source is selected
+  decides what a pasted ref resolves to and which repository a file pick browses. When the menu has
+  nothing to decide it renders as a LABEL rather than a chevron: a trigger whose one entry re-selects
+  the current source promises a choice that isn't there.
+- **Its second tier connects a source from inside the form** (`ui.openDocumentConnect`, opened OVER
+  the caller's modal so nothing typed is lost), and `reconcileSource`'s `awaiting` selects that source
+  the moment the probe reports it connected. It routes to that source's own connect screen, never to
+  the Integrations hub, for the reason the bug hunt's tracker menu does.
+- **That second tier is WITHHELD from a member**, because connecting stores a workspace credential
+  and is `integrations.manage` while attaching what it holds is member-tier. `connectableSources` is
+  the one answer to "which sources could I connect", read by the picker's add tier AND by both hosts'
+  connect shortcuts (`ContextAttachmentFields`, `TaskContextDocs`); it withholds everything when the
+  integration is unavailable to the deployment OR the reader may not connect one. So a member sees
+  the source NAMED with no add entry, rather than a connect that opens a modal, takes a token and
+  403s. The no-source empty state splits the same way: the admin tier is told to connect one, a
+  member is told to ask an admin, because an instruction the reader's own menu withholds is not
+  advice they can act on.
+- **A document source cannot be "connected but switched off here"** the way a tracker can, so
+  `buildConnectionSourceChoices` cannot emit the `enable` wording at all, and `sourceMenuItems`
+  derives its wording map from what the choices can carry. A source that one day gains a
+  per-workspace toggle therefore fails the typecheck at this surface rather than rendering
+  "Connect X" over something already connected.
+
 ## A referenced context document reaches the agent, or the run breaks
 
 A document attached to a block (and any imported document its description names outright)
@@ -371,3 +401,6 @@ generically, no per-source form is hard-coded in the frontend.
   `0005_confluence.sql`, migrating any live rows across before dropping them)
 - Tests: `test/integration/documents-*.spec.ts` with `FakeDocumentSourceProvider`
   and the `documentsDeps()` helper
+- SPA: `frontend/app/app/components/documents/ContextDocumentPicker.vue` (+ its
+  `.logic.ts` sibling for the ref pre-flight), with the source-selection rules it
+  shares with the tracker pickers in `frontend/app/app/utils/sourcePicker.ts`
