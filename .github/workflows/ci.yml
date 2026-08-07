@@ -162,11 +162,22 @@ jobs:
             # to see that `dist` to run publint/attw over it. `sdkSrc` in the `src` filter below
             # is what makes that true rather than merely intended: without it an
             # `sdk/gatekeeper-worker/**`-only diff left `code` false and skipped both lanes.
+            #
+            # The last three entries are what the LIVE half of this lane needs, and they are
+            # narrower than they look. A change to the `/api/v1` CONTRACTS already lands here
+            # through `sdk/gatekeeper/**`, because the bindings table is generated from the spec and
+            # `check:sdk` refuses a diff that did not regenerate it; what that cannot see is a
+            # controller whose BEHAVIOUR moved under an unchanged contract, which is exactly the
+            # disagreement the live suite exists to catch. The harness paths are here because the
+            # phase and the boot it runs against live in them.
             gatekeeper:
               - 'deploy/gatekeeper/**'
               - 'sdk/gatekeeper/**'
               - 'sdk/gatekeeper-worker/**'
               - 'sdk/typescript/**'
+              - 'backend/packages/server/src/modules/publicApi/**'
+              - 'backend/internal/sdk-smoketest/**'
+              - 'backend/internal/e2e/src/**'
               - '.github/workflows/ci.yml'
               - '.github/actions/**'
             # The cross-SDK smoketest (`sdk-smoketest`) boots a real backend and drives all four
@@ -1273,21 +1284,34 @@ jobs:
   # The Cloudflare OS Gatekeeper, in real workerd: the machinery package's own suite, plus the
   # template that installs it. NON-BLOCKING (deliberately NOT in the aggregated `Test` gate's
   # `needs`, the shape `test-eks` and `test-e2e` have): this Worker tracks a partner protocol that
-  # is still moving, and a change on that side must not red this repo's required check. It needs no
-  # database and no cluster (the cat-factory origin it talks to is a scripted worker bound as the
-  # pool's outbound service), so it is a plain install, build and run.
+  # is still moving, and a change on that side must not red this repo's required check.
+  #
+  # It runs the same Worker TWICE, against two origins, and the second one is why this job now
+  # needs a database. The hermetic run binds a scripted cat-factory as the pool's outbound service,
+  # which is what makes it fast and deterministic — and is also the only thing it cannot check,
+  # since a fixture agrees with the package by construction. The LIVE run takes that fixture away:
+  # `@cat-factory/sdk-smoketest` boots the real Node facade (real Postgres, real pg-boss, fake
+  # agents), seeds a workspace that parks, and points the Worker at it, so a request shape the
+  # bindings and the SDK both consider correct meets the surface that has to accept it.
   test-gatekeeper:
     name: Test Gatekeeper (workerd)
     needs: changes
     if: ${{ needs.changes.outputs.gatekeeper == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: read
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+
+      # Backgrounded, the same pair the DB and e2e lanes use, so the image pull hides behind the
+      # install and the build below rather than running serially in front of them.
+      - name: Start Postgres (background)
+        run: nohup .github/scripts/start-postgres.sh > "$RUNNER_TEMP/postgres-start.log" 2>&1 &
 
       - name: Install pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
@@ -1302,19 +1326,32 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Both packages import their dependencies through the built `dist`: the machinery imports the
-      # SDK and the bindings table, and the template imports the machinery.
+      # SDK and the bindings table, and the template imports the machinery. The smoketest harness is
+      # filtered in as well because the live run below boots a real backend through it, which is
+      # every backend package's `dist`.
       - name: Build the published surface it consumes
-        run: pnpm exec turbo run build --filter=@cat-factory/gatekeeper-worker...
+        run: >-
+          pnpm exec turbo run build
+          --filter=@cat-factory/gatekeeper-worker... --filter=@cat-factory/sdk-smoketest...
 
       - name: Typecheck
         run: >-
           pnpm exec turbo run typecheck
           --filter=@cat-factory/gatekeeper-worker --filter=@cat-factory/deploy-gatekeeper
 
-      - name: Gatekeeper tests
+      - name: Gatekeeper tests (hermetic, scripted origin)
         run: >-
           pnpm exec turbo run test:run
           --filter=@cat-factory/gatekeeper-worker --filter=@cat-factory/deploy-gatekeeper
+
+      - name: Wait for Postgres
+        run: .github/scripts/wait-postgres.sh
+
+      # The same Worker against the real `/api/v1`. The harness owns the boot and the seed and runs
+      # the package's `test/live` specs in workerd with no outbound service, so every call the
+      # Gatekeeper makes leaves the isolate and lands on the deployment.
+      - name: Gatekeeper tests (live, against a real deployment)
+        run: pnpm --filter @cat-factory/sdk-smoketest run smoketest -- --only=gatekeeper
 
   # Single aggregated status named "Test" so branch protection can require one
   # check regardless of the job/shard layout. Fails unless every test job passed OR was

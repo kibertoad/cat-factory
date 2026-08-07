@@ -1,6 +1,7 @@
 # Cloudflare OS Gatekeeper integration
 
-Status: in progress. Slices 1 to 4 and slice 6 have landed; slice 5 is open.
+Status: in progress. Slices 1 to 4 and 6 have landed, and slice 5's first leg with them; slice 5's
+second leg (against a real Cloudflare OS) is open and blocked on something this repo does not own.
 
 ## Goal and rationale
 
@@ -309,16 +310,57 @@ Both are ADDITIONS to the slice-4 suite, never replacements for it, and both are
 construction. Neither is a prerequisite for using the Gatekeeper; they exist to catch a
 disagreement the hermetic suite structurally cannot see.
 
-- **Against a real `/api/v1`.** A phase in `backend/internal/sdk-smoketest`, which already boots
-  the real Node facade and mints keys, driving the Gatekeeper's own forwarding path against it.
-  The reason it belongs THERE rather than in `deploy/gatekeeper` is the one the smoketest itself
-  gives: the harness that boots a backend should be the one that owns the boot, and the template an
-  operator copies should not carry a Postgres-shaped devDependency. What it would catch is the
-  Gatekeeper and the live surface disagreeing about a request shape the generated bindings and the
-  SDK both consider correct.
-- **Against a real Cloudflare OS.** Manual/nightly, opt-in behind a `GATEKEEPER_OS_REF` pointing at
-  a partner commit, allowed to go red without blocking anyone. Do not fold it into the PR lane on
-  the grounds that it passed a few times.
+- **Against a real `/api/v1` (landed).** A `--only=gatekeeper` phase in
+  `backend/internal/sdk-smoketest`, which already boots the real Node facade and mints keys, running
+  the machinery package's own `test/live` specs against it. The reason it belongs THERE rather than
+  in `deploy/gatekeeper` is the one the smoketest itself gives: the harness that boots a backend
+  should be the one that owns the boot, and the template an operator copies should not carry a
+  Postgres-shaped devDependency.
+- **Against a real Cloudflare OS (open, and blocked).** Manual/nightly, opt-in behind a
+  `GATEKEEPER_OS_REF` pointing at a partner commit, allowed to go red without blocking anyone. Do
+  not fold it into the PR lane on the grounds that it passed a few times. What it is blocked on is
+  stated below, because "not built yet" and "cannot be built yet" are different facts.
+
+#### What the live leg is, and the four decisions in it
+
+The Worker is not re-composed in Node and nothing about it is substituted: the SAME assembled
+Worker runs in the SAME pool as the hermetic suite, with the scripted origin removed
+(`vitest.live.config.ts` sets no `outboundService`), so the SDK's calls leave workerd and land on the
+harness's deployment. It enrols on the real named-webhook collection, mints a real per-actor key and
+recovers from its revocation, forwards the everyday loop, and answers a run that really parked.
+
+- **The claims live in the SPECS, and the phase grades only that they ran.** They need workerd and a
+  Cap'n Web session, which exist in that package and not in a Node harness; what the harness has and
+  the package must not is a database. So the phase reads vitest's JSON REPORT rather than its exit
+  code: a suite that collected nothing also exits 0, and this repo's own rule is that a phase which
+  reported nothing is not a pass.
+- **The workspace is asked to PARK, per workspace.** `startBackend` clears `E2E_DECISION_ON_STEPS`
+  for every other phase (a park would stop the SDK scenario before it observed any progress), so
+  this phase sets `decisionOnSteps: [0]` for its own workspace over the control channel. A
+  Gatekeeper whose reason to exist is answering parked runs, smoketested against a deployment that
+  never parks one, would be a suite asserting the easy half.
+- **The card is raised from the platform's OWN notification.** A public `https` endpoint is required
+  at registration and rightly so, so no loopback receiver can be registered and no delivery can
+  actually travel. Rather than script a card, the specs read the notification the parked run really
+  raised, assert it is a type this Gatekeeper subscribes to and dispositions as answerable, and wrap
+  THAT object in the envelope the platform's own channel composes. What stays synthetic is the
+  wrapper and the MAC, both of which the hermetic suite pins; what is real is every field a card is
+  built from. The residual gap is stated in the spec's header rather than left to be inferred.
+- **It runs in the Gatekeeper's own NON-BLOCKING lane, not in the blocking smoketest job.** That is
+  also why the phase is asked for BY NAME rather than joining the everything run, and why the
+  summary prints it as NOT RUN there: a section that is simply absent reads as a section that
+  passed. The lane's `paths-filter` gained the publicApi controllers and the two harness paths; it
+  did not need the contracts, because a contract change that moves the surface must regenerate
+  `sdk/gatekeeper/src/bindings.generated.ts` (`check:sdk` refuses otherwise), which is already in
+  the filter. A controller whose BEHAVIOUR moved under an unchanged contract is the case that
+  needed adding, and it is exactly what this leg exists to catch.
+
+**What blocks the second leg**: a ref to pin. The opt-in shape is agreed (`GATEKEEPER_OS_REF`,
+nightly, `continue-on-error`), and it is deliberately not landing as a workflow that clones a
+partner repository and guesses at its boot command. That job's whole value is that a red run means
+something; one written against an unverified boot would go red on its own scaffolding and be muted
+within a week, which is worse than not having it. It needs a partner commit that boots
+reproducibly and a documented way to drive one workspace agent; land it then, and not before.
 
 ### 6. Base and template: `@cat-factory/gatekeeper-worker` (landed)
 
@@ -374,7 +416,10 @@ suite covers.
 - [x] Slice 4: reference Gatekeeper Worker (`deploy/gatekeeper`, own CI lane, unpublished), plus
       the review corrections above (every park answerable, card dispositions, atomic delivery,
       claimed minting, `approvals_inspect` / `runs_watched` / `POST /admin/retire`)
-- [ ] Slice 5: the two legs the scripted origin cannot cover (below)
+- [ ] Slice 5: the two legs the scripted origin cannot cover
+  - [x] Against a real `/api/v1`: `sdk/gatekeeper-worker/test/live` + the smoketest's
+        `--only=gatekeeper` phase, in the non-blocking Gatekeeper lane
+  - [ ] Against a real Cloudflare OS: blocked on a partner ref that boots reproducibly (above)
 - [x] Slice 6: base/template split (`@cat-factory/gatekeeper-worker` published, `deploy/gatekeeper`
       down to its policy, bindings and wiring)
 
@@ -394,6 +439,14 @@ suite covers.
   item is `pending`, which is deliberately before the run stops. A predicate keyed on the run's
   status misses every early triage, which is the case the surface added it for.
 
+- **A task with only a TITLE parks before any agent runs, and that is the first thing the live leg
+  found.** The pre-dispatch input gate is a deterministic reduction over the task's own authored
+  fields, so `tasks_create` + `tasks_start` with no description stops on an `input-gate` park
+  (`description_missing`) rather than on the step the caller was waiting for. It is correct
+  behaviour and no scripted origin can show it: an integration that files work on a title alone gets
+  a parked run every time, and reports it as the platform being slow. A Gatekeeper's own docs should
+  say what filing a task actually takes; the live specs file one with a description for the same
+  reason.
 - **`minScope` is the STATIC floor, not the whole admission story.** `startPublicTask` and
   `createPublicJob` escalate to `decide` at request time when the named pipeline can park
   (`pipeline_requires_decide_scope`), and two park shapes slip past even that (see

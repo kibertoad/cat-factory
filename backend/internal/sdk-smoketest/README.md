@@ -13,6 +13,9 @@ DATABASE_URL=... pnpm --filter @cat-factory/sdk-smoketest run smoketest -- --onl
 
 # just the MCP facade (needs `pnpm build` first, for sdk/mcp/dist/bin.js):
 DATABASE_URL=... pnpm --filter @cat-factory/sdk-smoketest run smoketest -- --only=mcp
+
+# the Cloudflare OS Gatekeeper against this deployment (not part of the everything run):
+DATABASE_URL=... pnpm --filter @cat-factory/sdk-smoketest run smoketest -- --only=gatekeeper
 ```
 
 ## What it is for
@@ -90,6 +93,34 @@ is a PROCESS:
 
 A missing `dist/bin.js` is a **failure naming the build command**, not a skip: the artifact is ours
 rather than a language toolchain, so there is nothing to conclude from its absence.
+
+## The Gatekeeper phase
+
+`src/gatekeeper.ts` points the **Cloudflare OS Gatekeeper Worker**
+([`sdk/gatekeeper-worker`](../../../sdk/gatekeeper-worker)) at this backend and runs that package's
+`test/live` specs in real workerd, with no outbound service, so every call the Worker makes leaves
+the isolate and lands on the deployment.
+
+It exists for the half of that package its own suite structurally cannot reach. The hermetic run
+binds a SCRIPTED cat-factory as the pool's outbound service, which is what makes it fast and
+deterministic and is also why it can never disagree with the package: the fixture was written from
+the same reading of the surface. A request shape the generated bindings and the SDK both consider
+correct therefore round-trips there and fails for the first time in somebody's production. This
+phase is where it fails here instead: the enrolment's notification-type vocabulary, a per-actor key
+mint and its 401 recovery, the everyday loop's bodies, and a real run answered off a real decision
+list through the card the platform's own notification raises.
+
+Three things are worth knowing before changing it:
+
+- **The claims live in the specs**, not here: they need workerd and a Cap'n Web session. What this
+  module grades is that the suite RAN and that everything in it passed, read from vitest's JSON
+  report rather than the exit code alone, because a suite that collected nothing also exits 0.
+- **The workspace is asked to PARK.** `startBackend` clears `E2E_DECISION_ON_STEPS` for every other
+  phase; this one sets `decisionOnSteps: [0]` for its own workspace over the control channel. A
+  Gatekeeper cannot be smoketested against a deployment that never parks a run.
+- **It is asked for by name.** CI runs it in the Gatekeeper's own non-blocking lane, where a
+  partner-side protocol still in motion cannot red this repo's required checks, so the everything
+  run reports it as NOT RUN rather than leaving the section out.
 
 ## Notes
 
