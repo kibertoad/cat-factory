@@ -239,9 +239,9 @@ would still be arbitrary, since it would leave the score ceilings free to move. 
 worth having is that the guard is INERT until an operator authors a role policy, exactly as
 `{}` / `[]` are the identity everywhere else in this feature.
 
-It binds at the SERVICE (`BoardService.addTask` / `updateBlock`), not in a controller, because the
-field is writable at both doors and the escape is whichever one a caller reaches for. The editor
-travels as a REQUIRED `BlockEditActor` parameter, so a new call site cannot inherit an exemption
+It binds at the SERVICE (`BoardService.addTask` / `updateBlock` / `reparent`), not in a controller,
+because the field is writable at every one of those doors and the escape is whichever one a caller
+reaches for. The editor travels as a REQUIRED `BlockEditActor` parameter, so a new call site cannot inherit an exemption
 from a default, and `blockEditActor.coverage.spec.ts` then classifies each route as attributed or
 deliberately unattributed with a reason: the typecheck forces a value, only the spec forces the
 RIGHT one. That pairing is copied from the run-start attribution above for the same reason: this
@@ -255,6 +255,34 @@ was deciding its own exemption inside a collaborator, where no route stated it. 
 now travels to the layer that can answer it: a service takes the editor and never invents one,
 and every site that names a value is classified wherever it lives. What a module does with an
 actor is a typecheck's business; which actor it is, is a fact about the request.
+
+#### The third door: a task can change policy without changing its `riskPolicyId`
+
+Two doors write the field, and counting doors was the wrong frame, because the field is not what
+resolves. `resolveRiskPolicy` takes a workspace AND an id, so the policy in force can be re-decided
+from either side, and only one of them is a `riskPolicyId` write. A CROSS-HOME reparent is the
+other: dragging a task (or a module carrying tasks) into a service homed on a different workspace
+physically migrates the rows there, and the destination's library is what governs them afterwards.
+A preset id belonging to the source workspace is simply dangling at the destination and falls back
+to ITS default, exactly like a deleted one. So a sandboxed member could drag the task one service
+over and start it live, having selected nothing, with the picker's refusal never consulted.
+
+`reparent` therefore takes the editor too, and its cross-home branch runs the same rule with the
+WORKSPACE varying instead of the id: the policy resolved at the source home against the one
+resolved at the destination home, for EVERY task in the moved subtree (a module carries its tasks,
+and reading only the dragged block would see a module, which pins nothing and could never refuse).
+Same-home moves read no preset at all: same library, same ids, nothing re-decided.
+
+The copy is separate from the picker's (`MOVE_REFUSAL_MESSAGE`), because someone who dragged a task
+between two services picked no policy; told "the merge policy you picked", they would go looking for
+a control they never touched. The refusal `reason` vocabulary is unchanged, so the SPA's existing
+mapping covers both.
+
+The alternative considered and rejected was refusing a role-restricted task's cross-workspace move
+outright, without resolving the destination. It is simpler and strictly more restrictive, and that
+is the problem: it would refuse the move onto a destination that sandboxes the member just as hard,
+which is a move that drops nothing. The narrow-only property is the whole rule, and a guard that
+refuses tightenings is not applying it.
 
 #### What the rule does NOT cover: a service mounted on two boards
 

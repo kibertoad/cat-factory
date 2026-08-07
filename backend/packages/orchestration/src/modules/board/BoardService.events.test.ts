@@ -166,6 +166,7 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
       ACTING,
       'blk_shared',
       { parentId: 'frame_dest', position: { x: 1, y: 2 } },
+      UNATTRIBUTED_BLOCK_EDITOR,
       'cid-xyz',
     )
     const e = emits.find((x) => x.reason === 'block-reparented')
@@ -292,7 +293,12 @@ describe('BoardService targeted vs coarse board changes', () => {
 
   it('does NOT carry a block for a reparent', async () => {
     const { service, emits } = build([frame('frame_1'), frame('frame_2'), task('blk_1', 'frame_1')])
-    await service.reparent(WS, 'blk_1', { parentId: 'frame_2', position: { x: 1, y: 2 } })
+    await service.reparent(
+      WS,
+      'blk_1',
+      { parentId: 'frame_2', position: { x: 1, y: 2 } },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     const e = emits.find((x) => x.reason === 'block-reparented')
     expect(e).toBeDefined()
     expect(e?.carried).toBeNull()

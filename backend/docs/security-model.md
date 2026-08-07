@@ -320,8 +320,13 @@ With that scoping, the pipeline properties are:
   member-tier board write, which made re-pointing the task the way around a sandbox nobody had to
   edit. `refuseRiskPolicySelection` closes it with the narrow-only rule one level up: a selection
   may not drop a restriction the SELECTOR's own role was under (the sandbox, the submission
-  allowlist, or a class the role layer narrowed), at either door that can carry the field (creating
-  a task and patching one). The arms run in the engine's own precedence order, so the reason it
+  allowlist, or a class the role layer narrowed), at every door that can re-decide it: creating a
+  task, patching one, and moving one. That last is not a `riskPolicyId` write at all: the field
+  resolves against the workspace that HOMES the task, so a cross-home reparent (dragging it into a
+  service homed elsewhere, both mounted on the board) migrates the rows to a library where the
+  source's preset is dangling and the destination's default governs instead. Same rule, with the
+  workspace varying rather than the id, applied to every task the move carries.
+  The arms run in the engine's own precedence order, so the reason it
   gives names the restriction the run itself would have been refused on. It compares only the ROLE
   layer, so choosing between presets that treat every initiator alike stays a plain member
   affordance.

@@ -232,13 +232,23 @@ describe('BoardService document-repository reparent gating', () => {
   it('rejects dragging a feature task into a document repository', async () => {
     const { service } = build('feature')
     await expect(
-      service.reparent(WS, 'task_1', { parentId: 'frame_docs', position: { x: 1, y: 1 } }),
+      service.reparent(
+        WS,
+        'task_1',
+        { parentId: 'frame_docs', position: { x: 1, y: 1 } },
+        UNATTRIBUTED_BLOCK_EDITOR,
+      ),
     ).rejects.toThrow(/document repository only accepts document or spike/i)
   })
 
   it('allows a document task into a document repository and re-stamps its type', async () => {
     const { service, patches } = build('document')
-    await service.reparent(WS, 'task_1', { parentId: 'frame_docs', position: { x: 1, y: 1 } })
+    await service.reparent(
+      WS,
+      'task_1',
+      { parentId: 'frame_docs', position: { x: 1, y: 1 } },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     const patch = patches.find((p) => p.id === 'task_1')?.patch
     expect(patch?.parentId).toBe('frame_docs')
     expect(patch?.type).toBe('document')

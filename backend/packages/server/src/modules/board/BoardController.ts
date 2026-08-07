@@ -146,14 +146,16 @@ export function boardController(): Hono<AppEnv> {
   })
 
   buildHonoRoute(app, reparentBlockContract, async (c) => {
-    const block = await c
-      .get('container')
-      .boardService.reparent(
-        param(c, 'workspaceId'),
-        c.req.valid('param').blockId,
-        c.req.valid('json'),
-        c.req.header('x-connection-id') ?? null,
-      )
+    const block = await c.get('container').boardService.reparent(
+      param(c, 'workspaceId'),
+      c.req.valid('param').blockId,
+      c.req.valid('json'),
+      // Dragging a task into a service homed on another workspace re-points it at that
+      // workspace's merge presets, which is the same policy decision a patch makes and is
+      // judged against the mover's own tier (ADR 0037).
+      blockEditActor(c),
+      c.req.header('x-connection-id') ?? null,
+    )
     return c.json(block, 200)
   })
 

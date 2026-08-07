@@ -1,4 +1,11 @@
 import { join } from 'node:path'
+import {
+  addTaskSchema,
+  createPublicTaskSchema,
+  updateBlockSchema,
+  updatePublicTaskSchema,
+} from '@cat-factory/contracts'
+import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import { loadCode } from './coverageScan.js'
 
@@ -83,6 +90,10 @@ const UNATTRIBUTED: Record<string, string> = {
   'orchestration:modules/boardScan/BoardScanService.ts':
     'blueprint reconciliation runs in the engine with no request behind it: it materialises what ' +
     'a scan found rather than what a person chose, so there is no acting tier to read.',
+  'orchestration:modules/execution/PostMergeBoardController.ts':
+    'the post-merge follow-up that materialises the module a merged task named and moves the ' +
+    'task into it: the engine acting on what the run produced, with no session behind it. The ' +
+    'move is also within the one service, so it changes no merge-preset resolution either way.',
 }
 
 describe('board-write sites classify their editor', () => {
@@ -142,5 +153,53 @@ describe('board-write sites classify their editor', () => {
         'blockEditActor(c)',
       )
     }
+  })
+})
+
+/**
+ * The second half of the two `/api/v1` exemptions above, which their reasons LEAN ON and nothing
+ * enforced: an API key holds no tier, so the guard cannot judge what it selects, and both reasons
+ * answer "what if it selects something anyway?" with the claim that the public contract exposes no
+ * preset at all. That was a comment guarding a hole one optional field wide.
+ *
+ * The hole is not hypothetical plumbing: `createTaskWithAttachments` spreads the parsed body
+ * straight onto the internal `AddTaskInput` (`const { ticket, documents, fields, ...rest } = body`),
+ * and `AddTaskInput` carries `riskPolicyId`. So the day the public schema gains that field, every
+ * headless caller can author a task onto any preset in the workspace, unjudged, and the only thing
+ * that would have said so is a sentence in a test's exemption list.
+ *
+ * Both halves are asserted, because they fail differently: a DECLARED field would be a deliberate
+ * contract change that has to come back here, and an unstripped unknown key would be a caller
+ * smuggling one past a schema that never mentions it.
+ */
+describe('the /api/v1 task surface cannot select a merge preset', () => {
+  /**
+   * Read off the INTERNAL schemas rather than written down here, so this spec cannot go vacuous by
+   * outliving the field: rename `riskPolicyId` and these two reads fail, which is the failure that
+   * points at the rename. A public schema is free of the field only if there IS a field.
+   */
+  const INTERNAL_PRESET_FIELD = 'riskPolicyId'
+
+  it('still describes a real field (the internal writes it guards both carry one)', () => {
+    expect(Object.keys(addTaskSchema.entries)).toContain(INTERNAL_PRESET_FIELD)
+    expect(Object.keys(updateBlockSchema.entries)).toContain(INTERNAL_PRESET_FIELD)
+  })
+
+  it('declares no preset field on either public schema', () => {
+    expect(Object.keys(createPublicTaskSchema.entries)).not.toContain(INTERNAL_PRESET_FIELD)
+    expect(Object.keys(updatePublicTaskSchema.entries)).not.toContain(INTERNAL_PRESET_FIELD)
+  })
+
+  it('strips a preset a caller supplies anyway, so the spread onto AddTaskInput cannot carry it', () => {
+    const created = v.parse(createPublicTaskSchema, {
+      title: 'Ship it',
+      [INTERNAL_PRESET_FIELD]: 'mp_open',
+    })
+    expect(created).not.toHaveProperty(INTERNAL_PRESET_FIELD)
+    const patched = v.parse(updatePublicTaskSchema, {
+      title: 'Renamed',
+      [INTERNAL_PRESET_FIELD]: 'mp_open',
+    })
+    expect(patched).not.toHaveProperty(INTERNAL_PRESET_FIELD)
   })
 })
