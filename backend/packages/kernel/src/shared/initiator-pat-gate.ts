@@ -47,8 +47,14 @@ export function createInitiatorPatGate(deps: {
   /**
    * The shared `AppCaches.workspaceSettings` slice when the facade has one. This read runs per
    * dispatch and per gate probe; the slice is invalidated by `WorkspaceSettingsService.update`,
-   * so a turned-off switch takes effect on the next run rather than on a TTL. Absent ⇒ a direct
-   * repository read (the Worker's situation, where the slice is a pass-through anyway).
+   * so a turned-off switch takes effect on the next run rather than on a TTL.
+   *
+   * How fast a REVOCATION of `allowInitiatorPat` lands is therefore a per-runtime fact, and
+   * worth stating because this is a permission gate: on Node the invalidation reaches peers
+   * over the notification bus; on the Worker's coherent profile it rides the generation
+   * directory, so a peer isolate honours the old value for at most the probe window (~5s), or
+   * for the entry's TTL in the one case the directory bump itself failed. Absent ⇒ a direct
+   * repository read.
    */
   cache?: GroupCacheHandle<WorkspaceSettingsCacheValue>
   /**

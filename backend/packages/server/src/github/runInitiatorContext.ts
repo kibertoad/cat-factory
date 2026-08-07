@@ -27,10 +27,14 @@ interface InitiatorContext {
   // the freshness window of that one call, so there is no staleness concern.
   //
   // Memoizing the decrypt alone was not enough, and the gap was invisible on Node: the policy
-  // read rides `AppCaches.workspaceSettings`, which is `enabled: false` in the Worker's
-  // isolate-safe profile (our own mutable state, no cross-isolate invalidation bus). So on
+  // read rides `AppCaches.workspaceSettings`, which the Worker used to run pass-through
+  // (`enabled: false`, our own mutable state with no cross-isolate invalidation bus), so on
   // Cloudflare every un-memoized ask was a live D1 read, five per poll, for the whole life of
-  // a PR's CI. Keyed by the scope's identity fields rather than object identity, so a caller
+  // a PR's CI. The generation directory has since given that slice a real TTL on the coherent
+  // profile, which shortens those reads but does not make this memo redundant: it still
+  // collapses one boundary's fan-out to a single decision, and it is the only part that holds
+  // on the pass-through profile a deployment without the `CACHE_GENERATIONS` binding still
+  // runs. Keyed by the scope's identity fields rather than object identity, so a caller
   // that rebuilds an equal scope inside its own boundary still hits the memo.
   decisionMemo?: Map<string, Promise<string | null>>
 }

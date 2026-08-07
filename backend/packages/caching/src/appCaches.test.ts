@@ -386,10 +386,16 @@ describe('profiles', () => {
   it('keeps the self-verifying document-body cache enabled on the isolate-safe profile', () => {
     // Its entries are external page content re-validated by a cheap version probe,
     // so a Worker isolate can hold a real TTL without a cross-isolate bus.
-    expect(ISOLATE_SAFE_APP_CACHES_PROFILE.fragmentDocumentBody).toEqual(
-      DEFAULT_APP_CACHES_PROFILE.fragmentDocumentBody,
-    )
     expect(ISOLATE_SAFE_APP_CACHES_PROFILE.fragmentDocumentBody.enabled).toBe(true)
+    // …but the isolate profile widens the probe window to cover the WHOLE TTL, because the
+    // Worker's bag is one per isolate: an entry lives its full TTL across requests, and the
+    // claim that keeps this cache enabled there is that the probe bounds its staleness. A
+    // narrower window would leave the opening stretch of every entry's life unprobed.
+    const isolateBody = ISOLATE_SAFE_APP_CACHES_PROFILE.fragmentDocumentBody
+    expect(isolateBody.ttlLeftBeforeRefreshInMsecs).toBe(isolateBody.ttlInMsecs)
+    expect(
+      DEFAULT_APP_CACHES_PROFILE.fragmentDocumentBody.ttlLeftBeforeRefreshInMsecs,
+    ).toBeLessThan(DEFAULT_APP_CACHES_PROFILE.fragmentDocumentBody.ttlInMsecs)
   })
 
   it('keeps the linked-document version probe enabled on the isolate-safe profile', () => {
@@ -421,10 +427,14 @@ describe('profiles', () => {
     // A branch read is re-validated by the `headSha` probe (the git analogue of the
     // document-body version probe), so like `fragmentDocumentBody` it holds a real TTL on
     // a Worker isolate without a cross-isolate invalidation bus.
-    expect(ISOLATE_SAFE_APP_CACHES_PROFILE.repoFiles).toEqual(DEFAULT_APP_CACHES_PROFILE.repoFiles)
     expect(ISOLATE_SAFE_APP_CACHES_PROFILE.repoFiles.enabled).toBe(true)
     // A refresh window is configured so the head-sha probe actually fires.
     expect(DEFAULT_APP_CACHES_PROFILE.repoFiles.ttlLeftBeforeRefreshInMsecs).toBeGreaterThan(0)
+    // And on the isolate profile it covers the whole TTL, for the same reason as
+    // `fragmentDocumentBody`: entries outlive the request that loaded them there, and an
+    // unprobed stretch of a repo-FILE entry's life is a post-op reading pre-commit content.
+    const isolateRepoFiles = ISOLATE_SAFE_APP_CACHES_PROFILE.repoFiles
+    expect(isolateRepoFiles.ttlLeftBeforeRefreshInMsecs).toBe(isolateRepoFiles.ttlInMsecs)
   })
 })
 
@@ -496,5 +506,148 @@ describe('repoProjection cache (slice 3)', () => {
     await caches.repoProjection.get('ws1', 'ws1', load)
     await caches.repoProjection.get('ws1', 'ws1', load)
     expect(calls).toBe(2)
+  })
+})
+
+describe('invocation-scoped loads (isolate runtimes)', () => {
+  // A facade that supplies `currentInvocation` is declaring that its cache bag outlives the
+  // invocations reading it AND that a promise may not cross between them. On Cloudflare that
+  // second half is not a preference: workerd destroys an invocation that awaits another's
+  // promise, at the runtime level, where no `catch` can see it. So what these pin is that the
+  // shared load path is not reachable across invocations at all, only within one.
+
+  /** One profile entry with a real in-memory tier, so a hit is distinguishable from a load. */
+  const PROFILE = {
+    repoProjection: { enabled: true, ttlInMsecs: 60_000, maxGroups: 10, maxItemsPerGroup: 4 },
+  }
+  const repos = (name: string) => [{ githubId: 1, owner: 'acme', name } as never]
+
+  function deferred() {
+    let resolve!: () => void
+    const promise = new Promise<void>((r) => {
+      resolve = r
+    })
+    return { promise, resolve }
+  }
+
+  it('never joins a load started by a different invocation', async () => {
+    let invocation: object | undefined
+    const caches = createAppCaches({
+      profile: PROFILE,
+      currentInvocation: () => invocation,
+    })
+    const gate = deferred()
+    let loads = 0
+    const load = async () => {
+      loads += 1
+      await gate.promise
+      return repos('a')
+    }
+
+    invocation = { id: 'A' }
+    const first = caches.repoProjection.get('ws1', 'ws1', load)
+    await Promise.resolve()
+    // A concurrent invocation misses the same key while A's load is still in flight.
+    invocation = { id: 'B' }
+    const second = caches.repoProjection.get('ws1', 'ws1', load)
+
+    gate.resolve()
+    await Promise.all([first, second])
+    // Two loads, not one: B ran its own rather than awaiting the promise A created.
+    expect(loads).toBe(2)
+  })
+
+  it('still coalesces two reads of one key inside ONE invocation', async () => {
+    const invocation = { id: 'A' }
+    const caches = createAppCaches({ profile: PROFILE, currentInvocation: () => invocation })
+    const gate = deferred()
+    let loads = 0
+    const load = async () => {
+      loads += 1
+      await gate.promise
+      return repos('a')
+    }
+    const both = Promise.all([
+      caches.repoProjection.get('ws1', 'ws1', load),
+      caches.repoProjection.get('ws1', 'ws1', load),
+    ])
+    gate.resolve()
+    await both
+    // Joining is safe here: both promises belong to the same invocation.
+    expect(loads).toBe(1)
+  })
+
+  it('coalesces nothing when there is no invocation to attribute a load to', async () => {
+    // A Workflows step has no ExecutionContext. Two loads that cannot be told apart must be
+    // assumed to belong to different contexts, so the safe reading of "unknown" is "not mine".
+    const caches = createAppCaches({ profile: PROFILE, currentInvocation: () => undefined })
+    const gate = deferred()
+    let loads = 0
+    const load = async () => {
+      loads += 1
+      await gate.promise
+      return repos('a')
+    }
+    const both = Promise.all([
+      caches.repoProjection.get('ws1', 'ws1', load),
+      caches.repoProjection.get('ws1', 'ws1', load),
+    ])
+    gate.resolve()
+    await both
+    expect(loads).toBe(2)
+  })
+
+  it('caches across invocations: the value outlives the one that loaded it', async () => {
+    // The whole point of the isolate-scoped bag. Removing the cross-invocation JOIN must not
+    // cost the cross-invocation HIT.
+    let invocation: object = { id: 'A' }
+    const caches = createAppCaches({ profile: PROFILE, currentInvocation: () => invocation })
+    let loads = 0
+    const load = async () => {
+      loads += 1
+      return repos('a')
+    }
+    await caches.repoProjection.get('ws1', 'ws1', load)
+    invocation = { id: 'B' }
+    await caches.repoProjection.get('ws1', 'ws1', load)
+    expect(loads).toBe(1)
+  })
+
+  it('an invalidation during a load discards the late write instead of resurrecting the entry', async () => {
+    const invocation = { id: 'A' }
+    const caches = createAppCaches({ profile: PROFILE, currentInvocation: () => invocation })
+    const gate = deferred()
+    let loads = 0
+    const load = async () => {
+      loads += 1
+      await gate.promise
+      return repos('a')
+    }
+    const inFlight = caches.repoProjection.get('ws1', 'ws1', load)
+    // The write commits and invalidates while the read above is still loading.
+    await caches.repoProjection.invalidate('ws1', 'ws1')
+    gate.resolve()
+    await inFlight
+
+    // The caller still got its value, but it was NOT published: the next read reloads rather
+    // than serving a snapshot taken before the invalidation.
+    await caches.repoProjection.get('ws1', 'ws1', load)
+    expect(loads).toBe(2)
+  })
+
+  it('stays pass-through when the profile disables the cache', async () => {
+    const invocation = { id: 'A' }
+    const caches = createAppCaches({
+      profile: ISOLATE_SAFE_APP_CACHES_PROFILE,
+      currentInvocation: () => invocation,
+    })
+    let loads = 0
+    const load = async () => {
+      loads += 1
+      return repos('a')
+    }
+    await caches.repoProjection.get('ws1', 'ws1', load)
+    await caches.repoProjection.get('ws1', 'ws1', load)
+    expect(loads).toBe(2)
   })
 })

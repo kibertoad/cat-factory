@@ -67,6 +67,7 @@ import {
 } from './infrastructure/github/sync-consumer'
 import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
+import { runWithExecutionContext } from './infrastructure/requestContext'
 import { runPlatformMetricsSweep } from './infrastructure/observability/platformMetrics'
 import { flushOperationalMetricsForIsolate } from './infrastructure/observability/operationalFlush'
 import { flushOtelLogsForIsolate } from './infrastructure/observability/logExport'
@@ -117,6 +118,8 @@ export { ExecutionContainer } from './infrastructure/containers/ExecutionContain
 export { DeployContainer } from './infrastructure/containers/DeployContainer'
 // Per-workspace WebSocket fan-out hub (real-time execution/board events).
 export { WorkspaceEventsHub } from './infrastructure/durable-objects/WorkspaceEventsHub'
+// Cross-isolate cache-coherency directory (per-group generation counters; see appCachesHost.ts).
+export { CacheGenerationDirectory } from './infrastructure/durable-objects/CacheGenerationDirectory'
 
 // Installation-level AI provisioning extension point: a deployment registers extra
 // model-provider registries at startup (e.g. AWS Bedrock from
@@ -797,6 +800,16 @@ async function handleScheduled(
   env: Env,
   ctx: ExecutionContext,
 ): Promise<void> {
+  // The ambient ExecutionContext (requestContext.ts): the module-scope cache bag's background
+  // work adopts the CURRENT invocation's `waitUntil` through it.
+  return runWithExecutionContext(ctx, () => runScheduled(controller, env, ctx))
+}
+
+async function runScheduled(
+  controller: ScheduledController,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<void> {
   applyLogSettings(env)
   const clock = new SystemClock()
   const tick = new SweepTick(ctx)
@@ -859,10 +872,13 @@ async function handleQueue(
   env: Env,
   ctx: ExecutionContext,
 ): Promise<void> {
-  applyLogSettings(env)
-  const work = routeQueueBatch(batch, env)
-  flushTelemetryAfter(work, env, ctx, new SystemClock())
-  await work
+  // Same ambient-ExecutionContext bracket as `handleScheduled` (requestContext.ts).
+  return runWithExecutionContext(ctx, async () => {
+    applyLogSettings(env)
+    const work = routeQueueBatch(batch, env)
+    flushTelemetryAfter(work, env, ctx, new SystemClock())
+    await work
+  })
 }
 
 /** The routing half of {@link handleQueue}, split out so the flush can bracket the whole batch. */
@@ -957,7 +973,12 @@ export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
         registries,
         onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
       })
-      const response = Promise.resolve(app.fetch(request, env, ctx))
+      // The ambient-ExecutionContext bracket (requestContext.ts): background work the
+      // module-scope cache bag starts while serving this request adopts THIS request's
+      // `waitUntil` through it, resolved at spawn time.
+      const response = Promise.resolve(
+        runWithExecutionContext(ctx, () => app.fetch(request, env, ctx)),
+      )
       // Flush whatever THIS isolate counted while serving the request, after the response.
       flushTelemetryAfter(response, env, ctx, new SystemClock())
       return response
