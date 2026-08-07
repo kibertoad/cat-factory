@@ -311,3 +311,20 @@ describe('GitHubIssuesProvider.searchIssues (issue intake)', () => {
     expect(searchCalls).toEqual([])
   })
 })
+
+describe('GitHubIssuesProvider.repoScope', () => {
+  const provider = new GitHubIssuesProvider({
+    githubClient: fakeClient({}).client,
+    installations,
+  })
+
+  // Declaring `repoScope` is what makes the source repo-backed: the controller resolves a scope
+  // before the search because of it, and the imported-issue list narrows to that scope because
+  // of it. Both callers read the declaration and neither can see the other, so it is pinned here.
+  it('is declared, and matches on GitHub casing rules', () => {
+    expect(provider.repoScope).toBeDefined()
+    expect(provider.repoScope?.matches('kibertoad/simple-service#3', scope)).toBe(true)
+    expect(provider.repoScope?.matches('Kibertoad/Simple-Service#3', scope)).toBe(true)
+    expect(provider.repoScope?.matches('kibertoad/other#3', scope)).toBe(false)
+  })
+})

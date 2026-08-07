@@ -1048,7 +1048,7 @@ runs no freshness check at all, which is not the same fact as a check that ran a
 conclude. `movedDuringRun` is computed from the run's own records: the source moved WHILE the run
 was in flight, so its earlier steps built against something its later ones did not read. Nothing
 here is re-probed at read time, by design: the source has moved on since, so a fresh probe would
-answer about a revision no agent on this run ever saw. Added in 1.25.0 (report `version` 9), so a
+answer about a revision no agent on this run ever saw. Added in 1.26.0 (report `version` 9), so a
 consumer written earlier simply does not see the key.
 
 `observability` carries the links back: `runUrl` (the app's panel, for a person), `trajectoryUrl`
@@ -1081,7 +1081,7 @@ recorded about it (that is the state the run ended on) plus `movedDuringRun`, wh
 changed while the run was in flight and is therefore the one thing that last verdict cannot say.
 `url` is null for an `upload`, which has no source page to open, and a null `freshness` means the
 deployment runs no freshness check at all rather than a check that ran and could not conclude. Its
-`gap` when absent is `none_linked` or `run_unavailable`. Added in 1.25.0 (outcome `version` 2).
+`gap` when absent is `none_linked` or `run_unavailable`. Added in 1.26.0 (outcome `version` 2).
 
 Both are composed by the same code over one read of the run's evidence, so the coverage counts
 (`met` / `notMet` / `notCovered` / `regressions` / `total`) and the regression rule are the same

@@ -126,18 +126,39 @@ const API_PREFIX = '/api/v1'
 // headlessly: four of its seven codes name a field of that bag, and until now the surface named a
 // remedy it did not offer.
 //
-// 1.25.0: the verification report gains a `context` section and the run outcome summary a
+// 1.22.0 belongs to `GET /api/v1/runs/:runId/outcome` and the verification report's new optional
+// `requirements.unmatchedVerdicts`. Two diffs claiming one number is a lie a consumer pinning
+// the version would act on, so re-read this line after any merge rather than trusting that the
+// VERSION auto-merged clean.
+// 1.24.0, not 1.23.0: `PATCH /api/v1/tasks/:taskId` accepts `fields`, the task's per-type bag,
+// merged over what the task already carries. Additive (a new optional request field; a caller that
+// never sends one is unaffected), and it is what makes the pre-dispatch input gate's findings
+// FIXABLE headlessly: four of its seven codes name a field of that bag, and until now the surface
+// named a remedy it did not offer. This branch first claimed 1.23.0, which main then published for
+// `x-min-scope` while the branch was in flight: the collision surfaced as a conflict on this
+// comment block only because each version step writes its own paragraph here, never as one on the
+// VERSION line, which auto-merges clean to a number main has already used.
+// 1.25.0, not 1.24.0: `gitlab` joins the `TaskSourceKind` enum, GitLab Issues being a fourth
+// built-in task source. Additive on a CLOSED vocabulary, which is the shape the SDKs are built to
+// tolerate: they map an unknown enum member through rather than refusing it, so a client compiled
+// against 1.24.0 keeps parsing every response it already understood and simply never asks for the
+// new source. No existing member changes meaning and no persisted `source` value moves.
+//
+// This branch has now lost that race TWICE (it claimed 1.22.0, then 1.23.0, then 1.24.0, each
+// published by main while the branch was in flight), which is the paragraph above's point made
+// again: the VERSION line auto-merges clean to a number main has already used, and only this
+// comment block conflicts. Re-read it after every merge.
+//
+// 1.26.0: the verification report gains a `context` section and the run outcome summary a
 // `sources` one, both saying which linked pages a run's agents read and at which revision.
 // Additive on both surfaces (a new section object beside the existing ones, on two endpoints and
 // inside the PR body's fenced block), and inert for a consumer that ignores it: every section it
 // already reads is byte-for-byte unchanged. `PR_VERIFICATION_REPORT_VERSION` steps to 9 and
 // `RUN_OUTCOME_VERSION` to 2 with it.
 //
-// This branch has now claimed 1.22.0, 1.23.0 and 1.24.0 in turn, each published by main while it
-// was in flight. The collision surfaces as a conflict on THIS comment block, because each version
-// step writes its own paragraph, and never on the VERSION line, which auto-merges clean to a
-// number main has already used. So re-read this line after every merge rather than trusting it.
-const API_VERSION = '1.25.0'
+// FOURTH loss of that race for this branch (1.22.0, 1.23.0, 1.24.0, 1.25.0), which is the two
+// paragraphs above making the same point a third time. Re-read this after every merge.
+const API_VERSION = '1.26.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

@@ -127,13 +127,13 @@ import {
   selectSandboxDeps,
   selectFoundationalServiceDeps,
   selectSkillLibraryDeps,
-  selectTasksDeps,
   selectTraceSink,
   selectWorkRunner,
 } from './container.js'
 import { selectRecurringDeps } from './container-tracker-deps.js'
 import { selectDocumentsDeps } from './container-documents-deps'
 import { selectGitHubDeps } from './github-deps.js'
+import { selectTasksDeps } from './tasks-deps.js'
 import type { D1Database } from '@cloudflare/workers-types'
 import { buildExternalNotificationChannel, selectSlackDeps } from './container-notification-deps'
 

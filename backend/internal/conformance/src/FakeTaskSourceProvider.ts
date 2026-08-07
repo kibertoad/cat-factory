@@ -9,12 +9,16 @@ import type {
   TaskSourceDiagnostic,
   TaskSourceKind,
   TaskSourceProvider,
+  TaskRepoScopeRules,
   NormalizedTaskConnection,
 } from '@cat-factory/kernel'
 import {
   GITHUB_ISSUES_DESCRIPTOR,
+  GITLAB_ISSUES_DESCRIPTOR,
   JIRA_DESCRIPTOR,
   LINEAR_TASK_DESCRIPTOR,
+  githubIssuesLogic,
+  gitlabIssuesLogic,
 } from '@cat-factory/integrations'
 import { fakeTrackerWebhookAdapter } from './fakeTrackerWebhook.js'
 
@@ -27,7 +31,25 @@ import { fakeTrackerWebhookAdapter } from './fakeTrackerWebhook.js'
 const BUILTIN_DESCRIPTORS: Record<string, TaskSourceDescriptor> = {
   jira: JIRA_DESCRIPTOR,
   github: GITHUB_ISSUES_DESCRIPTOR,
+  gitlab: GITLAB_ISSUES_DESCRIPTOR,
   linear: LINEAR_TASK_DESCRIPTOR,
+}
+
+/**
+ * The built-in REPO-BACKED sources and the real matcher each one declares, for the same reason
+ * {@link BUILTIN_DESCRIPTORS} exists: a fake standing in for a shipped source has to present the
+ * same CAPABILITIES, not just the same labels. Repo-backing is routed on well before the provider
+ * is reached (the HTTP layer resolves the searching service's repository because of it, and the
+ * imported-issue list narrows because of it), so a fake that omits it exercises a path the real
+ * source never takes, and the assertion that a repo-backed search refuses an unlinked service
+ * would pass against a source the platform considers repo-less.
+ *
+ * Absent for the repo-LESS built-ins (Jira, Linear) and for any generated `<ns>:<name>` source,
+ * which is what makes their `null` scope legal.
+ */
+const BUILTIN_REPO_SCOPES: Record<string, TaskRepoScopeRules | undefined> = {
+  github: { matches: githubIssuesLogic.githubIssueInRepoScope },
+  gitlab: { matches: gitlabIssuesLogic.gitlabIssueInRepoScope },
 }
 
 /**
@@ -58,6 +80,8 @@ function descriptorFor(kind: TaskSourceKind): TaskSourceDescriptor {
  */
 export class FakeTaskSourceProvider implements TaskSourceProvider {
   readonly descriptor: TaskSourceDescriptor
+  /** Repo-backing, mirrored from the shipped source this fake stands in for (see the map). */
+  readonly repoScope: TaskRepoScopeRules | undefined
   /**
    * Inbound-webhook capability, so the shared suite can drive the REAL receiver → gateway →
    * `TrackerWebhookService` path on every facade (see `fakeTrackerWebhook.ts` for why the
@@ -85,6 +109,7 @@ export class FakeTaskSourceProvider implements TaskSourceProvider {
     issues: Record<string, Partial<TaskContent>> = {},
   ) {
     this.descriptor = descriptorFor(kind)
+    this.repoScope = BUILTIN_REPO_SCOPES[kind]
     for (const [externalId, partial] of Object.entries(issues)) this.set(externalId, partial)
   }
 

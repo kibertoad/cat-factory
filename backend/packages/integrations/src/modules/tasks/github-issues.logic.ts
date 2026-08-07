@@ -306,6 +306,20 @@ function isScopedRepo(id: GitHubIssueExternalId, scope: TaskSearchRepoScope): bo
   )
 }
 
+/**
+ * The provider's `TaskRepoScopeRules` matcher: whether a STORED external id belongs to the
+ * scoped repository. Case-insensitive, because GitHub owner/repo names are, and the two sides
+ * come from different places (the id was minted from user input, the scope from the repo
+ * projection), so the casing is routinely not the same for one repository.
+ *
+ * An id that does not parse is out of scope: the row is stale or hand-edited, and a repository it
+ * cannot name is not this one.
+ */
+export function githubIssueInRepoScope(externalId: string, scope: TaskSearchRepoScope): boolean {
+  const id = parseGitHubIssueExternalId(externalId)
+  return id ? isScopedRepo(id, scope) : false
+}
+
 /** Cap on a candidate's rendered body; the ranking judges actionability, not the full trace. */
 const MAX_CANDIDATE_DESCRIPTION_CHARS = 1_200
 

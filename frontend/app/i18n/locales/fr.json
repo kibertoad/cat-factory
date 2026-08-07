@@ -345,6 +345,7 @@
       "intake": "Prise en charge des tickets",
       "intakeHint": "Chaque exécution sélectionne un ticket ouvert correspondant dans le suivi et le traite de bout en bout.",
       "intakeNoSources": "Connectez d'abord une source de tâches pour en extraire des tickets.",
+      "intakeNoIntakeSources": "Une source de tâches est connectée, mais aucune des sources connectées ne peut encore exécuter une recherche de tickets planifiée.",
       "intakeGithubRepo": "Dépôt",
       "intakeBoardId": "ID du tableau",
       "intakeBoardIdHelp": "Le tableau, projet ou file d’attente auquel ce traqueur limite la prise en charge. Son format est défini par le traqueur.",
@@ -2759,27 +2760,21 @@
         "linearTeamSearchPlaceholder": "Rechercher des équipes…"
       },
       "vendor": {
-        "github": "GitHub Issues",
-        "jira": "Jira",
-        "linear": "Linear"
+        "github": "GitHub Issues"
       },
       "linking": {
         "heading": "Lier des tickets comme contexte",
         "description": "Lorsqu'une source est proposée, vous pouvez importer ses tickets et les rattacher à une tâche, afin que les agents voient la description du ticket et les commentaires pendant l'implémentation. C'est indépendant du suivi de création ci-dessus.",
-        "github": {
-          "available": "S'appuie sur votre GitHub App installée : aucun identifiant nécessaire.",
-          "unavailable": "Installez la GitHub App (Intégrations → GitHub) pour proposer cette source."
-        },
         "checkSetup": "Vérifier la configuration",
-        "install": "Installer",
         "connected": "Connecté.",
-        "jira": {
-          "connectHint": "Connectez-vous avec un compte Jira et un jeton d'API."
+        "connect": "Connecter",
+        "state": {
+          "ridesConnected": "Utilise la connexion {provider} de cet espace de travail, donc aucun identifiant propre n'est nécessaire.",
+          "ridesMissing": "Connectez {provider} dans Intégrations pour proposer cette source.",
+          "notConnected": "Pas encore connecté."
         },
-        "linear": {
-          "connectHint": "Connectez-vous avec une clé d'API personnelle Linear."
-        },
-        "connect": "Connecter"
+        "connectProvider": "Connecter {provider}",
+        "none": "Ce déploiement n'a aucune source de tâches configurée."
       },
       "writeback": {
         "heading": "Écriture en retour",

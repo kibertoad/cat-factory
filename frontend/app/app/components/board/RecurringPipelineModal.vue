@@ -175,8 +175,11 @@ const intakeDispatch = computed<'queue' | 'per-ticket'>(() =>
   isBugIntake.value ? 'queue' : 'per-ticket',
 )
 
-// Sources that can back intake right now (connected / App-installed AND enabled).
-const intakeSources = computed(() => tasks.offeredSources)
+// Sources that can back intake right now: connected / App-installed AND enabled, AND able to run
+// the predicate search intake fires. The last is not a refinement of the first two — a source
+// without it saves a schedule that can never produce a ticket — so it is asked of the server
+// (`supportsIntake`, derived from the registered provider) rather than inferred from the id here.
+const intakeSources = computed(() => tasks.offeredSources.filter((s) => s.supportsIntake))
 
 watch(open, (isOpen) => {
   if (!isOpen) return
@@ -490,8 +493,14 @@ async function add() {
           <p class="text-[11px] text-slate-500">
             {{ t('board.recurring.intakeHint') }}
           </p>
+          <!-- Two different remedies: connect something, versus connect something ELSE. A source
+               that is connected but cannot run a scheduled search is not an absent connection. -->
           <p v-if="intakeSources.length === 0" class="text-[11px] text-amber-500">
-            {{ t('board.recurring.intakeNoSources') }}
+            {{
+              tasks.anyOffered
+                ? t('board.recurring.intakeNoIntakeSources')
+                : t('board.recurring.intakeNoSources')
+            }}
           </p>
           <div v-else class="flex flex-wrap gap-1">
             <UButton

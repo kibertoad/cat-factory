@@ -1,10 +1,12 @@
 import {
   GitHubIssuesProvider,
+  GitLabIssuesProvider,
   IssueWritebackService,
   JiraProvider,
   LinearTaskProvider,
   VcsPatConnectionService,
   githubIssuesLogic,
+  gitlabWebBaseFromApiBase,
 } from '@cat-factory/integrations'
 import { GitLabIdentityResolver, buildGitLabConnectClient } from '@cat-factory/gitlab'
 import type {
@@ -93,16 +95,17 @@ export interface NodeTasksDeps {
 }
 
 /**
- * Wire the task-source integration for the Node facade (Jira + Linear always; GitHub Issues
- * only when a GitHub client is available, since it reuses the workspace's App installation).
- * Mirrors the Cloudflare facade's `config.github.enabled` gate (see CLAUDE.md parity rule).
- * Whether a workspace OFFERS a source is the per-workspace toggle (task_source_settings), not
- * a deployment env gate.
+ * Wire the task-source integration for the Node facade (Jira + Linear always; the two VCS-backed
+ * issue sources only when their client is available, since each reuses the workspace's own VCS
+ * connection). Mirrors the Cloudflare facade's gating (see CLAUDE.md parity rule). Whether a
+ * workspace OFFERS a source is the per-workspace toggle (task_source_settings), not a deployment
+ * env gate.
  */
 function selectNodeTasksDeps(
   config: AppConfig,
   db: DrizzleDb,
   githubClient: GitHubClient | undefined,
+  gitlabClient: GitHubClient | undefined,
   installations: GitHubInstallationRepository,
 ): NodeTasksDeps {
   if (!config.tasks.enabled || !config.tasks.encryptionKey) return { deps: {} }
@@ -113,6 +116,19 @@ function selectNodeTasksDeps(
   // credentials of its own and resolves the installation per issue.
   if (githubClient) {
     providers.push(new GitHubIssuesProvider({ githubClient, installations }))
+  }
+  // GitLab Issues are the same credentialless shape over whichever client can read the
+  // workspace's GitLab connection (the caller resolves which). Fed that client DIRECTLY, never
+  // the provider-routing one: this source answers GitLab questions only, and the availability
+  // check keys on the connection row's own provider.
+  if (gitlabClient) {
+    providers.push(
+      new GitLabIssuesProvider({
+        gitlabClient,
+        installations,
+        webBaseUrl: gitlabWebBaseFromApiBase(config.gitlab?.apiBase),
+      }),
+    )
   }
 
   const taskConnectionRepository = new DrizzleTaskConnectionRepository(
@@ -265,12 +281,38 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
   // distinct from its GitLab engine fallback.
   const engineVcsClient: GitHubClient | undefined = githubClient ?? gitlabEngineClient
 
-  // Task-source integration (Jira + GitHub issues). Tenants connect their own Jira
-  // site through the UI (credentials stored per-workspace, encrypted at rest); the
-  // tracker resolves each workspace's own credentials from this same store. GitHub
-  // issues reuse the workspace's installed App, so they wire only when `githubClient`
-  // is available — kept here, after the client is built, for parity with the Worker.
-  const tasks = selectNodeTasksDeps(config, db, githubClient, githubInstallationRepository)
+  // Per-workspace GitLab PAT connect (opt-in): the GitLab-backed client whose token source
+  // decrypts each workspace's sealed PAT, plus the connect service the controller drives.
+  // Built HERE rather than inside the module-deps builder because two consumers need it: the
+  // `github` module's routing client and the GitLab Issues task source below.
+  const gitlabConnect = selectVcsConnectDeps({
+    config,
+    installations: githubInstallationRepository,
+    workspaceRepository: input.workspaceRepository,
+    clock,
+  })
+
+  // The client the GitLab Issues task source reads through. A hosted deployment uses the
+  // per-workspace connect client. LOCAL mode has no such connection and needs no second client:
+  // it is single-provider, and the injected client already ROUTES by the deployment credential,
+  // so the same client backs both VCS-backed sources there. Registering both is not ambiguous,
+  // because availability is the connection row's own `provider` — exactly one of the two is ever
+  // offered, and in local GitLab mode that is this one rather than a GitHub Issues source whose
+  // `owner/repo#n` grammar cannot spell a subgroup project.
+  const gitlabTasksClient = gitlabConnect?.client ?? githubClientOverride
+
+  // Task-source integration (Jira + Linear + the two VCS-backed issue sources). Tenants connect
+  // their own Jira site through the UI (credentials stored per-workspace, encrypted at rest); the
+  // tracker resolves each workspace's own credentials from this same store. GitHub and GitLab
+  // issues reuse the workspace's own VCS connection, so each wires only when its client is
+  // available — kept here, after the clients are built, for parity with the Worker.
+  const tasks = selectNodeTasksDeps(
+    config,
+    db,
+    githubClient,
+    gitlabTasksClient,
+    githubInstallationRepository,
+  )
 
   // Issue-tracker writeback (comment-on-PR-open + close-on-merge of a task's linked
   // issue), gated per workspace + per task inside the provider.
@@ -374,6 +416,7 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
   const githubModuleDeps = buildNodeGitHubModuleDeps({
     input,
     githubClient,
+    gitlabConnect,
   })
 
   return {
@@ -438,13 +481,14 @@ function buildNodeGitHubModuleDeps(args: {
   input: NodeGitHubDepsInput
   /** The engine/App client already resolved by the caller (an override or App-minted). */
   githubClient: GitHubClient | undefined
+  /** The per-workspace GitLab connect wiring, resolved once by the caller (two consumers). */
+  gitlabConnect: ReturnType<typeof selectVcsConnectDeps>
 }): Partial<CoreDependencies> {
-  const { input, githubClient } = args
+  const { input, githubClient, gitlabConnect } = args
   const {
     config,
     db,
     sourced,
-    clock,
     appRegistry,
     githubInstallationRepository,
     repoProjectionRepository,
@@ -457,17 +501,11 @@ function buildNodeGitHubModuleDeps(args: {
   // projection repos here makes the inline ingest actually persist (parity with the
   // Worker, which fans the same sync through a queue/Workflow). `canCreateRepos` /
   // `workflowsGranted` come from the App registry when present (advisory).
-  // Per-workspace GitLab PAT connect (opt-in): when GitLab is configured AND a sealing key is
-  // present, wire a GitLab-backed client whose token source decrypts each workspace's sealed PAT,
-  // plus the connect service that validates + seals a pasted PAT. This lets a workspace connect
-  // GitLab through the UI and reuse the SAME GitHub-shaped projection/sync surface. Mirrors the
-  // Worker's `selectGitHubDeps` (per "keep the runtimes symmetric").
-  const gitlabConnect = selectVcsConnectDeps({
-    config,
-    installations: githubInstallationRepository,
-    workspaceRepository: input.workspaceRepository,
-    clock,
-  })
+  // The per-workspace GitLab PAT connect wiring (resolved by the caller): a GitLab-backed client
+  // whose token source decrypts each workspace's sealed PAT, plus the connect service that
+  // validates + seals a pasted PAT. This lets a workspace connect GitLab through the UI and reuse
+  // the SAME GitHub-shaped projection/sync surface. Mirrors the Worker's `selectGitHubDeps` (per
+  // "keep the runtimes symmetric").
   const gitlabConnectClient = gitlabConnect?.client
   const vcsConnectionService = gitlabConnect?.service
 
