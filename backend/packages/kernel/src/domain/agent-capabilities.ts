@@ -323,6 +323,11 @@ export interface UnavailableToolServer {
   id: string
   label: string
   /**
+   * Mirrored on the wire as contracts' `toolServerUnavailableReasonSchema`, which is what the run
+   * surface renders a chip from; the two member lists are pinned together by a conformity test in
+   * `agent-capabilities.test.ts`. A member added here and not there reaches an operator as a chip
+   * with no copy.
+   *
    * Each member names a DIFFERENT fix, which is why they are not folded together:
    *
    * - `reserved_secret` is kept apart from `missing_secret` because a missing secret is a variable

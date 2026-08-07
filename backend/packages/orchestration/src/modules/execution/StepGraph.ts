@@ -104,6 +104,11 @@ export class StepGraph {
     // — this one can legitimately go present → absent (a looped-back `repro-test` step has its
     // `custom` cleared above, so the re-dispatch resolves no spec and nothing overwrites it).
     step.reproduction = undefined
+    // Drop the prior dispatch's tool-server (MCP) resolution for the same reason: it is a record
+    // of one dispatch, not of the step, and a deployment that has since retired a registration
+    // would leave the re-run claiming it wired a server it never asked for. The re-dispatch
+    // rewrites it whole.
+    step.toolServers = undefined
     step.rework = undefined
     // Clear the live container handle + the deployer fan-out state, so a re-run of a `deployer`
     // step re-provisions from scratch (a stale `deployEnvs` would otherwise let it skip straight to

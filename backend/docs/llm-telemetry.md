@@ -13,7 +13,10 @@ The sinks:
 - **`agent_context_snapshots`**: the complete context an agent was PROVIDED per dispatch,
   including the full content of injected `.cat-context/*` files, which the agent reads via tools
   and which therefore never reach proxy telemetry. A redacted allow-list projection, never a
-  token or credential-bearing URL.
+  token or credential-bearing URL. Most structural facts ride the untyped `extras` bag, which the
+  observability panel renders as a JSON dump; a fact an operator OPENS the panel to find gets a
+  column of its own instead (`tool_servers`, the MCP servers the dispatch wired and dropped with
+  the reason). Absent and empty stay distinct there: a kind that declared none records nothing.
 - **`agent_search_queries`**: one row per web search a container agent PERFORMED.
 - **`agent_tool_calls`**: one row per tool invocation an agent MADE, in the order it made them:
   the TRAJECTORY. Where the snapshot keeps what an agent was given and `llm_call_metrics` what

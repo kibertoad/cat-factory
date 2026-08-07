@@ -1319,6 +1319,32 @@
       "subtasks": "Subtareas · {completed}/{total}",
       "standardsApplied": "Estándares aplicados",
       "standardsAppliedHint": "Los estandares de buenas practicas incorporados al prompt de sistema de este paso. Un agente que implementa recibe una version condensada de cada uno; los revisores y planificadores reciben el texto completo.",
+      "toolServers": {
+        "heading": "Servidores de herramientas (MCP)",
+        "hint": "Los servidores MCP que este envío conectó al agente, más los que su tipo de agente declaró y no se pudieron conectar. Los servidores se registran en el código del despliegue; las credenciales y las concesiones OAuth son por espacio de trabajo.",
+        "wired": "Conectado",
+        "unavailableCount": "{count} no disponible | {count} no disponibles",
+        "reason": {
+          "harness_unsupported": "El harness no puede servirlo",
+          "transport_unsupported": "Transporte inalcanzable",
+          "missing_secret": "Falta la credencial",
+          "reserved_secret": "Nombre de clave reservado",
+          "oauth_not_connected": "Sin conectar",
+          "oauth_token_failed": "No se pudo emitir el token",
+          "over_budget": "Supera el límite por envío",
+          "unknown": "Motivo no reconocido"
+        },
+        "remedy": {
+          "harness_unsupported": "Este paso se ejecutó en una CLI de agente que no habla MCP, o en una que la declaración excluye. Cambia el harness del paso o la lista de harnesses del servidor.",
+          "transport_unsupported": "La CLI habla MCP pero no alcanza el transporte de este servidor. Declara un servidor stdio para él, o ejecuta el paso en una CLI que alcance HTTP.",
+          "missing_secret": "Una credencial que la declaración exige no está configurada para este espacio de trabajo. Añádela en las credenciales de capacidades.",
+          "reserved_secret": "La declaración nombra una clave que pertenece a la configuración de la plataforma. Cambia la declaración; definir esa variable es justo lo que no ayudará.",
+          "oauth_not_connected": "Nadie ha conectado todavía este espacio de trabajo con el servidor. Conéctalo desde los ajustes de servidores de herramientas.",
+          "oauth_token_failed": "Hay una concesión registrada que no produjo ningún token de acceso. Vuelve a conectarla desde los ajustes de servidores de herramientas.",
+          "over_budget": "El tipo de agente declara más servidores de los que lleva un envío. Recorta la lista del tipo.",
+          "unknown": "Registrado como «{reason}», que esta versión ya no reconoce. La ejecución es anterior a un cambio en la lista de motivos."
+        }
+      },
       "decision": "Decisión",
       "awaitingChoice": "Esperando una elección humana",
       "approvalGate": "Verificación de aprobación",

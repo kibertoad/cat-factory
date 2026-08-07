@@ -34,7 +34,11 @@ import type { OwnServiceContext } from '../domain/block-tree.js'
 import type { CustomTaskTypeContext } from '../domain/task-type-context.js'
 import type { ContainerEvictionKind } from './runner-transport.js'
 import type { HarnessFailureCause } from '../domain/harness-failure.js'
-import type { AgentEffortReport, InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
+import type {
+  AgentEffortReport,
+  DispatchedToolServer,
+  InitiativePresetPhaseTemplate,
+} from '@cat-factory/contracts'
 
 // Port for "an agent doing its work". The execution engine calls this to perform
 // each pipeline step. An agent either produces a work product or asks for a
@@ -927,6 +931,21 @@ export interface AgentJobHandle {
    * the run's repo origin. Absent for executors that don't operate on a repo (inline agents, tests).
    */
   repo?: { owner: string; name: string; baseBranch?: string; provider?: string }
+  /**
+   * What this dispatch decided about the tool servers (MCP) its agent kind declared: the ones
+   * wired into the agent's CLI and the ones dropped, each with the reason.
+   *
+   * Resolved at dispatch and carried here for the same reason {@link model} and {@link search}
+   * are: the poll site rebuilds the handle from the step alone and cannot re-derive it. It
+   * depends on the resolved HARNESS, the facade-wired secret resolver and this workspace's OAuth
+   * grants, none of which survives into a poll, so a step whose Slack tools never appeared would
+   * otherwise leave the reason nowhere but a backend `warn` line and the agent's own prompt.
+   *
+   * Absent when the kind declared none, which is every built-in agent on a stock deployment; a
+   * dispatch that resolved at least one declaration carries the WHOLE list, wired entries
+   * included, because "two of three" and "two of two" are different facts about the same step.
+   */
+  toolServers?: DispatchedToolServer[]
 }
 
 /** The outcome of polling an {@link AgentJobHandle}. */

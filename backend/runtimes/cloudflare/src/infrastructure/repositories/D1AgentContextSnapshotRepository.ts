@@ -7,6 +7,7 @@ import type {
   AgentContextSnapshotIndex,
   AgentContextSnapshotRepository,
 } from '@cat-factory/kernel'
+import type { DispatchedToolServer } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface SnapshotRow {
@@ -23,6 +24,7 @@ interface SnapshotRow {
   fragments: string
   context_files: string
   extras: string
+  tool_servers: string
 }
 
 function parseArray<T>(text: string): T[] {
@@ -74,6 +76,7 @@ function rowToIndex(row: IndexRow): AgentContextSnapshotIndex {
 }
 
 function rowToSnapshot(row: SnapshotRow): AgentContextSnapshot {
+  const toolServers = parseArray<DispatchedToolServer>(row.tool_servers)
   return {
     id: row.id,
     workspaceId: row.workspace_id,
@@ -88,6 +91,10 @@ function rowToSnapshot(row: SnapshotRow): AgentContextSnapshot {
     fragments: parseArray<AgentContextFragment>(row.fragments),
     contextFiles: parseArray<AgentContextFile>(row.context_files),
     extras: parseObject(row.extras),
+    // Absent rather than empty when the dispatch resolved no declarations, so a stock run's
+    // snapshot does not render an empty "MCP tool servers" section on every step. A row written
+    // before the column existed reads as '[]' (the column's default), which is that same fact.
+    ...(toolServers.length ? { toolServers } : {}),
   }
 }
 
@@ -127,8 +134,9 @@ export class D1AgentContextSnapshotRepository implements AgentContextSnapshotRep
       .prepare(
         `INSERT INTO agent_context_snapshots
            (id, workspace_id, execution_id, agent_kind, step_index, created_at,
-            model, harness, system_prompt, user_prompt, fragments, context_files, extras)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)${
+            model, harness, system_prompt, user_prompt, fragments, context_files, extras,
+            tool_servers)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)${
            ignoreDuplicateId ? ' ON CONFLICT(id) DO NOTHING' : ''
          }`,
       )
@@ -146,6 +154,7 @@ export class D1AgentContextSnapshotRepository implements AgentContextSnapshotRep
         JSON.stringify(snapshot.fragments),
         JSON.stringify(snapshot.contextFiles),
         JSON.stringify(snapshot.extras),
+        JSON.stringify(snapshot.toolServers ?? []),
       )
   }
 

@@ -1907,6 +1907,32 @@
       "subtasks": "Sotto-attivita' · {completed}/{total}",
       "standardsApplied": "Standard applicati",
       "standardsAppliedHint": "Gli standard di buone pratiche inseriti nel prompt di sistema di questo step. Un agente che implementa ne riceve una versione condensata; revisori e pianificatori ricevono il testo completo.",
+      "toolServers": {
+        "heading": "Server di strumenti (MCP)",
+        "hint": "I server MCP che questo invio ha collegato all'agente, più quelli che il suo tipo di agente ha dichiarato e non è stato possibile collegare. I server si registrano nel codice del deployment; credenziali e concessioni OAuth sono per spazio di lavoro.",
+        "wired": "Collegato",
+        "unavailableCount": "{count} non disponibile | {count} non disponibili",
+        "reason": {
+          "harness_unsupported": "L'harness non può servirlo",
+          "transport_unsupported": "Trasporto non raggiungibile",
+          "missing_secret": "Credenziale mancante",
+          "reserved_secret": "Nome di chiave riservato",
+          "oauth_not_connected": "Non connesso",
+          "oauth_token_failed": "Token non rilasciato",
+          "over_budget": "Oltre il limite per invio",
+          "unknown": "Motivo non riconosciuto"
+        },
+        "remedy": {
+          "harness_unsupported": "Questo passo è stato eseguito su una CLI di agente che non parla MCP, o su una che la dichiarazione esclude. Cambia l'harness del passo, oppure l'elenco di harness del server.",
+          "transport_unsupported": "La CLI parla MCP ma non raggiunge il trasporto di questo server. Dichiara un server stdio al suo posto, oppure esegui il passo su una CLI che raggiunge HTTP.",
+          "missing_secret": "Una credenziale richiesta dalla dichiarazione non è impostata per questo spazio di lavoro. Aggiungila nelle credenziali delle capability.",
+          "reserved_secret": "La dichiarazione indica una chiave che appartiene alla configurazione della piattaforma. Cambia la dichiarazione; impostare quella variabile è proprio ciò che non aiuterà.",
+          "oauth_not_connected": "Nessuno ha ancora connesso questo spazio di lavoro al server. Collegalo dalle impostazioni dei server di strumenti.",
+          "oauth_token_failed": "Una concessione è registrata e non ha prodotto alcun token di accesso. Riconnettila dalle impostazioni dei server di strumenti.",
+          "over_budget": "Il tipo di agente dichiara più server di quanti ne trasporti un singolo invio. Riduci l'elenco del tipo.",
+          "unknown": "Registrato come «{reason}», che questa versione non riconosce più. L'esecuzione precede una modifica all'elenco dei motivi."
+        }
+      },
       "decision": "Decisione",
       "awaitingChoice": "In attesa di una scelta umana",
       "approvalGate": "Gate di approvazione",

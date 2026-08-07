@@ -626,6 +626,9 @@ export class DrizzleLlmCallMetricRepository implements LlmCallMetricRepository {
 type AgentContextSnapshotRow = typeof agentContextSnapshots.$inferSelect
 
 function rowToAgentContextSnapshot(row: AgentContextSnapshotRow): AgentContextSnapshot {
+  const toolServers = parseJsonArray<NonNullable<AgentContextSnapshot['toolServers']>[number]>(
+    row.tool_servers,
+  )
   return {
     id: row.id,
     workspaceId: row.workspace_id,
@@ -640,6 +643,9 @@ function rowToAgentContextSnapshot(row: AgentContextSnapshotRow): AgentContextSn
     fragments: parseJsonArray<AgentContextSnapshot['fragments'][number]>(row.fragments),
     contextFiles: parseJsonArray<AgentContextSnapshot['contextFiles'][number]>(row.context_files),
     extras: parseAgentContextExtras(row.extras),
+    // Absent rather than empty when the dispatch resolved no declarations, which is the same fact a row
+    // written before this column existed carries, since it defaults to '[]'.
+    ...(toolServers.length ? { toolServers } : {}),
   }
 }
 
@@ -679,6 +685,7 @@ function snapshotValues(snapshot: AgentContextSnapshot) {
     fragments: JSON.stringify(snapshot.fragments),
     context_files: JSON.stringify(snapshot.contextFiles),
     extras: JSON.stringify(snapshot.extras),
+    tool_servers: JSON.stringify(snapshot.toolServers ?? []),
   }
 }
 

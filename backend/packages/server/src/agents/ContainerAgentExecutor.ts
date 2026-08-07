@@ -49,6 +49,7 @@ import { ModelRouter } from './ModelRouter.js'
 import { buildContextFiles, renderSkillsForHarness } from './contextFiles.js'
 import {
   dispatchToolServerDeps,
+  dispatchedToolServersFor,
   resolveDispatchToolServers,
   type ResolvedToolServers,
 } from './toolServers.js'
@@ -539,6 +540,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       repo: repoSummary,
       ...(subscriptionTokenId ? { subscriptionTokenId } : {}),
       ...(context.initiatedByUserId ? { initiatedByUserId: context.initiatedByUserId } : {}),
+      // What this dispatch decided about the kind's declared tool servers, for the engine to
+      // record on the step: the poll site rebuilds this handle from the step alone.
+      ...dispatchedToolServersFor(toolServers),
     }
   }
 

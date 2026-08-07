@@ -112,7 +112,7 @@ export type {
   EnvironmentStatus as HumanTestEnvironmentStatus,
 } from '@cat-factory/contracts'
 
-import type { CompanionVerdict } from '@cat-factory/contracts'
+import type { CompanionVerdict, DispatchedToolServer } from '@cat-factory/contracts'
 
 // ---------------------------------------------------------------------------
 // Frontend-only shapes with no exported contract type. The contract defines them
@@ -172,4 +172,9 @@ export interface AgentContextSnapshot {
   fragments: AgentContextFragment[]
   contextFiles: AgentContextFile[]
   extras: Record<string, unknown>
+  /**
+   * The tool servers (MCP) the dispatch wired and dropped. Absent, never an empty array, when
+   * the dispatched kind declared none, which is every built-in agent on a stock deployment.
+   */
+  toolServers?: DispatchedToolServer[]
 }

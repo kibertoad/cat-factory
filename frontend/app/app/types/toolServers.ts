@@ -6,6 +6,7 @@
 // member added on one side only renders as a blank chip rather than failing to compile.
 
 export type {
+  DispatchedToolServer,
   ToolServerAllowedToolsCheck,
   ToolServerCredential,
   ToolServerNotProbeableReason,
@@ -14,6 +15,13 @@ export type {
   ToolServerProbeResult,
   ToolServerProbeStatus,
   ToolServerTransport,
+  ToolServerUnavailableReason,
   ToolServerView,
   ToolServersView,
 } from '@cat-factory/contracts'
+
+// The RUN-facing half: what one dispatch decided about the servers its agent kind declared.
+// `isToolServerUnavailableReason` is re-exported beside the type because the reason is PERSISTED
+// on a run, so a step recorded by an older build can carry a member this one has retired. The
+// renderer narrows through the predicate and says so, rather than looking up an absent key.
+export { isToolServerUnavailableReason } from '@cat-factory/contracts'

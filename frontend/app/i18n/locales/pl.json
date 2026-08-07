@@ -1319,6 +1319,32 @@
       "subtasks": "Podzadania · {completed}/{total}",
       "standardsApplied": "Zastosowane standardy",
       "standardsAppliedHint": "Standardy dobrych praktyk wplecione w prompt systemowy tego kroku. Agent wykonawczy dostaje skróconą wersję każdego z nich, a recenzenci i planiści pełny tekst.",
+      "toolServers": {
+        "heading": "Serwery narzędzi (MCP)",
+        "hint": "Serwery MCP podłączone do agenta w tym zleceniu oraz te, które jego rodzaj agenta zadeklarował, a których nie dało się podłączyć. Serwery rejestruje się w kodzie wdrożenia; poświadczenia i zgody OAuth są ustawiane osobno dla każdej przestrzeni roboczej.",
+        "wired": "Podłączony",
+        "unavailableCount": "{count} niedostępny | {count} niedostępne | {count} niedostępnych",
+        "reason": {
+          "harness_unsupported": "Harness go nie obsłuży",
+          "transport_unsupported": "Transport nieosiągalny",
+          "missing_secret": "Brak poświadczenia",
+          "reserved_secret": "Zastrzeżona nazwa klucza",
+          "oauth_not_connected": "Niepołączony",
+          "oauth_token_failed": "Nie wydano tokenu",
+          "over_budget": "Ponad limit na zlecenie",
+          "unknown": "Nierozpoznany powód"
+        },
+        "remedy": {
+          "harness_unsupported": "Ten krok działał na CLI agenta, które nie zna MCP, albo na takim, które wyklucza deklaracja. Zmień harness kroku lub listę harnessów serwera.",
+          "transport_unsupported": "CLI zna MCP, ale nie sięga transportu tego serwera. Zadeklaruj dla niego serwer stdio albo uruchom krok na CLI, które sięga HTTP.",
+          "missing_secret": "Poświadczenie wymagane przez deklarację nie jest ustawione w tej przestrzeni roboczej. Dodaj je w poświadczeniach możliwości.",
+          "reserved_secret": "Deklaracja wskazuje klucz należący do konfiguracji samej platformy. Zmień deklarację; ustawienie tej zmiennej to właśnie to, co nie pomoże.",
+          "oauth_not_connected": "Nikt jeszcze nie połączył tej przestrzeni roboczej z serwerem. Połącz ją w ustawieniach serwerów narzędzi.",
+          "oauth_token_failed": "Zgoda jest zapisana, ale nie dała tokenu dostępu. Połącz ją ponownie w ustawieniach serwerów narzędzi.",
+          "over_budget": "Rodzaj agenta deklaruje więcej serwerów, niż mieści jedno zlecenie. Skróć listę tego rodzaju.",
+          "unknown": "Zapisano jako „{reason}”, czego ta wersja już nie rozpoznaje. Przebieg pochodzi sprzed zmiany listy powodów."
+        }
+      },
       "decision": "Decyzja",
       "awaitingChoice": "Oczekiwanie na wybór człowieka",
       "approvalGate": "Bramka zatwierdzenia",

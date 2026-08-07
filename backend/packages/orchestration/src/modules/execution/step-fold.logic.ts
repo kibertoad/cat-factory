@@ -13,7 +13,8 @@ import { shouldPersistActivity } from './job.logic.js'
 /**
  * Persist the attribution a DISPATCH knows and the poll site cannot re-derive: the resolved
  * model, plus (for a subscription-harness job) the leased pool row and the run's initiator,
- * plus the agent kind the job actually ran AS.
+ * plus the agent kind the job actually ran AS, plus what it decided about the kind's declared
+ * tool servers (MCP).
  *
  * An async container job settles on the durable poll path, which rebuilds the job handle from
  * the step alone — so anything not recorded here is lost by the time the usage lands. Dropping
@@ -38,6 +39,13 @@ export function recordDispatchAttribution(
   if (handle.model) step.model = handle.model
   if (handle.subscriptionTokenId) step.subscriptionTokenId = handle.subscriptionTokenId
   if (handle.initiatedByUserId) step.initiatedByUserId = handle.initiatedByUserId
+  // What the dispatch decided about the kind's tool servers (MCP). Written whole, so a
+  // re-dispatch REPLACES the previous answer rather than merging with it: the list describes one
+  // resolution against one harness, one secret resolver and one set of OAuth grants, and half of
+  // an old answer beside half of a new one describes no dispatch that ever happened. Absent on
+  // the handle leaves the step's own value alone, following `model`: a helper dispatch declaring
+  // no servers must not erase what the producer step recorded.
+  if (handle.toolServers) step.toolServers = handle.toolServers
   // Order-preserving by FIRST dispatch, counting every one after it: the count is what makes a
   // gate's fourth fixer round visible, so a re-dispatch increments rather than deduplicating.
   const dispatches = step.dispatches ?? []

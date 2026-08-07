@@ -1907,6 +1907,32 @@
       "subtasks": "Teilaufgaben · {completed}/{total}",
       "standardsApplied": "Angewendete Standards",
       "standardsAppliedHint": "Die Best-Practice-Standards, die in den System-Prompt dieses Schritts eingefügt wurden. Ein umsetzender Agent erhält von jedem eine gekürzte Fassung; Reviewer und Planer bekommen den vollen Text.",
+      "toolServers": {
+        "heading": "Toolserver (MCP)",
+        "hint": "Die MCP-Toolserver, die dieser Dispatch an den Agenten angebunden hat, sowie alle, die seine Agentenart deklariert hat und die nicht angebunden werden konnten. Server werden im Deployment-Code registriert; Zugangsdaten und OAuth-Freigaben gelten pro Workspace.",
+        "wired": "Angebunden",
+        "unavailableCount": "{count} nicht verfügbar | {count} nicht verfügbar",
+        "reason": {
+          "harness_unsupported": "Harness kann ihn nicht bedienen",
+          "transport_unsupported": "Transport nicht erreichbar",
+          "missing_secret": "Zugangsdaten fehlen",
+          "reserved_secret": "Reservierter Schlüsselname",
+          "oauth_not_connected": "Nicht verbunden",
+          "oauth_token_failed": "Token konnte nicht ausgestellt werden",
+          "over_budget": "Über dem Limit pro Dispatch",
+          "unknown": "Unbekannter Grund"
+        },
+        "remedy": {
+          "harness_unsupported": "Dieser Schritt lief auf einer Agenten-CLI ohne MCP oder auf einer, die die Deklaration ausschließt. Ändern Sie die Harness des Schritts oder die Harness-Liste des Servers.",
+          "transport_unsupported": "Die CLI spricht MCP, erreicht aber den Transport dieses Servers nicht. Deklarieren Sie dafür einen stdio-Server oder führen Sie den Schritt auf einer CLI aus, die HTTP erreicht.",
+          "missing_secret": "Ein von der Deklaration benötigtes Zugangsdatum ist für diesen Workspace nicht gesetzt. Legen Sie es unter den Capability-Zugangsdaten an.",
+          "reserved_secret": "Die Deklaration nennt einen Schlüssel, der zur Konfiguration der Plattform gehört. Ändern Sie die Deklaration; das Setzen dieser Variablen hilft gerade nicht.",
+          "oauth_not_connected": "Dieser Workspace wurde noch von niemandem mit dem Server verbunden. Stellen Sie die Verbindung in den Toolserver-Einstellungen her.",
+          "oauth_token_failed": "Eine Freigabe liegt vor, lieferte aber kein Zugriffstoken. Verbinden Sie sie in den Toolserver-Einstellungen neu.",
+          "over_budget": "Die Agentenart deklariert mehr Toolserver, als ein Dispatch mitführt. Kürzen Sie die Liste der Art.",
+          "unknown": "Aufgezeichnet als „{reason}“, was diese Version nicht mehr kennt. Der Lauf stammt aus der Zeit vor einer Änderung der Gründeliste."
+        }
+      },
       "decision": "Entscheidung",
       "awaitingChoice": "Wartet auf eine menschliche Wahl",
       "approvalGate": "Freigabe-Gate",

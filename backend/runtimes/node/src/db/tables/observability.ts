@@ -97,6 +97,8 @@ export const agentContextSnapshots = telemetry.table(
     context_files: text('context_files').notNull().default('[]'),
     // Redacted structural bits (repo/branch, webSearch, infra, decisions, revision).
     extras: text('extras').notNull().default('{}'),
+    // JSON array: the tool servers (MCP) the dispatch wired and dropped, [{id,label,status,reason}].
+    tool_servers: text('tool_servers').notNull().default('[]'),
   },
   (t) => [
     index('idx_agent_context_snapshots_execution').on(t.workspace_id, t.execution_id, t.created_at),

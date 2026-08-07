@@ -8,7 +8,11 @@ import type {
 import { TOOL_SERVER_BUDGET } from '@cat-factory/kernel'
 import { AgentKindRegistry } from '@cat-factory/agents'
 import { describe, expect, it } from 'vitest'
-import { createEnvToolSecretResolver, resolveToolServers } from './toolServers.js'
+import {
+  createEnvToolSecretResolver,
+  dispatchedToolServersFor,
+  resolveToolServers,
+} from './toolServers.js'
 
 // Tool servers (MCP) for one dispatch. The two channels a server splits into are the point of
 // these: the PROMPT-FACING projection must never carry a credential (it is copied into the
@@ -813,5 +817,69 @@ describe('the OAuth header and a static credential naming it', () => {
     })
 
     expect(result.mcpServers[0]?.headers).toEqual({ 'x-api-key': 'resolved' })
+  })
+})
+
+describe('dispatchedToolServersFor', () => {
+  // The RUN-facing projection: one list an operator reads, built from the two the resolution
+  // produces. What it must never do is report an empty one, because the engine writes it onto the
+  // step and the snapshot verbatim.
+
+  it('reports every declared server in one list, wired and dropped alike', async () => {
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(
+        { id: 'docs', label: 'Docs', transport: { kind: 'http', url: 'https://docs/mcp' } },
+        {
+          id: 'tickets',
+          label: 'Tickets',
+          transport: { kind: 'http', url: 'https://tickets/mcp' },
+          secretKeys: [{ key: 'TICKETS_TOKEN', header: 'authorization' }],
+        },
+      ),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      // No resolver at all, so the credentialed server is dropped and the other survives: the
+      // "two of three" case the single list exists to state.
+    })
+
+    expect(dispatchedToolServersFor(result)).toEqual({
+      toolServers: [
+        { id: 'docs', label: 'Docs', status: 'wired' },
+        {
+          id: 'tickets',
+          label: 'Tickets',
+          status: 'unavailable',
+          reason: 'missing_secret',
+        },
+      ],
+    })
+  })
+
+  it('carries no credential into the projection', async () => {
+    // It is written to a persisted step and a telemetry snapshot, so this is the assertion that
+    // stops a future field addition from turning either into a credential store.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith({
+        id: 'tickets',
+        transport: { kind: 'http', url: 'https://tickets/mcp' },
+        secretKeys: [{ key: 'TICKETS_TOKEN', header: 'authorization' }],
+      }),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ TICKETS_TOKEN: 'super-secret' }),
+    })
+
+    expect(JSON.stringify(dispatchedToolServersFor(result))).not.toContain('super-secret')
+  })
+
+  it('answers ABSENT, never an empty list, when the kind declared none', () => {
+    // Every built-in agent on a stock deployment lands here. An empty array would render an empty
+    // "Tool servers (MCP)" section on every step of every run.
+    expect(
+      dispatchedToolServersFor({ toolServers: [], unavailableToolServers: [], mcpServers: [] }),
+    ).toEqual({})
+    expect(dispatchedToolServersFor(undefined)).toEqual({})
   })
 })

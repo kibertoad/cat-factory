@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { webSearchProviderSchema } from './execution.js'
+import { dispatchedToolServerSchema } from './tool-servers.js'
 
 // Wire contracts for LLM observability — the per-call detail behind the board's
 // step rollups (see `stepMetricsSchema` in entities). The proxy records one of
@@ -424,6 +425,23 @@ export const agentContextSnapshotSchema = v.object({
    * embed a token), so it never carries a token, secret, or credential-bearing URL.
    */
   extras: v.record(v.string(), v.unknown()),
+  /**
+   * What this dispatch decided about the tool servers (MCP) the kind declared: the ones wired into
+   * the agent's CLI and the ones dropped, each with its reason.
+   *
+   * A TYPED field rather than another key in {@link extras}, which is where it used to live as a
+   * bare id list. The two readers of this record are an operator debugging a run and the panel
+   * rendering it, and `extras` reaches the second one as a pretty-printed JSON dump, so the fact
+   * that a server was dropped for a missing credential was, in practice, findable only by someone
+   * already scrolling a blob looking for it.
+   *
+   * Non-secret by construction: it is the same prompt-facing projection the run context carries
+   * (an id, a label, and a reason). The credentials live only on the job body's `mcpServers`
+   * field, which this record's allow-list deliberately never copies.
+   *
+   * Absent when the kind declared no tool servers (every built-in agent on a stock deployment).
+   */
+  toolServers: v.optional(v.array(dispatchedToolServerSchema)),
 })
 export type AgentContextSnapshot = v.InferOutput<typeof agentContextSnapshotSchema>
 

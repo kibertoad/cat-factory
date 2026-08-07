@@ -1,0 +1,15 @@
+-- The tool servers (MCP) one dispatch wired and dropped, as a TYPED column on the agent-context
+-- snapshot (MCP maturation, slice 5: docs/initiatives/mcp-maturation.md).
+--
+-- It rode in the `extras` bag before this, as a bare id list plus a parallel drop list, which the
+-- observability panel renders as a pretty-printed JSON dump. That made "the Slack server was
+-- dropped because its credential did not resolve" a fact you could find only by already scrolling
+-- a blob looking for it, on the one surface an operator opens to ask exactly that.
+--
+-- '[]' rather than NULL, and no backfill: an empty list and an absent one are the same fact here
+-- (this dispatch resolved no declarations), so a row written before the column existed is correct
+-- rather than merely missing. Pre-column rows also churn out within
+-- LLM_CALL_METRICS_RETENTION_DAYS, which this table is pruned on.
+--
+-- No index: the column is read only alongside the row it belongs to, never filtered on.
+ALTER TABLE agent_context_snapshots ADD COLUMN tool_servers TEXT NOT NULL DEFAULT '[]';

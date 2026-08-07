@@ -4,7 +4,7 @@ import type {
   AgentContextFragment,
   RecordAgentContextInput,
 } from '@cat-factory/kernel'
-import type { ResolvedToolServers } from './toolServers.js'
+import { dispatchedToolServersFor, type ResolvedToolServers } from './toolServers.js'
 
 // The agent-context observability SNAPSHOT: composing the redacted record of everything one
 // dispatch handed its agent. Extracted from `ContainerAgentExecutor` because it is a distinct
@@ -107,6 +107,10 @@ export function buildAgentContextRecord(
     userPrompt: str(body.userPrompt),
     fragments,
     contextFiles,
+    // The tool servers (MCP) this dispatch wired and dropped, as a TYPED field rather than another
+    // key in the `extras` bag it used to ride in: the panel renders `extras` as a JSON dump, so a
+    // server dropped for a missing credential was findable only by someone already scrolling it.
+    ...dispatchedToolServersFor(ids.toolServers),
     extras: {
       pipelineName: context.pipelineName,
       mode: body.mode,
@@ -116,21 +120,10 @@ export function buildAgentContextRecord(
       webSearch: body.webSearch ?? false,
       infra: redactInfra(body.infra),
       decisions: context.decisions,
-      ...(ids.toolServers?.toolServers.length
-        ? { toolServers: ids.toolServers.toolServers.map((t) => t.id) }
-        : {}),
-      ...(ids.toolServers?.unavailableToolServers.length
-        ? {
-            unavailableToolServers: ids.toolServers.unavailableToolServers.map((t) => ({
-              id: t.id,
-              reason: t.reason,
-            })),
-          }
-        : {}),
       // The generative binary integrations this dispatch ran with — ids and content types only.
-      // Worth recording for the same reason `toolServers` is: when a generation step's output is
-      // wrong or missing, "which integration was it even pointed at" is the first question, and
-      // the step's own selection can be edited after the run. The credential KEY name is
+      // Worth recording for the reason the tool-server field above is: when a generation step's
+      // output is wrong or missing, "which integration was it even pointed at" is the first
+      // question, and the step's own selection can be edited after the run. The credential KEY name is
       // deliberately not copied: it identifies nothing about the run and this is a body a human
       // reads for debugging.
       ...(context.binaryGenerators?.length

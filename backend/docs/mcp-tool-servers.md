@@ -106,6 +106,26 @@ them through an exhaustive `Record`, so adding one fails the typecheck rather th
 | `oauth_token_failed`    | A grant IS on file and produced no access token: revoked/expired refresh, an authorization server that refused, discovery failed | Reconnect, or wait out the vendor's outage            |
 | `over_budget`           | Nothing is wrong with the server; the kind declares more than a dispatch carries                                                 | Trim the kind's declarations                          |
 
+### Where an operator reads the answer
+
+The reasons above reach two readers by design. The AGENT gets the prompt's tool-server section, in
+prose written to make it plan around a missing tool instead of trying harder. The OPERATOR gets the
+same resolution as a record on the run: the dispatch writes the whole list, wired entries included,
+onto the step (`step.toolServers`, rendered as chips on the step's metadata card beside the model
+and the container) and onto the agent-context telemetry snapshot (a typed field, rendered by the
+observability panel). The copy differs on purpose, because the audiences do: the operator's half
+names what to CHANGE, which is exactly the split the reason vocabulary is built on.
+
+Read the list as a whole rather than as a drop list. "Two wired of three declared" and "two wired of
+two" are the two answers this surface exists to tell apart, and a field that carried only the drops
+could state neither. The field is ABSENT, never an empty list, when the dispatched kind declared no
+tool servers at all, so a stock deployment's runs say nothing rather than showing an empty section
+on every step.
+
+Two things it does NOT say, for which the probe (below) is the instrument: whether a wired server
+actually answered, and whether the tools it exposes are the ones the declaration narrowed to. This
+records the platform's DECISION at dispatch, taken before a single byte reached the server.
+
 **A dispatch carries at most `TOOL_SERVER_BUDGET.maxServers` servers**, plus a total byte cap on
 the job-body field. Past either the excess is dropped under `over_budget`, and **both dimensions
 warn at boot** (`too_many_tool_servers`, `tool_servers_over_byte_budget`) so the deployment learns
@@ -504,8 +524,16 @@ this list exists so an adopting deployment learns the ceiling from the docs rath
   every workspace's runs of the kinds it is declared on; only the credential half is per-workspace
   today. Capability credentials are also SPA-only (absent from the public API) until the same
   slice.
-- **What a run actually reached is not yet recorded on a typed surface** (slice 5's remaining
-  half). Today the evidence is the prompt's tool-server section and the agent-context snapshot.
+- **The dispatch record is not on the remote debugging surface yet.** `step.toolServers` and the
+  snapshot column are read by the SPA over the internal execution route; `/api/v1/debug/*` still
+  answers without them. Adding them there is an additive `/api/v1` change and therefore its own
+  step (an OpenAPI `info.version` minor plus a regeneration of the four SDK clients), so it is
+  tracked rather than smuggled in.
+- **What the CLI actually reached is still not observed** (slice 5's remaining half). The run
+  surface records what the PLATFORM decided at dispatch, which is a different fact from what the
+  agent's MCP client managed to connect to once the container started: a server wired into the
+  config and then failing its handshake inside the run reads here as `wired`. Closing that needs
+  the harness to report its client's own view back, and therefore a runner-image bump.
 - **Pi has no MCP client** (standing non-goal, ADR 0029). A deployment whose model provisioning
   resolves to Pi runs gets no tool servers there, stated per run as `harness_unsupported`.
 - **`http` means streamable HTTP.** The legacy HTTP+SSE transport is deliberately not a vocabulary

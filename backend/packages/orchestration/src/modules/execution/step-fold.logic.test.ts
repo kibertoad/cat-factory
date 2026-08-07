@@ -48,3 +48,39 @@ describe('recordDispatchAttribution — dispatched kinds', () => {
     expect([s.model, s.initiatedByUserId]).toEqual(['claude-x', 'u1'])
   })
 })
+
+describe('recordDispatchAttribution: tool servers (MCP)', () => {
+  const wired = [{ id: 'slack', label: 'Slack', status: 'wired' as const }]
+  const dropped = [
+    {
+      id: 'slack',
+      label: 'Slack',
+      status: 'unavailable' as const,
+      reason: 'missing_secret' as const,
+    },
+  ]
+
+  it('records what the dispatch resolved, since the poll site cannot re-derive it', () => {
+    const s = step()
+    recordDispatchAttribution(s, { jobId: 'j', toolServers: dropped } as AgentJobHandle, 'coder')
+    expect(s.toolServers).toEqual(dropped)
+  })
+
+  it('REPLACES the previous answer on a re-dispatch rather than merging with it', () => {
+    // The list describes one resolution against one harness, one secret resolver and one set of
+    // OAuth grants. A fixer round that now resolves the credential must not leave the earlier
+    // "missing" entry sitting beside the new "wired" one, describing a dispatch that never
+    // happened.
+    const s = step({ toolServers: dropped })
+    recordDispatchAttribution(s, { jobId: 'j', toolServers: wired } as AgentJobHandle, 'ci-fixer')
+    expect(s.toolServers).toEqual(wired)
+  })
+
+  it('leaves the step alone when the dispatch declared none', () => {
+    // A gate helper declaring no tool servers dispatches against the same step as its producer.
+    // Erasing on absence would make the producer's resolution disappear the moment the gate ran.
+    const s = step({ toolServers: wired })
+    recordDispatchAttribution(s, handle, 'ci-fixer')
+    expect(s.toolServers).toEqual(wired)
+  })
+})

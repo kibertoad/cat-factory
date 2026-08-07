@@ -106,6 +106,47 @@ export function defineAgentContextSuite(
       expect(stored.extras).toMatchObject({ branch: 'cat-factory/blk', webSearch: true })
     })
 
+    // --- the tool servers (MCP) one dispatch wired and dropped -------------------------
+    // Tool servers had no cross-runtime assertion of any kind before this: everything about
+    // them lived in the container executor (which the conformance harness replaces with a fake)
+    // and in an untyped corner of `extras`. Now that the decision is a COLUMN, the two things a
+    // column can get wrong per runtime are what these two cases pin: the payload, and the
+    // difference between "declared none" and "declared some and wired none".
+
+    it('round-trips the tool servers a dispatch wired and dropped', async () => {
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.record(
+        snapshot({
+          id: `${ws}-mcp`,
+          workspaceId: ws,
+          executionId: e1,
+          toolServers: [
+            { id: 'slack', label: 'Slack', status: 'wired' },
+            { id: 'jira', label: 'Jira', status: 'unavailable', reason: 'missing_secret' },
+          ],
+        }),
+      )
+      const stored = (await repo.listByExecution(ws, e1))[0]!
+      // The REASON is the load-bearing half: it is the only record of why an agent was never
+      // given a tool its kind declares, and it is what the run surface renders a chip from.
+      expect(stored.toolServers).toEqual([
+        { id: 'slack', label: 'Slack', status: 'wired' },
+        { id: 'jira', label: 'Jira', status: 'unavailable', reason: 'missing_secret' },
+      ])
+    })
+
+    it('reports a dispatch that declared no tool servers as ABSENT, never as an empty list', async () => {
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      // Both stores default the column to '[]', so a runtime that mapped it back verbatim would
+      // report every stock run's every step as having an (empty) tool-server section, breaking the
+      // "absent and zero must never render the same" rule, on the surface an operator reads to
+      // find out whether a deployment registered any tool servers at all.
+      await repo.record(snapshot({ id: `${ws}-none`, workspaceId: ws, executionId: e1 }))
+      expect((await repo.listByExecution(ws, e1))[0]!.toolServers).toBeUndefined()
+    })
+
     // --- the remote debugging surface's bounded index (`/api/v1/debug/*`) ---------------
     // The index exists precisely so a page of snapshots can never carry bodies (one row is
     // routinely megabytes). These assertions pin that: the SIZES must be right and the bodies

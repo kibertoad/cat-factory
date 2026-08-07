@@ -8,6 +8,7 @@ import { judgeStepStateSchema } from './judge.js'
 import { agentFailureKindSchema } from './agent-failure-kinds.js'
 import { ralphStepStateSchema } from './ralph.js'
 import { validationReportSchema } from './validation-checks.js'
+import { dispatchedToolServersSchema } from './tool-servers.js'
 import { reproductionReportSchema } from './reproduction.js'
 import { prReviewStepStateSchema } from './prReview.js'
 import { runInputGateSchema } from './input-gate.js'
@@ -772,6 +773,23 @@ export const pipelineStepSchema = v.object({
    * produced the tree this step pushed. Rides the run's persisted `detail` blob, so no migration.
    */
   validationConfigUnreadable: v.optional(v.nullable(v.boolean())),
+  /**
+   * What THIS step's latest container dispatch decided about the tool servers (MCP) its agent kind
+   * declared: which were wired into the agent's CLI, and which were dropped with the reason.
+   *
+   * Written at dispatch (`recordDispatchAttribution`) because the poll site rebuilds the job handle
+   * from the step alone and cannot re-derive it. Whether a server is servable depends on the
+   * resolved harness, the facade-wired secret resolver and this workspace's OAuth grants, none of
+   * which survives into a poll. Until it did, a run whose Slack tools silently never appeared left
+   * the reason in exactly two places, neither of them an operator's: the agent's own prompt and a
+   * backend `warn` line.
+   *
+   * Rides the run's persisted `detail` blob, so no migration. Absent when the dispatched kind
+   * declared no tool servers, which is every built-in agent on a stock deployment; a kind that
+   * declared any carries the whole list, wired entries included. See
+   * {@link dispatchedToolServersSchema} and docs/initiatives/mcp-maturation.md.
+   */
+  toolServers: v.optional(v.nullable(dispatchedToolServersSchema)),
   /**
    * The harness-computed BUGFIX REPRODUCTION PROOF for a coding step that carried a declared
    * reproduction: the declared command run against the pre-fix tree and the final tree, with

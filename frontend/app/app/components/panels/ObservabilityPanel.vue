@@ -29,6 +29,7 @@ import {
 import OutcomeFilterChips from '~/components/observability/OutcomeFilterChips.vue'
 import RunFailureSummary from '~/components/observability/RunFailureSummary.vue'
 import ToolCallList from '~/components/observability/ToolCallList.vue'
+import StepToolServers from '~/components/panels/StepToolServers.vue'
 
 /** No run selected: the same empty, NOT-truncated trajectory the store answers with. */
 const EMPTY_TRAJECTORY: RunToolCallTrajectory = Object.freeze({
@@ -1102,6 +1103,11 @@ function exportJson() {
                         >{{ file.content }}</pre>
                     </div>
                   </div>
+                  <!-- The tool servers (MCP) this dispatch wired and dropped. A typed field on the
+                       snapshot rather than a line in the JSON dump below, because "the Slack
+                       server was dropped for a missing credential" is a fact someone opens this
+                       panel to find, not one to discover while scrolling a blob. -->
+                  <StepToolServers v-if="s.toolServers?.length" :servers="s.toolServers" />
                   <div>
                     <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
                       {{ t('observability.context.details') }}

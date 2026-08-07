@@ -18,6 +18,7 @@ import {
   noopLogger,
   runBestEffort,
 } from '@cat-factory/kernel'
+import type { DispatchedToolServer } from '@cat-factory/contracts'
 import {
   isReservedPlatformEnvKey,
   isToolchainEnvName,
@@ -109,6 +110,41 @@ const EMPTY: ResolvedToolServers = {
   toolServers: [],
   unavailableToolServers: [],
   mcpServers: [],
+}
+
+/**
+ * Project one dispatch's resolution into the RUN-facing record the engine persists on the step and
+ * the agent-context snapshot records: every declared server, wired and dropped alike, in one list.
+ *
+ * Shaped as a spreadable partial (`{ toolServers?: … }`) rather than a nullable array so a caller
+ * building a handle or a snapshot writes ONE line and cannot accidentally record an empty list: a
+ * kind that declared nothing must leave the field ABSENT, because an empty "MCP tool servers"
+ * section on every step of every stock run says something false about a deployment that registered
+ * none. A kind that declared any always carries the whole list, because "two of three wired" and "two of
+ * two" are the two answers this surface exists to tell apart, and a drops-only list cannot.
+ *
+ * Non-secret by construction: id, label and reason, the same three fields the prompt already
+ * states to the agent. An absent resolution (a caller with no tool-server support wired at all)
+ * answers the same way a kind that declared none does, because it is the same fact.
+ */
+export function dispatchedToolServersFor(resolved: ResolvedToolServers | undefined): {
+  toolServers?: DispatchedToolServer[]
+} {
+  if (!resolved) return {}
+  const dispatched: DispatchedToolServer[] = [
+    ...resolved.toolServers.map((server) => ({
+      id: server.id,
+      label: server.label,
+      status: 'wired' as const,
+    })),
+    ...resolved.unavailableToolServers.map((server) => ({
+      id: server.id,
+      label: server.label,
+      status: 'unavailable' as const,
+      reason: server.reason,
+    })),
+  ]
+  return dispatched.length ? { toolServers: dispatched } : {}
 }
 
 /**

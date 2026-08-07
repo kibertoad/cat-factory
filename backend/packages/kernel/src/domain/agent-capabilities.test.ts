@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { HarnessKind } from '../ports/model-provider.js'
-import type { McpServerDefinition } from './agent-capabilities.js'
+import {
+  isToolServerUnavailableReason,
+  toolServerUnavailableReasonSchema,
+} from '@cat-factory/contracts'
+import type { McpServerDefinition, UnavailableToolServer } from './agent-capabilities.js'
 import {
   MCP_HARNESS_TRANSPORTS,
   MCP_SUPPORTED_HARNESSES,
@@ -169,5 +173,43 @@ describe('isValidMcpToolName', () => {
     for (const good of ['search_issues', 'get-issue', 'issues.search', 'v2_search1']) {
       expect(isValidMcpToolName(good), good).toBe(true)
     }
+  })
+})
+
+describe('the unavailability vocabulary is pinned to its wire mirror', () => {
+  // The reason a dispatch drops a tool server is authored HERE (each member's prose says what the
+  // operator has to change) and mirrored in `@cat-factory/contracts` as
+  // `toolServerUnavailableReasonSchema`, because the SPA has to state the same judgement to a human
+  // and cannot see kernel. The mirror is what the run surface renders a chip from, so a member
+  // added on one side only is either a chip with no translated copy or a reason the engine can
+  // never emit. Neither fails anything without this test.
+  //
+  // The type side of the pin is `REASON_PROSE` below: it is a `Record` over kernel's own union, so
+  // adding a member here fails to compile until it is listed, and the runtime comparison then
+  // fails until contracts lists it too.
+  const REASON_PROSE: Record<UnavailableToolServer['reason'], true> = {
+    harness_unsupported: true,
+    transport_unsupported: true,
+    missing_secret: true,
+    reserved_secret: true,
+    oauth_not_connected: true,
+    oauth_token_failed: true,
+    over_budget: true,
+  }
+
+  it('names exactly the members contracts publishes', () => {
+    expect([...toolServerUnavailableReasonSchema.options].sort()).toEqual(
+      Object.keys(REASON_PROSE).sort(),
+    )
+  })
+
+  it('narrows a stored value, and refuses one no build knows', () => {
+    // A reason is PERSISTED (on the step, and in the agent-context snapshot), so a run recorded by
+    // an older build outlives any member a later one retires. The predicate is what lets the
+    // renderer say so instead of rendering a blank chip.
+    for (const reason of toolServerUnavailableReasonSchema.options) {
+      expect(isToolServerUnavailableReason(reason)).toBe(true)
+    }
+    expect(isToolServerUnavailableReason('retired_in_a_later_build')).toBe(false)
   })
 })

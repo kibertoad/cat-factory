@@ -1429,6 +1429,32 @@
       "subtasks": "Subtasks · {completed}/{total}",
       "standardsApplied": "Standards applied",
       "standardsAppliedHint": "The best-practice standards folded into this step's system prompt. An implementing agent receives a condensed version of each; reviewers and planners get the full text.",
+      "toolServers": {
+        "heading": "Tool servers (MCP)",
+        "hint": "The MCP tool servers this dispatch wired into the agent, plus any its agent kind declared that could not be wired. Servers are registered in deployment code; credentials and OAuth grants are per workspace.",
+        "wired": "Wired",
+        "unavailableCount": "{count} unavailable | {count} unavailable",
+        "reason": {
+          "harness_unsupported": "Harness cannot serve it",
+          "transport_unsupported": "Transport not reachable",
+          "missing_secret": "Credential missing",
+          "reserved_secret": "Reserved key name",
+          "oauth_not_connected": "Not connected",
+          "oauth_token_failed": "Token could not be issued",
+          "over_budget": "Over the per-dispatch cap",
+          "unknown": "Unrecognised reason"
+        },
+        "remedy": {
+          "harness_unsupported": "This step ran on an agent CLI that speaks no MCP, or on one the declaration excludes. Change the step's harness, or the server's harness list.",
+          "transport_unsupported": "The CLI speaks MCP but cannot reach this server's transport. Declare a stdio server for it, or run the step on a CLI that reaches HTTP.",
+          "missing_secret": "A credential the declaration requires is not set for this workspace. Add it under capability credentials.",
+          "reserved_secret": "The declaration names a key the platform's own configuration owns. Change the declaration; setting that variable is exactly what will not help.",
+          "oauth_not_connected": "Nobody has connected this workspace to the server yet. Connect it from the tool-server settings.",
+          "oauth_token_failed": "A grant is on file and produced no access token. Reconnect it from the tool-server settings.",
+          "over_budget": "The agent kind declares more tool servers than one dispatch carries. Trim the kind's list.",
+          "unknown": "Recorded as “{reason}”, which this version no longer recognises. The run predates a change to the reason list."
+        }
+      },
       "decision": "Decision",
       "awaitingChoice": "Awaiting a human choice",
       "approvalGate": "Approval gate",

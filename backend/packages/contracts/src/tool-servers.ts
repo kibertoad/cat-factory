@@ -365,3 +365,92 @@ export const MCP_PROBE_MAX_PAGES = 3
 
 /** How long a probe waits for the whole handshake-plus-list exchange. */
 export const MCP_PROBE_TIMEOUT_MS = 10_000
+
+// ---------------------------------------------------------------------------
+// The RUN-facing half: what one dispatch decided about the servers its agent kind declared.
+//
+// Everything above answers "what did this deployment register, and does it answer". This answers
+// a different question, settled from a different source and at a different time: for THIS step,
+// which declared servers were actually wired into the agent's CLI, and which were not, and why.
+// Until now that decision reached exactly two readers, neither of them an operator: the agent's
+// own prompt (which states the drops so it plans around them) and a backend `warn` line, plus an
+// untyped id list in the agent-context snapshot's `extras` bag, which the observability panel
+// renders as a JSON dump.
+//
+// It is a WIRE vocabulary rather than a kernel one because both sides have to agree about it: the
+// engine writes it onto the step at dispatch, and the SPA renders each member as a chip with its
+// own translated remedy. A reason the SPA cannot name is a blank chip on the one surface an
+// operator opens to find out why their tool never showed up.
+// ---------------------------------------------------------------------------
+
+/**
+ * Why a declared tool server was not wired into one dispatch. Mirrors kernel's
+ * `UnavailableToolServer['reason']`, which carries the authoring-side prose for each member; the
+ * two lists are pinned together by a conformity test in kernel, because a member added on one side
+ * only renders as a chip with no copy.
+ *
+ * Split by the FIX each one calls for, never by where in the resolution the drop happened:
+ * `missing_secret` is a value to supply and `reserved_secret` is a declaration to change;
+ * `oauth_not_connected` is a person pressing Connect and `oauth_token_failed` is a grant that
+ * stopped working; `harness_unsupported` is the wrong CLI for the server and
+ * `transport_unsupported` is the right CLI reaching the wrong transport; `over_budget` is a kind
+ * declaring more servers than a job body carries, with nothing wrong with the server at all.
+ */
+export const toolServerUnavailableReasonSchema = v.picklist([
+  'harness_unsupported',
+  'transport_unsupported',
+  'missing_secret',
+  'reserved_secret',
+  'oauth_not_connected',
+  'oauth_token_failed',
+  'over_budget',
+])
+export type ToolServerUnavailableReason = v.InferOutput<typeof toolServerUnavailableReasonSchema>
+
+/**
+ * Whether a value is a reason this build knows.
+ *
+ * DERIVED from the picklist's own options rather than restated, and it exists because this
+ * vocabulary is PERSISTED: a run recorded last month carries whatever members that build had, so a
+ * member retired in a later one still arrives at a renderer whose exhaustive `Record` has no entry
+ * for it. Narrowing through this keeps the compile-time totality (adding a member still fails the
+ * build until it is named) while letting a retired one render as retired instead of as an empty
+ * chip or a thrown `TypeError` in the panel an operator opened to read it.
+ */
+export function isToolServerUnavailableReason(
+  value: unknown,
+): value is ToolServerUnavailableReason {
+  return (
+    typeof value === 'string' &&
+    (toolServerUnavailableReasonSchema.options as readonly string[]).includes(value)
+  )
+}
+
+/**
+ * One declared tool server, as ONE dispatch resolved it.
+ *
+ * `status` rather than a bare presence-or-absence list because the two halves answer the same
+ * operator question and belong in one ordered record: a step that wired two of the three servers
+ * its kind declares is a different fact from one that wired two and declares two, and a surface
+ * reading two lists has to reconstruct that. `reason` is present exactly when `status` is
+ * `unavailable`.
+ */
+export const dispatchedToolServerSchema = v.object({
+  id: v.string(),
+  /** The declaration's human label (its id when it declared none), for the chip. */
+  label: v.string(),
+  status: v.picklist(['wired', 'unavailable']),
+  /** Why it was not wired. Present exactly when `status` is `unavailable`. */
+  reason: v.optional(toolServerUnavailableReasonSchema),
+})
+export type DispatchedToolServer = v.InferOutput<typeof dispatchedToolServerSchema>
+
+/**
+ * What one dispatch decided about every tool server its kind declared, wired and dropped alike.
+ *
+ * ABSENT and EMPTY are deliberately different facts and only one of them is ever written: absent
+ * means the kind declared no tool servers at all (every built-in agent on a stock deployment), so
+ * the surface says nothing rather than showing an empty "MCP tool servers" heading on every step
+ * of every run. A dispatch that resolved at least one declaration always writes the whole list.
+ */
+export const dispatchedToolServersSchema = v.array(dispatchedToolServerSchema)

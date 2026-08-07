@@ -1,6 +1,6 @@
 # MCP support maturation
 
-Status: **in progress; slices 1, 2, 3, 4, slice 5's HANDSHAKE half and slice 7's CONSUMING half landed.** Sources: the 2026-08-04 review of both MCP
+Status: **in progress; slices 1, 2, 3, 4, slice 5's HANDSHAKE and DISPATCH-RECORD halves, and slice 7's CONSUMING half landed.** Sources: the 2026-08-04 review of both MCP
 surfaces, and the 2026-08-05 follow-up review of one question through the same material: how well
 a deployment can add EXTERNAL tool servers programmatically, without forking. That review's
 verdict and its new findings are folded in below (the inventory rows marked 2026-08-05, slice 8,
@@ -116,8 +116,8 @@ dump and never uses the word MCP).
       declared in kernel and populated into the checklist the contract already had a field for; the
       Test button and the inventory rendered above the credential checklist; and the operator docs
       (the Slack runbook, the `MCP_*` convention). Its four decisions are below.
-- [ ] **5. Run-surface observability for tool servers. The HANDSHAKE half has landed; the
-      TELEMETRY half has not.**
+- [ ] **5. Run-surface observability for tool servers. The HANDSHAKE and DISPATCH-RECORD halves
+      have landed; the CLI-OBSERVATION half has not.**
       **Handshake (done):** the harness reports the job-body capability field names it parses
       (`mcpServers`, `skills`) on `/health` and on the `POST /jobs` acceptance; `RunnerTransport`
       gained a `RunnerDispatchAck` return every harness-speaking transport forwards; and the
@@ -127,18 +127,30 @@ dump and never uses the word MCP).
       step a `preflight` fault, while `unknown` proceeds and is reported through a warn line plus
       `container.capability_unknown`. Its decisions and the gotchas it surfaced are below. Image
       bumped to 1.93.0.
-      **Telemetry (open):** dispatch telemetry recording what the CLI actually reached (server
-      started, N tools) on a typed snapshot field instead of the raw `extras` dump the SPA renders,
-      and an unavailable server becoming a stated chip on the run surface rather than a line only
-      the agent's own prompt and a backend warn ever see. The job-body observation seam
-      ([capability-credential-store.md](./capability-credential-store.md) slice 3, re-scoped there as
-      exactly this) lands with it, giving tool servers their first cross-runtime conformance
-      assertion. It comes AFTER the probe on purpose: the chip and the snapshot field both need a
-      wire vocabulary for a tool server, and slice 4 is where that vocabulary now exists
-      (`@cat-factory/contracts`'s `tool-servers.ts`), so this extends one rather than inventing a
-      second. The handshake went first because the 2026-08-05 review rated the blind run the
-      likeliest failure an adopting deployment actually hits, and unlike the chip it needed no wire
-      vocabulary.
+      **Dispatch record (done):** what the platform DECIDED about a kind's declared servers is now
+      a record on the run rather than a line only the agent's prompt and a backend warn ever saw.
+      One list, wired entries included (`dispatchedToolServersSchema`, extending slice 4's
+      `tool-servers.ts` rather than inventing a second vocabulary), written at dispatch through
+      `recordDispatchAttribution` onto `step.toolServers` and onto the agent-context snapshot as a
+      typed COLUMN instead of the `extras` key it rode in, which the panel renders as a JSON dump.
+      The SPA renders it as chips on the step's metadata card and inside the observability panel,
+      each drop naming what to CHANGE (the operator's half of the vocabulary the prompt states to
+      the agent). Tool servers also gained their first cross-runtime conformance assertions, on the
+      column D1 and Drizzle now both map. Its decisions and the gotchas it surfaced are below.
+      **CLI observation (open):** what the agent's own MCP client actually reached (server started,
+      N tools), which is a DIFFERENT fact from the dispatch record and the one the record cannot
+      state: a server wired into the config and then failing its handshake inside the container
+      reads as `wired` today. It needs the harness to report its client's view back on the job
+      view, so it is an image bump, and it should reuse the same wire vocabulary rather than adding
+      a second. The job-body observation seam
+      ([capability-credential-store.md](./capability-credential-store.md) slice 3) is still open and
+      is still the right home for asserting that a stored credential reaches a dispatch's job body;
+      the conformance added here asserts the RECORD, not the body. The same half carries the
+      dispatch record onto `/api/v1/debug/*`, which today answers without it: that is an ADDITIVE
+      public-API change (OpenAPI `info.version` minor, four SDK clients regenerated), which is why
+      it did not ride along with an internal-surface slice. The handshake went first because
+      the 2026-08-05 review rated the blind run the likeliest failure an adopting deployment
+      actually hits.
 - [ ] **6. Tenant-level configurability.** The binary-generator pattern applied to tool servers:
       a contracts-level non-secret vocabulary, a snapshot projection, per-workspace
       enable/disable, per-step selection via `stepOptions`, and a picker. The SPA finally learns
@@ -200,10 +212,12 @@ carries it; "done" means that slice has landed.
 | No inventory: a registration attached to no kind is invisible                     | Slice 4 (done)                |
 | `McpSecretRef` lacks the `usage` note the checklist can render                    | Slice 4 (done)                |
 | The credential checklist's READ was documented as gated and was not               | Slice 4 (done)                |
-| Telemetry records ids only; SPA renders raw `extras` JSON                         | Slice 5                       |
-| Dropped-server diagnosis reaches the agent and a warn log, no operator surface    | Slice 5                       |
+| Telemetry records ids only; SPA renders raw `extras` JSON                         | Slice 5 (done)                |
+| Dropped-server diagnosis reaches the agent and a warn log, no operator surface    | Slice 5 (done)                |
 | Older harness image silently drops `mcpServers` (blind run)                       | Slice 5 (handshake done)      |
-| Tool servers asserted nowhere cross-runtime                                       | Slice 5                       |
+| Tool servers asserted nowhere cross-runtime                                       | Slice 5 (done)                |
+| What the agent's own MCP client reached is unobserved                             | Slice 5 (CLI observation)     |
+| The dispatch record is absent from `/api/v1/debug/*` (an additive spec change)    | Slice 5 (CLI observation)     |
 | No per-workspace/per-step server selection; no wire vocabulary; no SPA visibility | Slice 6                       |
 | Capability credentials absent from the public API                                 | Slice 6                       |
 | No OAuth for remote tool servers                                                  | Slice 7 (consuming half done) |
@@ -287,7 +301,9 @@ Recorded so the next iteration does not re-propose them.
   `allToolServers()`, for the one question that walk cannot answer: which registrations no kind
   declares at all.
 - **Slice 4's harness edits: there were none.** The probe is entirely backend, so no image bump. That
-  is not a general property of this initiative; slice 5's handshake was the next one (1.93.0).
+  is not a general property of this initiative; slice 5's handshake was the next one (1.93.0), and
+  slice 5's dispatch record was again none (it reads what the backend already resolved). What
+  remains of slice 5 is precisely the part that cannot avoid one.
 - **A new unavailability reason owes prose in `UNAVAILABLE_REASONS`** (the exhaustive `Record` in
   `prompts/capabilities.ts`), phrased for the AGENT rather than an operator: it needs to know the
   tool is absent and that trying harder will not produce it. Two reasons deliberately render the
@@ -389,6 +405,60 @@ Recorded so the next iteration does not re-propose them.
 - **The 400 path must NOT report capabilities.** A refused body accepted no job, so there is no
   dispatch to hold to a handshake, and answering with one invites a caller to read a parse failure
   as a capability verdict.
+
+## Slice 5 (dispatch record): its four decisions
+
+- **It rides the DISPATCH, not the poll, and therefore `AgentJobHandle`.** The poll site reaches
+  every transport and would have cost one field. It cannot answer the question: whether a server is
+  servable depends on the resolved harness, the facade-wired secret resolver and this workspace's
+  OAuth grants, and the durable poll path rebuilds the job handle from the STEP alone, so by then
+  none of that is in scope. That is the same argument `model`, `search` and `repo` already made, so
+  the field joins them on the handle and `recordDispatchAttribution` folds it, which gets all four
+  container dispatch sites (agent, gate helper, ralph, visual confirmation) with no per-site code.
+- **ONE list with a `status`, not a wired list beside a dropped one.** The two-list shape is what
+  the resolution already produces and what the prompt renders, so mirroring it was free. It cannot
+  state the fact an operator is actually after: "two of three wired" and "two of two wired" are
+  different answers, and a surface holding two lists has to reconstruct the denominator. The list
+  is also written WHOLE on each dispatch rather than merged, because it describes one resolution
+  against one harness and one credential set; half of an old answer beside half of a new one
+  describes a dispatch that never happened. `resetStepForRerun` drops it for the same reason.
+- **A typed COLUMN on the snapshot, not one more key in `extras`.** `extras` is the right home for
+  structural debris nobody opens the panel for (the branch, the web-search flag, the infra spec):
+  it is rendered as a pretty-printed JSON dump, which is a fair rendering of debris. "The Slack
+  server was dropped because its credential did not resolve" is the opposite: it is the fact
+  someone opens that panel to FIND, and leaving it in the dump made it findable only by whoever
+  was already scrolling for it. Internals carry no compatibility obligation, so the old `extras`
+  keys are simply gone rather than dual-written.
+- **The vocabulary is MIRRORED into contracts rather than moved there.** Kernel keeps the authored
+  union (each member's prose says which of three layers must agree about it, which is a kernel
+  concern), and contracts publishes the wire mirror the SPA renders chips from, pinned by a
+  conformity test. Moving it outright would have put the dispatch's own drop reasons behind a
+  package the resolution has no other reason to read; restating it un-pinned is how the SPA ends
+  up with a blank chip for a member added on one side.
+
+## Gotchas slice 5 (dispatch record) surfaced
+
+- **A persisted closed vocabulary needs a runtime narrowing, not only an exhaustive `Record`.** The
+  reason is stored on the run and in the snapshot, so a member retired in a later build still
+  arrives at a renderer whose `Record` is total against the TYPE and partial against the DATA. The
+  chip narrows through `isToolServerUnavailableReason`, derived from the picklist's own options, so
+  adding a member still fails the build while a retired one renders as itself instead of as an
+  empty chip inside the panel someone opened to read it.
+- **Both stores default the new column to `'[]'`, which is how "declared none" becomes a lie.** A
+  repository that mapped the column back verbatim would report every step of every stock run as
+  having an (empty) tool-server section, since no built-in declares any. The mapping drops an empty
+  list back to ABSENT on both runtimes and the conformance suite asserts exactly that, beside the
+  round-trip: it is the one thing a column can get wrong per runtime that a payload assertion
+  cannot see.
+- **`ContainerAgentExecutor.ts` had six lines of size-ratchet headroom**, which is why the
+  projection is a spreadable partial built in `toolServers.ts` (`dispatchedToolServersFor`) rather
+  than assembled at the dispatch site. That is the better shape anyway, since the snapshot builder
+  needs the identical projection, but the constraint is worth knowing before planning an edit
+  there: the file is one small addition away from needing a split.
+- **The component takes the LIST, not the step.** The same record reaches a reader from two
+  different stores (the run's step and the telemetry snapshot), and a component typed against
+  `PipelineStep` would have needed a second one for the panel, which is how two renderings of one
+  vocabulary start disagreeing.
 
 ## Slice 7 (consuming) — its five decisions
 

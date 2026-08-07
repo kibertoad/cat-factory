@@ -1338,6 +1338,32 @@
       "subtasks": "Alt görevler · {completed}/{total}",
       "standardsApplied": "Uygulanan standartlar",
       "standardsAppliedHint": "Bu adımın sistem istemine eklenen iyi uygulama standartları. Uygulayan bir ajan her birinin kısaltılmış sürümünü alır; gözden geçirenler ve planlayıcılar tam metni alır.",
+      "toolServers": {
+        "heading": "Araç sunucuları (MCP)",
+        "hint": "Bu gönderimin ajana bağladığı MCP araç sunucuları ve ajan türünün bildirdiği hâlde bağlanamayanlar. Sunucular dağıtım kodunda kaydedilir; kimlik bilgileri ve OAuth izinleri çalışma alanı başınadır.",
+        "wired": "Bağlandı",
+        "unavailableCount": "{count} kullanılamıyor | {count} kullanılamıyor",
+        "reason": {
+          "harness_unsupported": "Harness sunamıyor",
+          "transport_unsupported": "Taşıma erişilemiyor",
+          "missing_secret": "Kimlik bilgisi eksik",
+          "reserved_secret": "Ayrılmış anahtar adı",
+          "oauth_not_connected": "Bağlı değil",
+          "oauth_token_failed": "Belirteç verilemedi",
+          "over_budget": "Gönderim başına sınırın üzerinde",
+          "unknown": "Tanınmayan neden"
+        },
+        "remedy": {
+          "harness_unsupported": "Bu adım MCP konuşmayan bir ajan CLI'sinde ya da bildirimin dışladığı birinde çalıştı. Adımın harness'ını veya sunucunun harness listesini değiştirin.",
+          "transport_unsupported": "CLI MCP konuşuyor ama bu sunucunun taşımasına erişemiyor. Onun için bir stdio sunucusu bildirin ya da adımı HTTP'ye erişen bir CLI'de çalıştırın.",
+          "missing_secret": "Bildirimin zorunlu tuttuğu bir kimlik bilgisi bu çalışma alanı için ayarlı değil. Yetenek kimlik bilgilerine ekleyin.",
+          "reserved_secret": "Bildirim, platformun kendi yapılandırmasına ait bir anahtarı adlandırıyor. Bildirimi değiştirin; o değişkeni ayarlamak tam da yardımcı olmayacak şeydir.",
+          "oauth_not_connected": "Bu çalışma alanını sunucuya henüz kimse bağlamadı. Araç sunucusu ayarlarından bağlayın.",
+          "oauth_token_failed": "Kayıtlı bir izin var ve erişim belirteci üretmedi. Araç sunucusu ayarlarından yeniden bağlayın.",
+          "over_budget": "Ajan türü, tek bir gönderimin taşıdığından fazla araç sunucusu bildiriyor. Türün listesini kısaltın.",
+          "unknown": "“{reason}” olarak kaydedilmiş; bu sürüm artık bunu tanımıyor. Çalışma, neden listesindeki bir değişiklikten öncesine ait."
+        }
+      },
       "decision": "Karar",
       "awaitingChoice": "Bir kullanıcı seçimi bekleniyor",
       "approvalGate": "Onay kapısı",

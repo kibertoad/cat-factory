@@ -4,6 +4,7 @@ import type { AgentState, PipelineStep, CompanionVerdict, StepApproval } from '~
 import { subtaskIconClass } from '~/utils/pipelineRender'
 import StepModelActivity from '~/components/observability/StepModelActivity.vue'
 import StepContainerStatus from '~/components/panels/StepContainerStatus.vue'
+import StepToolServers from '~/components/panels/StepToolServers.vue'
 
 // The step's metadata card body: state/timing/model/run id, the container cold-boot
 // phase, the live subtask breakdown, the LLM observability rollup, the applied
@@ -241,6 +242,10 @@ async function copyRunId() {
         </UBadge>
       </div>
     </div>
+
+    <!-- tool servers (MCP) this dispatch wired, and the ones it declared and could not.
+         Self-hides for a kind that declares none, i.e. every built-in on a stock deployment. -->
+    <StepToolServers :servers="step.toolServers ?? []" class="mt-4" />
 
     <!-- decision raised on this step -->
     <div v-if="step.decision" class="mt-4">

@@ -1319,6 +1319,32 @@
       "subtasks": "Sous-tâches · {completed}/{total}",
       "standardsApplied": "Standards appliqués",
       "standardsAppliedHint": "Les standards de bonnes pratiques integres au prompt systeme de cette etape. Un agent qui implemente en recoit une version condensee ; les relecteurs et les planificateurs recoivent le texte complet.",
+      "toolServers": {
+        "heading": "Serveurs d'outils (MCP)",
+        "hint": "Les serveurs MCP que cet envoi a raccordés à l'agent, ainsi que ceux que son type d'agent a déclarés sans pouvoir les raccorder. Les serveurs sont enregistrés dans le code du déploiement ; les identifiants et les autorisations OAuth sont propres à chaque espace de travail.",
+        "wired": "Raccordé",
+        "unavailableCount": "{count} indisponible | {count} indisponibles",
+        "reason": {
+          "harness_unsupported": "Le harness ne peut pas le servir",
+          "transport_unsupported": "Transport inaccessible",
+          "missing_secret": "Identifiant manquant",
+          "reserved_secret": "Nom de clé réservé",
+          "oauth_not_connected": "Non connecté",
+          "oauth_token_failed": "Jeton non délivré",
+          "over_budget": "Au-delà du plafond par envoi",
+          "unknown": "Motif non reconnu"
+        },
+        "remedy": {
+          "harness_unsupported": "Cette étape a tourné sur une CLI d'agent qui ne parle pas MCP, ou que la déclaration exclut. Changez le harness de l'étape, ou la liste de harnesses du serveur.",
+          "transport_unsupported": "La CLI parle MCP mais n'atteint pas le transport de ce serveur. Déclarez un serveur stdio à sa place, ou exécutez l'étape sur une CLI qui atteint HTTP.",
+          "missing_secret": "Un identifiant exigé par la déclaration n'est pas défini pour cet espace de travail. Ajoutez-le dans les identifiants de capacités.",
+          "reserved_secret": "La déclaration nomme une clé qui appartient à la configuration de la plateforme. Modifiez la déclaration ; définir cette variable est précisément ce qui n'aidera pas.",
+          "oauth_not_connected": "Personne n'a encore connecté cet espace de travail au serveur. Connectez-le depuis les réglages des serveurs d'outils.",
+          "oauth_token_failed": "Une autorisation est enregistrée et n'a produit aucun jeton d'accès. Reconnectez-la depuis les réglages des serveurs d'outils.",
+          "over_budget": "Le type d'agent déclare plus de serveurs qu'un envoi n'en transporte. Réduisez la liste du type.",
+          "unknown": "Enregistré comme « {reason} », que cette version ne reconnaît plus. L'exécution est antérieure à une modification de la liste des motifs."
+        }
+      },
       "decision": "Décision",
       "awaitingChoice": "En attente d'un choix humain",
       "approvalGate": "Gate d'approbation",
