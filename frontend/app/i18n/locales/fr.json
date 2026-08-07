@@ -1430,11 +1430,11 @@
           "unknown": "n'était pas disponible ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Exécutez l’étape sur une CLI d’agent qui parle MCP, ou élargissez la liste de harnesses du serveur.",
+          "harnessUnsupported": "Exécutez l’étape sur une CLI d’agent qui parle MCP, ou élargissez la liste de harnesses du serveur. Une exécution Codex connectée avec votre propre session CLI n’a nulle part où conserver le serveur le temps de l’exécution : utilisez plutôt un identifiant de la plateforme.",
           "transportUnsupported": "Déclarez un serveur stdio à sa place, ou exécutez l’étape sur une CLI d’agent qui atteint les serveurs HTTP.",
-          "missingSecret": "Renseignez l’identifiant qu’il nomme dans les identifiants de capacités, depuis la fenêtre Infrastructure.",
+          "missingSecret": "Renseignez l’identifiant qu’il nomme, soit comme variable d’environnement du déploiement, soit dans les identifiants de capacités, depuis la fenêtre Infrastructure.",
           "reservedSecret": "Modifiez la déclaration pour demander une autre clé ; définir cette variable est précisément ce qui n’aidera pas.",
-          "oauthNotConnected": "Connectez ce tableau à ce serveur depuis la fenêtre Infrastructure.",
+          "oauthNotConnected": "Connectez ce tableau à ce serveur depuis la fenêtre Infrastructure. Un déploiement sans ENCRYPTION_KEY n’a nulle part où conserver une autorisation : un opérateur doit d’abord la définir.",
           "oauthTokenFailed": "Reconnectez-le depuis la fenêtre Infrastructure, ou attendez la fin de la panne du fournisseur.",
           "overBudget": "Réduisez ce que l’agent déclare, pour qu’une exécution puisse tout transporter."
         }

@@ -1430,11 +1430,11 @@
           "unknown": "nie był dostępny ({reason})."
         },
         "remedy": {
-          "harnessUnsupported": "Uruchom krok na CLI agenta, które zna MCP, albo poszerz listę harnessów serwera.",
+          "harnessUnsupported": "Uruchom krok na CLI agenta, które zna MCP, albo poszerz listę harnessów serwera. Uruchomienie Codex z Twoim własnym logowaniem do CLI nie ma gdzie przechować serwera na czas przebiegu, więc użyj poświadczenia platformy.",
           "transportUnsupported": "Zadeklaruj dla niego serwer stdio albo uruchom krok na CLI agenta, które dosięga serwerów HTTP.",
-          "missingSecret": "Ustaw wskazane poświadczenie w poświadczeniach możliwości, w oknie Infrastruktura.",
+          "missingSecret": "Ustaw wskazane poświadczenie jako zmienną środowiskową wdrożenia albo w poświadczeniach możliwości, w oknie Infrastruktura.",
           "reservedSecret": "Zmień deklarację tak, by prosiła o inny klucz; ustawienie tej zmiennej to właśnie to, co nie pomoże.",
-          "oauthNotConnected": "Połącz tę tablicę z serwerem w oknie Infrastruktura.",
+          "oauthNotConnected": "Połącz tę tablicę z serwerem w oknie Infrastruktura. Wdrożenie bez ENCRYPTION_KEY nie ma gdzie przechować zgody, więc operator musi ją najpierw ustawić.",
           "oauthTokenFailed": "Połącz go ponownie w oknie Infrastruktura albo przeczekaj awarię dostawcy.",
           "overBudget": "Skróć to, co deklaruje agent, aby jedno uruchomienie uniosło całość."
         }

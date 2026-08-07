@@ -11,3 +11,10 @@ also names the thing to change. Each reason now renders its remedy beneath it, o
 the vocabulary, since needing a different fix is what makes each member its own member. A reason
 this build no longer recognises renders its raw code with no remedy, because there is no surface
 it could honestly send anyone to.
+
+Each remedy covers every cause its reason is reached from, which is not the same as covering the
+obvious one. `harness_unsupported` also fires for an ambient-auth Codex run, where the CLI already
+speaks MCP and is already allowed and only a leased credential helps; `missing_secret` comes from a
+composed resolver whose default half is a deployment environment variable, not the workspace
+credential store; `oauth_not_connected` also fires where no grant store is wired at all. A line
+naming one cause of three would cost an operator the attempt as well as the answer.
