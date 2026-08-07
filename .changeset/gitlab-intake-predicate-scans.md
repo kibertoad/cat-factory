@@ -34,3 +34,24 @@ id onto the leg its provider reads with an `if`-chain that fell through to the o
 deployment-registered leg, so every GitLab hunt handed its project path to a field no built-in
 provider reads and reported an empty board. It is now an exhaustive record over the built-in
 vocabulary, so a fifth built-in source fails to compile until it names its leg.
+
+A predicate a source cannot evaluate is now declared rather than dropped in silence. GitLab and
+Linear both ignore `issueType`, and both intake forms rendered the field anyway, so an operator
+configuring a schedule saw a filter that was never applied: on an unattended `bug-intake` schedule,
+whose default is `bug`, that starts the bugfix pipeline on whatever is oldest and open. A provider
+now states its gaps on `TaskSourceProvider.ignoredIntakePredicates`, `TaskSourceState` carries them
+to the SPA, and the recurring-schedule and bug-hunt modals replace the field with what to narrow
+with instead. `intakePredicateSupport.test.ts` keeps a declaration honest by compiling each source's
+query with and without each predicate, so the answer is read off the compiler rather than restated
+beside it.
+
+Two GitLab-specific corrections ride along. The intake walk now pages on GitLab's own
+`Link: rel="next"` (carried out on the new `ProjectIssuePage`) instead of treating a short page as
+the last one: `max_page_size` is an instance setting an administrator can lower below the overscan
+size, and on such an instance every page is short, so the walk stopped after page 1 and reported a
+board it never finished as exhausted. And a walk whose workspace has no GitLab connection now
+refuses instead of returning an empty list, which the intake step renders as the cause of a
+no-pickup fire rather than as "no matching open issues".
+
+`ProjectIssuePage` replaces the bare hit array `VcsClient.searchProjectIssues` /
+`GitHubClient.searchProjectIssues` returned. Both are internal ports with one implementation.

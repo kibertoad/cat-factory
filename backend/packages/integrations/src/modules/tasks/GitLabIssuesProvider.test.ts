@@ -62,8 +62,15 @@ function fakeClient(opts: {
             query: ProjectIssueQuery,
           ) {
             searchCalls.push({ ref: `${ref.owner}/${ref.repo}`, query })
-            if (opts.pages) return opts.pages[(query.page ?? 1) - 1] ?? []
-            return opts.hits ?? []
+            const page = (query.page ?? 1) - 1
+            if (opts.pages) {
+              // `hasMore` is what a real GitLab reports, so it tracks whether a NEXT page exists
+              // rather than how full this one is. That split is the point of the fixture: a short
+              // page with more behind it is exactly the case an instance-lowered `max_page_size`
+              // produces, and the case a short-page guess gets wrong.
+              return { hits: opts.pages[page] ?? [], hasMore: page + 1 < opts.pages.length }
+            }
+            return { hits: opts.hits ?? [], hasMore: false }
           },
         }),
   } as unknown as GitHubClient
@@ -409,7 +416,7 @@ describe('GitLabIssuesProvider.searchIssues', () => {
     expect(results.map((r) => r.externalId)).toEqual(['group/sub/web#2'])
   })
 
-  it('stops paging on a short page rather than walking the bound', async () => {
+  it('stops paging when the vendor reports no next page, rather than walking the bound', async () => {
     const { client, searchCalls } = fakeClient({ pages: [[hit(1)]] })
     const provider = new GitLabIssuesProvider({
       gitlabClient: client,
@@ -426,13 +433,37 @@ describe('GitLabIssuesProvider.searchIssues', () => {
     expect(results).toEqual([])
   })
 
-  it('returns nothing when the workspace’s connection is a GitHub App, or absent', async () => {
+  // A page shorter than the overscan asked for proves nothing: `max_page_size` is an instance
+  // setting an administrator can lower below it, and on such an instance EVERY page is short. So
+  // the walk pages on GitLab's own next-page answer, and a short page with more behind it keeps
+  // going instead of reporting a board it never finished as exhausted.
+  it('keeps walking a short page the vendor says has more behind it', async () => {
+    const { client, searchCalls } = fakeClient({ pages: [[hit(1)], [hit(2)]] })
+    const provider = new GitLabIssuesProvider({
+      gitlabClient: client,
+      installations: connectionRepo('gitlab'),
+    })
+
+    const results = await provider.searchIssues(
+      {},
+      { ...intake, limit: 5, excludeExternalIds: ['group/sub/web#1'] },
+      'ws1',
+    )
+
+    expect(searchCalls).toHaveLength(2)
+    expect(results.map((r) => r.externalId)).toEqual(['group/sub/web#2'])
+  })
+
+  // An intake read PICKS WORK TO START, on a schedule nobody is watching, so an empty list is
+  // consumed as "no matching open issues" — the opposite fact from "there is no GitLab connection
+  // to read one through", and the only one of the two that names something to fix.
+  it('refuses when the workspace’s connection is a GitHub App, or absent', async () => {
     for (const provider of ['github', null] as const) {
       const source = new GitLabIssuesProvider({
         gitlabClient: fakeClient({ hits: [hit(5)] }).client,
         installations: connectionRepo(provider),
       })
-      expect(await source.searchIssues({}, intake, 'ws1')).toEqual([])
+      await expect(source.searchIssues({}, intake, 'ws1')).rejects.toThrow(/no GitLab connection/i)
     }
   })
 

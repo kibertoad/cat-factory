@@ -170,6 +170,21 @@ export const taskSourceDescriptorSchema = v.object({
 })
 export type TaskSourceDescriptor = v.InferOutput<typeof taskSourceDescriptorSchema>
 
+/**
+ * The narrowing predicates an issue-intake query (the recurring `bug-intake` schedule and the
+ * interactive bug hunt share one vocabulary) can carry, as the closed set a source states its
+ * gaps against. The kernel port owns the query shape; this picklist is the member list, here
+ * because the SPA renders one form field per predicate and has to agree with the backend about
+ * which of them a given source will actually apply.
+ */
+export const issueIntakePredicateSchema = v.picklist([
+  'titleFragment',
+  'labels',
+  'issueType',
+  'unassignedOnly',
+])
+export type IssueIntakePredicate = v.InferOutput<typeof issueIntakePredicateSchema>
+
 /** A Linear team, offered in the ticket-filing team picker. */
 export const linearTeamSchema = v.object({
   id: v.string(),
@@ -215,6 +230,17 @@ export const taskSourceStateSchema = v.object({
    * schedule that can never fire, and the form has to know which before it renders a picker.
    */
   supportsIntake: v.boolean(),
+  /**
+   * The intake predicates this source's provider will NOT apply, because its vendor cannot
+   * express them. Empty for a source that applies all of them.
+   *
+   * On the wire because the form offering a predicate is the only place the gap is meetable: a
+   * dropped predicate leaves a schedule that saves, fires, and picks up the wrong issue, and the
+   * SPA cannot infer which those are from the source id without restating the backend's compiler
+   * (the exact split `binaryFormatCoverage` exists to avoid). So the field is rendered with the
+   * substitution stated on it rather than silently misleading.
+   */
+  ignoredIntakePredicates: v.array(issueIntakePredicateSchema),
 })
 export type TaskSourceState = v.InferOutput<typeof taskSourceStateSchema>
 

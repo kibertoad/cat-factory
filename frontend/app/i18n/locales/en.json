@@ -399,6 +399,7 @@
       "intakeLabels": "Labels",
       "intakeLabelsPlaceholder": "comma-separated",
       "intakeIssueType": "Issue type",
+      "intakeIssueTypeUnsupported": "{tracker} has no issue type that means \"bug\", so this schedule will not apply it. Narrow the pickup with a label instead.",
       "intakeInProgressLabel": "In-progress label",
       "refusalPerTicketRequiresOnDemand": "A tracker-triggered schedule must be on-demand. A cadence tick carries no ticket to dispatch.",
       "refusalPerTicketConflictsWithBugIntake": "This pipeline picks its own issue from the board, so it cannot also be driven by a pushed ticket. Choose a pipeline without a bug-intake step."
@@ -4595,6 +4596,7 @@
     "boardsFailed": "Boards could not be loaded: {reason}",
     "issueType": "Issue type",
     "issueTypeHelp": "Defaults to bug. Ignored by trackers with no issue types.",
+    "issueTypeUnsupported": "{tracker} has no issue type that means \"bug\", so this filter is not applied. Narrow the scan with a label instead.",
     "labels": "Labels",
     "labelsHelp": "Comma separated. All of them must be present.",
     "adoptInto": "Add the picked bug to",

@@ -172,6 +172,10 @@ export class TaskConnectionService {
         // back a recurring intake, and offering it in the schedule form produces a schedule that
         // saves and then never fires.
         supportsIntake: typeof provider.searchIssues === 'function',
+        // Asked of the provider too, but DECLARED there rather than derived: the four vendor
+        // grammars share no shape to inspect. Absent ⇒ every predicate bites, which is the
+        // claim a source makes by saying nothing.
+        ignoredIntakePredicates: [...(provider.ignoredIntakePredicates ?? [])],
       })
     }
     return states

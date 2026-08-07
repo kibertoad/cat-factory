@@ -11,6 +11,7 @@ import type { IssueIntakeRefusalReason } from '@cat-factory/contracts'
 import { BUILTIN_TASK_SOURCE_KINDS } from '@cat-factory/contracts'
 import { apiErrorReason } from '~/composables/api/errors'
 import { pipelineAllowedForSchedule } from '~/utils/pipeline'
+import { appliesIntakePredicate } from '~/utils/intakePredicates'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -185,6 +186,20 @@ const intakeDispatch = computed<'queue' | 'per-ticket'>(() =>
 // (`supportsIntake`, derived from the registered provider) rather than inferred from the id here.
 const intakeSources = computed(() => tasks.offeredSources.filter((s) => s.supportsIntake))
 
+/** The selected source's state, which is what declares the predicates it will not apply. */
+const intakeSourceState = computed(() =>
+  intakeSource.value ? tasks.descriptorFor(intakeSource.value) : undefined,
+)
+const intakeSourceLabel = computed(() => intakeSourceState.value?.label ?? '')
+/**
+ * Whether the selected source will actually apply the issue-type predicate. A schedule fires
+ * unattended, and `BugIntakeService` defaults the predicate to `bug`, so a source that drops it
+ * starts the bugfix pipeline on whatever is oldest and open with nothing to point at.
+ */
+const intakeIssueTypeApplies = computed(() =>
+  appliesIntakePredicate(intakeSourceState.value, 'issueType'),
+)
+
 watch(open, (isOpen) => {
   if (!isOpen) return
   name.value = ''
@@ -296,7 +311,12 @@ function buildIssueIntake(): IssueIntakeConfig {
         ? { titleFragment: intakeTitleFragment.value.trim() }
         : {}),
       ...(labels.length ? { labels } : {}),
-      ...(intakeIssueType.value.trim() ? { issueType: intakeIssueType.value.trim() } : {}),
+      // Withheld for a source that would drop it anyway, so the STORED config carries no
+      // predicate the schedule never applies: a config read back later is evidence of what the
+      // schedule does, and a dead `issueType: 'bug'` on it is the same lie the form would tell.
+      ...(intakeIssueTypeApplies.value && intakeIssueType.value.trim()
+        ? { issueType: intakeIssueType.value.trim() }
+        : {}),
     },
     ...(source === 'github' && intakeInProgressLabel.value.trim()
       ? { inProgressLabel: intakeInProgressLabel.value.trim() }
@@ -598,7 +618,23 @@ async function add() {
             </UFormField>
             <UFormField :label="t('board.recurring.intakeIssueType')">
               <!-- A literal issue-type example (tracker vocabulary), kept verbatim across locales. -->
-              <UInput v-model="intakeIssueType" placeholder="bug" class="w-full" />
+              <UInput
+                v-if="intakeIssueTypeApplies"
+                v-model="intakeIssueType"
+                placeholder="bug"
+                class="w-full"
+              />
+              <!-- Not a disabled input: this source's provider never sends the predicate, so a box
+                   still holding a value would read as a filter that is on. Stated here because a
+                   schedule fires unattended — the only other evidence of the gap is a bugfix run
+                   started on a docs chore. -->
+              <p v-else class="text-xs text-amber-400">
+                {{
+                  t('board.recurring.intakeIssueTypeUnsupported', {
+                    tracker: intakeSourceLabel,
+                  })
+                }}
+              </p>
             </UFormField>
             <UFormField
               v-if="intakeSource === 'github'"

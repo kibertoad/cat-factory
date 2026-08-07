@@ -234,13 +234,31 @@ this before slice 6 (webhooks) or 7 (writeback).
   narrowing, and it is its own field rather than a convention on `text` because the picker's
   free-text box legitimately wants the wider reading: the two differ in what they RETURN, not in
   how they are spelled.
-- **`issueType` is IGNORED, and that is a stated outcome rather than a silent one.** GitLab's own
-  issue-type vocabulary is the closed set `issue` / `incident` / `test_case` / `task`, which has
-  no member meaning "bug" — and `bug` is exactly what `BugIntakeService` defaults the predicate
-  to, so sending it would be rejected by the API outright. This follows the precedent Linear
-  already set (teams label their bugs, which the `labels` predicate covers). The consequence
-  worth knowing when configuring a GitLab intake: the type predicate does not narrow anything, so
-  a schedule that must pick up only bugs says so with a LABEL.
+- **`issueType` is IGNORED, and the FORM that offers it says so.** GitLab's own issue-type
+  vocabulary is the closed set `issue` / `incident` / `test_case` / `task`, which has no member
+  meaning "bug" — and `bug` is exactly what `BugIntakeService` defaults the predicate to, so
+  sending it would be rejected by the API outright. This follows the precedent Linear already set
+  (teams label their bugs, which the `labels` predicate covers).
+
+  Writing that down in a doc was not enough, because the operator meets the gap in the schedule
+  modal, which rendered an issue-type box for every source. A dropped predicate is invisible at
+  every layer that would otherwise catch it: the query compiles, the vendor answers, and the caller
+  gets issues, just a wider set than it asked for — on an unattended schedule whose default is
+  `bug`, that is a bugfix pipeline started on a docs chore with nothing to point at. So a provider
+  now DECLARES its gaps as `TaskSourceProvider.ignoredIntakePredicates`, `TaskSourceState` carries
+  them to the SPA, and both intake forms replace the field with the substitution to use. The
+  declaration is kept honest by `intakePredicateSupport.test.ts`, which compiles each source's
+  query with and without each predicate and reads the answer off the compiler rather than restating
+  it: teaching GitLab to send `issue_type` fails until the declaration drops it, and dropping a
+  predicate from a compiler fails until the declaration names it.
+
+- **The GitLab walk pages on GitLab's own next-page answer, not on a short page.** `max_page_size`
+  is an INSTANCE setting an administrator can lower below the overscan's `limit + excluded.size`,
+  and on such an instance every page is short — so "fewer than I asked for, therefore the last one"
+  ends the walk after page 1 and reports a board it never finished as exhausted. The adapter
+  already parses `Link: rel="next"` and now carries it out on `ProjectIssuePage.hasMore` rather
+  than discarding it. (The GitHub twin keeps the short-page break: GitHub honours `per_page` up to
+  100 with no instance knob under it.)
 - **The exclusion overscan cannot page on exclusions alone, on either provider.** Both walks size
   the request at `limit + excluded.size`, so a FULL page can hold at most `excluded.size` excluded
   ids and therefore always yields at least `limit` eligible ones. The bounded page walk is reached

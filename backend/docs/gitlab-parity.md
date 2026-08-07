@@ -36,9 +36,11 @@ comparison (not a work log), see [`vcs-providers.md`](./vcs-providers.md).
   `bug-intake` schedule (scoped by a `gitlabProject` board field) and the interactive bug hunt,
   each reading a whole page of candidates in ONE project-scoped call. Still open: push intake
   (the `X-Gitlab-Token` webhook adapter) and ticket writeback. One predicate does NOT bite on
-  GitLab and is documented rather than faked: `issueType` is ignored, because GitLab's own type
-  vocabulary (`issue` / `incident` / `test_case` / `task`) has no member meaning "bug" and GitLab
-  shops mark bugs with a label, so a GitLab intake narrows to bugs through `labels`. Tracker:
+  GitLab: `issueType` is ignored, because GitLab's own type vocabulary (`issue` / `incident` /
+  `test_case` / `task`) has no member meaning "bug" and GitLab shops mark bugs with a label. The
+  provider DECLARES that on `ignoredIntakePredicates`, which rides `TaskSourceState` to the SPA, so
+  both intake forms name the substitution where the operator configures the schedule rather than
+  offering a box whose value is dropped. Tracker:
   [`gitlab-issues-intake.md`](../../docs/initiatives/gitlab-issues-intake.md).
 - **Per-workspace PAT connect (backend + UI landed; engine-routing pending)**: a workspace
   connects GitLab by pasting a PAT in the UI: `POST /workspaces/:ws/gitlab/connection` validates +

@@ -2933,6 +2933,7 @@
       "intakeLabels": "Etichette",
       "intakeLabelsPlaceholder": "separate da virgole",
       "intakeIssueType": "Tipo di issue",
+      "intakeIssueTypeUnsupported": "{tracker} non ha un tipo di issue che significhi «bug», quindi questa pianificazione non lo applicherà. Restringi la selezione con un’etichetta.",
       "intakeInProgressLabel": "Etichetta in corso",
       "refusalPerTicketRequiresOnDemand": "Una pianificazione attivata dal tracker deve essere su richiesta. Un ciclo a cadenza non porta con sé alcun ticket da assegnare.",
       "refusalPerTicketConflictsWithBugIntake": "Questa pipeline sceglie da sola il proprio problema dalla bacheca, quindi non può essere guidata anche da un ticket in arrivo. Scegli una pipeline senza passaggio di raccolta bug."
@@ -4070,6 +4071,7 @@
     "boardsFailed": "Impossibile caricare le board: {reason}",
     "issueType": "Tipo di ticket",
     "issueTypeHelp": "Per impostazione predefinita bug. Ignorato dai tracker senza tipi di ticket.",
+    "issueTypeUnsupported": "{tracker} non ha un tipo di issue che significhi «bug», quindi questo filtro non viene applicato. Restringi la scansione con un’etichetta.",
     "labels": "Etichette",
     "labelsHelp": "Separate da virgole. Devono essere tutte presenti.",
     "adoptInto": "Aggiungi il bug scelto a",

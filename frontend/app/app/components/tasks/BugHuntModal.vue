@@ -36,6 +36,7 @@ import {
   sourceMenuItems,
 } from '~/utils/sourcePicker'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import { appliesIntakePredicate } from '~/utils/intakePredicates'
 
 const { t, d, n } = useI18n()
 const ui = useUiStore()
@@ -66,6 +67,13 @@ const {
 } = useContainerTargets(() => ui.bugHunt?.containerId)
 
 const descriptor = computed(() => (source.value ? tasks.descriptorFor(source.value) : undefined))
+
+/**
+ * Whether the picked tracker will actually apply the issue-type predicate. Asked of the source's
+ * own declaration, because a hunt whose type filter is silently dropped ranks and adopts whatever
+ * is oldest and open, and `run` sends the `bug` default whether or not the user typed one.
+ */
+const issueTypeApplies = computed(() => appliesIntakePredicate(descriptor.value, 'issueType'))
 
 /**
  * Wording for an addable tracker, as an exhaustive map over the add actions a TRACKER menu can
@@ -325,8 +333,17 @@ const STATUS_KEYS: Record<BugHuntAnalysisStatus, string> = {
             </p>
           </UFormField>
 
-          <UFormField :label="t('bugHunt.issueType')" :help="t('bugHunt.issueTypeHelp')">
-            <UInput v-model="issueType" placeholder="bug" class="w-full" />
+          <UFormField
+            :label="t('bugHunt.issueType')"
+            :help="issueTypeApplies ? t('bugHunt.issueTypeHelp') : undefined"
+          >
+            <UInput v-if="issueTypeApplies" v-model="issueType" placeholder="bug" class="w-full" />
+            <!-- Not a disabled input: this tracker's provider never sends the predicate, so a box
+                 still holding a value would read as a filter that is on. What it CAN narrow by is
+                 named instead, since the alternative is a hunt over every open issue. -->
+            <p v-else class="text-xs text-amber-400">
+              {{ t('bugHunt.issueTypeUnsupported', { tracker: descriptor?.label ?? '' }) }}
+            </p>
           </UFormField>
 
           <UFormField :label="t('bugHunt.labels')" :help="t('bugHunt.labelsHelp')">

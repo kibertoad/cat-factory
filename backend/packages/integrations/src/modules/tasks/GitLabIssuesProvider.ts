@@ -80,6 +80,14 @@ export class GitLabIssuesProvider implements TaskSourceProvider {
    * requires a scope and its imported rows narrow to one. See the kernel port.
    */
   readonly repoScope = { matches: gitlabIssuesLogic.gitlabIssueInRepoScope }
+  /**
+   * GitLab's own issue-type vocabulary is the closed set `issue` / `incident` / `test_case` /
+   * `task`, which has no member meaning "bug", and GitLab shops mark bugs with a label instead.
+   * Sending the intake default (`bug`) as `issue_type` would be rejected by the API outright, so
+   * {@link gitlabIssuesLogic.buildGitLabIntakeSearch} omits it — and this is what stops that
+   * omission being silent all the way out to the schedule form.
+   */
+  readonly ignoredIntakePredicates = ['issueType'] as const
 
   constructor(private readonly deps: GitLabIssuesProviderDependencies) {}
 
@@ -191,15 +199,17 @@ export class GitLabIssuesProvider implements TaskSourceProvider {
       }
     }
 
-    const hits = await searchProject
+    // One page is the whole picker: it offers 20 hits and the user narrows by typing, so the
+    // `hasMore` the read carries out is for the intake walk, not for this.
+    const page = await searchProject
       .call(
         this.deps.gitlabClient,
         connection.installationId,
         { owner: scope.owner, repo: scope.repo },
         gitlabIssuesLogic.buildGitLabIssueSearchQuery(query, 20),
       )
-      .catch(() => [])
-    for (const hit of hits) {
+      .catch(() => null)
+    for (const hit of page?.hits ?? []) {
       const externalId = gitlabIssuesLogic.gitlabIssueExternalId(hit)
       if (seen.has(externalId)) continue
       seen.add(externalId)
@@ -275,13 +285,22 @@ export class GitLabIssuesProvider implements TaskSourceProvider {
    * Comparison is case-SENSITIVE, unlike the GitHub twin's: both sides of it are GitLab project
    * paths built from the same `path_with_namespace`, and folding case would let two projects
    * GitLab serves as distinct answer for each other.
+   *
+   * Both preconditions REFUSE rather than answer empty, which is where this parts company with
+   * {@link GitLabIssuesProvider.listBoards} and {@link GitLabIssuesProvider.search}: those read a
+   * board to OFFER, and "nothing to offer yet" beside a connect button is the honest answer for a
+   * workspace that has not connected. These two reads pick work to START, on a schedule nobody is
+   * watching, so an empty list is consumed as the finding "no matching open issues to pick up" —
+   * the opposite fact from "this workspace has no GitLab connection to read one through", and the
+   * only one of the two that names something to fix. The intake step turns the throw back into a
+   * no-pickup summary carrying the cause, so a schedule that outlives its connection reports why
+   * instead of reporting a quiet board.
    */
   private async walkIntakeHits(
     intake: IssueIntakeQuery,
     workspaceId: string,
   ): Promise<GitHubIssueSearchHit[]> {
-    const connection = await this.deps.installations.getByWorkspace(workspaceId)
-    if (!connection || connection.provider !== 'gitlab') return []
+    const connection = await this.requireConnection(workspaceId)
     const searchProject = this.deps.gitlabClient.searchProjectIssues
     if (!searchProject) {
       // Never an empty result: "this deployment cannot scan a GitLab board" and "this board has
@@ -299,7 +318,7 @@ export class GitLabIssuesProvider implements TaskSourceProvider {
     const out: GitHubIssueSearchHit[] = []
     for (let page = 1; page <= INTAKE_MAX_PAGES && out.length < intake.limit; page++) {
       const search = gitlabIssuesLogic.buildGitLabIntakeSearch(intake, { limit: per, page })
-      const hits = await searchProject.call(
+      const { hits, hasMore } = await searchProject.call(
         this.deps.gitlabClient,
         connection.installationId,
         search.ref,
@@ -314,7 +333,11 @@ export class GitLabIssuesProvider implements TaskSourceProvider {
         out.push(hit)
         if (out.length >= intake.limit) break
       }
-      if (hits.length < per) break // a short page is the last page — stop paging
+      // GitLab's own answer, not the returned count: `max_page_size` is an instance setting an
+      // administrator can lower below the overscan's `per`, and on such an instance EVERY page is
+      // short — so reading a short page as the last one would end the walk after page 1 and report
+      // a board it never finished as exhausted.
+      if (!hasMore) break
     }
     return out
   }

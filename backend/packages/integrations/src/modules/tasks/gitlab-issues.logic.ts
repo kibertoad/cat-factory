@@ -1,14 +1,12 @@
 import {
   ValidationError,
-  type BugCandidate,
-  type GitHubIssueSearchHit,
   type IssueIntakeQuery,
   type ProjectIssueQuery,
   type TaskSearchRepoScope,
   type TaskSourceDescriptor,
-  type TrackerBoard,
 } from '@cat-factory/kernel'
 import type { TaskSourceReadReason } from '@cat-factory/contracts'
+import { repoIssueBugCandidateMapper, repoRefsToBoards } from './repo-issues.logic.js'
 
 // GitLab-issues task-source pure logic, the sibling of `github-issues.logic.ts`: the
 // descriptor, the external-id grammar and its round-trip, the ref parser, and the
@@ -240,53 +238,23 @@ export function buildGitLabIntakeSearch(
   }
 }
 
-/** Cap on a candidate's rendered body; the ranking judges actionability, not the full trace. */
-const MAX_CANDIDATE_DESCRIPTION_CHARS = 1_200
-
 /**
- * Project a project-scoped search hit onto a {@link BugCandidate}. GitLab's project-issues
- * response carries the description, labels, creation time and note count in the SAME payload as
- * the title, so a whole hunt scan is one request per page and never a per-candidate detail read.
+ * Project a project-scoped search hit onto a {@link BugCandidate}: the shared repo-backed
+ * projection, over GitLab's own external-id grammar. GitLab's project-issues response carries the
+ * description, labels, creation time and note count in the SAME payload as the title, so a whole
+ * hunt scan is one request per page and never a per-candidate detail read.
  *
- * `priority` and `type` stay empty rather than guessed: GitLab models both as label conventions
- * that differ per instance (`priority::high`, `type::bug`), and reading one instance's convention
- * onto every deployment would report a priority nobody set. The labels themselves are carried, so
- * a ranking still sees them.
+ * See {@link repoIssueBugCandidateMapper} for why `priority` and `type` stay empty; on GitLab the
+ * conventions it declines to guess at are the scoped labels `priority::high` and `type::bug`.
  */
-export function gitlabHitToBugCandidate(hit: GitHubIssueSearchHit): BugCandidate {
-  return {
-    source: 'gitlab',
-    externalId: gitlabIssueExternalId(hit),
-    title: hit.title,
-    url: hit.url,
-    status: hit.state,
-    type: '',
-    priority: null,
-    labels: hit.labels ?? [],
-    description: (hit.body ?? '').trim().slice(0, MAX_CANDIDATE_DESCRIPTION_CHARS),
-    createdAt: hit.createdAt ?? '',
-    commentCount: hit.commentCount ?? 0,
-  }
-}
+export const gitlabHitToBugCandidate = repoIssueBugCandidateMapper('gitlab', gitlabIssueExternalId)
 
 /**
- * Map the projects a connection can reach onto hunt boards. A GitLab board scope is the full
- * path with namespace (what {@link buildGitLabIntakeSearch} splits back into a ref), so `id` and
- * `key` are the same value; `name` is the project's own final segment, which is what a human
- * scans a list by, while the `key` beside it disambiguates two projects of the same name in
- * different groups (routine on GitLab, where every team has its own `web`).
+ * Map the projects a connection can reach onto hunt boards: the shared repo-backed projection,
+ * since a GitLab board scope is the full path with namespace that {@link buildGitLabIntakeSearch}
+ * splits back into a ref.
  */
-export function gitlabProjectsToBoards(
-  projects: { owner: string; name: string }[],
-): TrackerBoard[] {
-  return projects
-    .filter((project) => project.owner && project.name)
-    .map((project) => ({
-      id: `${project.owner}/${project.name}`,
-      name: project.name,
-      key: `${project.owner}/${project.name}`,
-    }))
-}
+export const gitlabProjectsToBoards = repoRefsToBoards
 
 /**
  * Resolve raw search input that names ONE specific issue in the SCOPED project (rather than

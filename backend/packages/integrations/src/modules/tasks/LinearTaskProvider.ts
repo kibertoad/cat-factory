@@ -68,6 +68,11 @@ export class LinearTaskProvider implements TaskSourceProvider {
    */
   readonly webhook = linearWebhookAdapter
   readonly descriptor = LINEAR_TASK_DESCRIPTOR
+  /**
+   * Linear has no issue-type notion at all: teams distinguish bugs with a label, which is what
+   * `buildLinearIntakeFilter` compiles and what an intake schedule has to narrow with here.
+   */
+  readonly ignoredIntakePredicates = ['issueType'] as const
 
   normalizeConnection(input: TaskCredentials): NormalizedTaskConnection {
     // The OAuth connect flow writes a `{ token }` record directly (it never calls
