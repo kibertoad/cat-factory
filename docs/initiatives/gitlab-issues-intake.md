@@ -132,6 +132,7 @@ tracker rather than a one-PR change.
 | 2   | `gitlab-issues.logic.ts`: descriptor, multi-segment external id, ref parser, URL resolution             | 🟩 done | this |
 | 3   | `GitLabIssuesProvider`: `normalizeConnection` / `parseRef` / `fetchTask` / `search` / `diagnose`        | 🟩 done | this |
 | 3b  | **Registry wiring, both facades** (pulled forward out of slice 4: the read path is unreachable unwired) | 🟩 done | this |
+| 3c  | **Registry-driven scope + settings surface** (review follow-up: three `github` hard-codings)            | 🟩 done | this |
 | 4   | `searchIssues` (recurring `bug-intake`) + the `board.gitlabProject` scope field                         | ⬜ todo |      |
 | 5   | `listBoards` + `listBugCandidates` (interactive bug hunt), ONE vendor call per scan                     | ⬜ todo |      |
 | 6   | Webhook adapter: `X-Gitlab-Token` verification on the RAW body, push intake + ticket replies            | ⬜ todo |      |
@@ -139,7 +140,7 @@ tracker rather than a one-PR change.
 | 8   | Conformance: the task-source suite parameterised over the new provider on both facades                  | ⬜ todo |      |
 | 9   | Docs sweep: root README "What it supports", `vcs-providers.md`, `gitlab-parity.md` cross-links          | ⬜ todo |      |
 
-## Findings (slices 1-3b: the read path)
+## Findings (slices 1-3c: the read path)
 
 The first code slice landed import, search and the setup check, wired on both facades. Read this
 before slice 4 (recurring intake) or 5 (bug hunt): three of the decisions below constrain them.
@@ -194,6 +195,22 @@ before slice 4 (recurring intake) or 5 (bug hunt): three of the decisions below 
   `config.gitlab.apiBase`) and answers `''` without one. A `gitlab.com` constant would be wrong
   for every self-managed instance, and a wrong link fails differently from a missing one: it
   looks like it worked. Same disposition the UI-parity tracker reached for its new-project link.
+
+- **Registering a provider is not the same as REACHING it, and three callers were the difference.**
+  Review of the read path found the source registered, wired and unit-tested, and still unusable:
+  `TaskSourceController.resolveSearchScope` returned `null` for anything but `github`, so every
+  GitLab query reached a provider that refuses a null scope by design and 422'd; `taskInRepoScope`
+  early-returned `true` for anything but `github`, so a multi-project connection leaked other
+  projects' issues into every frame's imported list; and the issue-tracker settings panel held one
+  hard-coded card per built-in, so the new setup check had no button and the toggle no switch.
+  Each was a source LIST standing where a registry lookup belongs, and each failed silently in a
+  different direction. The fix is one declaration read by both backend callers,
+  `TaskSourceProvider.repoScope` (present ⇔ repo-backed; it carries the `matches` rule because the
+  comparison is the source's own: GitHub folds case, GitLab must not, and a GitLab namespace
+  NESTS), plus `TaskSourceState.ridesVcsProvider` on the wire so the panel renders one card per
+  registered source and still names the right remedy for an unavailable one. **A slice that adds a
+  capability owes the callers that gate on it, not only the provider that implements it**: slice 4
+  and slice 6 each have one (`supportsIntake` and the webhook adapter's presence).
 
 When the committed scope completes, convert this tracker into a numbered ADR under
 `backend/docs/adr/` and `git rm` this file, per CLAUDE.md.

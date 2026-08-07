@@ -135,6 +135,24 @@ export function gitlabWebBaseFromApiBase(apiBase: string | undefined): string | 
 }
 
 /**
+ * The provider's `TaskRepoScopeRules` matcher: whether a STORED external id belongs to the
+ * scoped project.
+ *
+ * Case-SENSITIVE, where the GitHub twin is not, and that asymmetry is the whole reason the
+ * comparison belongs to the source rather than to a shared helper. A GitLab project path is the
+ * `path_with_namespace` both sides are built from (the id is parsed out of a `web_url`, the scope
+ * comes from the repo projection's own fold of the same field), so they already agree; folding
+ * case on top would let `Acme/web` and `acme/web`, which GitLab serves as two different projects,
+ * answer for each other.
+ *
+ * An id that does not parse is out of scope, same reading as the GitHub matcher's.
+ */
+export function gitlabIssueInRepoScope(externalId: string, scope: TaskSearchRepoScope): boolean {
+  const id = parseGitLabIssueExternalId(externalId)
+  return !!id && id.owner === scope.owner && id.repo === scope.repo
+}
+
+/**
  * Build the project-scoped issue search for the picker's free-text box. The scope is the
  * repository the searching service frame is linked to, and it is an ARGUMENT of the request
  * rather than text in the query, so there is no unscoped spelling of this search to reach by

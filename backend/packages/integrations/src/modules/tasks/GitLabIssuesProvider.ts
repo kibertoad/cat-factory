@@ -60,6 +60,11 @@ export interface GitLabIssuesProviderDependencies {
 export class GitLabIssuesProvider implements TaskSourceProvider {
   readonly kind = 'gitlab' as const
   readonly descriptor = GITLAB_ISSUES_DESCRIPTOR
+  /**
+   * Repo-backed: a `group/sub/project#iid` id names its project, so this source's search
+   * requires a scope and its imported rows narrow to one. See the kernel port.
+   */
+  readonly repoScope = { matches: gitlabIssuesLogic.gitlabIssueInRepoScope }
 
   constructor(private readonly deps: GitLabIssuesProviderDependencies) {}
 

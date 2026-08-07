@@ -2760,27 +2760,21 @@
         "linearTeamSearchPlaceholder": "Rechercher des équipes…"
       },
       "vendor": {
-        "github": "GitHub Issues",
-        "jira": "Jira",
-        "linear": "Linear"
+        "github": "GitHub Issues"
       },
       "linking": {
         "heading": "Lier des tickets comme contexte",
         "description": "Lorsqu'une source est proposée, vous pouvez importer ses tickets et les rattacher à une tâche, afin que les agents voient la description du ticket et les commentaires pendant l'implémentation. C'est indépendant du suivi de création ci-dessus.",
-        "github": {
-          "available": "S'appuie sur votre GitHub App installée : aucun identifiant nécessaire.",
-          "unavailable": "Installez la GitHub App (Intégrations → GitHub) pour proposer cette source."
-        },
         "checkSetup": "Vérifier la configuration",
-        "install": "Installer",
         "connected": "Connecté.",
-        "jira": {
-          "connectHint": "Connectez-vous avec un compte Jira et un jeton d'API."
+        "connect": "Connecter",
+        "state": {
+          "ridesConnected": "Utilise la connexion {provider} de cet espace de travail, donc aucun identifiant propre n'est nécessaire.",
+          "ridesMissing": "Connectez {provider} dans Intégrations pour proposer cette source.",
+          "notConnected": "Pas encore connecté."
         },
-        "linear": {
-          "connectHint": "Connectez-vous avec une clé d'API personnelle Linear."
-        },
-        "connect": "Connecter"
+        "connectProvider": "Connecter {provider}",
+        "none": "Ce déploiement n'a aucune source de tâches configurée."
       },
       "writeback": {
         "heading": "Écriture en retour",

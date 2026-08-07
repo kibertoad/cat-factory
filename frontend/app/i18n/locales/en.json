@@ -3011,27 +3011,21 @@
         "linearTeamSearchPlaceholder": "Search teams…"
       },
       "vendor": {
-        "github": "GitHub Issues",
-        "jira": "Jira",
-        "linear": "Linear"
+        "github": "GitHub Issues"
       },
       "linking": {
         "heading": "Link issues as context",
         "description": "When a source is offered you can import its issues and attach them to a task, so agents see the issue description and comments while implementing. This is independent of the filing tracker above.",
-        "github": {
-          "available": "Rides your installed GitHub App — no credentials needed.",
-          "unavailable": "Install the GitHub App (Integrations → GitHub) to offer this source."
-        },
         "checkSetup": "Check setup",
-        "install": "Install",
         "connected": "Connected.",
-        "jira": {
-          "connectHint": "Connect with a Jira account and API token."
+        "connect": "Connect",
+        "state": {
+          "ridesConnected": "Rides this workspace's {provider} connection, so it needs no credentials of its own.",
+          "ridesMissing": "Connect {provider} under Integrations to offer this source.",
+          "notConnected": "Not connected yet."
         },
-        "linear": {
-          "connectHint": "Connect with a Linear personal API key."
-        },
-        "connect": "Connect"
+        "connectProvider": "Connect {provider}",
+        "none": "This deployment has no task sources configured."
       },
       "writeback": {
         "heading": "Writeback",

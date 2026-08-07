@@ -150,14 +150,25 @@ export class TaskImportService {
   /**
    * Every issue imported into the workspace, across sources, as wire shapes.
    *
-   * `scope` (resolved by the controller from an originating block) pins a
-   * repo-backed source to one repository: GitHub issues from other repos are
-   * dropped so a service's quick-pick list stays in-repo, while repo-less sources
-   * (Jira, Linear) are returned in full. Omitted → the whole workspace.
+   * `scope` (resolved by the controller from an originating block) pins EVERY repo-backed
+   * source to one repository: an issue from another repository is dropped so a service's
+   * quick-pick list stays in-repo, while repo-less sources (Jira, Linear) are returned in full.
+   * Which sources are repo-backed is the registry's answer, never a list restated here, so a
+   * source added to the deployment narrows on the same day it can be imported. Omitted → the
+   * whole workspace.
+   *
+   * The provider for each source is resolved ONCE (rows routinely run into the hundreds and a
+   * workspace has a handful of sources), so the filter is a map lookup per row rather than a
+   * registry walk.
    */
   async listTasks(workspaceId: string, scope?: TaskSearchRepoScope): Promise<SourceTask[]> {
     const records = await this.deps.taskRepository.listByWorkspace(workspaceId)
-    const scoped = scope ? records.filter((r) => taskInRepoScope(r, scope)) : records
+    if (!scope) return records.map(toSourceTask)
+    const providers = new Map<TaskSourceKind, TaskSourceProvider | undefined>()
+    const scoped = records.filter((r) => {
+      if (!providers.has(r.source)) providers.set(r.source, this.deps.registry.get(r.source))
+      return taskInRepoScope(r, scope, providers.get(r.source))
+    })
     return scoped.map(toSourceTask)
   }
 

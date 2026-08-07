@@ -52,7 +52,11 @@ function service(connected: VcsProvider | null): TaskConnectionService {
       list: () => [source('github'), source('gitlab')],
       get: (kind: string) => (kind === 'github' ? source('github') : source('gitlab')),
     } as unknown as TaskSourceRegistry,
-    workspaceRepository: {} as WorkspaceRepository,
+    workspaceRepository: {
+      async get(id: string) {
+        return { id }
+      },
+    } as unknown as WorkspaceRepository,
     clock: { now: () => 0 },
     installations,
   })
@@ -81,5 +85,24 @@ describe('TaskConnectionService — VCS-backed source availability', () => {
     const onGitLab = await service('gitlab').diagnose('ws1', 'github')
     expect(onGitLab.status).toBe('not_installed')
     expect(onGitLab.message).toMatch(/Install it under Integrations → GitHub/)
+  })
+
+  it('publishes WHICH connection each source rides, so the UI need not infer the remedy', async () => {
+    const states = await service('gitlab').listSourceStates('ws1')
+    expect(states.map((s) => [s.source, s.ridesVcsProvider])).toEqual([
+      ['github', 'github'],
+      ['gitlab', 'gitlab'],
+    ])
+  })
+
+  it('refuses a connect on the source the caller named, never on the other provider’s', async () => {
+    // Both sources are credentialless, so `connect` refuses both — but a refusal that names the
+    // GitHub App to a GitLab operator points at an integration their deployment does not run.
+    await expect(service('gitlab').connect('ws1', 'gitlab', {})).rejects.toThrow(
+      /rides this workspace's GitLab connection/,
+    )
+    await expect(service('github').connect('ws1', 'github', {})).rejects.toThrow(
+      /rides this workspace's GitHub App/,
+    )
   })
 })

@@ -343,6 +343,7 @@ export type {
   TaskCredentials,
   TaskContent,
   TaskSearchRepoScope,
+  TaskRepoScopeRules,
   IssueIntakeQuery,
   BugCandidate,
   TrackerBoard,

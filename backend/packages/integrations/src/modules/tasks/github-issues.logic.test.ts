@@ -4,6 +4,7 @@ import {
   buildGitHubIssueSearchQuery,
   detectExactGitHubIssueRef,
   githubHitToBugCandidate,
+  githubIssueInRepoScope,
   githubIssueUrl,
   githubReposToBoards,
   parseGitHubIssueExternalId,
@@ -307,5 +308,24 @@ describe('githubReposToBoards', () => {
         { owner: 'octo', name: '' },
       ]),
     ).toEqual([])
+  })
+})
+
+describe('githubIssueInRepoScope', () => {
+  const scope = { owner: 'octo', repo: 'demo' }
+
+  it('keeps an issue of the scoped repo and drops a sibling repo', () => {
+    expect(githubIssueInRepoScope('octo/demo#42', scope)).toBe(true)
+    expect(githubIssueInRepoScope('octo/other#7', scope)).toBe(false)
+    expect(githubIssueInRepoScope('someone/demo#7', scope)).toBe(false)
+  })
+
+  it('matches case-insensitively, as GitHub repo names are', () => {
+    expect(githubIssueInRepoScope('Octo/Demo#42', scope)).toBe(true)
+    expect(githubIssueInRepoScope('octo/demo#42', { owner: 'OCTO', repo: 'DEMO' })).toBe(true)
+  })
+
+  it('treats an unparseable id as out-of-scope, never in every scope', () => {
+    expect(githubIssueInRepoScope('not-an-id', scope)).toBe(false)
   })
 })

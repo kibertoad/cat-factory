@@ -2901,27 +2901,21 @@
         "linearTeamSearchPlaceholder": "チームを検索…"
       },
       "vendor": {
-        "github": "GitHub Issues",
-        "jira": "Jira",
-        "linear": "Linear"
+        "github": "GitHub Issues"
       },
       "linking": {
         "heading": "課題をコンテキストとしてリンク",
         "description": "ソースが提供されている場合、その課題をインポートしてタスクに添付できます。これにより、エージェントは実装中に課題の説明とコメントを参照できます。これは上記の起票トラッカーとは独立しています。",
-        "github": {
-          "available": "インストール済みの GitHub App を利用します。認証情報は不要です。",
-          "unavailable": "このソースを提供するには GitHub App (Integrations → GitHub) をインストールしてください。"
-        },
         "checkSetup": "セットアップを確認",
-        "install": "インストール",
         "connected": "接続済み。",
-        "jira": {
-          "connectHint": "Jira アカウントと API トークンで接続します。"
+        "connect": "接続",
+        "state": {
+          "ridesConnected": "このワークスペースの {provider} 接続を利用するため、独自の認証情報は不要です。",
+          "ridesMissing": "このソースを利用するには、連携設定で {provider} を接続してください。",
+          "notConnected": "まだ接続されていません。"
         },
-        "linear": {
-          "connectHint": "Linear の個人 API キーで接続します。"
-        },
-        "connect": "接続"
+        "connectProvider": "{provider} を接続",
+        "none": "このデプロイにはタスクソースが設定されていません。"
       },
       "writeback": {
         "heading": "ライトバック",

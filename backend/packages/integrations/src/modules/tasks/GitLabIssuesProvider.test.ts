@@ -303,3 +303,24 @@ describe('GitLabIssuesProvider.diagnose', () => {
     expect(result.message).toMatch(message)
   })
 })
+
+describe('GitLabIssuesProvider.repoScope', () => {
+  const provider = new GitLabIssuesProvider({
+    gitlabClient: fakeClient({}).client,
+    installations: connectionRepo('gitlab'),
+  })
+
+  // Declaring `repoScope` is what makes the source repo-backed, and it is read by two callers
+  // that never meet: the controller (which resolves a scope BEFORE the search) and the imported-
+  // issue list (which filters AFTER). Wiring it to the GitHub matcher would pass every id-shape
+  // test in this file and then fold `group/sub/web` onto `group`, so the wiring is pinned here.
+  it('is declared, and matches on the GitLab grammar rather than the GitHub one', () => {
+    expect(provider.repoScope).toBeDefined()
+    expect(provider.repoScope?.matches('group/sub/web#12', scope)).toBe(true)
+    expect(provider.repoScope?.matches('group/other/web#12', scope)).toBe(false)
+    // The GitHub matcher would fold this to `{ owner: 'group', repo: 'sub' }` and refuse it.
+    expect(provider.repoScope?.matches('group/sub/web#12', { owner: 'group', repo: 'sub' })).toBe(
+      false,
+    )
+  })
+})

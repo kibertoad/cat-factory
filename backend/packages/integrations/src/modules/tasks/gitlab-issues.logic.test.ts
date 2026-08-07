@@ -3,6 +3,7 @@ import {
   buildGitLabIssueSearchQuery,
   detectExactGitLabIssueRef,
   gitlabIssueExternalId,
+  gitlabIssueInRepoScope,
   gitlabIssueUrl,
   gitlabWebBaseFromApiBase,
   parseGitLabIssueExternalId,
@@ -122,5 +123,32 @@ describe('detectExactGitLabIssueRef', () => {
 
   it('treats free text as free text', () => {
     expect(detectExactGitLabIssueRef('crash on save', scope)).toBeNull()
+  })
+})
+
+describe('gitlabIssueInRepoScope', () => {
+  it('keeps an issue of the scoped project and drops a sibling one', () => {
+    const scope = { owner: 'acme', repo: 'web' }
+    expect(gitlabIssueInRepoScope('acme/web#42', scope)).toBe(true)
+    expect(gitlabIssueInRepoScope('acme/api#42', scope)).toBe(false)
+    expect(gitlabIssueInRepoScope('other/web#42', scope)).toBe(false)
+  })
+
+  it('holds a NESTED namespace whole, so a subgroup is not another group project', () => {
+    const scope = { owner: 'acme/platform', repo: 'web' }
+    expect(gitlabIssueInRepoScope('acme/platform/web#7', scope)).toBe(true)
+    // Same trailing segments, different subgroup: a fold at the FIRST slash would pass this.
+    expect(gitlabIssueInRepoScope('acme/tooling/web#7', scope)).toBe(false)
+    expect(gitlabIssueInRepoScope('acme/web#7', scope)).toBe(false)
+  })
+
+  it('is case-SENSITIVE, because GitLab serves two differently-cased paths as two projects', () => {
+    expect(gitlabIssueInRepoScope('Acme/Web#42', { owner: 'acme', repo: 'web' })).toBe(false)
+  })
+
+  it('treats an unparseable id as out-of-scope, never in every scope', () => {
+    expect(gitlabIssueInRepoScope('not-an-id', { owner: 'acme', repo: 'web' })).toBe(false)
+    // A single-segment path names no project, so it names no scope either.
+    expect(gitlabIssueInRepoScope('web#42', { owner: 'acme', repo: 'web' })).toBe(false)
   })
 })
