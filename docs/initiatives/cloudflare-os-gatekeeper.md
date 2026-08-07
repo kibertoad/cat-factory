@@ -97,7 +97,8 @@ this repo's CI; the bindings package is its contract.
 
 ## Checklist
 
-- [x] Slice 1: scope as data, `x-min-scope`, `@cat-factory/gatekeeper-bindings` (this PR)
+- [x] Slice 1: scope as data, `x-min-scope`, `@cat-factory/gatekeeper-bindings`
+      ([#1804](https://github.com/kibertoad/cat-factory/pull/1804))
 - [ ] Slice 2: outbound webhook collection (both runtimes + conformance + SDK surface)
 - [ ] Slice 3: `externalIdentity` on key provisioning, echoed on run detail
 - [ ] Slice 4: reference Gatekeeper Worker (external)
