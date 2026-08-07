@@ -59,17 +59,27 @@ export type PublicApiScope = v.InferOutput<typeof publicApiScopeSchema>
  * that mints one key per person can map a RUN back to that person without keeping a keyId table
  * of its own, which is the whole cost it otherwise pays for real per-user attribution.
  *
- * Bounded and control-character-free rather than a bare string: it is echoed on the key resource,
- * on run projections and (per key) on `GET /api/v1/me`, so a value carrying a newline or a
- * terminator would be an integrator's own text breaking a line-oriented log or a table row on
- * whichever surface renders it next.
+ * Bounded and line-break-free rather than a bare string: it is echoed on the key resource, on run
+ * projections and (per key) on `GET /api/v1/me`, so a value carrying a newline or a terminator
+ * would be an integrator's own text breaking a line-oriented log or a table row on whichever
+ * surface renders it next.
+ *
+ * The class names its members one by one rather than using `\p{C}`, because this pattern SHIPS:
+ * it lands in `docs/openapi.json`, which third parties feed to their own codegen and validators,
+ * and a Unicode PROPERTY escape needs a regex flag many of them do not set.
  */
 export const publicApiExternalIdentitySchema = v.pipe(
   v.string(),
   v.trim(),
   v.minLength(1),
   v.maxLength(200),
-  v.regex(/^[^\p{C}]+$/u, 'externalIdentity must not contain control characters'),
+  v.regex(
+    // The lint guards a pattern that matches control characters by ACCIDENT; here refusing them
+    // is the whole rule, which is why the class names them one by one.
+    // eslint-disable-next-line no-control-regex
+    /^[^\u0000-\u001f\u007f\u0085\u2028\u2029]+$/,
+    'externalIdentity must not contain control characters or line breaks',
+  ),
 )
 export type PublicApiExternalIdentity = v.InferOutput<typeof publicApiExternalIdentitySchema>
 

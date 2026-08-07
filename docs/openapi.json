@@ -6,7 +6,7 @@
           "externalIdentity": {
             "maxLength": 200,
             "minLength": 1,
-            "pattern": "^[^\\p{C}]+$",
+            "pattern": "^[^\\u0000-\\u001f\\u007f\\u0085\\u2028\\u2029]+$",
             "type": "string"
           },
           "label": {
