@@ -288,6 +288,14 @@ provisions that infrastructure and probes those monitors. Its bound is three thi
   enumerates every readable row: five sources today, each bound to one repository read, one record
   field and one HKDF tag. A source not in that table is unreachable, whatever the row is worth.
 
+Two properties of the answering deployment bound it further, and both are structural rather than
+conventional. **Only a deployment holding its own main database serves the pair at all**, gated on
+the `secretCipherFor` capability: a mothership-mode node would otherwise answer under the LOCAL key
+that seals its own agent credentials, sealing rows the org can never open. And **no failure on this
+path is logged through a bare message read**: every one is bound with kernel's `describeError`, so
+`redactSecrets` runs over it first. This is the one surface whose SUBJECT is a credential, and a
+driver or WebCrypto error routinely echoes back the value it choked on.
+
 So the honest statement of the blast radius is: **a stolen machine token reads the org credentials
 of the accounts it is scoped to, for the sources in that table.** That is strictly more than the
 same token could read before, and strictly less than the mothership's `ENCRYPTION_KEY`, which still

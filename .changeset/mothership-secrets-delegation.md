@@ -33,8 +33,15 @@ hosted deployment, and local mode over its own Postgres) it is a pass-through to
 cipher, so nothing changes there.
 
 With provisioning writes now safe to persist, `environmentRegistryRepository.insert`/`update` join
-the persistence allow-list, and a mothership-mode node provisions, polls and tears down environments
-for real; the ephemeral-environment self-test runs end to end.
+the persistence allow-list, and so does `softDelete`, the tombstone half every re-provision and
+every reclaim runs. A mothership-mode node therefore provisions, polls and tears down environments
+for real, and the ephemeral-environment self-test runs end to end. Provisioning and teardown take
+the delegate together rather than separately: teardown opens the very provision fields provisioning
+sealed, so a node holding one and not the other could stand infrastructure up and never reclaim it.
+
+A mothership-mode node may not itself answer the delegation endpoints. They are wired only where a
+facade holds its own main database, because a node's `ENCRYPTION_KEY` is the local key that seals
+its own agent credentials, and sealing an org row under it is the split this change removes.
 
 Behaviour change worth knowing about on an existing mothership-mode node: rows it previously sealed
 under its LOCAL key are no longer opened locally. Pre-1.0 internals break rather than grow a

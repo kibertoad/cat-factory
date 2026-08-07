@@ -587,14 +587,14 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // (the secrets-delegation slice), which is also what made the provisioning WRITES below safe.
   environmentConnectionRepository: {},
   environmentRegistryRepository: {
-    // `insert`/`update` are now allow-listed (REMOTE_PERSISTENCE_METHODS): the provisioning write
-    // path. Safe because the row's `accessCipher`/`provisionFieldsCipher` are sealed BY THE
-    // MOTHERSHIP over `/internal/secrets/seal`, so a laptop-provisioned environment stays
-    // readable by the org (and reclaimable by the mothership's own teardown).
+    // `insert`/`update`/`softDelete` are now allow-listed (REMOTE_PERSISTENCE_METHODS): the
+    // provisioning write path and its tombstone. Safe because the row's
+    // `accessCipher`/`provisionFieldsCipher` are sealed BY THE MOTHERSHIP over
+    // `/internal/secrets/seal`, so a laptop-provisioned environment stays readable by the org
+    // (and reclaimable by the mothership's own teardown).
     // listByWorkspace is now allow-listed (REMOTE_PERSISTENCE_METHODS) — the frontend UI-test
     // gate's batch env read + the environments list endpoint. Classified there, not here.
     listExpired: 'sweeper',
-    softDelete: 'pending',
   },
   environmentUserHandlerRepository: {
     listByUserWorkspace: 'local',

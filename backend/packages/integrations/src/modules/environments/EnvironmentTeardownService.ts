@@ -1,6 +1,6 @@
 import type { Clock, Logger, ProvisioningOutcome } from '@cat-factory/kernel'
 import type { EnvironmentRecord, EnvironmentRegistryRepository } from '@cat-factory/kernel'
-import type { SecretCipher } from '@cat-factory/kernel'
+import type { OrgSecretCipher, SecretCipher, SecretDelegate } from '@cat-factory/kernel'
 import type {
   EnvironmentHandle,
   EnvironmentProvider,
@@ -8,7 +8,13 @@ import type {
   TeardownConfirmation,
   TeardownProbe,
 } from '@cat-factory/kernel'
-import { assertFound, getErrorMessage, noopLogger, runBestEffort } from '@cat-factory/kernel'
+import {
+  assertFound,
+  createOrgSecretCipher,
+  getErrorMessage,
+  noopLogger,
+  runBestEffort,
+} from '@cat-factory/kernel'
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
 import { classifyTeardownProbe, recordToHandle } from './environments.logic.js'
 import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningLogService.js'
@@ -65,6 +71,14 @@ export interface EnvironmentTeardownServiceDependencies {
   connectionService: EnvironmentConnectionService
   environmentRegistryRepository: EnvironmentRegistryRepository
   secretCipher: SecretCipher
+  /**
+   * Present ONLY on a mothership-mode node. A teardown opens the very fields the provisioning
+   * service sealed, so this seam has to be wired in lockstep with that one: a node that provisions
+   * through the mothership's key and tears down through its own local one cannot reclaim anything
+   * it stood up, and neither can it reclaim what a hosted teammate stood up. Composed into
+   * {@link OrgSecretCipher} below, so a deployment with no delegate is byte-for-byte unchanged.
+   */
+  secretDelegate?: SecretDelegate
   clock: Clock
   /** Best-effort provisioning-event log; absent ⇒ teardown is unchanged. */
   provisioningLog?: ProvisioningLogRecorder
@@ -74,6 +88,7 @@ export interface EnvironmentTeardownServiceDependencies {
 
 export class EnvironmentTeardownService {
   private readonly log: Logger
+  private readonly orgSecrets: OrgSecretCipher
   /**
    * Late-bound because the engine that consumes it is constructed AFTER this service (it is
    * injected into the provisioning service, which the engine takes). Same shape as
@@ -83,6 +98,10 @@ export class EnvironmentTeardownService {
 
   constructor(private readonly deps: EnvironmentTeardownServiceDependencies) {
     this.log = deps.logger ?? noopLogger
+    this.orgSecrets = createOrgSecretCipher({
+      cipher: deps.secretCipher,
+      ...(deps.secretDelegate ? { delegate: deps.secretDelegate } : {}),
+    })
   }
 
   /** Late-bind the teardown-recorded notification. Unset ⇒ nothing is notified. */
@@ -158,7 +177,7 @@ export class EnvironmentTeardownService {
       await this.recordTeardownOutcome(record, 'success', null, confirmation)
       return confirmation
     }
-    const provisionFields = await this.decryptFields(record.provisionFieldsCipher)
+    const provisionFields = await this.decryptFields(record)
     const request = {
       manifest: resolved.manifest,
       externalId: record.externalId,
@@ -341,9 +360,31 @@ export class EnvironmentTeardownService {
     })
   }
 
-  private async decryptFields(cipher: string | null): Promise<Record<string, string>> {
-    if (!cipher) return {}
-    const parsed = JSON.parse(await this.deps.secretCipher.decrypt(cipher))
+  /**
+   * Open the provider's stored provision fields, the twin of
+   * `EnvironmentProvisioningService.decryptFields` and deliberately the same shape: it takes the
+   * RECORD, not the bare envelope, because a delegated open addresses the ROW. The mothership
+   * re-reads it under the node's account scope rather than decrypting whatever ciphertext it was
+   * handed, which is what keeps the delegation from being an oracle.
+   *
+   * Every caller reaches here from a row this service just read (`teardown` via `get`,
+   * `sweepExpired` via `listExpired`), so the ref always names a stored row, which is the
+   * precondition a row-addressed open needs.
+   */
+  private async decryptFields(
+    record: Pick<EnvironmentRecord, 'workspaceId' | 'id' | 'provisionFieldsCipher'>,
+  ): Promise<Record<string, string>> {
+    if (!record.provisionFieldsCipher) return {}
+    const parsed = JSON.parse(
+      await this.orgSecrets.decryptFor(
+        {
+          source: 'environment_provision_fields',
+          workspaceId: record.workspaceId,
+          key: [record.id],
+        },
+        record.provisionFieldsCipher,
+      ),
+    )
     return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {}
   }
 }

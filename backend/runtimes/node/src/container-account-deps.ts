@@ -163,6 +163,7 @@ export function buildNodeAccountDeps(input: NodeAccountDepsInput) {
         incidentEnrichmentConnectionRepository: repos.incidentEnrichmentConnectionRepository,
         secretCipher: incidentEnrichmentSecretCipher,
         ...(input.secretDelegate ? { secretDelegate: input.secretDelegate } : {}),
+        logger,
       }),
     )
   }

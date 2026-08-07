@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { noopLogger } from '@cat-factory/kernel'
 import { MachineTokenUnavailableError } from '@cat-factory/server'
-import { type DriveConfig, NodeRealtimeHub } from '@cat-factory/node-server'
+import { type DriveConfig, NodeRealtimeHub, createDbClient } from '@cat-factory/node-server'
 import { buildLocalContainer } from './container.js'
 import {
   SqliteWorkRunner,
@@ -1160,6 +1160,61 @@ describe('composeMothership notification delivery delegation', () => {
       await container.machineNotificationDelivery!.deliver('ws_1', notification)
       // Containment, not equality: booting the container also fires background persistence RPCs.
       expect(posted).toContain('https://m.test/internal/notifications/deliver')
+    } finally {
+      await container.onShutdown?.()
+    }
+  })
+})
+
+describe('mothership-mode node as a secret-delegation SERVER', () => {
+  // The inverse of every test above: not "can this node ask a mothership", but "may this node be
+  // asked". It may not, and the reason is the key split itself. Its `ENCRYPTION_KEY` seals its own
+  // agent/model credentials under a LOCAL key, which is a different key from the one the org's
+  // rows carry, so answering `/internal/secrets/seal` here would store a row the org can never
+  // open: the silent split the whole delegation exists to remove, one write later.
+  //
+  // `repositories` cannot be the thing that stops it, which is why this is asserted on the
+  // CAPABILITY. A mothership-mode node populates that registry too (with the RPC-backed remote
+  // repos), so it is present on precisely the deployment it would need to exclude. `secretCipherFor`
+  // is the seam only a deployment authoritative for the rows wires, and the controller 503s without
+  // it.
+  const DELEGATION_ENV = (over: Record<string, string | undefined> = {}) =>
+    BASE_ENV({
+      ENVIRONMENT: 'test',
+      AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
+      ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+      HARNESS_SHARED_SECRET: 'mothership-test-harness-secret',
+      ...over,
+    })
+
+  it('wires no sealed-secret cipher when it holds no database of its own', async () => {
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ ok: true, value: null })))
+    const container = buildLocalContainer({
+      env: DELEGATION_ENV({
+        LOCAL_MOTHERSHIP_URL: 'https://m.test',
+        LOCAL_MOTHERSHIP_TOKEN: 'env-tok',
+      }),
+    })
+    try {
+      // Present, and deliberately not the discriminator: this is the remote registry.
+      expect(container.repositories).toBeDefined()
+      expect(container.secretCipherFor).toBeUndefined()
+      // The drift sweep's inventory has nothing local to enumerate either, for the same reason.
+      expect(container.sealedSecretInventory).toBeUndefined()
+    } finally {
+      await container.onShutdown?.()
+    }
+  })
+
+  it('wires it when the node holds its own database, so an ordinary deployment can still be a mothership', async () => {
+    // The half that makes the assertion above a GATE rather than a feature nobody wired: gating on
+    // `db` must not turn the delegation off everywhere. No query is issued during construction, so
+    // the pool never has to be reachable.
+    const { db } = createDbClient('postgres://unused:unused@127.0.0.1:5432/unused')
+    const container = buildLocalContainer({ db, env: DELEGATION_ENV() })
+    try {
+      expect(container.secretCipherFor).toBeDefined()
+      expect(container.sealedSecretInventory).toBeDefined()
     } finally {
       await container.onShutdown?.()
     }

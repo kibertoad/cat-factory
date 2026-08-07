@@ -165,8 +165,10 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // secret bundle, a release-health connection. The node names the ROW (never the ciphertext) and
   // the mothership re-reads it, scope-checks it and opens it under its own key; the seal half
   // keeps a secret the NODE produces readable by the org. Machine-token gated like the persistence
-  // RPC; 503 unless the facade wired `secretCipherFor` and its repository registry. Mounted on
-  // both facades so either can be a mothership. See docs/initiatives/mothership-mode.md.
+  // RPC; 503 unless the facade wired `secretCipherFor`, which it does only when it holds its own
+  // main database and so is AUTHORITATIVE for the rows (a mothership-mode node holds only a local
+  // key). Mounted on both facades so either can be a mothership. See
+  // docs/initiatives/mothership-mode.md.
   app.route('/', secretDelegationController())
   // Mothership-mode foundational-services `builtin` tier (`GET /internal/foundational-services`
   // + the batched `POST .../contracts`):

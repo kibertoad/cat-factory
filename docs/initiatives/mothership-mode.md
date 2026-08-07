@@ -371,24 +371,39 @@
     so a source added to the kernel vocabulary fails to compile until it is bound. Adding one
     admits one more org credential to a laptop, so the bar is that a run needs the PLAINTEXT on the
     node, not merely the row.
-  - **`environmentRegistryRepository.insert`/`update` go remote** in the same slice, and could not
-    have gone earlier: the provisioning WRITE is exactly what would have stored a laptop-sealed
-    row. With the seal delegated, a mothership-mode node provisions, polls and tears down for real,
-    and the ephemeral-environment self-test runs end to end (its store went remote in the GitHub
-    delegation slice precisely against this day).
+  - **`environmentRegistryRepository.insert`/`update`/`softDelete` go remote** in the same slice,
+    and could not have gone earlier: the provisioning WRITE is exactly what would have stored a
+    laptop-sealed row. With the seal delegated, a mothership-mode node provisions, polls and tears
+    down for real, and the ephemeral-environment self-test runs end to end (its store went remote in
+    the GitHub delegation slice precisely against this day). `softDelete` is the TOMBSTONE half of
+    that same write and is inseparable from it: `supersedePriorEnvironment` runs it before every
+    re-provision (unguarded, so a deployer re-run fails outright without it) and it is how every
+    reclaim ends. Opening the insert alone would let a node stand infrastructure up and never record
+    it as reclaimed, which is the one failure the seal direction was opened to prevent.
   - Consumers wire through `CoreDependencies.secretDelegate` (top-level, like the logger: it is not
     one integration's concern) and the `NodeContainerOptions.secretDelegate` seam:
-    `EnvironmentProvisioningService`, `EnvironmentConnectionService`, `RegistryReleaseHealthProvider`
-    and `WorkspaceIncidentEnrichmentProvider` each compose it with their own cipher.
+    `EnvironmentProvisioningService`, `EnvironmentTeardownService`, `EnvironmentConnectionService`,
+    `RegistryReleaseHealthProvider` and `WorkspaceIncidentEnrichmentProvider` each compose it with
+    their own cipher. **Provisioning and teardown are one unit, not two consumers.** Teardown opens
+    the very `provisionFieldsCipher` that provisioning sealed, so a node holding a delegate for one
+    and not the other stands infrastructure up under the mothership's key and then cannot open the
+    fields its own reclaim needs, failing before `provider.teardown` on every mothership-sealed row.
+  - **A mothership-mode node may not itself ANSWER `/internal/secrets/*`**, and the gate is the
+    `secretCipherFor` capability, wired only where a facade holds its OWN main database. Its
+    `ENCRYPTION_KEY` seals the node's own agent/model credentials under the LOCAL key, so answering
+    a delegated `seal` there would store a row the org can never read: the same silent split, one
+    write later. The `repositories` registry cannot stand in for that check, because a
+    mothership-mode node populates it too, with the RPC-backed remote repos.
   - Tested in `packages/server/test/secretsDelegation.spec.ts` (auth pin, scope binding, the
     open-the-stored-row-not-the-body property, the closed table incl. prototype members, the
     declared key arity, 404-vs-500 dispositions, 503 edges, and the client's throw-never-degrade
     contract), `packages/kernel/src/ports/secret-delegation.test.ts` (the pass-through and
     always-delegate compositions, and that the envelope never reaches the delegate),
     `runtimes/local/src/mothership.test.ts` (the wire shape both directions, the token-less throw,
-    and an END-TO-END guard: a no-Postgres container resolves an environment handle whose access
-    cipher only the mothership can open), and the shared cross-runtime suite (`core-workspaces.ts`
-    asserts both routes are mounted + machine-gated on BOTH facades).
+    an END-TO-END guard where a no-Postgres container resolves an environment handle whose access
+    cipher only the mothership can open, and both halves of the answer-side gate above), and the
+    shared cross-runtime suite (`core-workspaces.ts` asserts both routes are mounted +
+    machine-gated on BOTH facades).
   - **Deliberately still off.** (1) The document/task SOURCE connections: those repos decrypt
     INSIDE the repository, so there is no sealed blob for a row-addressed unseal to answer with,
     and the dispatch-time freshness gap keeps reporting itself as `credentials_unreadable` (which

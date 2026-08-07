@@ -1,5 +1,6 @@
 import { Hono, type Context } from 'hono'
 import type { SecretCipher } from '@cat-factory/kernel'
+import { describeError } from '@cat-factory/kernel'
 import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
 import { logger } from '../../observability/logger.js'
@@ -48,11 +49,19 @@ import type {
  * workspace → account scope binding, with a uniform 404 for anything out of scope, absent, or
  * holding no sealed value (no existence leak, and no distinguishing "wrong account" from "no such
  * row"). Every denial is audit-logged with the node + user ids; the PLAINTEXT is never logged, at
- * any level, and neither is the envelope.
+ * any level, and neither is the envelope. Every failure is bound with kernel's `describeError`
+ * rather than a local message read, because this is the one surface whose SUBJECT is a credential:
+ * a repository driver or WebCrypto error here routinely echoes back the value it choked on, and
+ * `describeError` is what runs it through `redactSecrets` first.
  *
- * Mounted on BOTH facades so either a Node or a Cloudflare deployment can be a mothership. A
- * deployment that is not a mothership (no `repositories`) or that wired no cipher factory (no
- * `ENCRYPTION_KEY`, so nothing is sealed at all) serves a 503, after the auth check.
+ * Mounted on BOTH facades so either a Node or a Cloudflare deployment can be a mothership. The
+ * capability that decides whether it answers is `secretCipherFor`, absent it a 503 after the auth
+ * check. A facade wires that only where it holds an `ENCRYPTION_KEY` (no key ⇒ nothing is sealed at
+ * all) AND its own main database (⇒ it is AUTHORITATIVE for the rows it would be asked about).
+ * `repositories` is NOT the discriminator, and reading it as one is the trap: a mothership-mode
+ * node populates that registry too, with the RPC-backed remote repos, so it would pass the check on
+ * precisely the deployment that must never answer, then seal under its LOCAL key. The registry read
+ * below stays a separate guard because the two are different facts.
  */
 export function secretDelegationController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -88,7 +97,7 @@ export function secretDelegationController(): Hono<AppEnv> {
       envelope =
         row && typeof row === 'object' ? (row as Record<string, unknown>)[spec.field] : null
     } catch (error) {
-      sourceLog.error('secret delegation: row read failed', { err: describe(error) })
+      sourceLog.error('secret delegation: row read failed', describeError(error))
       return internalError(c)
     }
     // An absent row and a row whose field holds nothing are the SAME uniform 404. The node read
@@ -106,7 +115,7 @@ export function secretDelegationController(): Hono<AppEnv> {
       // The mothership's OWN key failed on its OWN row: key drift (ADR 0026 D6.2), not a caller
       // fault. Reported as a 500 so the node retries rather than treating it as "nothing here",
       // and logged with the cause so the drift sweep's finding has a runtime counterpart.
-      sourceLog.error('secret delegation: decrypt failed', { err: describe(error) })
+      sourceLog.error('secret delegation: decrypt failed', describeError(error))
       return internalError(c)
     }
     sourceLog.info('secret delegation: unsealed', { label: spec.label })
@@ -140,7 +149,7 @@ export function secretDelegationController(): Hono<AppEnv> {
     try {
       envelope = await cipherFor(spec.info).encrypt(body.plaintext)
     } catch (error) {
-      sourceLog.error('secret delegation: encrypt failed', { err: describe(error) })
+      sourceLog.error('secret delegation: encrypt failed', describeError(error))
       return internalError(c)
     }
     sourceLog.info('secret delegation: sealed', { label: spec.label })
@@ -261,10 +270,6 @@ async function readJson<T>(c: DelegationContext): Promise<T | undefined> {
   } catch {
     return undefined
   }
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 function validationError(c: DelegationContext, message: string): Response {

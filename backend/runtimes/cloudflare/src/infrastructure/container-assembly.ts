@@ -1064,9 +1064,9 @@ function selectWorkerSealedSecretDeps(
     // drop remediation targets.
     sealedSecretInventory: new D1SealedSecretInventory({ db }),
     // What `/internal/secrets/{unseal,seal}` opens and seals an ORG credential through on a
-    // mothership-mode node's behalf. Gated on the key alone: the ROW read rides `repositories`,
-    // which the controller checks separately, so a non-mothership deployment simply never
-    // reaches this.
+    // mothership-mode node's behalf. Gated on the key alone, unlike the Node twin's extra `db`
+    // check: a Worker takes a non-optional `D1Database`, so it is authoritative for the rows it
+    // would be asked about and can never itself be the mothership-mode node this endpoint serves.
     secretCipherFor: (info: string) => new WebCryptoSecretCipher({ masterKeyBase64, info }),
   }
 }

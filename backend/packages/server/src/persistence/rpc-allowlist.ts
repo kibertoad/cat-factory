@@ -480,6 +480,14 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // never complete.
     insert: { scope: { kind: 'workspaceField', arg: 0 } },
     update: { scope: { kind: 'workspace', arg: 0 } },
+    // The TOMBSTONE half of that same write path, and inseparable from it. Two unguarded callers
+    // reach it: `supersedePriorEnvironment`, which every re-provision runs before inserting (so a
+    // deployer re-run fails outright without it), and `EnvironmentTeardownService.tombstone`, which
+    // is how EVERY reclaim ends. Opening the insert while leaving this closed would let a
+    // mothership-mode node stand infrastructure up and never record it as reclaimed, which is the
+    // one failure the seal direction was opened to prevent. `softDelete(workspaceId, id, at)` takes
+    // the workspaceId positionally → the `workspace` rule.
+    softDelete: { scope: { kind: 'workspace', arg: 0 } },
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
     // The per-`(block, service frame)` discovery read. `AgentContextBuilder.resolveEnvironment`
     // (and `RunDispatcher.attachEnvironmentProjection`) resolve the OWN service frame's env by

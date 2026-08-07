@@ -1127,21 +1127,31 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
  * read from one variable, and keeping the facades legible side by side is what makes a seam wired
  * on one visibly missing from the other.
  *
- * Note the asymmetry INSIDE the pair, which is deliberate: the inventory needs a `db` to enumerate
- * over, while the cipher factory needs only the key. A mothership-mode node has no `db` and is
- * precisely the deployment that must never answer `/internal/secrets/*`, but what stops it there
- * is the controller's `repositories` check, not a missing cipher.
+ * BOTH are gated on `db` as well as the key, and the `db` half is what makes the pair correct
+ * rather than merely tidy. On Node, no `db` means MOTHERSHIP MODE (`buildNodeContainer` asserts
+ * exactly that: a db-less boot must supply the RPC-backed `repos` instead), and a mothership-mode
+ * node is the one deployment that must never answer `/internal/secrets/*`. Its `ENCRYPTION_KEY` is
+ * the LOCAL key that seals its own agent/model credentials, which is a different key from the one
+ * the org's rows were sealed under, so answering there would seal a delegated `POST .../seal` under
+ * a key the org cannot read: the silent split the delegation exists to remove, one write later.
+ *
+ * The `repositories` registry cannot stand in for this check, which is why the gate lives here.
+ * A mothership-mode node populates it too (with the REMOTE, RPC-backed repos), so it is present on
+ * exactly the deployment it would need to exclude; the capability the controller 503s on has to be
+ * the one seam only an authoritative deployment wires, and that is the cipher. The Worker takes a
+ * non-optional `D1Database` and so is always authoritative, which is why its twin gates on the key
+ * alone.
  */
 function selectNodeSealedSecretDeps(
   env: NodeJS.ProcessEnv,
   db: DrizzleDb | undefined,
 ): Pick<ServerContainer, 'sealedSecretInventory' | 'secretCipherFor'> {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
-  if (!masterKeyBase64) return {}
+  if (!masterKeyBase64 || !db) return {}
   return {
     // ADR 0026 D6.2/D6.3: what the boot drift sweep attempts to decrypt, and what an operator's
     // drop remediation targets.
-    ...(db ? { sealedSecretInventory: new DrizzleSealedSecretInventory(db) } : {}),
+    sealedSecretInventory: new DrizzleSealedSecretInventory(db),
     // What `/internal/secrets/{unseal,seal}` opens and seals an ORG credential through on a
     // mothership-mode node's behalf.
     secretCipherFor: (info: string) => new WebCryptoSecretCipher({ masterKeyBase64, info }),

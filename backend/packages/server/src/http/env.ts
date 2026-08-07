@@ -291,9 +291,13 @@ export interface ServerContainer extends Core {
   /**
    * Builds this deployment's own {@link SecretCipher} for an HKDF `info` tag: the seam the
    * mothership SECRET DELEGATION endpoints (`/internal/secrets/{unseal,seal}`) open and seal org
-   * credentials through on a mothership-mode node's behalf. Present only when the facade wired an
-   * `ENCRYPTION_KEY` (no key ⇒ nothing is sealed, so there is nothing to delegate). Absent, the
-   * delegation endpoints 503.
+   * credentials through on a mothership-mode node's behalf. Absent, the delegation endpoints 503.
+   *
+   * A facade wires it only when BOTH hold: an `ENCRYPTION_KEY` (no key ⇒ nothing is sealed, so
+   * there is nothing to delegate) and its own main database (⇒ this deployment is AUTHORITATIVE
+   * for the org rows, rather than a mothership-mode node reading them over the RPC and holding
+   * only a local key). This capability, not the `repositories` registry, is what tells the two
+   * apart: a mothership-mode node populates that registry too, with the remote repos.
    *
    * Deliberately a FACTORY rather than a single cipher: each sealed source is domain-separated by
    * its own `info` tag, and handing the controller one cipher would either flatten that separation
