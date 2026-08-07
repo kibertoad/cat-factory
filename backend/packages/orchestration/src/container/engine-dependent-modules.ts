@@ -119,6 +119,7 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
   modules.build('agentContextObservability', () => dependencies.agentContextObservability)
   modules.build('searchQueryObservability', () => dependencies.searchQueryObservability)
   modules.build('vcsConnectionService', () => dependencies.vcsConnectionService)
+  modules.build('vcsWebUrls', () => dependencies.vcsWebUrls)
   modules.build('accountSettings', () =>
     dependencies.accountSettings ? { service: dependencies.accountSettings } : undefined,
   )

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, type Mock } from 'vitest'
 import { useGitHubStore } from '~/stores/github'
 import { useWorkspaceStore } from '~/stores/workspace'
-import type { GitHubConnection, VcsConnectOption } from '~/types/domain'
+import type { GitHubConnection, GitHubRepo, VcsConnectOption } from '~/types/domain'
 
 // The VCS connect surface of the (single, GitHub-shaped) repo store: which connect methods the
 // deployment offers, the per-workspace GitLab PAT connect, and the provider-routed disconnect.
@@ -16,6 +16,7 @@ function connection(overrides: Partial<GitHubConnection> = {}): GitHubConnection
     connectedAt: 1,
     provider: 'github',
     method: 'app',
+    webUrl: 'https://github.com',
     canCreateRepos: false,
     canManageWorkflows: true,
     ...overrides,
@@ -45,7 +46,9 @@ describe('github store — VCS connect capability', () => {
     stubApi({
       getGitHubConnection: vi.fn().mockResolvedValue({ connection: null }),
       listVcsConnectOptions: vi.fn().mockResolvedValue({
-        options: [{ provider: 'gitlab', method: 'pat' }] satisfies VcsConnectOption[],
+        options: [
+          { provider: 'gitlab', method: 'pat', webUrl: 'https://gitlab.acme.dev' },
+        ] satisfies VcsConnectOption[],
       }),
     })
     const github = storeWithWorkspace()
@@ -71,8 +74,8 @@ describe('github store — VCS connect capability', () => {
         .mockResolvedValue({ connection: connection({ provider: 'gitlab', method: 'pat' }) }),
       listVcsConnectOptions: vi.fn().mockResolvedValue({
         options: [
-          { provider: 'github', method: 'app' },
-          { provider: 'gitlab', method: 'pat' },
+          { provider: 'github', method: 'app', webUrl: 'https://github.com' },
+          { provider: 'gitlab', method: 'pat', webUrl: 'https://gitlab.acme.dev' },
         ] satisfies VcsConnectOption[],
       }),
     })
@@ -107,8 +110,8 @@ describe('github store — VCS connect capability', () => {
       getGitHubConnection: vi.fn().mockResolvedValue({ connection: null }),
       listVcsConnectOptions: vi.fn().mockResolvedValue({
         options: [
-          { provider: 'github', method: 'app' },
-          { provider: 'gitlab', method: 'pat' },
+          { provider: 'github', method: 'app', webUrl: 'https://github.com' },
+          { provider: 'gitlab', method: 'pat', webUrl: 'https://gitlab.acme.dev' },
         ] satisfies VcsConnectOption[],
       }),
     })
@@ -173,5 +176,112 @@ describe('github store — VCS connect capability', () => {
 
     expect(api.disconnectGitHub).toHaveBeenCalledWith('ws-1')
     expect(api.disconnectGitLab).not.toHaveBeenCalled()
+  })
+
+  // The host a surface links to, before and after binding. `surfaceProvider` names the brand;
+  // this names the instance, and the two must come from the same place or the copy and the link
+  // disagree (the bootstrap modal renders both).
+  it('takes the host from the connect option before binding, and from the connection after', async () => {
+    stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: null }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({
+        options: [
+          { provider: 'gitlab', method: 'pat', webUrl: 'https://gitlab.acme.dev' },
+        ] satisfies VcsConnectOption[],
+      }),
+      connectGitLab: vi
+        .fn()
+        .mockResolvedValue(
+          connection({ provider: 'gitlab', method: 'pat', webUrl: 'https://gitlab.acme.dev' }),
+        ),
+    })
+    const github = storeWithWorkspace()
+
+    await github.probe()
+    expect(github.surfaceWebUrl).toBe('https://gitlab.acme.dev')
+
+    await github.connectGitLab('glpat-secret')
+    expect(github.surfaceWebUrl).toBe('https://gitlab.acme.dev')
+  })
+
+  it('has no host to offer when several providers are connectable and none is bound', async () => {
+    stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: null }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({
+        options: [
+          { provider: 'github', method: 'app', webUrl: 'https://github.com' },
+          { provider: 'gitlab', method: 'pat', webUrl: 'https://gitlab.acme.dev' },
+        ] satisfies VcsConnectOption[],
+      }),
+    })
+    const github = storeWithWorkspace()
+
+    await github.probe()
+
+    expect(github.surfaceWebUrl).toBeNull()
+  })
+})
+
+describe('github store — repo web links', () => {
+  const repo = (over: Partial<GitHubRepo> = {}): GitHubRepo => ({
+    githubId: 1,
+    installationId: 42,
+    owner: 'acme',
+    name: 'api',
+    defaultBranch: 'main',
+    private: false,
+    syncedAt: 0,
+    ...over,
+  })
+
+  async function storeWith(conn: GitHubConnection, repos: GitHubRepo[]) {
+    stubApi({
+      getGitHubConnection: vi.fn().mockResolvedValue({ connection: conn }),
+      listVcsConnectOptions: vi.fn().mockResolvedValue({ options: [] }),
+      listGitHubRepos: vi.fn().mockResolvedValue(repos),
+    })
+    const github = storeWithWorkspace()
+    await github.probe()
+    await github.load()
+    return github
+  }
+
+  // Every one of these used to be hand-built from `https://github.com`, which is right for
+  // exactly one deployment shape. The host now comes off the connection and the path shape off
+  // the repo row's own provider.
+  it('builds links on the connected instance, in the repo provider’s own shape', async () => {
+    const github = await storeWith(
+      connection({ provider: 'gitlab', method: 'pat', webUrl: 'https://gitlab.acme.dev' }),
+      [repo({ provider: 'gitlab', owner: 'acme/platform' })],
+    )
+
+    expect(github.repoUrl(1)).toBe('https://gitlab.acme.dev/acme/platform/api')
+    expect(github.pullUrl({ repoGithubId: 1, number: 7 } as never)).toBe(
+      'https://gitlab.acme.dev/acme/platform/api/-/merge_requests/7',
+    )
+    expect(github.issueUrl({ repoGithubId: 1, number: 3 } as never)).toBe(
+      'https://gitlab.acme.dev/acme/platform/api/-/issues/3',
+    )
+    expect(github.branchUrl(1, 'feat/sso')).toBe(
+      'https://gitlab.acme.dev/acme/platform/api/-/tree/feat/sso',
+    )
+  })
+
+  it('withholds every link when the deployment could not name its host', async () => {
+    const github = await storeWith(connection({ webUrl: null }), [repo()])
+
+    expect(github.repoUrl(1)).toBeNull()
+    expect(github.pullUrl({ repoGithubId: 1, number: 7 } as never)).toBeNull()
+    expect(github.branchUrl(1, 'main')).toBeNull()
+  })
+
+  // A row written before the discriminator existed is GitHub, so its links keep the GitHub shape
+  // rather than falling through to whatever the connection happens to say.
+  it('treats a repo row with no provider as GitHub', async () => {
+    const github = await storeWith(connection(), [repo()])
+
+    expect(github.pullUrl({ repoGithubId: 1, number: 7 } as never)).toBe(
+      'https://github.com/acme/api/pull/7',
+    )
   })
 })

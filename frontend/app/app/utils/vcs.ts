@@ -11,6 +11,13 @@ import type { GitHubConnection, VcsProvider } from '~/types/domain'
 //
 // Each map is an exhaustive `Record<VcsProvider, …>`: adding a provider to the union fails
 // the typecheck here instead of silently rendering a GitHub icon for it.
+//
+// EVERY link builder here takes the connection's `webUrl` — the browser-facing host the
+// backend derived from the instance the workspace is actually bound to. The SPA used to
+// hand-build `https://github.com/…`, which is right for exactly one deployment shape and sends
+// a self-managed GitLab (or GitHub Enterprise) user to whatever lives at that path on the
+// public instance. A null host means the deployment could not name one, and a builder that
+// needs one answers `undefined` so its caller drops the affordance.
 // ---------------------------------------------------------------------------
 
 /** Brand name, as rendered in titles and buttons. */
@@ -24,30 +31,58 @@ export const VCS_PROVIDER_ICONS: Record<VcsProvider, string> = {
   gitlab: 'i-lucide-gitlab',
 }
 
-/** Where a user creates a personal access token for the provider (the PAT connect flow). */
-export const VCS_PROVIDER_TOKEN_URLS: Record<VcsProvider, string> = {
-  github: 'https://github.com/settings/tokens/new',
-  gitlab: 'https://gitlab.com/-/user_settings/personal_access_tokens',
+/**
+ * The public instance of each provider, used ONLY where no host is known and a wrong link costs
+ * nothing but a click: the token-creation page during connect (see {@link vcsTokenCreateUrl}).
+ * Never for a link to a repo, a project or a namespace, where the public instance may well
+ * serve somebody else's page under the same path.
+ */
+const VCS_PROVIDER_PUBLIC_WEB_URLS: Record<VcsProvider, string> = {
+  github: 'https://github.com',
+  gitlab: 'https://gitlab.com',
+}
+
+/** Where a user creates a personal access token, relative to the instance's web root. */
+const TOKEN_SETTINGS_PATHS: Record<VcsProvider, string> = {
+  github: '/settings/tokens/new',
+  gitlab: '/-/user_settings/personal_access_tokens',
+}
+
+/** Where a user creates a repository/project by hand, relative to the instance's web root. */
+const NEW_REPO_PATHS: Record<VcsProvider, string> = {
+  github: '/new',
+  gitlab: '/projects/new',
+}
+
+/** How each provider addresses a pull/merge request and an issue under a repo's web path. */
+const PULL_PATHS: Record<VcsProvider, (n: number) => string> = {
+  github: (n) => `/pull/${n}`,
+  gitlab: (n) => `/-/merge_requests/${n}`,
+}
+const ISSUE_PATHS: Record<VcsProvider, (n: number) => string> = {
+  github: (n) => `/issues/${n}`,
+  gitlab: (n) => `/-/issues/${n}`,
+}
+const BRANCH_PATHS: Record<VcsProvider, (branch: string) => string> = {
+  github: (branch) => `/tree/${branch}`,
+  gitlab: (branch) => `/-/tree/${branch}`,
+}
+
+/** Strip a trailing slash so a host and a path never join into a double slash. */
+function root(webUrl: string): string {
+  return webUrl.replace(/\/+$/, '')
 }
 
 /**
- * Where a user creates a repository by hand, for the flows that need one to exist before a run
- * can target it, or `null` where the SPA cannot name the instance the workspace is connected
- * to, in which case the affordance is WITHHELD rather than pointed somewhere plausible.
+ * Where a user creates a personal access token on the instance they are connecting.
  *
- * `gitlab` is null for that reason: a deployment may be bound to any self-hosted instance and
- * nothing on the wire carries its web host yet (the connection is the proposed carrier; see
- * the initiative tracker's slice 5). `https://gitlab.com/projects/new` would be a guess about
- * which server the user's projects live on, and the cost of being wrong is not a dead link: a
- * project created on the wrong instance looks like success until the bootstrap push cannot
- * find it. This is the same rule the callers already apply when no provider is resolved at
- * all, so the two cases collapse into {@link newRepoUrl} returning `undefined`.
- *
- * A `Record` rather than a switch so a provider joining the union has to state its answer.
+ * The one builder that FALLS BACK to the provider's public instance when no host is known,
+ * deliberately unlike its repo-facing siblings: this renders during connect, before anything is
+ * bound, and the cost of being wrong is a settings page that isn't theirs — a click, noticed
+ * immediately. A wrong REPOSITORY link is silent and can cost a run, so those withhold instead.
  */
-const NEW_REPO_PAGES: Record<VcsProvider, string | null> = {
-  github: 'https://github.com/new',
-  gitlab: null,
+export function vcsTokenCreateUrl(provider: VcsProvider, webUrl?: string | null): string {
+  return `${root(webUrl || VCS_PROVIDER_PUBLIC_WEB_URLS[provider])}${TOKEN_SETTINGS_PATHS[provider]}`
 }
 
 /**
@@ -58,20 +93,27 @@ const NEW_REPO_PAGES: Record<VcsProvider, string | null> = {
  * token's scope and the user's project membership on the host, so there is nothing to link
  * to and the callers drop the affordance rather than pointing at a URL that 404s. Keyed on the
  * connection's own `method` (see the contract) rather than on `provider`, and asked as
- * `=== 'app'` so anything that is not an App installation withholds the link.
+ * `=== 'app'` so anything that is not an App installation withholds the link — as does an
+ * installation whose host the deployment could not name, since an installation id means nothing
+ * on an instance other than its own.
  */
 export function appInstallationManageUrl(connection: GitHubConnection | null): string | undefined {
-  if (!connection || connection.method !== 'app') return undefined
+  if (!connection || connection.method !== 'app' || !connection.webUrl) return undefined
+  const base = root(connection.webUrl)
   return connection.targetType === 'Organization'
-    ? `https://github.com/organizations/${connection.accountLogin}/settings/installations/${connection.installationId}`
-    : `https://github.com/settings/installations/${connection.installationId}`
+    ? `${base}/organizations/${connection.accountLogin}/settings/installations/${connection.installationId}`
+    : `${base}/settings/installations/${connection.installationId}`
 }
 
 /**
- * The host's new-repository page for a manual create, or `undefined` where there is no page
- * this deployment can honestly send the user to (see {@link NEW_REPO_PAGES}), including a
- * null `provider`, which is what a surface rendering before anything is connected has when
- * the deployment offers several. A caller that gets `undefined` hides the affordance.
+ * The host's new-repository page for a manual create, or `undefined` when the deployment could
+ * not name the instance (a null/absent `webUrl`) or no provider is resolved at all, which is
+ * what a surface rendering before anything is connected has when the deployment offers several.
+ * A caller that gets `undefined` hides the affordance.
+ *
+ * Withholding is the whole point: a project created on the wrong instance looks like success
+ * until the bootstrap push cannot find it, which is a failed run rather than a dead link. Now
+ * that the host is on the wire, a GitLab deployment that HAS one gets the button back.
  *
  * GitHub's form is the only one that takes a prefill, so what the bootstrap flow already
  * knows is carried over and the user creates the right repo in one click. `visibility` is
@@ -79,10 +121,11 @@ export function appInstallationManageUrl(connection: GitHubConnection | null): s
  */
 export function newRepoUrl(
   provider: VcsProvider | null,
+  webUrl: string | null | undefined,
   prefill: { owner?: string; name?: string; description?: string; private: boolean },
 ): string | undefined {
-  const page = provider ? NEW_REPO_PAGES[provider] : null
-  if (page === null) return undefined
+  if (!provider || !webUrl) return undefined
+  const page = `${root(webUrl)}${NEW_REPO_PATHS[provider]}`
   if (provider !== 'github') return page
   const params = new URLSearchParams()
   if (prefill.owner) params.set('owner', prefill.owner)
@@ -90,4 +133,45 @@ export function newRepoUrl(
   if (prefill.description) params.set('description', prefill.description)
   params.set('visibility', prefill.private ? 'private' : 'public')
   return `${page}?${params.toString()}`
+}
+
+/**
+ * A repository's page on the instance it lives on, or null when no host is known.
+ *
+ * `owner` is the full namespace on both providers (GitHub's `owner`, GitLab's group path,
+ * nested groups included), so the repo path itself needs no provider switch — only what hangs
+ * off it does.
+ */
+export function repoWebUrl(
+  webUrl: string | null | undefined,
+  repo: { owner: string; name: string },
+): string | null {
+  return webUrl ? `${root(webUrl)}/${repo.owner}/${repo.name}` : null
+}
+
+/** A pull request (GitHub) / merge request (GitLab) under a repo's page. */
+export function pullWebUrl(
+  provider: VcsProvider,
+  repoUrl: string | null,
+  pullNumber: number,
+): string | null {
+  return repoUrl ? `${repoUrl}${PULL_PATHS[provider](pullNumber)}` : null
+}
+
+/** An issue under a repo's page. */
+export function issueWebUrl(
+  provider: VcsProvider,
+  repoUrl: string | null,
+  issueNumber: number,
+): string | null {
+  return repoUrl ? `${repoUrl}${ISSUE_PATHS[provider](issueNumber)}` : null
+}
+
+/** A branch's file listing under a repo's page. */
+export function branchWebUrl(
+  provider: VcsProvider,
+  repoUrl: string | null,
+  branch: string,
+): string | null {
+  return repoUrl ? `${repoUrl}${BRANCH_PATHS[provider](branch)}` : null
 }

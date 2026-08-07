@@ -45,6 +45,7 @@ import {
   PatPreferringAppRegistry,
   ProviderRoutingGitHubClient,
   logger,
+  resolveVcsWebUrls,
   WebCryptoSecretCipher,
   WebCryptoWebhookVerifier,
   makeResolveRepoFilesForCoords,
@@ -465,6 +466,9 @@ function selectVcsConnectDeps(input: {
     identityResolver: new GitLabIdentityResolver({ apiBase: gitlab.apiBase }),
     cipher,
     clock,
+    // Where this connection's projects can be opened in a browser, from the SAME resolver the
+    // App connect path and the connect-capability route read.
+    webUrls: resolveVcsWebUrls(config),
   })
   return { client, service }
 }

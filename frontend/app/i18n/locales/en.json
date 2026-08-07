@@ -515,7 +515,6 @@
       },
       "pr": "PR",
       "prNumber": "PR #{number}",
-      "openPrOnGithub": "Open {pr} on GitHub",
       "readOutcome": "Outcome",
       "readOutcomeHint": "Read what changed, with the evidence behind it",
       "review": "Review",
@@ -529,7 +528,8 @@
       "module": "Module: {name}",
       "buildSteps": "Build steps",
       "reviewAndApprove": "Review & approve",
-      "clickToViewStep": "Click to view step details & output"
+      "clickToViewStep": "Click to view step details & output",
+      "openPrLink": "Open {pr}"
     },
     "dryRunToast": {
       "title": "Dry run started",
@@ -665,7 +665,7 @@
         "agent_backend_unconfigured": "No runner backend is available to run container agents. Register a self-hosted runner pool, or enable Cloudflare Containers in your deployment.",
         "run_not_retryable": "Only a failed or finished run can be retried. This run is still active or in a state that can't be retried.",
         "no_pr_to_merge": "This run hasn't opened a pull request yet, so there is nothing to merge.",
-        "github_not_connected": "Connect this workspace to GitHub so agents can clone the repository, push changes, and open pull requests.",
+        "github_not_connected": "Connect this workspace to a repository host so agents can clone the repository, push changes, and open pull requests.",
         "bootstrap_not_retryable": "This bootstrap job can't be retried in its current state (it is still running or already finished successfully).",
         "bootstrap_reference_missing": "The reference repository this bootstrap adapts is no longer reachable. It was deleted or its access was revoked. Pick another reference, or scaffold from scratch.",
         "preset_unsatisfiable": "An inline step's model can't run inline on this deployment (a subscription-only model with no inline support). Pick an inline-capable model or preset.",
@@ -4165,14 +4165,11 @@
       "loading": "Loading…",
       "tabs": {
         "repos": "Repositories",
-        "pulls": "Pull requests",
         "issues": "Issues"
       },
       "linkedToBoard": "Linked to this board",
       "manageRepos": "Manage repos",
-      "manageHint": "Pick the repositories this board should track. The GitHub connection is shared across the account, and each board links its own repos.",
       "loadingRepos": "Loading repositories…",
-      "noAvailableRepos": "The installation can't access any repositories yet.",
       "private": "private",
       "saveSelection": "Save selection",
       "noLinkedRepos": "No repositories linked yet. Use Manage repos to pick which repositories this board tracks.",
@@ -4182,15 +4179,11 @@
       "fromSha": "From SHA",
       "commitShaPlaceholder": "commit sha",
       "createBranch": "Create branch",
-      "openPr": "Open PR",
       "repository": "Repository",
       "chooseRepository": "Choose a repository",
       "prTitle": "Title",
       "headBranch": "Head branch",
       "baseBranch": "Base branch",
-      "openPullRequest": "Open pull request",
-      "noPulls": "No pull requests synced.",
-      "mergePr": "Merge pull request",
       "noIssues": "No issues synced.",
       "prState": {
         "open": "open",
@@ -4204,9 +4197,7 @@
       "toast": {
         "resync": "Resync {status}",
         "reposUpdated": "Linked repositories updated",
-        "branchCreated": "Branch {name} created",
-        "prOpened": "Pull request opened",
-        "prMerged": "PR #{number} merged"
+        "branchCreated": "Branch {name} created"
       },
       "errors": {
         "disconnect": "Could not disconnect",
@@ -4215,7 +4206,6 @@
         "updateRepos": "Could not update repositories",
         "loadBranches": "Could not load branches",
         "createBranch": "Could not create branch",
-        "openPr": "Could not open pull request",
         "merge": "Could not merge"
       }
     },
@@ -5058,7 +5048,7 @@
       "suffixFixing": "· fixer addressing comments…",
       "suffixFailing": "· review comments to address",
       "suffixAwaiting": "· awaiting review",
-      "reviewPr": "Review pull request on GitHub",
+      "reviewPr": "Review pull request",
       "requestFixHeading": "Request a fix",
       "requestFixDescription": "Describe a change for the fixer to make on the PR branch now (in addition to any review comments, which it addresses automatically).",
       "requestFixPlaceholder": "e.g. rename the helper and add a unit test for the empty-input case",
@@ -5072,12 +5062,12 @@
     },
     "conflicts": {
       "mergeability": "Mergeability",
-      "viewPr": "View pull request on GitHub"
+      "viewPr": "View pull request"
     },
     "docQuality": {
       "findings": "Document issues",
       "findingsFallback": "The document passed the structural checks.",
-      "viewPr": "View pull request on GitHub"
+      "viewPr": "View pull request"
     },
     "attemptsHeading": "{helper} attempts",
     "attempt": "Attempt {number}",
@@ -7098,7 +7088,33 @@
       },
       "toast": {
         "disconnected": "{provider} disconnected"
-      }
+      },
+      "pulls": {
+        "github": {
+          "tab": "Pull requests",
+          "open": "Open PR",
+          "openSubmit": "Open pull request",
+          "merge": "Merge this pull request",
+          "none": "No pull requests synced.",
+          "opened": "Pull request opened",
+          "mergedToast": "PR #{number} merged",
+          "openFailed": "Could not open pull request"
+        },
+        "gitlab": {
+          "tab": "Merge requests",
+          "open": "Open MR",
+          "openSubmit": "Open merge request",
+          "merge": "Merge this merge request",
+          "none": "No merge requests synced.",
+          "opened": "Merge request opened",
+          "mergedToast": "MR !{number} merged",
+          "openFailed": "Could not open merge request"
+        }
+      },
+      "manageHintApp": "Pick the repositories this board should track. The App installation is shared across the account, and each board links its own repositories.",
+      "manageHintToken": "Pick the repositories this board should track. The list is what the connected token can reach, and each board links its own repositories.",
+      "noAvailableReposApp": "The App installation can’t access any repositories yet.",
+      "noAvailableReposToken": "The connected token can’t reach any repositories yet. Check its scope and your access to them."
     },
     "connect": {
       "or": "or",

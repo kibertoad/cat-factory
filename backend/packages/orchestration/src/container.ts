@@ -122,6 +122,7 @@ import type {
   PromptFragmentRegistry,
   PromptFragmentSource,
   TaskTypeRegistry,
+  VcsWebUrls,
 } from '@cat-factory/kernel'
 
 // Composition root for the domain layer. The worker's infrastructure builds the
@@ -505,6 +506,12 @@ export interface OptionalCoreModules {
   github?: GitHubModule
   /** Present only when a facade wired the per-workspace VCS PAT connect service (GitLab connect). */
   vcsConnectionService?: VcsPatConnectionService
+  /**
+   * The browser-facing base URL of each provider's configured instance (see CoreDependencies).
+   * Surfaced here so the connect-capability route answers with the SAME host the connection will
+   * carry once bound, rather than re-deriving it from config beside it.
+   */
+  vcsWebUrls?: VcsWebUrls
   /** Present only when the document-source integration is configured (see CoreDependencies). */
   documents?: DocumentsModule
   /** Present only when the task-source integration is configured (see CoreDependencies). */

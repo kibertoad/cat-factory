@@ -15,6 +15,7 @@ export interface VcsProviderViews {
   canConnectGitLabPat: ComputedRef<boolean>
   soleConnectProvider: ComputedRef<VcsProvider | null>
   surfaceProvider: ComputedRef<VcsProvider | null>
+  surfaceWebUrl: ComputedRef<string | null>
 }
 
 /** The derived provider questions above, off the probed connection + capability state. */
@@ -53,12 +54,30 @@ export function createVcsProviderViews(ctx: GitHubStoreContext): VcsProviderView
     connection.value !== null ? provider.value : soleConnectProvider.value,
   )
 
+  /**
+   * The browser-facing host of the instance {@link surfaceProvider} names: the connected one's,
+   * or (with nothing bound) the host the deployment advertises for the provider it could
+   * connect. Null when neither is known, which is what a link builder needs to WITHHOLD rather
+   * than fall back to the provider's public instance.
+   *
+   * It has to come off the connect OPTION before a connection exists, because the two surfaces
+   * that need a host that early (the PAT box's token link, bootstrap's create-repository button)
+   * render while the connect box is still on screen.
+   */
+  const surfaceWebUrl = computed<string | null>(() => {
+    if (connection.value !== null) return connection.value.webUrl
+    const sole = soleConnectProvider.value
+    if (!sole) return null
+    return connectOptions.value.find((o) => o.provider === sole)?.webUrl ?? null
+  })
+
   return {
     provider,
     canConnectGitHubApp,
     canConnectGitLabPat,
     soleConnectProvider,
     surfaceProvider,
+    surfaceWebUrl,
   }
 }
 

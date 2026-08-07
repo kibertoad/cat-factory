@@ -10,7 +10,9 @@ import type {
   GitHubRepo,
   RepoTreeEntry,
   VcsConnectOption,
+  VcsProvider,
 } from '~/types/domain'
+import { branchWebUrl, issueWebUrl, pullWebUrl, repoWebUrl } from '~/utils/vcs'
 import { useSingleFlightProbe } from '~/composables/useSingleFlightProbe'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -94,18 +96,32 @@ export const useGitHubStore = defineStore('github', () => {
     return issues.value.filter((i) => i.repoGithubId === repoGithubId)
   }
 
-  /** Build the github.com URL for a repo / PR / issue from the projection row. */
+  // Web links for a repo / pull request / issue / branch, built from the connection's own host
+  // (`webUrl`) and the repo row's provider. Every one of these used to be a hand-built
+  // `https://github.com/…`, which is only right for a github.com deployment: a self-managed
+  // GitLab or GitHub Enterprise workspace was linked to whatever the public instance serves at
+  // that path. Null when the deployment could not name its host, so the caller withholds the
+  // link rather than pointing at an instance the repo does not live on.
   function repoUrl(repoGithubId: number): string | null {
     const r = repoFor(repoGithubId)
-    return r ? `https://github.com/${r.owner}/${r.name}` : null
+    return r ? repoWebUrl(connection.value?.webUrl, r) : null
+  }
+  /** The provider a projected row belongs to; a row predating the discriminator is GitHub. */
+  function providerOfRepo(repoGithubId: number): VcsProvider {
+    return repoFor(repoGithubId)?.provider ?? 'github'
   }
   function pullUrl(pr: GitHubPullRequest): string | null {
-    const base = repoUrl(pr.repoGithubId)
-    return base ? `${base}/pull/${pr.number}` : null
+    return pullWebUrl(providerOfRepo(pr.repoGithubId), repoUrl(pr.repoGithubId), pr.number)
   }
   function issueUrl(issue: GitHubIssue): string | null {
-    const base = repoUrl(issue.repoGithubId)
-    return base ? `${base}/issues/${issue.number}` : null
+    return issueWebUrl(
+      providerOfRepo(issue.repoGithubId),
+      repoUrl(issue.repoGithubId),
+      issue.number,
+    )
+  }
+  function branchUrl(repoGithubId: number, branch: string): string | null {
+    return branchWebUrl(providerOfRepo(repoGithubId), repoUrl(repoGithubId), branch)
   }
 
   /**
@@ -246,6 +262,7 @@ export const useGitHubStore = defineStore('github', () => {
     repoUrl,
     pullUrl,
     issueUrl,
+    branchUrl,
     probe,
     ensureProbed,
     load,

@@ -465,10 +465,10 @@ GitLab deployments.
   `github` module reads through **`ProviderRoutingGitHubClient`**, which dispatches per installation by
   stored provider (memoised, so no N+1). Don't hand-roll a second per-provider client or fork the module;
   keep facades symmetric (`selectVcsConnectDeps` ⇄ `selectWorkerVcsConnectDeps`).
-- **What the SPA may connect comes from `GET /workspaces/:ws/vcs/connect-options`**, never inferred from a
-  connection read. Presentation switches in ONE place: `app/utils/vcs.ts` `Record<VcsProvider, …>`
-  constants plus provider-parameterised `vcs.*` i18n keys. Adding a provider extends those Records (the
-  typecheck fails until you do), never a component fork.
+- **What the SPA may connect comes from `GET /workspaces/:ws/vcs/connect-options`**; WHERE it links, from
+  that option's / the connection's `webUrl` (derived from the API base; null ⇒ WITHHOLD the affordance,
+  never fall back to the public instance). Both switch in ONE place: `app/utils/vcs.ts`
+  `Record<VcsProvider, …>` constants + `vcs.*` i18n keys, extended per provider (typecheck fails), never forked.
 - The migration is incremental: kernel ports are neutralized, but entity types (`GitHubRepo`, the
   `github_repos`/`github_installations` tables) are still GitHub-named and reused as-is. Copy the NEUTRAL
   shape for new surfaces; an un-migrated neighbour is not license to name a field `githubId`.

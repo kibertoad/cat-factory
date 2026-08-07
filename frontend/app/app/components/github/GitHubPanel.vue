@@ -51,6 +51,39 @@ const CONNECTION_META: Record<VcsProvider, () => string> = {
 }
 const connectionMeta = computed(() => CONNECTION_META[github.provider]())
 
+// GitHub opens PULL requests, GitLab opens MERGE requests, and the panel renders both providers'
+// rows through one component. The vocabulary is therefore a per-provider set of STATIC catalog
+// keys (an exhaustive Record, so a new provider fails the typecheck rather than shipping GitHub's
+// nouns), resolved off the connected provider — the panel only ever lists one connection's repos.
+const PULL_TERMS = {
+  github: {
+    tab: 'vcs.panel.pulls.github.tab',
+    open: 'vcs.panel.pulls.github.open',
+    openSubmit: 'vcs.panel.pulls.github.openSubmit',
+    merge: 'vcs.panel.pulls.github.merge',
+    none: 'vcs.panel.pulls.github.none',
+    opened: 'vcs.panel.pulls.github.opened',
+    mergedToast: 'vcs.panel.pulls.github.mergedToast',
+    openFailed: 'vcs.panel.pulls.github.openFailed',
+  },
+  gitlab: {
+    tab: 'vcs.panel.pulls.gitlab.tab',
+    open: 'vcs.panel.pulls.gitlab.open',
+    openSubmit: 'vcs.panel.pulls.gitlab.openSubmit',
+    merge: 'vcs.panel.pulls.gitlab.merge',
+    none: 'vcs.panel.pulls.gitlab.none',
+    opened: 'vcs.panel.pulls.gitlab.opened',
+    mergedToast: 'vcs.panel.pulls.gitlab.mergedToast',
+    openFailed: 'vcs.panel.pulls.gitlab.openFailed',
+  },
+} as const satisfies Record<VcsProvider, Record<string, string>>
+const pullTerms = computed(() => PULL_TERMS[github.provider])
+
+// What the repo picker can offer, and why a repo might be missing from it, differ by how the
+// workspace authenticates rather than by provider: an App installation is shared across the
+// account and has its own access list, a pasted token reaches exactly what its owner does.
+const isAppConnection = computed(() => github.connection?.method === 'app')
+
 // On open: refresh projections when connected. The not-connected state renders
 // <GitHubConnect>, which discovers and links installations on its own.
 watch(
@@ -111,7 +144,7 @@ type Tab = 'repos' | 'pulls' | 'issues'
 const tab = ref<Tab>('repos')
 const tabs = computed<{ id: Tab; label: string; icon: string }[]>(() => [
   { id: 'repos', label: t('github.panel.tabs.repos'), icon: 'i-lucide-folder-git-2' },
-  { id: 'pulls', label: t('github.panel.tabs.pulls'), icon: 'i-lucide-git-pull-request' },
+  { id: 'pulls', label: t(pullTerms.value.tab), icon: 'i-lucide-git-pull-request' },
   { id: 'issues', label: t('github.panel.tabs.issues'), icon: 'i-lucide-circle-dot' },
 ])
 
@@ -233,9 +266,9 @@ async function openPr() {
     })
     showPrForm.value = false
     prForm.value = { repoGithubId: null, title: '', head: '', base: '' }
-    toast.add({ title: t('github.panel.toast.prOpened'), icon: 'i-lucide-check', color: 'success' })
+    toast.add({ title: t(pullTerms.value.opened), icon: 'i-lucide-check', color: 'success' })
   } catch (e) {
-    notifyError(t('github.panel.errors.openPr'), e)
+    notifyError(t(pullTerms.value.openFailed), e)
   } finally {
     openingPr.value = false
   }
@@ -258,7 +291,7 @@ async function merge(pr: GitHubPullRequest) {
   try {
     await github.mergePullRequest(pr.repoGithubId, pr.number, { method: 'squash' })
     toast.add({
-      title: t('github.panel.toast.prMerged', { number: pr.number }),
+      title: t(pullTerms.value.mergedToast, { number: pr.number }),
       icon: 'i-lucide-git-merge',
       color: 'success',
     })
@@ -378,7 +411,9 @@ async function merge(pr: GitHubPullRequest) {
               class="space-y-2 rounded-md border border-slate-700 bg-slate-900/80 p-3"
             >
               <p class="text-[12px] text-slate-400">
-                {{ t('github.panel.manageHint') }}
+                {{
+                  isAppConnection ? t('vcs.panel.manageHintApp') : t('vcs.panel.manageHintToken')
+                }}
               </p>
               <div
                 v-if="github.loadingAvailable"
@@ -388,7 +423,11 @@ async function merge(pr: GitHubPullRequest) {
                 {{ t('github.panel.loadingRepos') }}
               </div>
               <p v-else-if="!github.availableRepos.length" class="py-2 text-sm text-slate-400">
-                {{ t('github.panel.noAvailableRepos') }}
+                {{
+                  isAppConnection
+                    ? t('vcs.panel.noAvailableReposApp')
+                    : t('vcs.panel.noAvailableReposToken')
+                }}
               </p>
               <div v-else class="max-h-64 space-y-1 overflow-y-auto">
                 <button
@@ -554,7 +593,7 @@ async function merge(pr: GitHubPullRequest) {
                   }
                 "
               >
-                {{ t('github.panel.openPr') }}
+                {{ t(pullTerms.open) }}
               </UButton>
             </div>
 
@@ -599,13 +638,13 @@ async function merge(pr: GitHubPullRequest) {
                   :disabled="!canOpenPr"
                   @click="openPr"
                 >
-                  {{ t('github.panel.openPullRequest') }}
+                  {{ t(pullTerms.openSubmit) }}
                 </UButton>
               </div>
             </div>
 
             <p v-if="!github.pulls.length" class="py-4 text-sm text-slate-400">
-              {{ t('github.panel.noPulls') }}
+              {{ t(pullTerms.none) }}
             </p>
             <div
               v-for="pr in github.pulls"
@@ -634,7 +673,7 @@ async function merge(pr: GitHubPullRequest) {
                   color="neutral"
                   variant="ghost"
                   icon="i-lucide-git-merge"
-                  :aria-label="t('github.panel.mergePr')"
+                  :aria-label="t(pullTerms.merge)"
                   :loading="merging === pr.number"
                   @click="merge(pr)"
                 />
