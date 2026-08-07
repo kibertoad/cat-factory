@@ -32,10 +32,14 @@ function notification(overrides: Partial<Notification> = {}): Notification {
   }
 }
 
-function repoWith(record: NotificationWebhookRecord | null): NotificationWebhookRepository {
+function repoWith(
+  ...records: readonly (NotificationWebhookRecord | null)[]
+): NotificationWebhookRepository {
+  const present = records.filter((record): record is NotificationWebhookRecord => record !== null)
   return {
-    get: async () => record,
-    put: async () => {},
+    get: async (_workspaceId, id) => present.find((record) => record.id === id) ?? null,
+    list: async () => present,
+    put: async () => 'stored' as const,
     delete: async () => {},
   }
 }
@@ -49,6 +53,8 @@ const clock = { now: () => 1_700_000_000_000 }
 function webhook(overrides: Partial<NotificationWebhookRecord> = {}): NotificationWebhookRecord {
   return {
     workspaceId: 'ws1',
+    id: 'default',
+    name: 'Default',
     url: 'https://example.test/hook',
     types: [],
     runEvents: [],

@@ -83,6 +83,16 @@ aggregate names no resource ids and carries no per-user dimension.
 
 ### The outbound push extends the EXISTING endpoint rather than adding a second one
 
+> **Amended.** A workspace now registers SEVERAL NAMED endpoints
+> (`/api/v1/notification-webhooks/:webhookId`), the singular routes below projecting onto the id
+> `default`. What is recorded here still holds and is the reason the amendment is small: all three
+> families still share one row shape, one sealed secret per row, one SSRF guard and one
+> `signedDelivery.ts` retry core, and a delivery simply fans out over the endpoints subscribed to
+> its family. What changed is only the KEY. One endpoint per workspace made a second integration's
+> enrolment destructive: registering it overwrote whatever was there, and the only symptom was that
+> the previous receiver went quiet. See
+> [`cloudflare-os-gatekeeper.md`](../../../docs/initiatives/cloudflare-os-gatekeeper.md), slice 2.
+
 The workspace already registers ONE outbound HTTPS endpoint (`notification_webhooks`,
 sealed signing secret, SSRF-guarded, retried) to receive its notification cards. Run-lifecycle
 events reuse it: same row, same secret, same guard, same retry budget; an operator registers a
@@ -162,7 +172,10 @@ routes on and an empty title is honest about what could be read.
 - **A second webhook table keyed per API KEY.** The tracker originally scoped item #10 that way. It
   would have duplicated the endpoint record, the sealed secret, the SSRF guard and the retry loop
   for a granularity nobody asked for: public keys are workspace-scoped anyway, so a per-key
-  endpoint distinguishes nothing a per-workspace one does not.
+  endpoint distinguishes nothing a per-workspace one does not. _(Still rejected after the named
+  collection landed, and for the same reason: the collection re-keyed the ONE table by a
+  caller-chosen id rather than adding a second one, so an integration names its own endpoint
+  without tying its lifetime to a key it may rotate.)_
 - **A claim table for terminal deliveries.** Rejected above: it buys exactly-once for an effect a
   receiver collapses with one `deliveryId` comparison, at the price of a table, a status machine, a
   re-claim TTL and a sweeper on both facades.
@@ -194,16 +207,18 @@ routes on and an empty title is honest about what could be read.
   the projection rather than hand-listed; the cursor's sort key must be the exact value the query
   orders by, from the same source; and an id list resolved by a prior read goes down as a SUBQUERY,
   never a dynamic `IN (...)` (D1 hard-rejects a statement over 100 bound parameters).
-- **The webhook row is now read on the run's terminal path**, so its repository is allow-listed for
-  mothership mode (`get` / `put` / `delete`, workspace-scoped). An un-routed method there would have
-  surfaced only as a webhook that silently never fires, because both delivery paths are best-effort.
-- **Both delivery paths stay best-effort but never invisible**: a failure is swallowed and reported
-  through the facade's structured logger, so a broken receiver is diagnosable.
-- **The notification webhook still has no SPA panel**: it is managed over
-  `GET|PUT|DELETE /workspaces/:ws/notification-webhook` behind `integrations.manage`. Its consumer
-  is a headless integration whose operator is already using the API; a settings panel is worth
-  adding when a human-facing deployment wants one, and it would now carry the `runEvents` selector
-  too.
+- **The webhook rows are now read on the run's terminal path**, so their repository is allow-listed
+  for mothership mode (`get` / `list` / `put` / `delete`, workspace-scoped). An un-routed method
+  there would surface only as a webhook that silently never fires, because every delivery path is
+  best-effort. `list` is the one the delivery paths call.
+- **Every delivery path stays best-effort but never invisible**: a failure is swallowed and reported
+  through the facade's structured logger, naming the endpoint it belonged to, so a broken receiver
+  is diagnosable and does not mask a healthy sibling's state.
+- **The notification webhooks still have no SPA panel**: they are managed over
+  `GET|PUT|DELETE /workspaces/:ws/notification-webhook[s]` behind `integrations.manage`. Their
+  consumer is a headless integration whose operator is already using the API; a settings panel is
+  worth adding when a human-facing deployment wants one, and it would now carry the `runEvents`
+  selector and the endpoint list too.
 - **Tier 4 is now one item, not three**: `POST /bootstrap` stays deferred (container-backed and
   force-pushes to GitHub, breaking the "public runs never touch GitHub" invariant), and serving
   `GET /api/v1/openapi.json` stays unbuilt but trivial (the spec already ships as a repo file, so an
