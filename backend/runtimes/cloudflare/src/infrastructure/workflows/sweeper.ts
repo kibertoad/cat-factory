@@ -63,18 +63,56 @@ interface WorkflowLookup {
 const INSTANCE_DETAIL_CAP = 400
 
 /**
- * Whether a `Workflow.get` throw means "no instance with this id" (the state the sweeper
- * acts on) rather than "the lookup failed" (which says nothing about the run).
+ * Workflows' code for "no instance with this id". It rides the error MESSAGE
+ * (`(instance.not_found) Instance does not exist` from the API, a bare `instance.not_found`
+ * from the local binding); the binding's own `WorkflowError.code` is a NUMBER, so this string
+ * is the only spelling stable across both.
+ */
+const INSTANCE_NOT_FOUND_CODE = 'instance.not_found'
+
+/** How far down a `cause` chain the classification below looks before giving up. */
+const CAUSE_DEPTH = 4
+
+/**
+ * The message a thrown value carries, whatever shape it arrived in.
  *
- * Workflows signals the first as the `instance.not_found` error code, which rides the message
- * (`(instance.not_found) Instance does not exist`, and a bare `instance.not_found` from the
- * local binding). Matching the CODE rather than the prose keeps it stable across the two
- * spellings; anything else (a quota rejection, an unbound namespace, an API outage) is a
- * lookup failure and must NOT be reported as a lost instance.
+ * Reading `.message` only off an `Error` is the trap: `Workflow.get` is declared to reject with
+ * a plain `WorkflowError` (`{ code?: number; message: string }`), which is not an `Error`, so an
+ * `instanceof` test falls through to `String(error)` and renders it `[object Object]`. That
+ * silently makes `missing` unreachable, and with it the ENTIRE stale-run backstop: every probe
+ * answers `unknown`, which by design takes no action at all. Empty when the value carries no
+ * message, so a caller can tell "nothing said" from "said nothing useful".
+ */
+function messageOf(error: unknown): string {
+  if (typeof error === 'string') return error
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error !== null) {
+    const { message } = error as { message?: unknown }
+    if (typeof message === 'string') return message
+  }
+  return ''
+}
+
+/**
+ * Whether a lookup throw means "no instance with this id" (the state the sweeper acts on)
+ * rather than "the lookup failed" (which says nothing about the run).
+ *
+ * Matching the CODE rather than the prose keeps it stable across Workflows' two spellings, and
+ * walking the `cause` chain keeps it stable across a binding shim that re-throws wrapping the
+ * original. Anything else (a quota rejection, an unbound namespace, an API outage) is a lookup
+ * failure and must NOT be reported as a lost instance.
+ *
+ * A misclassification here is invisible in the sweep's dispositions, which is what
+ * `sweep.run_state_unknown` is counted for: a sweeper that can no longer recognise the code
+ * reports every stale run as unclassifiable rather than re-driving none of them quietly.
  */
 function isInstanceNotFound(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error)
-  return message.includes('instance.not_found')
+  let current: unknown = error
+  for (let depth = 0; depth < CAUSE_DEPTH && current != null; depth++) {
+    if (messageOf(current).includes(INSTANCE_NOT_FOUND_CODE)) return true
+    current = (current as { cause?: unknown }).cause
+  }
+  return false
 }
 
 /**
@@ -96,9 +134,28 @@ function describeInstanceError(error: { name?: string; message?: string } | unde
   return probeDetail([error.name, error.message].filter(Boolean).join(': '))
 }
 
-/** Why a lookup could not answer, scrubbed and capped. */
+/**
+ * Why a lookup could not answer, scrubbed and capped. Reads the message off whatever shape the
+ * throw arrived in (see {@link messageOf}) rather than stringifying it, since the plain
+ * `WorkflowError` the binding is declared to reject with renders as `[object Object]` and would
+ * put a run's only account of an outage as literally nothing.
+ */
 function describeLookupFailure(error: unknown): string {
-  return probeDetail(error instanceof Error ? `${error.name}: ${error.message}` : String(error))
+  const message = messageOf(error)
+  if (!message) return probeDetail(safeStringify(error))
+  const name = error instanceof Error ? error.name : ''
+  return probeDetail(name ? `${name}: ${message}` : message)
+}
+
+/** A last-resort rendering of a throw that carries no message. Never throws itself. */
+function safeStringify(error: unknown): string {
+  try {
+    return typeof error === 'object' && error !== null ? JSON.stringify(error) : String(error)
+  } catch {
+    // silent-catch-ok: the value is unserialisable (a cycle, a throwing getter); its type is
+    // the only honest thing left to say about it, and this is already the fallback path.
+    return Object.prototype.toString.call(error)
+  }
 }
 
 /** WorkflowLookup over a Cloudflare Workflows binding. */
@@ -143,6 +200,11 @@ export class WorkflowsLookup implements WorkflowLookup {
       const detail = describeInstanceError(error)
       return { state: 'terminal', ...(detail ? { detail } : {}) }
     } catch (error) {
+      // The handle `get` hands back is LAZY: it resolves nothing, so "no instance with this id"
+      // routinely surfaces here rather than from `get`. It is the same fact and takes the same
+      // classification, or a genuinely lost instance reads as an unreadable one and is never
+      // re-created.
+      if (isInstanceNotFound(error)) return { state: 'missing' }
       this.log.warn('workflow instance status unreadable', { runId, ...describeError(error) })
       return { state: 'unknown', detail: describeLookupFailure(error) }
     }

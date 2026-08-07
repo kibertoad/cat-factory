@@ -214,16 +214,20 @@ export class AgentDispatchController {
     // it now — the board names the model while the step is querying instead of only
     // once the result lands. recordStepResult re-asserts it from the result.
     const previewModel = await this.previewStepModel(context)
+    if (previewModel && previewModel !== step.model) step.model = previewModel
     // An inline step dispatches nowhere, which is exactly why it used to stamp nothing and
     // left a run whose last step was inline reporting whatever CONTAINER step ran before it
     // (or nothing at all, on a pure inline pipeline) as where the run was when it died. It
     // names its backend as `inline` rather than leaving it for a poll that never comes.
-    this.beginDispatchDiagnostics(instance, context, previewModel ?? step.model ?? null, 'inline')
-    if (previewModel && previewModel !== step.model) {
-      step.model = previewModel
-      await this.deps.runStateMachine.casPersist(workspaceId, instance)
-      await this.deps.runStateMachine.emitInstance(workspaceId, instance)
-    }
+    this.beginDispatchDiagnostics(instance, context, step.model ?? null, 'inline')
+    // Persist UNCONDITIONALLY, exactly as the container path above does. The block is opened on
+    // every dispatch, so there is always something new to write, and the inline call below runs
+    // under `rethrowAgentErrors` on both durable drivers: its throw propagates past here and
+    // `failRun` re-reads the instance from storage. Gating this on the model having changed left
+    // the failure this block exists to explain with no diagnostics whenever the preview resolved
+    // nothing or resolved what the step already carried.
+    await this.deps.runStateMachine.casPersist(workspaceId, instance)
+    await this.deps.runStateMachine.emitInstance(workspaceId, instance)
 
     const result = await this.runAgent(context, options)
     return this.deps.recordStepResult(workspaceId, instance, step, isFinalStep, result)

@@ -121,6 +121,29 @@ describe('durable execution: agent failure handling', () => {
     ).rejects.toThrow('boom')
   })
 
+  it("PERSISTS an inline step's diagnostics before the call that can throw past them", async () => {
+    // The failure the block exists to explain is the one that never returns: under
+    // `rethrowAgentErrors` (both durable drivers) the inline throw propagates out of the
+    // dispatch and `failRun` re-reads the run from STORAGE, so a block that only ever reached
+    // the in-memory instance is gone. `ThrowingAgentExecutor` previews no model, which used to
+    // be the exact condition under which the pre-dispatch persist was skipped.
+    const { wsId, pipelineId } = await seedWorkspaceWithCompanionFreePipeline()
+    const c = buildContainer(env, {
+      agentExecutor: new ThrowingAgentExecutor(),
+      workRunner: new FakeWorkRunner(),
+    })
+    const instance = await c.executionService.start(wsId, 'task_login', pipelineId)
+
+    await expect(
+      advanceUntilHalt(c, wsId, instance.id, { rethrowAgentErrors: true }),
+    ).rejects.toThrow('boom')
+
+    const reloaded = await new D1ExecutionRepository({ db: env.DB, clock }).get(wsId, instance.id)
+    const dispatch = reloaded!.diagnostics?.lastDispatch
+    expect(dispatch?.executionBackend).toBe('inline')
+    expect(dispatch?.agentKind).toBeTruthy()
+  })
+
   it('swallows the error into step output by default', async () => {
     const { wsId, pipelineId } = await seedWorkspaceWithCompanionFreePipeline()
     const c = buildContainer(env, {

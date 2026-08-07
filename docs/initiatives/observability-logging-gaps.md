@@ -934,8 +934,19 @@ answers a PROBE (`{ state, detail }`) over a four-member state, and the fourth m
 **5.1's pooled half.** `postMortem` was passed to the per-RUN local poll and not to the POOLED one,
 though the method takes the same argument and a warm deployment is exactly where a long coding step
 runs. The class of container death that pooling exists to make cheaper was the class reporting
-nothing but the bare eviction sentinel. One argument; the rest of 5.1 (the CF container DO, K8s,
-the native transport) is untouched and still open.
+nothing but the bare eviction sentinel. The rest of 5.1 (the CF container DO, K8s, the native
+transport) is untouched and still open.
+
+Passing the same argument turned out to be the wrong shape for a SHARED backend, which is the
+gotcha for the remaining transports. `pollHarnessJob` falls to an eviction view down two branches,
+and only one of them means the backend is gone: on `unreachable` it stopped answering and the
+runtime confirmed it, on `job_unknown` it answered a 404 and is alive, having merely forgotten this
+job. A per-run container serves one run, so reading it is safe either way; a pool member is already
+serving somebody else, so a log tail lifted off it attaches another run's work (possibly another
+repo's) to this run's failure, indistinguishable from a genuine tail. So the poll now reports which
+branch it took (`EvictionCause`) and the pooled post-mortem states the situation instead of reading
+a live member. **Any transport whose backend outlives one run owes the same distinction**; a
+transport whose backend is per-run may ignore the argument, and the per-run local path does.
 
 #### Notes for the next implementer (5.2 / 5.4)
 
@@ -944,12 +955,21 @@ the native transport) is untouched and still open.
   durable driver copies that shape rather than re-deriving a three-state string, and a new state
   must decide explicitly whether it is actionable: the fall-through is what `unknown` and
   `waitingForPause` were both lost to.
+- **Classifying the throw is what the whole backstop rests on, and the throw is NOT an `Error`.**
+  `Workflow.get` is declared to reject with a plain `WorkflowError` (`{ code?: number; message }`),
+  whose `code` is a NUMBER, so `instance.not_found` is only ever readable off the MESSAGE and only
+  if the message is read off the object rather than off `Error.message`. Getting that wrong makes
+  `missing` unreachable, and because `unknown` deliberately takes no action, the entire stale-run
+  backstop stops acting with no failing disposition to show for it: nothing re-driven, nothing
+  finalized, nothing stalled. `sweep.run_state_unknown` is the only signal that separates it from a
+  healthy fleet, which is the reason it is counted. The classification is also applied to the
+  `status()` throw, not just `get`'s: the handle is lazy, so a lost instance surfaces from either.
 - **This is CF-only on purpose** (the tracker's runtime-symmetry note): Node's stale-run sweeper
   probes pg-boss, which has no analogous swallow. The `lastDispatch` half IS runtime-neutral
   (engine code) and is pinned by conformance on both facades.
 - **5.3 is now worth more.** It renders `diagnostics.lastDispatch` in the SPA, and the block it
   would render is no longer absent on exactly the failures a person opens that panel for.
-- **The `failure` object is additive on the public API** (`info.version` → 1.28.0), but the
+- **The `failure` object is additive on the public API** (`info.version` → 1.29.0), but the
   POPULATION changed: a pure-inline run used to answer `diagnostics: null` on the debug overview
   and now answers a block. A consumer reading "no diagnostics" as "no agent work happened" reads
   differently, which is stated in the spec's version note rather than left to be discovered.

@@ -8,6 +8,7 @@
 '@cat-factory/local-server': minor
 '@cat-factory/sdk': minor
 '@cat-factory/mcp-server': minor
+'@cat-factory/gatekeeper-bindings': minor
 ---
 
 Keep the cause of a failed dispatch and a dead durable driver, instead of discarding it at the
@@ -42,7 +43,7 @@ The local pooled container poll now passes `postMortem`, the same argument the p
 did, so a pool member that dies mid-run leaves its exit state and log tail behind rather than the
 bare eviction sentinel.
 
-Additive on the public API (`info.version` 1.28.0): `diagnostics.lastDispatch` grows an optional
+Additive on the public API (`info.version` 1.29.0): `diagnostics.lastDispatch` grows an optional
 `failure` object and `executionBackend` one further value. What does change for a consumer is the
 population, since a pure-inline run used to answer no diagnostics at all and now answers a block.
 A new `sweep.run_state_unknown` operational counter reports what the sweeper could not classify,

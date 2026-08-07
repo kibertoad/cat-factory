@@ -46,6 +46,51 @@ describe('WorkflowsLookup: a probe answers only what it established', () => {
     }
   })
 
+  it('recognises the code on the plain object shape the binding is declared to reject with', async () => {
+    // `Workflow.get` is typed to reject with a `WorkflowError` (`{ code?: number; message }`),
+    // which is NOT an `Error`. Classifying off `error instanceof Error ? error.message : String(error)`
+    // renders that as `[object Object]`, so `missing` becomes unreachable and the ENTIRE
+    // stale-run backstop silently stops acting: every probe answers `unknown`, which by design
+    // takes no action, so nothing is re-driven, nothing is finalized and nothing ever stalls.
+    const rejections: unknown[] = [
+      { code: 1000, message: '(instance.not_found) Instance does not exist' },
+      { message: 'instance.not_found' },
+      'instance.not_found',
+      // A binding shim that re-throws wrapping the original: the code is one `cause` down.
+      new Error('workflow lookup failed', { cause: new Error('(instance.not_found) gone') }),
+    ]
+    for (const rejection of rejections) {
+      const probe = await new WorkflowsLookup(workflowRejecting(rejection)).instanceState('run_1')
+      expect(probe.state).toBe('missing')
+    }
+  })
+
+  it('names the cause of a failed lookup that arrived as a plain object', async () => {
+    // The same shape on the other branch: stringifying it would put `[object Object]` on the run
+    // as its only account of the outage.
+    const probe = await new WorkflowsLookup(
+      workflowRejecting({ code: 1001, message: 'workflows API unavailable' }),
+    ).instanceState('run_1')
+
+    expect(probe.state).toBe('unknown')
+    expect(probe.detail).toContain('workflows API unavailable')
+  })
+
+  it('reports an instance the status read says does not exist as missing', async () => {
+    // The handle `get` returns is LAZY, so "no instance with this id" routinely surfaces from
+    // `status()` rather than from `get`. Read as merely unreadable it becomes `unknown`, and a
+    // genuinely lost instance is then never re-created.
+    const workflow = workflowWith(async () =>
+      Object.assign(Object.create(null), {
+        status: async () => {
+          throw new Error('(instance.not_found) Instance does not exist')
+        },
+      }),
+    )
+
+    expect((await new WorkflowsLookup(workflow).instanceState('run_1')).state).toBe('missing')
+  })
+
   it('reports a failed lookup as unknown, not missing, and names the cause', async () => {
     const logger = createRecordingLogger()
     const probe = await new WorkflowsLookup(
