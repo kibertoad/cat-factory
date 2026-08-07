@@ -170,7 +170,9 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   gate recoverable: four of that gate's codes name a field here. The trap is the `review` task,
   whose target is verified against the provider AND folded into the description at creation: both
   repeat here, and the fold is made idempotent by RECOMPUTING the old preamble and byte-comparing
-  it, refusing (never guessing) once a human has rewritten the description around it.
+  it, refusing (never guessing) once a human has rewritten the description around it. A description
+  arriving IN the patch is refolded too, not prepended to: the read surfaces serve the folded text,
+  so a read-modify-write caller hands it straight back, and prepending named two pull requests.
 - `board/reparentWrite.ts`: moving a block into a new container, split from `BoardService` because
   the cross-home case is a migration rather than a layout write: it carries the subtree's rows and
   executions to the destination service's home, re-stamps the service scope key, prunes the edges
