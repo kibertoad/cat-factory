@@ -26,6 +26,7 @@ from .models import (
     DebugLlmCall,
     DebugRunOverview,
     GetDebugLlmCallView,
+    GetPublicRunOutcomeResponse,
     ListDebugAgentContextResponse,
     ListDebugLlmCallsOrder,
     ListDebugLlmCallsResponse,
@@ -1524,8 +1525,8 @@ class DebugResource:
 
 
 class EvidenceResource:
-    """What a run proved: the engine's verification report and the artifacts it captured, bytes
-    included.
+    """What a run proved: the engine's verification report, the outcome summary behind it, and
+    the artifacts it captured, bytes included.
     """
 
     def __init__(self, transport: Transport) -> None:
@@ -1547,6 +1548,18 @@ class EvidenceResource:
             query=None,
             timeout=timeout,
         )
+
+    def get_outcome(self, run_id: str, timeout: float | None = None) -> GetPublicRunOutcomeResponse:
+        """getPublicRunOutcome
+        `GET /api/v1/runs/{runId}/outcome` (operation `getPublicRunOutcome`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/runs/{_quote(run_id)}/outcome",
+            query=None,
+            timeout=timeout,
+        )
+        return GetPublicRunOutcomeResponse.from_dict(raw)
 
     def get_report(self, run_id: str, timeout: float | None = None) -> PrVerificationReport:
         """Get a run's verification report

@@ -23,7 +23,7 @@ import type {
   RunInputGate,
 } from '@cat-factory/kernel'
 import { allPullRequests } from '@cat-factory/contracts'
-import type { PrVerificationReport } from '@cat-factory/contracts'
+import type { PrVerificationReport, RunOutcome } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { RunStartOptions } from './runStartOptions.js'
 import {
@@ -578,6 +578,23 @@ export class ExecutionService {
     const instance = await this.executionRepository.get(workspaceId, executionId)
     if (!instance) return null
     return this.prVerificationReport.composeForRun(workspaceId, instance)
+  }
+
+  /**
+   * The run's OUTCOME summary: the read behind `GET /api/v1/runs/:runId/outcome`. Null when the
+   * workspace has no such run, or when the run's block is gone.
+   *
+   * The sibling of {@link composeVerificationReport} and deliberately routed through the same
+   * collaborator: the two documents answer the same question for different readers (a reviewer
+   * who will open the diff, and someone who never will), so they read one run's evidence once,
+   * through one loader, and share the coverage rules underneath. The SPA composes this same
+   * reduction live off its own store, which is why it is a pure function in
+   * `@cat-factory/contracts` rather than a projection invented on this side of the wire.
+   */
+  async composeRunOutcome(workspaceId: string, executionId: string): Promise<RunOutcome | null> {
+    const instance = await this.executionRepository.get(workspaceId, executionId)
+    if (!instance) return null
+    return this.prVerificationReport.composeOutcomeForRun(workspaceId, instance)
   }
 
   /**

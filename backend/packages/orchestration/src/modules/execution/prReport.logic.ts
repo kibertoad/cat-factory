@@ -10,12 +10,17 @@ import type {
   PrReportRequirement,
   PrReportScope,
   PrVerificationReport,
-  RequirementVerdict,
   SpecDoc,
   TestReport,
 } from '@cat-factory/kernel'
 import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
-import { PR_VERIFICATION_REPORT_VERSION } from '@cat-factory/contracts'
+import {
+  indexRequirementVerdicts,
+  isRequirementRegression,
+  joinSpecRequirements,
+  PR_VERIFICATION_REPORT_VERSION,
+  tallyRequirements,
+} from '@cat-factory/contracts'
 import { CI_AGENT_KIND, MERGER_AGENT_KIND, isTesterKind } from './ci.logic.js'
 import {
   type PrReportEnvironmentInputs,
@@ -356,10 +361,12 @@ function composeMerge(instance: ExecutionInstance): PrVerificationReport['merge'
  * for a human. A `not_met` against an `aspirational` requirement is in-flight work; a `not_met`
  * against an `established` one is the service losing behaviour it had. Left uncomputed, the two
  * arrive at a reviewer as the same `not met` cell.
+ *
+ * The RULE lives in `@cat-factory/contracts` because the run outcome summary states the same
+ * judgement to a different audience, and a regression that the pull request calls a regression
+ * and the summary calls an ordinary failure is worse than either surface alone.
  */
-function isRegression(row: PrReportRequirement): boolean {
-  return row.state === 'established' && row.verdict === 'not_met'
-}
+const isRegression = isRequirementRegression
 
 /**
  * Cap the requirement table by SEVERITY FIRST, so a regression is the last thing dropped.
@@ -432,7 +439,15 @@ function composeRequirements(
   spec: SpecDoc | null | undefined,
   truncations: string[],
 ): PrVerificationReport['requirements'] {
-  const empty = { entries: [], met: 0, notMet: 0, notCovered: 0, regressions: 0, total: 0 }
+  const empty = {
+    entries: [],
+    met: 0,
+    notMet: 0,
+    notCovered: 0,
+    regressions: 0,
+    total: 0,
+    unmatchedVerdicts: 0,
+  }
   const testerSteps = instance.steps.filter((s) => isTesterKind(s.agentKind))
   if (testerSteps.length === 0) {
     return {
@@ -443,8 +458,7 @@ function composeRequirements(
       ...empty,
     }
   }
-  const reports = testerSteps.map((s) => s.test?.lastReport).filter((r) => r != null)
-  if (reports.length === 0) {
+  if (!testerSteps.some((s) => s.test?.lastReport != null)) {
     return {
       status: 'absent',
       note: 'The tester step produced no report, so no requirement was ruled on.',
@@ -461,36 +475,20 @@ function composeRequirements(
     }
   }
 
-  // Index the verdicts by requirement id, across every tester step in pipeline order. A
-  // duplicate id keeps the FIRST verdict — whether it repeats within one report or across two
-  // testers — because last-wins would let a trailing `not_covered` quietly erase a real
-  // observation, which is the one thing this section exists to prevent.
-  const verdicts = new Map<string, RequirementVerdict>()
-  for (const report of reports) {
-    for (const verdict of report.requirementVerdicts ?? []) {
-      if (!verdicts.has(verdict.requirementId)) verdicts.set(verdict.requirementId, verdict)
-    }
-  }
-
-  const rows: PrReportRequirement[] = []
-  for (const module of spec.modules ?? []) {
-    for (const group of module.groups ?? []) {
-      for (const req of group.requirements ?? []) {
-        const verdict = verdicts.get(req.id)
-        rows.push({
-          id: req.id,
-          title: scrubbed(req.title),
-          module: scrubbed(module.name),
-          group: scrubbed(group.name),
-          priority: req.priority,
-          state: req.state ?? 'aspirational',
-          verdict: verdict?.status ?? 'not_covered',
-          detail: verdictDetail(verdict?.detail),
-          criteriaCount: (req.acceptance ?? []).length,
-        })
-      }
-    }
-  }
+  // The index and the join are the shared rules (`@cat-factory/contracts`, `run-evidence.ts`),
+  // not this file's own: the run outcome summary counts the same coverage for a different reader,
+  // and two spellings of "which tester steps count" is how the two came to print different
+  // totals for one run. What stays here is the boundary treatment: a spec title and a tester's
+  // evidence are agent- and human-authored text heading for a PARSED, PUBLIC surface.
+  const verdicts = indexRequirementVerdicts(instance.steps)
+  const joined = joinSpecRequirements(spec, verdicts)
+  const rows: PrReportRequirement[] = joined.map((row) => ({
+    ...row,
+    title: scrubbed(row.title),
+    module: scrubbed(row.module),
+    group: scrubbed(row.group),
+    detail: verdictDetail(row.detail),
+  }))
   if (rows.length === 0) {
     return {
       status: 'absent',
@@ -503,16 +501,15 @@ function composeRequirements(
 
   // Counts are computed over EVERY row, before the cap — so a capped table still reports the
   // true totals and the `truncations` note says how much of the table was shown.
-  const count = (status: PrReportRequirement['verdict']) =>
-    rows.filter((r) => r.verdict === status).length
+  const known = new Set(joined.map((row) => row.id))
   return {
     status: 'reported',
     entries: selectRequirementEntries(rows, truncations),
-    met: count('met'),
-    notMet: count('not_met'),
-    notCovered: count('not_covered'),
-    regressions: rows.filter(isRegression).length,
-    total: rows.length,
+    ...tallyRequirements(joined),
+    // A verdict against an id the spec does not carry has no row to land on. Counted rather than
+    // dropped: the difference between this table's rulings and the tester's own is otherwise
+    // unexplainable, and it reads as a miscount in whichever of the two the reviewer trusts less.
+    unmatchedVerdicts: [...verdicts.keys()].filter((id) => !known.has(id)).length,
   }
 }
 

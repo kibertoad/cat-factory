@@ -5499,11 +5499,8 @@
       "notCovered": "Denetlenmeyen: {count}",
       "regressions": "Gerilemeler: {count}",
       "regressionTag": "Gerileme",
-      "idOnly": "yalnızca kimlik",
-      "idOnlyHint": "Bu kimlik servis şartnamesinde yer almadığı için gösterilecek bir başlık yok.",
       "spec": {
-        "not_read": "Servis şartnamesi okunmadı; bu nedenle burada test edicinin bildirdiği gereksinim kimlikleri, başlıkları olmadan yer alıyor.",
-        "unmatched": "Okunan servis şartnamesinde bu gereksinim kimliklerinin hiçbiri yok; bu nedenle yalnızca test edicinin bildirdiği kimlikler gösteriliyor."
+        "not_read": "Servis şartnamesi okunamadı; bu sayılar yalnızca testçinin karara bağladıklarını, kimlik bazında kapsıyor."
       },
       "verdict": {
         "met": "Doğrulandı",
@@ -5513,8 +5510,10 @@
       "gap": {
         "no_tester_step": "Bu hatta test adımı yok, bu yüzden hiçbir gereksinim denetlenmedi.",
         "tester_not_reported": "Testçi henüz rapor vermedi, bu yüzden hiçbir gereksinim karara bağlanmadı.",
-        "no_verdicts": "Testçi rapor verdi ancak belirtimdeki hiçbir gereksinim hakkında karar vermedi."
-      }
+        "no_verdicts": "Testçi rapor verdi ancak belirtimdeki hiçbir gereksinim hakkında karar vermedi.",
+        "no_requirements": "Servis şartnamesinde hiçbir gereksinim kayıtlı değil, dolayısıyla testçinin karara bağlayacağı bir şey yoktu."
+      },
+      "unmatchedVerdicts": "Testçi ayrıca bu şartnamede bulunmayan {count} kimlik hakkında karar verdi; bu yüzden kendi sayımı yukarıdakilerden yüksek."
     },
     "tests": {
       "title": "Nasıl test edildi",

@@ -13,8 +13,8 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * What a run proved: the engine's verification report and the artifacts it captured, bytes
- * included.
+ * What a run proved: the engine's verification report, the outcome summary behind it, and the
+ * artifacts it captured, bytes included.
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
 public final class EvidenceClient {
@@ -36,6 +36,14 @@ public final class EvidenceClient {
      */
     public byte[] downloadArtifact(String artifactId) {
         return transport.requestBytes("GET", "/api/v1/artifacts/" + Transport.pathSegment(artifactId) + "/blob", null, Map.of());
+    }
+
+    /**
+     * getPublicRunOutcome
+     * {@code GET /api/v1/runs/{runId}/outcome} (operation {@code getPublicRunOutcome}).
+     */
+    public GetPublicRunOutcomeResponse getOutcome(String runId) {
+        return transport.request("GET", "/api/v1/runs/" + Transport.pathSegment(runId) + "/outcome", null, Map.of(), new TypeReference<GetPublicRunOutcomeResponse>() {});
     }
 
     /**

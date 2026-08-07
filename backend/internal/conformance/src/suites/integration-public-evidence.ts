@@ -1,7 +1,9 @@
 import type { ExecutionInstance, Pipeline } from '@cat-factory/kernel'
 import {
   parsePrVerificationReport,
+  parseRunOutcome,
   PR_VERIFICATION_REPORT_VERSION,
+  RUN_OUTCOME_VERSION,
   type PublicApiKey,
   type PublicRunArtifactList,
 } from '@cat-factory/contracts'
@@ -10,7 +12,7 @@ import type { ConformanceHarness } from '../harness.js'
 import { memoryBinaryArtifactStore } from './shared.js'
 
 // Cross-runtime conformance for the public run-EVIDENCE surface (`/api/v1/runs/:runId/report`,
-// `…/artifacts`, `/api/v1/artifacts/:id/blob`) and for HEADLESS key provisioning
+// `…/outcome`, `…/artifacts`, `/api/v1/artifacts/:id/blob`) and for HEADLESS key provisioning
 // (`/api/v1/keys`).
 //
 // What belongs HERE rather than in a unit test is the half a unit test structurally cannot see:
@@ -85,6 +87,32 @@ export function definePublicEvidenceConformance(harness: ConformanceHarness): vo
       expect(report.tests.status).toBe('absent')
     })
 
+    it("composes a run's OUTCOME summary from the same evidence as its report", async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createOrgWorkspace({ seed: true })
+      const wsId = workspace.id
+      const auth = await mintKey(app, wsId, 'read')
+      const runId = await startRun(app, wsId)
+
+      const read = await app.call('GET', `/api/v1/runs/${runId}/outcome`, undefined, auth)
+      expect(read.status).toBe(200)
+      const outcome = parseRunOutcome(read.body)
+      expect(outcome.version).toBe(RUN_OUTCOME_VERSION)
+      expect(outcome.title).toBeTruthy()
+
+      // The half only a cross-surface assertion can see: this facade's outcome read and its report
+      // read must describe ONE run. A facade that wired a second loader (or a second composer)
+      // passes both endpoints' own tests and fails here.
+      const reported = await app.call('GET', `/api/v1/runs/${runId}/report`, undefined, auth)
+      const report = parsePrVerificationReport(reported.body)
+      expect(outcome.title).toBe(report.run.blockTitle)
+      // A pipeline of one `coder` ran no tester, and BOTH documents say so in their own vocabulary
+      // rather than either of them rendering an empty coverage section as a clean one.
+      expect(report.tests.status).toBe('absent')
+      expect(outcome.tests).toEqual({ status: 'absent', gap: 'no_tester_step' })
+      expect(outcome.requirements).toEqual({ status: 'absent', gap: 'no_tester_step' })
+    })
+
     it('refuses an unknown run, and refuses every read without a key', async () => {
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace({ seed: true })
@@ -95,8 +123,18 @@ export function definePublicEvidenceConformance(harness: ConformanceHarness): vo
       const missing = await app.call('GET', '/api/v1/runs/exec_nope/report', undefined, auth)
       expect(missing.status).toBe(404)
 
+      const missingOutcome = await app.call(
+        'GET',
+        '/api/v1/runs/exec_nope/outcome',
+        undefined,
+        auth,
+      )
+      expect(missingOutcome.status).toBe(404)
+
       const anonymous = await app.call('GET', `/api/v1/runs/${runId}/report`, undefined)
       expect(anonymous.status).toBe(401)
+      const anonymousOutcome = await app.call('GET', `/api/v1/runs/${runId}/outcome`, undefined)
+      expect(anonymousOutcome.status).toBe(401)
       const anonymousList = await app.call('GET', `/api/v1/runs/${runId}/artifacts`, undefined)
       expect(anonymousList.status).toBe(401)
     })

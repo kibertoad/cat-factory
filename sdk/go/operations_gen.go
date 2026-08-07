@@ -2013,8 +2013,8 @@ func (s *DebugService) ListToolCallsAll(ctx context.Context, runID string, query
 	}
 }
 
-// EvidenceService what a run proved: the engine's verification report and the artifacts it captured, bytes
-// included.
+// EvidenceService what a run proved: the engine's verification report, the outcome summary behind it, and the
+// artifacts it captured, bytes included.
 type EvidenceService struct {
 	client *Client
 }
@@ -2032,6 +2032,20 @@ func (s *EvidenceService) DownloadArtifact(ctx context.Context, artifactID strin
 		Path:   fmt.Sprintf("/api/v1/artifacts/%s/blob", pathEscape(artifactID)),
 	}
 	return s.client.requestBytes(ctx, req)
+}
+
+// GetOutcome getPublicRunOutcome
+// GET /api/v1/runs/{runId}/outcome (operation getPublicRunOutcome).
+func (s *EvidenceService) GetOutcome(ctx context.Context, runID string) (*GetPublicRunOutcomeResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/outcome", pathEscape(runID)),
+	}
+	var out GetPublicRunOutcomeResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // GetReport get a run's verification report

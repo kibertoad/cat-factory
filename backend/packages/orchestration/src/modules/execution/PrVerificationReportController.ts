@@ -9,18 +9,17 @@ import type {
   PrVerificationReportPublisher,
   ProvisioningLogRepository,
   ResolveRunRepoContext,
-  SpecDoc,
   TaskRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import { DEFAULT_WORKSPACE_SETTINGS, describeError } from '@cat-factory/kernel'
-import { readServiceSpec } from '@cat-factory/agents'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
-import type { PrVerificationReport } from '@cat-factory/contracts'
+import type { PrVerificationReport, RunOutcome } from '@cat-factory/contracts'
+import { composeRunOutcome } from '@cat-factory/contracts'
+import { RunEvidenceLoader } from './RunEvidenceLoader.js'
 import type { PrReportInputs } from './prReport.logic.js'
 import { composePrVerificationReport, renderPrVerificationReport } from './prReport.logic.js'
 import type { ProvisioningLifecycleRead } from './prReport.environments.js'
-import { isTesterKind } from './ci.logic.js'
 
 /**
  * How many of the run's environment provisioning rows the lifecycle timeline reads. A run stands
@@ -192,9 +191,10 @@ export class PrVerificationReportController {
 
   /**
    * Hard cap on {@link lastPublished}, counted in PULL REQUESTS rather than runs: a single-repo
-   * run holds one entry and a cross-service run one per PR it writes. Sized above
-   * {@link MAX_TRACKED_RUNS} for that reason — keyed per run, a handful of concurrent
-   * cross-service runs would otherwise evict the single-repo runs' entries out from under them.
+   * run holds one entry and a cross-service run one per PR it writes. Sized above the
+   * `RunEvidenceLoader`'s per-RUN spec bound for that reason. Keyed per run, a handful of
+   * concurrent cross-service runs would otherwise evict the single-repo runs' entries out from
+   * under them.
    *
    * A long-lived Node replica serves an unbounded number of runs and each entry holds a rendered
    * section, so the map is bounded here rather than relying on a call site to evict finished runs
@@ -205,15 +205,48 @@ export class PrVerificationReportController {
   private static readonly MAX_TRACKED_SECTIONS = 1024
 
   /**
-   * Hard cap on {@link specByRun}, counted in RUNS: the spec memo is per execution however many
-   * pull requests that execution writes to (it is the same service's `spec/` in every copy).
-   * Bounded and evicted exactly like {@link lastPublished}; the two are separate constants
-   * because they count different things, and one number standing for both is how a change to
-   * either silently re-sizes the other.
+   * The block + `spec/` reads both of this run's reductions share. A collaborator rather than two
+   * private methods because {@link composeOutcomeForRun} needs exactly the same two answers, and a
+   * second reader with its own branch choice or its own memo would drift from this one.
    */
-  private static readonly MAX_TRACKED_RUNS = 256
+  private readonly evidence: RunEvidenceLoader
 
-  constructor(private readonly deps: PrVerificationReportControllerDeps) {}
+  constructor(private readonly deps: PrVerificationReportControllerDeps) {
+    this.evidence = new RunEvidenceLoader(deps)
+  }
+
+  /**
+   * The run's OUTCOME summary (`GET /api/v1/runs/:runId/outcome`): the non-code answer to "what
+   * did this run change, and what backs that up", for a reader who does not open the diff. Null
+   * when the run's block is gone, exactly as {@link composeForRun} is.
+   *
+   * It lives on this controller because it reads the SAME evidence as the verification report and
+   * must not read it differently: the reduction itself is `composeRunOutcome` in
+   * `@cat-factory/contracts` (shared with the SPA, which composes it live off its own store), and
+   * the coverage rules underneath both documents are shared too. What this method contributes is
+   * the loader, so the summary a headless consumer fetches and the report on the pull request
+   * cannot be built from two different reads of one run.
+   *
+   * Cheaper than the report on the ordinary path and never more expensive: it needs no linked
+   * issues, no provisioning history and no pull-request target resolution, and it hits the same
+   * gated, memoised `spec/` read.
+   */
+  async composeOutcomeForRun(
+    workspaceId: string,
+    instance: ExecutionInstance,
+  ): Promise<RunOutcome | null> {
+    const evidence = await this.evidence.load(workspaceId, instance)
+    if (!evidence) return null
+    return composeRunOutcome({
+      block: evidence.block,
+      instance,
+      // The loader answers with a `SpecDoc` or null; the composer takes the SPA's read view, whose
+      // `present: false` arm is the same fact ("there is no spec to count against") arriving from
+      // the other side. Stated here rather than widening the composer, so the SPA keeps handing it
+      // the value its store already holds.
+      spec: evidence.spec ? { present: true, spec: evidence.spec, features: [] } : null,
+    })
+  }
 
   /**
    * Compose the report for `instance` and upsert it onto every pull request the run opened.
@@ -377,17 +410,17 @@ export class PrVerificationReportController {
     workspaceId: string,
     instance: ExecutionInstance,
   ): Promise<RunScopedReportInputs | null> {
-    const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
-    if (!block) return null
+    const evidence = await this.evidence.load(workspaceId, instance)
+    if (!evidence) return null
     return {
-      block,
+      block: evidence.block,
       issues: await this.linkedIssues(workspaceId, instance.blockId),
       runUrl: this.deepLink(workspaceId, instance, 'observability'),
       trajectoryUrl: this.apiLink(
         `/api/v1/debug/runs/${encodeURIComponent(instance.id)}/tool-calls?order=trajectory`,
       ),
       reportUrl: this.apiLink(`/api/v1/runs/${encodeURIComponent(instance.id)}/report`),
-      spec: await this.serviceSpec(workspaceId, instance, block.pullRequest?.branch),
+      spec: evidence.spec,
       environments: {
         provisioning: await this.provisioningEvents(workspaceId, instance),
         evidenceUrl: this.deepLink(workspaceId, instance, 'test-evidence'),
@@ -421,74 +454,6 @@ export class PrVerificationReportController {
     if (!repo) return true
     const settings = (await repo.get(workspaceId)) ?? DEFAULT_WORKSPACE_SETTINGS
     return settings.publishPrVerificationReport
-  }
-
-  /**
-   * The service's in-repo `spec/`, reassembled from the run's branch for the requirement →
-   * evidence join. Null whenever it could not be read — which the section reports with a note
-   * rather than a blank.
-   *
-   * GATED, then MEMOISED, because this is the report's only repo-reading path and the hook
-   * fires on EVERY settled step:
-   *  - Gate: nothing is read until a tester step has actually produced a report. Before that
-   *    the section's answer is already determined ("no tester step" / "no report yet"), so a
-   *    read would buy nothing; this keeps the ~15 settlements before the tester at zero repo
-   *    calls, exactly as they were before this feature.
-   *  - Memo: reassembling the sharded tree costs one read per module + per group, so the
-   *    handful of settlements AFTER the tester would otherwise repeat it each time. Cached
-   *    per execution id under the same bound as {@link lastPublished}.
-   *
-   * The memo deliberately holds the spec as it stood when the tester ruled. That is the tree
-   * the verdicts were made against, so pairing a later re-read with those same verdicts would
-   * be less truthful, not more — and the promotion post-op rewrites the spec on this very
-   * branch right after the tester settles.
-   *
-   * Only an ANSWER is memoised — a tree that was read, or a repo that demonstrably carries no
-   * `spec/`. A FAILURE (an unresolvable repo, a throwing transport) is not: caching it would
-   * turn one flaky read into "the spec could not be read" on every remaining publish of the
-   * run, when the very next settlement would have succeeded.
-   */
-  private async serviceSpec(
-    workspaceId: string,
-    instance: ExecutionInstance,
-    prBranch: string | null | undefined,
-  ): Promise<SpecDoc | null> {
-    const resolve = this.deps.resolveRunRepoContext
-    if (!resolve) return null
-    const testerReported = instance.steps.some(
-      (s) => isTesterKind(s.agentKind) && s.test?.lastReport != null,
-    )
-    if (!testerReported) return null
-    const cached = this.specByRun.get(instance.id)
-    if (cached !== undefined) return cached
-    try {
-      const ctx = await resolve(workspaceId, instance.blockId)
-      if (!ctx) return null
-      // Read the RUN's branch, not the repo default: the spec increment this task wrote is on
-      // the PR branch and has not merged yet, so the default branch would be missing exactly
-      // the requirements the tester just ruled on.
-      const view = await readServiceSpec(ctx.repo, prBranch ?? ctx.baseBranch)
-      const spec = view.present ? view.spec : null
-      this.rememberSpec(instance.id, spec)
-      return spec
-    } catch {
-      // Best-effort, like every other part of this hook: an unreadable spec reports `absent`
-      // with a note, never fails the run, and is re-attempted on the next settlement.
-      return null
-    }
-  }
-
-  /** Per-execution spec memo, bounded exactly like {@link lastPublished}. */
-  private readonly specByRun = new Map<string, SpecDoc | null>()
-
-  private rememberSpec(executionId: string, spec: SpecDoc | null): void {
-    this.specByRun.delete(executionId)
-    this.specByRun.set(executionId, spec)
-    while (this.specByRun.size > PrVerificationReportController.MAX_TRACKED_RUNS) {
-      const oldest = this.specByRun.keys().next()
-      if (oldest.done) break
-      this.specByRun.delete(oldest.value)
-    }
   }
 
   private async linkedIssues(workspaceId: string, blockId: string): Promise<PrReportIssue[]> {

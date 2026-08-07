@@ -86,7 +86,15 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   spill the rest of the report — including the machine-readable JSON block — into the body as prose.
   Its teardown leg is closed out of band by `ExecutionService.refreshVerificationReport`, wired
   to the teardown service's teardown-recorded hook (which fires on a failed attempt too), since
-  the TTL sweep reclaims an environment long after the run's last step settled. The step-selection
+  the TTL sweep reclaims an environment long after the run's last step settled. The controller also
+  answers the run OUTCOME summary (`composeOutcomeForRun`, behind
+  `GET /api/v1/runs/:runId/outcome`), which is the SAME evidence reduced for a reader who will not
+  open a diff: the reduction is `composeRunOutcome` in `@cat-factory/contracts` (shared with the SPA
+  card, which composes it live off its own store) and the rules the two documents both state live in
+  that package's `run-evidence.ts`. Both read one run's block and `spec/` through the shared
+  `RunEvidenceLoader`, because sharing composition rules while reading the evidence twice would move
+  the drift one layer down rather than removing it; `runOutcome.parity.test.ts` pins that the two
+  count one run identically. The step-selection
   rule both halves share lives under both in `prReport.steps.ts`, beside `absentNote`, the ONE
   renderer for an absent section's note (through `hostMarkdown`, since a note now names a pull
   request and `owner/repo#12` is a reference the host resolves). Every untrusted value it

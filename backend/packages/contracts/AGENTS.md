@@ -69,4 +69,16 @@ top-level files are the domain contracts.
   it to the provider's name search). Lives here because contracts is the only package both
   sides import.
 
+- `run-evidence.ts` + `run-outcome.ts`: how a finished run's evidence is REDUCED, and the reason
+  those rules are in a leaf package rather than in the engine. Two documents reduce one run: the PR
+  verification report (`pr-report.ts`, composed in orchestration) and the run OUTCOME summary
+  (`composeRunOutcome`, rendered by the SPA card and served at `GET /api/v1/runs/:runId/outcome`).
+  `run-evidence.ts` holds every rule they BOTH state: `isTesterKind`, which tester step a section
+  reports on, the verdict index across every tester step, the spec join, the regression rule and the
+  tallies. They lived on each side once and had already drifted on two axes (which testers count,
+  and what `not_covered` is counted over), so the same run printed different numbers depending on
+  whether you read the pull request or the app. What each surface still owns is presentation and its
+  own absence policy: the report writes prose onto a parsed host surface, the summary emits
+  machine-readable `gap` codes the SPA maps to translated copy.
+
 **See also:** `docs/glossary.md`, `CLAUDE.md` → "Board / service / repo-linkage model".

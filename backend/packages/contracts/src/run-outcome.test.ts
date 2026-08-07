@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { Block } from '~/types/domain'
-import type { ExecutionInstance, PipelineStep } from '~/types/execution'
-import type { ServiceSpecView } from '~/types/spec'
-import { composeRunOutcome, hasOutcomeToShow } from '~/utils/runOutcome'
+import type { Block } from './entities.js'
+import type { ExecutionInstance, PipelineStep } from './execution.js'
+import type { ServiceSpecView } from './spec.js'
+import { composeRunOutcome, hasOutcomeToShow } from './run-outcome.js'
 
 // The composer's whole job is to keep facts that mean different things from rendering the same,
 // so the cases worth pinning are the COLLAPSES: an absent producer vs a producer that found
@@ -212,6 +212,42 @@ describe('composeRunOutcome', () => {
     expect(outcome.requirements.entries[0]?.title).toBe('A user can sign in')
   })
 
+  // Coverage is counted over the SPEC, not over what the tester chose to rule on: a requirement
+  // nobody looked at has to appear as unchecked, or the one number a reader takes away ("2 of 2
+  // met") is computed over a denominator the tester picked for itself.
+  it('counts a requirement nobody ruled on as not covered rather than leaving it out', () => {
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([
+        testerStep({ requirementVerdicts: [{ requirementId: 'req-login', status: 'met' }] }),
+      ]),
+      spec,
+    })
+    if (outcome.requirements.status !== 'reported') throw new Error('expected a reported section')
+    expect(outcome.requirements).toMatchObject({ met: 1, notCovered: 1, total: 2 })
+    expect(outcome.requirements.entries.map((e) => e.id)).toEqual(['req-login', 'req-reset'])
+  })
+
+  // Every tester step's verdicts count, not just the reporting one's: the rule the PR
+  // verification report already followed while this summary read only the last tester.
+  it('joins the verdicts of every tester step in the pipeline', () => {
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([
+        testerStep(
+          { requirementVerdicts: [{ requirementId: 'req-login', status: 'met' }] },
+          'tester-api',
+        ),
+        testerStep(
+          { requirementVerdicts: [{ requirementId: 'req-reset', status: 'met' }] },
+          'tester-ui',
+        ),
+      ]),
+      spec,
+    })
+    expect(outcome.requirements).toMatchObject({ met: 2, notCovered: 0, total: 2 })
+  })
+
   it('says the spec was never read rather than rendering ids as titles', () => {
     const outcome = composeRunOutcome({
       block: block(),
@@ -229,23 +265,11 @@ describe('composeRunOutcome', () => {
     })
   })
 
-  // A spec that WAS read and names none of the reported ids leaves identical rows behind, and
-  // sends the reader to a different fix: the spec moved on, or the tester keyed its verdicts by
-  // something else. Reporting it as a failed read would send them to fix a read that worked.
-  it('keeps a spec that was never read apart from one that named none of these ids', () => {
-    const outcome = composeRunOutcome({
-      block: block(),
-      instance: run([
-        testerStep({ requirementVerdicts: [{ requirementId: 'req-gone', status: 'met' }] }),
-      ]),
-      spec,
-    })
-    expect(outcome.requirements).toMatchObject({ status: 'reported', spec: 'unmatched' })
-  })
-
-  // The partial join is the case a section-level note cannot state: some rows carry titles, and
-  // an id sitting unmarked between them reads as a requirement named after a slug.
-  it('marks the rows the spec did not name while the section as a whole joined', () => {
+  // A verdict against an id the spec does not carry has no row to land on. Dropped silently it
+  // makes the section report fewer rulings than the tester made, which reads as a miscount rather
+  // than as the two real causes: a spec rewritten under the tester, or a tester keying its
+  // verdicts by something else.
+  it('counts the verdicts the spec could not place instead of dropping them', () => {
     const outcome = composeRunOutcome({
       block: block(),
       instance: run([
@@ -258,11 +282,12 @@ describe('composeRunOutcome', () => {
       ]),
       spec,
     })
-    expect(outcome.requirements).toMatchObject({ status: 'reported', spec: 'joined' })
-    if (outcome.requirements.status !== 'reported') throw new Error('expected a reported section')
-    const rows = outcome.requirements.entries
-    expect(rows.find((e) => e.id === 'req-login')?.title).toBe('A user can sign in')
-    expect(rows.find((e) => e.id === 'req-gone')?.title).toBeNull()
+    expect(outcome.requirements).toMatchObject({
+      status: 'reported',
+      spec: 'joined',
+      met: 1,
+      unmatchedVerdicts: 1,
+    })
   })
 
   it('separates a tester report with no verdicts from a tester that never reported', () => {
@@ -271,6 +296,38 @@ describe('composeRunOutcome', () => {
       instance: run([testerStep({ requirementVerdicts: [] })]),
     })
     expect(outcome.requirements).toEqual({ status: 'absent', gap: 'no_verdicts' })
+  })
+
+  // With a spec to count against, a tester that ruled on nothing is not an absence: every
+  // requirement is unchecked, which is a stronger statement than a blank section and the one the
+  // PR verification report already makes.
+  it('reports a full spec of unchecked requirements when the tester ruled on none', () => {
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([testerStep({ requirementVerdicts: [] })]),
+      spec,
+    })
+    expect(outcome.requirements).toMatchObject({
+      status: 'reported',
+      spec: 'joined',
+      notCovered: 2,
+      total: 2,
+    })
+  })
+
+  it('says a spec that records no requirements had nothing to rule on', () => {
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([
+        testerStep({ requirementVerdicts: [{ requirementId: 'req-reset', status: 'met' }] }),
+      ]),
+      spec: {
+        present: true,
+        spec: { service: 'accounts', summary: '', modules: [] },
+        features: [],
+      },
+    })
+    expect(outcome.requirements).toEqual({ status: 'absent', gap: 'no_requirements' })
   })
 
   it('prefers the reviewed visual-confirmation pairs over the tester’s raw captures', () => {

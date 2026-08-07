@@ -120,7 +120,14 @@ const API_PREFIX = '/api/v1'
 // `extras` bag, which keeps serving them until the window in `public-api.md` closes, so no
 // consumer has to move on this version. 1.20.0 is main's published number as of this branch's last
 // merge; re-read this line after any merge rather than trusting that the VERSION auto-merged clean.
-const API_VERSION = '1.21.0'
+// 1.22.0, not 1.21.0: `GET /api/v1/runs/:runId/outcome` is a NEW endpoint (the run outcome
+// summary: what the run changed and what backs that up, the reduction the app's outcome card
+// renders), and `requirements.unmatchedVerdicts` is a new optional field on the verification
+// report. Both additive: no existing response changes shape, and a consumer that ignores the new
+// endpoint and the new field reads exactly what it read before. 1.21.0 is main's published number
+// as of this branch's last merge; re-read this line after any merge rather than trusting that the
+// VERSION auto-merged clean.
+const API_VERSION = '1.22.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

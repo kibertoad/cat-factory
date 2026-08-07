@@ -520,10 +520,10 @@ are `pending` on the persistence allow-list, so naming `documents` on a node wit
 answers `unknown_method`. A document-less create is unaffected. Moving the document write surface
 is one slice of the mothership tracker, not this one.
 
-### E1: Run EVIDENCE, the verification report + artifacts ✅
+### E1: Run EVIDENCE, the verification report + outcome summary + artifacts ✅
 
-`GET /api/v1/runs/:runId/report`, `GET /api/v1/runs/:runId/artifacts` and
-`GET /api/v1/artifacts/:artifactId/blob`, all `read` scope. The gap: everything the platform
+`GET /api/v1/runs/:runId/report`, `GET /api/v1/runs/:runId/outcome`,
+`GET /api/v1/runs/:runId/artifacts` and `GET /api/v1/artifacts/:artifactId/blob`, all `read` scope. The gap: everything the platform
 CAPTURED about a run was reachable only from a browser session, so a consumer whose job is to judge
 a run (a trial harness deciding whether to accept a change, an evaluation pipeline scoring a fleet)
 had to scrape the fenced JSON block out of a pull-request body for the report and could not reach
@@ -562,6 +562,43 @@ Decisions worth keeping:
   `resolveBinaryArtifactStore` from account settings while the ENGINE got the (overridable) one
   from `CoreDependencies`, so an override reached one side of the app and not the other. The
   container now reads it off `dependencies`.
+
+#### E1a: the OUTCOME summary, served beside the report ✅
+
+`GET /api/v1/runs/:runId/outcome`. The gap this closed is the mirror of the one above: the report is
+what a consumer JUDGING a run wants, and the platform's other reduction of the same evidence (what
+the run changed, in product language, for a reader who will not open a diff) existed only as a pure
+module inside the SPA. A bot posting "what shipped" to a channel, or a status page, had nothing to
+call.
+
+The reason it is worth recording is not the endpoint, which is small. It is what serving it forced:
+
+- **Three consumers, one reduction.** `composeRunOutcome` moved into `@cat-factory/contracts`, so
+  the SPA card and the endpoint are literally the same function over the same inputs. Anywhere else
+  it would have been two copies on day one.
+- **The rules the outcome shares with the REPORT moved with it** (`contracts/src/run-evidence.ts`):
+  which tester steps count, the spec join, the regression rule, the tally. That was not tidiness.
+  The two had ALREADY drifted, in production, on two axes: the report unioned every tester step's
+  verdicts while the summary read only the last one that reported, and the report counted coverage
+  over the service's `spec/` while the summary counted it over the verdicts the tester happened to
+  return. Same run, two different numbers under the same words, depending on whether you read the
+  pull request or the app. Fixing the summary onto the report's semantics is the behaviour change in
+  this slice, and it is the point of it.
+- **`unmatchedVerdicts` is new on BOTH documents.** The spec-anchored join drops a verdict whose id
+  the spec does not carry, which used to be silent; a section that reports fewer rulings than the
+  tester made, with no explanation, reads as a miscount rather than as a spec that moved on.
+- **Derived-from-the-report was considered and rejected.** `outcome = f(report)` would have been a
+  stronger structural guarantee, and it is wrong: the report is BOUNDED to a pull-request body and
+  says so in `truncations`, so a tally taken off its capped tables would be quietly incorrect. The
+  guarantee comes from shared inputs and shared rules instead, pinned by `runOutcome.parity.test.ts`
+  (the two composers, one run, equal counts) and by a conformance assertion that both endpoints of
+  one facade describe one run.
+- **A PR comment was NOT added.** The pull request already carries the report, which is the strictly
+  richer document for that audience; a second managed section restating it would compete for the
+  same body budget and give a reviewer two places to look.
+- **The loader is shared too** (`RunEvidenceLoader`): block + `spec/`, gated and memoised once.
+  Sharing composition rules while reading the evidence twice would have moved the drift one layer
+  down rather than removing it.
 
 ### E2: Headless key provisioning ✅
 
