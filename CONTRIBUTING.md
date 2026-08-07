@@ -119,27 +119,15 @@ This keeps the published image tag in lockstep with the source that produced it.
 
 ### Mirroring the runner image into a Cloudflare account
 
-> This repo publishes the image but deploys nothing. The step below belongs to
-> whoever operates a Cloudflare deployment; it is documented here because the
-> `image:publish` script and the tag pins it depends on live in this tree.
-
-CI publishes the runner image to **GHCR**, but Cloudflare Containers cannot pull
-from GHCR (only the Cloudflare managed registry, Docker Hub, and ECR are
-supported pull sources). So before deploying a Worker, the operator mirrors the
-image into the managed registry that Worker pulls from:
-
-```sh
-pnpm --filter @cat-factory/deploy-backend image:publish   # build + push to registry.cloudflare.com
-pnpm --filter @cat-factory/deploy-backend deploy          # wrangler deploy
-```
-
-`image:publish` builds the harness `Dockerfile` and pushes it with
-`wrangler containers build --push`, printing a
-`registry.cloudflare.com/<account-id>/...:<tag>` ref to pin in that deployment's
-`wrangler.toml`. In this repo, `deploy/backend/wrangler.toml` holds the same pin
-as a placeholder-account TEMPLATE, and its `:<tag>` must move in lockstep with
-`@cat-factory/executor-harness`'s version whenever the image changes: that tag is
-what tells a deployment which image the release supports.
+This repo publishes the image but operates no deployment of its own; the mirror
+step belongs to whoever runs a Cloudflare deployment, because Cloudflare
+Containers cannot pull from GHCR. The recipe, the full pin list and the
+release-PR re-sync behaviour live in
+[`docs/internal/releases.md`](docs/internal/releases.md): that doc is the
+authority, so extend it there rather than restating it here. The one rule that
+binds every PR in this tree: the `cat-factory-executor:<tag>` pins move in
+lockstep with `@cat-factory/executor-harness`'s version whenever the image
+changes (`scripts/check-runner-image-tag.mjs` guards it).
 
 ### Changes that need no release
 

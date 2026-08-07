@@ -504,12 +504,14 @@ project in [`deploy/frontend/`](./deploy/frontend/wrangler.toml). The backend ca
 dependency for the published npm version; see each package's README.
 
 Those packages are **example projects**: templates you copy, not a deployment
-this repository operates. Every account id, resource id and hostname in them is a
-`REPLACE_WITH_*` placeholder or an `example.com` name, so nothing here deploys
-anywhere until you have filled them in, and this repository ships no CD workflow
-of its own. A real deployment lives in its own repository, depends on the
-published `@cat-factory/*` packages rather than `workspace:*`, and carries its own
-ids, secrets and deploy pipeline.
+this repository operates. Every account id, resource id and hostname in their
+wrangler configs is a `REPLACE_WITH_*` placeholder or an `example.com` name
+(CI-guarded by `scripts/check-deploy-placeholders.mjs`), so nothing here deploys
+anywhere until you have filled them in. The one deploy this repository still runs
+is the per-PR [preview environment](./deploy/preview), against a dedicated
+preview account; there is no production CD workflow. A real deployment lives in
+its own repository, depends on the published `@cat-factory/*` packages rather
+than `workspace:*`, and carries its own ids, secrets and deploy pipeline.
 
 A Cloudflare deployment is three resources, named in `deploy/*/wrangler.toml`
 and reachable at whatever hostnames you point at them:
@@ -536,12 +538,15 @@ references it by tag.
 ```sh
 cd deploy/backend
 
-# 1. apply any new migrations to the PRODUCTION D1 (review the pending list first)
+# 1. apply any new migrations to your live D1 (review the pending list first)
 wrangler d1 migrations list  cat_factory --remote
 wrangler d1 migrations apply cat_factory --remote     # == pnpm db:migrate:remote
 
 # 2. deploy the Worker (also rolls the container image, workflows, cron triggers).
-#    `pnpm deploy` builds @cat-factory/worker first, then `wrangler deploy`.
+#    In a copied deployment the published @cat-factory/worker ships prebuilt, so
+#    `pnpm deploy` is just `wrangler deploy`. Inside THIS repo the dependency is
+#    `workspace:*`, so run it through Turbo instead, which builds the library
+#    first: `pnpm exec turbo run deploy --filter=@cat-factory/deploy-backend`.
 pnpm deploy
 ```
 

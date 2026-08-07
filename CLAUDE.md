@@ -566,10 +566,10 @@ Versioning is changesets (root `pnpm changeset` / `ci:publish`). **Always add a 
 a versioned package**; empty changeset for docs/CI/test-only. CI enforces this.
 
 **Any change to what goes into the runner image bumps `@cat-factory/executor-harness` AND the pinned
-tag everywhere it appears, then publishes and deploys a FRESH immutable tag: reusing a tag does NOT
-deploy** (`wrangler deploy` diffs by tag string; the symptom is `Container dispatch failed (HTTP 404)`).
-The full rollout recipe, the release-PR re-sync behaviour, and the new-published-package checklist (a
-folder is not wired up by existing): [`docs/internal/releases.md`](./docs/internal/releases.md).
+tag everywhere it appears.** This repo publishes the images but operates no deployment: the pins
+DECLARE the supported tag, which a deployment mirrors into its own registry as a FRESH immutable tag
+(reusing one does NOT roll out there; the symptom is `Container dispatch failed (HTTP 404)`). Rollout
+recipe, release-PR re-sync, new-published-package checklist: [`docs/internal/releases.md`](./docs/internal/releases.md).
 
 ### Run the CI guard scripts locally before committing
 
@@ -584,9 +584,9 @@ folder is not wired up by existing): [`docs/internal/releases.md`](./docs/intern
 - `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is
   RESERVED, so it can never be named as a capability credential.
 - `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through `buildStepApproval`.
-- `node scripts/check-shipped-doc-links.mjs`: a markdown file shipped in a published tarball may not
-  link OUT of its package (dead for the consumer who installed it); use an absolute repo URL.
+- `node scripts/check-shipped-doc-links.mjs`: a published tarball's docs never link out of the package.
 - `node scripts/check-test-lane-parity.mjs`: `pnpm test:quick` excludes what CI's no-DB lane does.
+- `node scripts/check-deploy-placeholders.mjs`: the `deploy/*` templates hold placeholders, never real ids.
 - `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs them all).
 - `pnpm exec changeset status --since=origin/main`: after committing locally.
 - `pnpm lint:monorepo` (sherif): cross-package dependency-version consistency.
