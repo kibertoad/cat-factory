@@ -15,6 +15,7 @@ import { fragmentAdherenceSchema } from './fragment-adherence.js'
 import { agentEffortReportSchema } from './agent-effort.js'
 import { foundationalServiceSelectionSchema } from './foundational-services.js'
 import { binaryOutputReportSchema } from './binary-outputs.js'
+import { stepToolServersSchema } from './tool-servers.js'
 // The polling-GATE and the human-verdict-gate step-state clusters each live in their own
 // module (the `forkDecision.ts` / `judge.ts` shape); `PipelineStep` composes them back in below.
 import { gateStepStateSchema } from './gate.js'
@@ -993,6 +994,23 @@ export const pipelineStepSchema = v.object({
       }),
     ),
   ),
+  /**
+   * The tool servers (MCP) this dispatch wired for the agent, and the ones it declared and
+   * dropped. The sibling of {@link skillVersions}, for the other half of the capability model.
+   *
+   * The AUTHORITY, rather than the agent-context telemetry snapshot, which carried the same facts
+   * in its untyped `extras` bag and keeps serving them deprecated (projected from this, so the two
+   * cannot disagree; the removal window is in `backend/docs/public-api.md`). Two reasons, and the
+   * first is the deciding one: the snapshot is DOUBLE-GATED (`LLM_RECORD_PROMPTS` plus the
+   * per-workspace `storeAgentContext`), so a surface reading it would be blank on a deployment that
+   * simply has prompt recording off, while "which tools did this step actually have" is an ordinary
+   * question about a run, not an opt-in debugging artifact. And a step outlives a snapshot, which is
+   * pruned on the telemetry retention window.
+   *
+   * Absent for every non-container step. See {@link stepToolServersSchema} for why the two lists
+   * are separate, why both-empty is its own state, and why the record names the DISPATCHED kind.
+   */
+  toolServers: v.optional(stepToolServersSchema),
   /**
    * The workspace agent-prompt revision this step was PINNED to at dispatch — the sibling of
    * {@link skillVersions}, and pinned for the same reason: what a step ran under must be

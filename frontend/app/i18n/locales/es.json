@@ -1414,6 +1414,22 @@
         "reduced": "Qué redujo la efectividad",
         "obstacles": "Obstáculos clave"
       },
+      "toolServers": {
+        "heading": "Servidores de herramientas (MCP)",
+        "dispatchedAs": "Resuelto para el agente {agent} que este paso ejecutó.",
+        "allTools": "Todas las herramientas que expone este servidor.",
+        "narrowed": "Limitado a: {tools}",
+        "reason": {
+          "harnessUnsupported": "no estuvo disponible: la CLI del agente de este paso no tiene cliente MCP.",
+          "transportUnsupported": "no estuvo disponible: la CLI del agente de este paso no puede alcanzar este tipo de servidor.",
+          "missingSecret": "no estuvo disponible: falta en este tablero una credencial que necesita.",
+          "reservedSecret": "no estuvo disponible: pide una variable que pertenece a la configuración de la plataforma, así que hay que cambiar la declaración.",
+          "oauthNotConnected": "no estuvo disponible: nadie ha conectado este tablero con él todavía.",
+          "oauthTokenFailed": "no estuvo disponible: la conexión dejó de producir un token de acceso.",
+          "overBudget": "no estuvo disponible: este agente declara más servidores de los que lleva una ejecución.",
+          "unknown": "no estuvo disponible ({reason})."
+        }
+      },
       "adherence": {
         "heading": "Cumplimiento de buenas prácticas",
         "headingHint": "Los estandares de buenas practicas incorporados al prompt de este revisor, y con cuanta fidelidad juzgo que el cambio sigue cada uno.",

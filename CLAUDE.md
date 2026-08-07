@@ -869,7 +869,7 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
   port; the VALUE rides the job body only. Deadliest trap: **a credential has TWO names and only one
   of them is a boundary** (the LOOKUP key may never be a variable the platform reads; `envName`
   carries only the narrower toolchain rule, because vendors' SDKs fix what they look for). Full
-  model: [`capability-credential-store.md`](./docs/initiatives/capability-credential-store.md).
+  model: [ADR 0041](./backend/docs/adr/0041-capability-credential-store.md).
 - **`allowedTools` is SCOPING, never a security boundary**, and claude-code's `--allowedTools` must
   ALWAYS carry the CLI's built-in tool names too (it is whole-session, not MCP-scoped). An `http`
   server must be `https` or loopback, refused at registration AND at the job boundary.
