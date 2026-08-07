@@ -1,6 +1,6 @@
 import type { ModelFamilyPolicy, ModelFlavor, SubscriptionVendor } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
-import type { ModelRef } from '../ports/model-provider.js'
+import type { HarnessKind, ModelRef } from '../ports/model-provider.js'
 import {
   ALL_SUBSCRIPTION_VENDORS,
   DEFAULT_PROVIDER_PREFERENCE,
@@ -25,6 +25,7 @@ import {
   personalCredentialVendorForModelId,
   resolveBedrockModelId,
   resolveModelRef,
+  runsOnSubscriptionHarness,
   subscriptionOptionFor,
   subscriptionVendorForRef,
 } from './models.js'
@@ -879,18 +880,51 @@ describe('isModelUsableInline', () => {
     })
   })
 
-  it('treats a Pi-harness ref as an ordinary metered route', () => {
-    const withPi = localSelectableModels([
-      { provider: 'ollama', label: 'Ollama', models: ['gemma3'] },
-    ])
-    expect(withPi).toHaveLength(1)
-    expect(
-      isModelUsableInline(
-        'ollama:gemma3',
-        caps({ localModels: new Set(['ollama:gemma3']) }),
-        () => false,
-      ),
-    ).toBe(true)
+  it('asks the ordinary usability rule for a ref that names no harness', () => {
+    // A local-runner id parses straight into a harness-less ref, so the inline decision is
+    // the plain one: usable because the runner serves the model, with `runsInline` never
+    // consulted — the `false` it would answer is what makes that visible.
+    const local = caps({ localModels: new Set(['ollama:gemma3']) })
+    expect(resolveModelRef('ollama:gemma3', local)?.harness).toBeUndefined()
+    expect(isModelUsableInline('ollama:gemma3', local, () => false)).toBe(true)
+    expect(isModelUsableInline('ollama:gemma3', caps(), () => false)).toBe(false)
+  })
+})
+
+describe('runsOnSubscriptionHarness', () => {
+  // The rule `isModelUsableInline`, `subscriptionVendorForRef` and `nativeVendorForRef` all
+  // turn on, two of them as its negation. Asserted on bare refs because that is the only
+  // place `harness: 'pi'` is reachable: the catalog declares no Pi variant today, so a ref
+  // resolved from a model id can never carry one, and a rule that only ever saw the two
+  // spellings agree would let them drift apart unnoticed.
+  const ref = (harness?: ModelRef['harness']): ModelRef => ({
+    provider: 'anthropic',
+    model: 'claude-opus-5',
+    ...(harness ? { harness } : {}),
+  })
+
+  // A `Record` over the closed harness union rather than a hand-listed array: adding a
+  // harness fails the BUILD here until it has picked a side, which is the whole point of
+  // pinning a rule whose two spellings are negations of each other.
+  const SIDE: Record<HarnessKind, boolean> = { pi: false, 'claude-code': true, codex: true }
+
+  it('sorts every harness the vocabulary has, Pi to the metered side', () => {
+    for (const [harness, subscription] of Object.entries(SIDE) as [HarnessKind, boolean][]) {
+      expect(runsOnSubscriptionHarness(ref(harness))).toBe(subscription)
+    }
+  })
+
+  it('is false for a ref that names no harness, Pi being the default', () => {
+    expect(runsOnSubscriptionHarness(ref())).toBe(false)
+  })
+
+  it('withholds a vendor from a Pi ref that the two vendor lookups would otherwise match', () => {
+    // `anthropic:claude-opus-5` IS a catalog subscription ref, so both lookups would answer
+    // `claude` on the harness alone. The Pi spelling is what must stop them.
+    expect(subscriptionVendorForRef(ref('claude-code'))).toBe('claude')
+    expect(nativeVendorForRef(ref('claude-code'))).toBe('claude')
+    expect(subscriptionVendorForRef(ref('pi'))).toBeUndefined()
+    expect(nativeVendorForRef(ref('pi'))).toBeUndefined()
   })
 })
 

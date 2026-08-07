@@ -1097,6 +1097,21 @@ const VENDOR_BY_SUBSCRIPTION_REF: Map<string, SubscriptionVendor> = (() => {
 })()
 
 /**
+ * Whether a ref runs on a SUBSCRIPTION harness: a vendor CLI the executor drives with a
+ * leased or ambient credential (`claude-code` / `codex`), as opposed to Pi (the platform's
+ * own agent harness, reached through the ordinary metered LLM route) or no harness at all,
+ * which Pi is also the default for.
+ *
+ * Stated once because three decisions turn on it and two of them spell it as the negation
+ * of the third. A ref carrying `harness: 'pi'` is the case the two spellings must agree
+ * about: it names a harness, so a bare truthiness test would route it down the
+ * subscription path and ask for a token no Pi run has.
+ */
+export function runsOnSubscriptionHarness(ref: ModelRef): boolean {
+  return ref.harness !== undefined && ref.harness !== 'pi'
+}
+
+/**
  * The subscription vendor a harness ref belongs to (ANY vendor — `claude` / `codex` / `glm` /
  * `kimi` / `deepseek`), or undefined for a non-subscription (Pi / absent-harness) ref. Matched
  * by the catalog's subscription refs, so it stays in step with {@link MODEL_CATALOG} rather than
@@ -1106,7 +1121,7 @@ const VENDOR_BY_SUBSCRIPTION_REF: Map<string, SubscriptionVendor> = (() => {
  * which injects the token + base URL exactly like the container coding path).
  */
 export function subscriptionVendorForRef(ref: ModelRef): SubscriptionVendor | undefined {
-  if (!ref.harness || ref.harness === 'pi') return undefined
+  if (!runsOnSubscriptionHarness(ref)) return undefined
   return VENDOR_BY_SUBSCRIPTION_REF.get(`${ref.provider}:${ref.model}`)
 }
 
@@ -1143,7 +1158,7 @@ export function isAmbientNativeVendor(
  * as an inline CLI call (local ambient inline execution).
  */
 export function nativeVendorForRef(ref: ModelRef): SubscriptionVendor | undefined {
-  if (!ref.harness || ref.harness === 'pi') return undefined
+  if (!runsOnSubscriptionHarness(ref)) return undefined
   if (ref.harness === 'codex') return 'codex'
   if (ref.harness === 'claude-code' && ref.provider === 'anthropic') return 'claude'
   return undefined
@@ -1167,7 +1182,7 @@ export function isModelUsableInline(
 ): boolean {
   const ref = resolveModelRef(id, caps)
   if (!ref) return false
-  if (ref.harness && ref.harness !== 'pi') return runsInline?.(ref) ?? false
+  if (runsOnSubscriptionHarness(ref)) return runsInline?.(ref) ?? false
   return isModelUsable(id, caps)
 }
 

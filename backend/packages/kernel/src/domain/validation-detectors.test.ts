@@ -39,6 +39,38 @@ function view(entries: Record<string, string | null>): RepoView {
 
 const pkg = (manifest: Record<string, unknown>) => JSON.stringify(manifest)
 
+/**
+ * A view that holds every PRESENCE gate open and records every CONTENT read, so what the
+ * detectors fetch is observed instead of restated. `fetched` decides whether a read
+ * resolves; `readAny` and `json` route through `read`, so recording there sees them all.
+ */
+class AskRecordingView extends RepoView {
+  readonly asked = new Set<string>()
+
+  constructor(private readonly fetched: boolean) {
+    super({ entries: [], files: {} })
+  }
+
+  override has(): boolean {
+    return true
+  }
+
+  override hasDir(): boolean {
+    return true
+  }
+
+  override hasFileWithSuffix(): boolean {
+    return true
+  }
+
+  override read(name: string): string | undefined {
+    this.asked.add(name)
+    // `{}` parses as JSON, as YAML and as an empty Makefile alike, so a fetched read never
+    // decides anything: this view is here to observe the ASKING, not to drive a detection.
+    return this.fetched ? '{}' : undefined
+  }
+}
+
 /** The `{ role: command }` map a detection produced, for readable per-role assertions. */
 function commands(detection: EcosystemDetection | null): Record<string, string> {
   const out: Record<string, string> = {}
@@ -54,9 +86,11 @@ describe('detectNode', () => {
     expect(detectNode(view({ 'pnpm-lock.yaml': null }))).toBeNull()
   })
 
-  it('drops the ecosystem when the manifest declares no script to verify with', () => {
-    // An install alone verifies nothing, and `ecosystem()` keeps only non-empty check lists,
-    // so a manifest with no scripts must not produce a node ecosystem at all.
+  it('keeps the install of a manifest declaring no script to verify with', () => {
+    // The detector does NOT drop such an ecosystem: `ecosystem()` nulls only an EMPTY check
+    // list, and the install is a check. Dropping it here would discard the one command
+    // dependency prepopulation wants, so the split is deliberate and the filtering happens
+    // later, in `detectValidationChecks` (pinned in `validation-detection.test.ts`).
     expect(
       detectNode(view({ 'package.json': pkg({ name: 'x' }) }))?.checks.map((c) => c.role),
     ).toEqual(['install'])
@@ -644,8 +678,15 @@ describe('the task runners', () => {
       expect(targets('TEST:\n\techo\n')).toEqual({ test: 'make test' })
     })
 
-    it('accepts the punctuation a make target may carry', () => {
-      expect(targets('lint:\nbuild-all:\n')).toMatchObject({ lint: 'make lint' })
+    it('reads a hyphenated target name whole, rather than stopping at the hyphen', () => {
+      // The role targets that carry punctuation are the only ones this is observable
+      // through: `format-check` and `type-check` are recognised names, so a target regex
+      // that ended the name at the `-` would leave the line matching nothing at all and
+      // both roles silently absent.
+      expect(targets('format-check:\n\techo\ntype-check:\n\techo\n')).toEqual({
+        format: 'make format-check',
+        typecheck: 'make type-check',
+      })
     })
   })
 
@@ -706,24 +747,23 @@ describe('the detector registries', () => {
     }
   })
 
-  it('fetch the content of every manifest a detector actually READS', () => {
-    // A detector reading a file the fetch list omits sees `undefined` forever: the rule silently
-    // never fires, and nothing fails. Anchored the other way round too: an entry nothing reads
-    // is a round trip bought on every detection for nothing.
-    const contentReaders = new Set([
-      'package.json',
-      'composer.json',
-      'pyproject.toml',
-      'Makefile',
-      'makefile',
-      'GNUmakefile',
-      'justfile',
-      'Justfile',
-      '.justfile',
-      'Taskfile.yml',
-      'Taskfile.yaml',
-    ])
-    expect(new Set(VALIDATION_DETECTION_CONTENT_FILES)).toEqual(contentReaders)
+  it('fetch the content of every manifest a detector actually READS, and nothing else', () => {
+    // Both directions matter and neither can be seen by restating the list beside itself: a
+    // detector reading a file the fetch list omits sees `undefined` forever, so its rule
+    // silently never fires and nothing fails; an entry nothing reads is a round trip bought
+    // on every detection for nothing. So the expectation is OBSERVED rather than written
+    // down — every detector runs against a surface whose presence gates are all open, and
+    // the names it asks to read are recorded. Twice, because the two passes reach different
+    // reads: with nothing fetched `readAny` walks every alternative it knows, and with
+    // everything fetched a read gated on another manifest's content still fires.
+    const namesRead = (fetched: boolean) => {
+      const view = new AskRecordingView(fetched)
+      for (const detector of [...LANGUAGE_DETECTORS, ...TASK_RUNNER_DETECTORS]) detector(view)
+      return view.asked
+    }
+    expect(new Set([...namesRead(false), ...namesRead(true)])).toEqual(
+      new Set(VALIDATION_DETECTION_CONTENT_FILES),
+    )
     expect(new Set(VALIDATION_DETECTION_CONTENT_FILES).size).toBe(
       VALIDATION_DETECTION_CONTENT_FILES.length,
     )
