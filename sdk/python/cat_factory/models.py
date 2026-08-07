@@ -2092,6 +2092,7 @@ class GetPublicRunOutcomeResponse:
     requirements: GetPublicRunOutcomeResponseRequirements
     tests: GetPublicRunOutcomeResponseTests
     title: str
+    truncations: list[str]
     version: float
     visuals: GetPublicRunOutcomeResponseVisuals
     #: Always present; ``None`` when the server has no value for it.
@@ -2105,7 +2106,7 @@ class GetPublicRunOutcomeResponse:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "GetPublicRunOutcomeResponse":
         """Decode a `GetPublicRunOutcomeResponse` from its JSON object."""
-        known = {"checks", "disposition", "pullRequests", "requirements", "tests", "title", "version", "visuals", "ask"}
+        known = {"checks", "disposition", "pullRequests", "requirements", "tests", "title", "truncations", "version", "visuals", "ask"}
         return cls(
             checks=[GetPublicRunOutcomeResponseCheck.from_dict(item) for item in data.get("checks") or []],
             disposition=_enum(GetPublicRunOutcomeResponseDisposition, data.get("disposition")),
@@ -2113,6 +2114,7 @@ class GetPublicRunOutcomeResponse:
             requirements=GetPublicRunOutcomeResponseRequirements.from_dict(data.get("requirements")),
             tests=GetPublicRunOutcomeResponseTests.from_dict(data.get("tests")),
             title=data.get("title"),
+            truncations=[item for item in data.get("truncations") or []],
             version=data.get("version"),
             visuals=GetPublicRunOutcomeResponseVisuals.from_dict(data.get("visuals")),
             ask=data.get("ask"),
@@ -2128,6 +2130,7 @@ class GetPublicRunOutcomeResponse:
         out["requirements"] = _encode(self.requirements)
         out["tests"] = _encode(self.tests)
         out["title"] = self.title
+        out["truncations"] = [_encode(item) for item in self.truncations]
         out["version"] = self.version
         out["visuals"] = _encode(self.visuals)
         out["ask"] = self.ask
@@ -2314,6 +2317,7 @@ class GetPublicRunOutcomeResponseRequirementsVariant1:
     regressions: float
     spec: GetPublicRunOutcomeResponseRequirementsVariant1Spec
     status: str
+    total: float
     unmatched_verdicts: float
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
@@ -2324,7 +2328,7 @@ class GetPublicRunOutcomeResponseRequirementsVariant1:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "GetPublicRunOutcomeResponseRequirementsVariant1":
         """Decode a `GetPublicRunOutcomeResponseRequirementsVariant1` from its JSON object."""
-        known = {"entries", "met", "notCovered", "notMet", "regressions", "spec", "status", "unmatchedVerdicts"}
+        known = {"entries", "met", "notCovered", "notMet", "regressions", "spec", "status", "total", "unmatchedVerdicts"}
         return cls(
             entries=[GetPublicRunOutcomeResponseRequirementsVariant1Entry.from_dict(item) for item in data.get("entries") or []],
             met=data.get("met"),
@@ -2333,6 +2337,7 @@ class GetPublicRunOutcomeResponseRequirementsVariant1:
             regressions=data.get("regressions"),
             spec=_enum(GetPublicRunOutcomeResponseRequirementsVariant1Spec, data.get("spec")),
             status=data.get("status"),
+            total=data.get("total"),
             unmatched_verdicts=data.get("unmatchedVerdicts"),
             extra={k: v for k, v in data.items() if k not in known},
         )
@@ -2347,6 +2352,7 @@ class GetPublicRunOutcomeResponseRequirementsVariant1:
         out["regressions"] = self.regressions
         out["spec"] = _encode(self.spec)
         out["status"] = self.status
+        out["total"] = self.total
         out["unmatchedVerdicts"] = self.unmatched_verdicts
         return out
 

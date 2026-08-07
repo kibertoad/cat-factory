@@ -182,7 +182,13 @@ describe('composeRunOutcome', () => {
       concerns: [{ title: 'Reset link expires immediately', severity: 'high' }],
     })
   })
+})
 
+// The REQUIREMENT COVERAGE half, split out to keep each describe within the per-function line
+// budget (see CLAUDE.md: split, never raise). It is the section with the most states by a wide
+// margin, because a coverage number carries three separate questions: which tester steps were
+// read, what the count was taken OVER, and what the spec could not place.
+describe('composeRunOutcome: requirement coverage', () => {
   it('reports a failing ESTABLISHED requirement as a regression and an aspirational one as not', () => {
     const outcome = composeRunOutcome({
       block: block(),
@@ -318,9 +324,7 @@ describe('composeRunOutcome', () => {
   it('says a spec that records no requirements had nothing to rule on', () => {
     const outcome = composeRunOutcome({
       block: block(),
-      instance: run([
-        testerStep({ requirementVerdicts: [{ requirementId: 'req-reset', status: 'met' }] }),
-      ]),
+      instance: run([testerStep({ requirementVerdicts: [] })]),
       spec: {
         present: true,
         spec: { service: 'accounts', summary: '', modules: [] },
@@ -330,6 +334,39 @@ describe('composeRunOutcome', () => {
     expect(outcome.requirements).toEqual({ status: 'absent', gap: 'no_requirements' })
   })
 
+  it('keeps the tester’s verdicts when the spec declares nothing to match them against', () => {
+    // The spec moved on under the run (or the tester keyed its verdicts by something else).
+    // Reporting this as `no_requirements` would say "there was nothing for the tester to rule
+    // on" while discarding the ruling it made, which is the one thing this section exists to
+    // prevent.
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([
+        testerStep({ requirementVerdicts: [{ requirementId: 'req-reset', status: 'met' }] }),
+      ]),
+      spec: {
+        present: true,
+        spec: { service: 'accounts', summary: '', modules: [] },
+        features: [],
+      },
+    })
+    expect(outcome.requirements).toEqual({
+      status: 'reported',
+      spec: 'joined',
+      met: 0,
+      notMet: 0,
+      notCovered: 0,
+      regressions: 0,
+      total: 0,
+      unmatchedVerdicts: 1,
+      entries: [],
+    })
+  })
+})
+
+// What the run LOOKED like, what the machines checked, and where the summary stands. Split from
+// the coverage half above for the same line-budget reason, along the same seam the card renders.
+describe('composeRunOutcome: visuals, checks and disposition', () => {
   it('prefers the reviewed visual-confirmation pairs over the tester’s raw captures', () => {
     const outcome = composeRunOutcome({
       block: block(),

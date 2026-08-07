@@ -12,6 +12,7 @@ import {
   selectTesterReportStep,
   tallyRequirements,
   tallyTestOutcomes,
+  unmatchedVerdictIds,
 } from './run-evidence.js'
 import { requirementStateSchema } from './spec.js'
 import type { ServiceSpecView } from './spec.js'
@@ -119,7 +120,12 @@ export const requirementsGapSchema = v.picklist([
   'tester_not_reported',
   /** No spec to count against, and no verdict either: there is nothing at all to show. */
   'no_verdicts',
-  /** The spec WAS read and records no requirements, so there was nothing to rule on. */
+  /**
+   * The spec WAS read, records no requirements, and no tester verdict stands against it either,
+   * so there was nothing to rule on. A spec declaring nothing while the tester DID return
+   * verdicts is a reported section instead, counting 0 requirements with every verdict
+   * unmatched: those rulings are evidence, and calling them an absence would discard them.
+   */
   'no_requirements',
 ])
 export type RequirementsGap = v.InferOutput<typeof requirementsGapSchema>
@@ -305,6 +311,20 @@ export const runOutcomeSchema = v.object({
   visuals: outcomeVisualsSchema,
   /** Only the checks that actually ran: an absent check is omitted, never rendered as passing. */
   checks: v.array(outcomeCheckSchema),
+  /**
+   * What a BOUNDED rendering of this summary had to leave out, one note per capped list
+   * (`"requirements.entries: showing 200 of 480"`), in the same vocabulary the verification
+   * report's own `truncations` uses. Empty whenever nothing was dropped, which is every
+   * ordinary run and every composition the SPA does (it renders from state it already holds and
+   * caps nothing).
+   *
+   * It exists because the counts above are computed over the WHOLE join, before any cap: a
+   * consumer that found 200 rows under a `total` of 480 and no note would have to guess whether
+   * the tail was never ruled on. A cap that is not a plain prefix says so in its note, since
+   * `entries` is ordered by SEVERITY and the rows a cap drops are therefore the least severe
+   * ones rather than the end of the spec.
+   */
+  truncations: v.array(v.string()),
 })
 export type RunOutcome = v.InferOutput<typeof runOutcomeSchema>
 
@@ -398,8 +418,14 @@ function composeRequirements(
   }
 
   const rows = joinSpecRequirements(doc, verdicts)
-  if (rows.length === 0) return { status: 'absent', gap: 'no_requirements' }
-  const known = new Set(rows.map((row) => row.id))
+  const unmatched = unmatchedVerdictIds(rows, verdicts)
+  // The spec was read and declares nothing, and no tester ruled on anything either: there is
+  // genuinely no coverage to state. An empty join with verdicts standing against it is NOT this
+  // case — it is a spec that moved on under the run, and reporting it as an absence would throw
+  // away every ruling the tester made and claim there was nothing to rule on.
+  if (rows.length === 0 && unmatched.length === 0) {
+    return { status: 'absent', gap: 'no_requirements' }
+  }
   const tally = tallyRequirements(rows)
   return {
     status: 'reported',
@@ -408,7 +434,7 @@ function composeRequirements(
     // A verdict the join could not place is REPORTED rather than dropped: it is the difference
     // between the tester's own count and this section's, and silence about it reads as a
     // miscount in whichever of the two the reader trusts less.
-    unmatchedVerdicts: [...verdicts.keys()].filter((id) => !known.has(id)).length,
+    unmatchedVerdicts: unmatched.length,
     entries: rows.map(toOutcomeRequirement).sort(bySeverity),
   }
 }
@@ -559,6 +585,9 @@ export function composeRunOutcome({ block, instance, spec }: ComposeRunOutcomeIn
     // Read off the BLOCK, so they survive a run this summary cannot see: the pull request is
     // what a merged task is usually reopened for, long after its run left the store.
     pullRequests: allPullRequests(block).map(({ repo, ref }) => toOutcomePr(ref, repo)),
+    // This composition caps nothing: it reduces state the caller already holds in full. A
+    // consumer that BOUNDS the result for a wire fills this in and says what it dropped.
+    truncations: [],
   }
   if (unresolvedRun) {
     return {

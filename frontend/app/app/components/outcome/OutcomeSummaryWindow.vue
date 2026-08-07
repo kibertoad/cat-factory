@@ -12,8 +12,8 @@
 // It composes NOTHING itself: `composeRunOutcome` (`~/utils/runOutcome`) is the pure reduction,
 // so the rules that matter (a regression is an `established` requirement observed to fail; an
 // absent producer never renders as a clean result) are unit-tested without mounting this. What
-// lives here is presentation only, plus the ONE fetch the card owns: the enclosing service's
-// spec, which turns the tester's requirement IDS into the requirement TITLES a reader came for.
+// lives here is presentation only, plus the ONE fetch the card owns: the spec THIS RUN was
+// judged against, which turns the tester's requirement IDS into the TITLES a reader came for.
 import { computed, onUnmounted, ref, watch } from 'vue'
 import type {
   OutcomeCheckKind,
@@ -47,32 +47,43 @@ const { t } = useI18n()
 const blobs = useArtifactBlobs()
 onUnmounted(() => blobs.revokeAll())
 
-// The shared seam contract. The `onOpen` loader fetches the ENCLOSING SERVICE's spec: the
-// requirement verdicts are keyed by the spec's own ids, and without it the coverage section can
-// only show ids (which it then says, rather than letting an id read as a title).
-const { open, blockId, instanceId, close } = useResultView('outcome', {
-  onOpen: (view) => {
-    const block = board.getBlock(view.blockId)
-    const service = block ? board.serviceOf(block) : undefined
-    if (service) void serviceSpec.load(service.id)
-  },
-})
+// The shared seam contract.
+const { open, blockId, instanceId, close } = useResultView('outcome')
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
-const service = computed(() => (block.value ? board.serviceOf(block.value) : undefined))
-const instance = computed(() => {
+const runId = computed(() => {
   // The run carried by the opener, else the block's own live run: a card opened from a
   // notification names the run, one opened from the board does not.
-  const id = instanceId.value ?? block.value?.executionId ?? null
-  return id ? (execution.getInstance(id) ?? null) : null
+  return instanceId.value ?? block.value?.executionId ?? null
 })
+const instance = computed(() => (runId.value ? (execution.getInstance(runId.value) ?? null) : null))
+
+// The ONE fetch this card owns: the spec THIS RUN was judged against. Requirement verdicts are
+// keyed by the spec's own ids, and without the spec the coverage section can only show ids
+// (which it then says, rather than letting an id read as a title).
+//
+// Keyed by the RUN, not by the enclosing service, and that is a correctness matter rather than a
+// cache detail: the service read comes from the repo's default branch, so for as long as the
+// run's pull request is open it is missing exactly the requirements the run added and the tester
+// just ruled on. Every one of those verdicts joined against nothing and rendered as "not
+// checked", and the card's counts contradicted `GET /api/v1/runs/:runId/outcome` for one run.
+//
+// A watch rather than the `onOpen` hook, because the run id can arrive after the block does (a
+// card open on a task that starts a run) and the join must follow it.
+watch(
+  runId,
+  (id) => {
+    if (id) void serviceSpec.loadForRun(id)
+  },
+  { immediate: true },
+)
 
 const outcome = computed(() =>
   block.value
     ? composeRunOutcome({
         block: block.value,
         instance: instance.value,
-        spec: service.value ? serviceSpec.viewFor(service.value.id) : null,
+        spec: runId.value ? serviceSpec.viewForRun(runId.value) : null,
       })
     : null,
 )

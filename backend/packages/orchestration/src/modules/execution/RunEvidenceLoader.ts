@@ -5,7 +5,8 @@ import type {
   ResolveRunRepoContext,
   SpecDoc,
 } from '@cat-factory/kernel'
-import { isTesterKind } from '@cat-factory/contracts'
+import type { ServiceSpecView } from '@cat-factory/contracts'
+import { EMPTY_SERVICE_SPEC_VIEW, isTesterKind, runSpecBranch } from '@cat-factory/contracts'
 import { readServiceSpec } from '@cat-factory/agents'
 
 // ---------------------------------------------------------------------------
@@ -25,11 +26,21 @@ import { readServiceSpec } from '@cat-factory/agents'
 export interface RunEvidence {
   block: Block
   /**
-   * The service's in-repo `spec/`, or null when it could not be read at all (no VCS wired, no
-   * repo resolved, a transport failure, or a tester that has not reported yet). Every consumer
-   * reports that absence explicitly rather than as a clean, empty coverage section.
+   * The service's in-repo `spec/` as it stands on the RUN's branch, or null when it could not be
+   * read at all (no VCS wired, no repo resolved, a transport failure, or a tester that has not
+   * reported yet). Every consumer reports that absence explicitly rather than as a clean, empty
+   * coverage section.
+   *
+   * The read VIEW rather than the doc, because the SPA's outcome card is served this same answer
+   * over {@link RunEvidenceLoader.specViewForRun} and a `present: false` spec (a repo that
+   * carries no `spec/`) is a different fact from an unread one.
    */
-  spec: SpecDoc | null
+  specView: ServiceSpecView | null
+}
+
+/** The doc a reduction counts against, or null when there is none. */
+export function specDocOf(view: ServiceSpecView | null): SpecDoc | null {
+  return view?.present ? view.spec : null
 }
 
 export interface RunEvidenceLoaderDeps {
@@ -60,7 +71,27 @@ export class RunEvidenceLoader {
   async load(workspaceId: string, instance: ExecutionInstance): Promise<RunEvidence | null> {
     const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return null
-    return { block, spec: await this.serviceSpec(workspaceId, instance, block.pullRequest?.branch) }
+    return { block, specView: await this.serviceSpec(workspaceId, instance, block) }
+  }
+
+  /**
+   * The run's `spec/` as a read VIEW, for the SPA's outcome card.
+   *
+   * The card composes `composeRunOutcome` live off its own store, so the ONE input it cannot
+   * derive from pushed state is this spec, and it used to fetch the SERVICE's spec from the
+   * repo's DEFAULT branch. That is a different document: the requirement ids this run's verdicts
+   * name are on the run's own branch until the pull request merges, so every one of them landed
+   * as "not checked" and the card's counts contradicted `GET /api/v1/runs/:runId/outcome` for the
+   * same run. Served from here, the two read one branch through one rule.
+   *
+   * `EMPTY_SERVICE_SPEC_VIEW` rather than null on an unread spec: the card's own composer already
+   * treats an absent spec as `spec: 'not_read'` and says so, and the read is best-effort by
+   * design (see {@link serviceSpec}).
+   */
+  async specViewForRun(workspaceId: string, instance: ExecutionInstance): Promise<ServiceSpecView> {
+    const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) return EMPTY_SERVICE_SPEC_VIEW
+    return (await this.serviceSpec(workspaceId, instance, block)) ?? EMPTY_SERVICE_SPEC_VIEW
   }
 
   /**
@@ -89,8 +120,8 @@ export class RunEvidenceLoader {
   private async serviceSpec(
     workspaceId: string,
     instance: ExecutionInstance,
-    prBranch: string | null | undefined,
-  ): Promise<SpecDoc | null> {
+    block: Block,
+  ): Promise<ServiceSpecView | null> {
     const resolve = this.deps.resolveRunRepoContext
     if (!resolve) return null
     const testerReported = instance.steps.some(
@@ -104,11 +135,11 @@ export class RunEvidenceLoader {
       if (!ctx) return null
       // Read the RUN's branch, not the repo default: the spec increment this task wrote is on
       // the PR branch and has not merged yet, so the default branch would be missing exactly
-      // the requirements the tester just ruled on.
-      const view = await readServiceSpec(ctx.repo, prBranch ?? ctx.baseBranch)
-      const spec = view.present ? view.spec : null
-      this.rememberSpec(instance.id, spec)
-      return spec
+      // the requirements the tester just ruled on. The rule is `runSpecBranch` rather than a
+      // local `??` because the SPA answers the same question and the two had already drifted.
+      const view = await readServiceSpec(ctx.repo, runSpecBranch(block, ctx.baseBranch))
+      this.rememberSpec(instance.id, view)
+      return view
     } catch {
       // Best-effort: an unreadable spec is reported as such by each consumer, never fails a run,
       // and is re-attempted on the next settlement.
@@ -117,9 +148,9 @@ export class RunEvidenceLoader {
   }
 
   /** Per-execution spec memo, bounded by {@link MAX_TRACKED_RUNS}. */
-  private readonly specByRun = new Map<string, SpecDoc | null>()
+  private readonly specByRun = new Map<string, ServiceSpecView>()
 
-  private rememberSpec(executionId: string, spec: SpecDoc | null): void {
+  private rememberSpec(executionId: string, spec: ServiceSpecView): void {
     this.specByRun.delete(executionId)
     this.specByRun.set(executionId, spec)
     while (this.specByRun.size > MAX_TRACKED_RUNS) {

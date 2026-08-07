@@ -14,9 +14,10 @@ import type {
 } from '@cat-factory/kernel'
 import { DEFAULT_WORKSPACE_SETTINGS, describeError } from '@cat-factory/kernel'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
-import type { PrVerificationReport, RunOutcome } from '@cat-factory/contracts'
+import type { PrVerificationReport, RunOutcome, ServiceSpecView } from '@cat-factory/contracts'
 import { composeRunOutcome } from '@cat-factory/contracts'
-import { RunEvidenceLoader } from './RunEvidenceLoader.js'
+import { RunEvidenceLoader, specDocOf } from './RunEvidenceLoader.js'
+import { boundOutcomeForApi } from './runOutcome.boundary.js'
 import type { PrReportInputs } from './prReport.logic.js'
 import { composePrVerificationReport, renderPrVerificationReport } from './prReport.logic.js'
 import type { ProvisioningLifecycleRead } from './prReport.environments.js'
@@ -237,15 +238,32 @@ export class PrVerificationReportController {
   ): Promise<RunOutcome | null> {
     const evidence = await this.evidence.load(workspaceId, instance)
     if (!evidence) return null
-    return composeRunOutcome({
+    // Composed from the loader's read VIEW, the same value the SPA's store now holds for this
+    // run: the composer's `spec: 'not_read'` arm and a repo carrying no `spec/` are the one fact
+    // arriving from two sides, and fabricating a view here would have been a third.
+    const outcome = composeRunOutcome({
       block: evidence.block,
       instance,
-      // The loader answers with a `SpecDoc` or null; the composer takes the SPA's read view, whose
-      // `present: false` arm is the same fact ("there is no spec to count against") arriving from
-      // the other side. Stated here rather than widening the composer, so the SPA keeps handing it
-      // the value its store already holds.
-      spec: evidence.spec ? { present: true, spec: evidence.spec, features: [] } : null,
+      spec: evidence.specView,
     })
+    // The BOUNDARY treatment, owed here and nowhere earlier: `composeRunOutcome` is shared with
+    // the SPA, which renders into a DOM for a member of the workspace, while this value is the
+    // response body of a public endpoint any read-scope key can fetch. The report already scrubs
+    // and clamps the same tester text on its way onto a pull request; serving it verbatim here
+    // would have made the weaker of the two surfaces the one an integration reads.
+    return boundOutcomeForApi(outcome)
+  }
+
+  /**
+   * The run's `spec/` as the SPA's outcome card must join against it: the same read, through the
+   * same loader and the same branch rule, that {@link composeOutcomeForRun} uses.
+   *
+   * Here rather than on a spec-owning module because the branch is a fact about the RUN, and the
+   * card asking a service-scoped endpoint for it is exactly how the two came to answer one
+   * question differently. See {@link RunEvidenceLoader.specViewForRun}.
+   */
+  async readRunSpec(workspaceId: string, instance: ExecutionInstance): Promise<ServiceSpecView> {
+    return this.evidence.specViewForRun(workspaceId, instance)
   }
 
   /**
@@ -420,7 +438,7 @@ export class PrVerificationReportController {
         `/api/v1/debug/runs/${encodeURIComponent(instance.id)}/tool-calls?order=trajectory`,
       ),
       reportUrl: this.apiLink(`/api/v1/runs/${encodeURIComponent(instance.id)}/report`),
-      spec: evidence.spec,
+      spec: specDocOf(evidence.specView),
       environments: {
         provisioning: await this.provisioningEvents(workspaceId, instance),
         evidenceUrl: this.deepLink(workspaceId, instance, 'test-evidence'),

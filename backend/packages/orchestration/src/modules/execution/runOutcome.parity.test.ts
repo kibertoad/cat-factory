@@ -1,7 +1,7 @@
 import type { Block, ExecutionInstance, PipelineStep, SpecDoc } from '@cat-factory/kernel'
 import { composeRunOutcome } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
-import { composePrVerificationReport } from './prReport.logic.js'
+import { composePrVerificationReport, renderPrVerificationReport } from './prReport.logic.js'
 
 // A finished run produces two documents: the PR verification report a reviewer reads, and the
 // outcome summary served at `GET /api/v1/runs/:runId/outcome` and rendered by the SPA. They are
@@ -173,5 +173,49 @@ describe('the run outcome summary and the PR verification report', () => {
     if (outcome.tests.status !== 'reported') throw new Error('expected a test section')
     expect(outcome.tests.summary).toBe(report.tests.summary)
     expect(outcome.tests.areas).toEqual(report.tests.tested)
+  })
+
+  it('both REPORT a spec that declares nothing while the tester ruled on something', () => {
+    // A spec with no requirements used to be an absence on both documents, which discarded
+    // every verdict the tester made and then said there was nothing for it to rule on. It is a
+    // spec that moved under the run, and the verdicts are the only evidence of the run there is.
+    const emptySpec: SpecDoc = { service: 'accounts', summary: '', modules: [] }
+    const strandedReport = composePrVerificationReport(INSTANCE, {
+      ...REPORT_INPUTS,
+      spec: emptySpec,
+    })
+    const strandedOutcome = composeRunOutcome({
+      block: BLOCK,
+      instance: INSTANCE,
+      spec: { present: true, spec: emptySpec, features: [] },
+    })
+    if (strandedOutcome.requirements.status !== 'reported') throw new Error('expected coverage')
+    expect(strandedReport.requirements.status).toBe('reported')
+    // Three verdicts across the two tester steps, none of which the empty spec can place.
+    expect(strandedOutcome.requirements.unmatchedVerdicts).toBe(3)
+    expect(strandedReport.requirements.unmatchedVerdicts).toBe(3)
+    expect(strandedOutcome.requirements.total).toBe(0)
+    expect(strandedReport.requirements.total).toBe(0)
+  })
+
+  it('agree that a spec declaring nothing AND a silent tester is a genuine absence', () => {
+    const emptySpec: SpecDoc = { service: 'accounts', summary: '', modules: [] }
+    const silent = { ...INSTANCE, steps: [tester('tester-api', [])] } as ExecutionInstance
+    const silentReport = composePrVerificationReport(silent, { ...REPORT_INPUTS, spec: emptySpec })
+    const silentOutcome = composeRunOutcome({
+      block: BLOCK,
+      instance: silent,
+      spec: { present: true, spec: emptySpec, features: [] },
+    })
+    expect(silentOutcome.requirements).toEqual({ status: 'absent', gap: 'no_requirements' })
+    expect(silentReport.requirements.status).toBe('absent')
+  })
+
+  it('the report RENDERS the verdicts its join could not place, not only counts them', () => {
+    // The count was computed for a reviewer and then shown to nobody, so a section reporting
+    // fewer rulings than the tester made carried no explanation of the difference.
+    const body = renderPrVerificationReport(report)
+    expect(body).toContain('1 tester verdict')
+    expect(body).toContain('`spec/` does not carry on this branch')
   })
 })

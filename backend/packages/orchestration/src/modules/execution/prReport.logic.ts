@@ -20,6 +20,7 @@ import {
   joinSpecRequirements,
   PR_VERIFICATION_REPORT_VERSION,
   tallyRequirements,
+  unmatchedVerdictIds,
 } from '@cat-factory/contracts'
 import { CI_AGENT_KIND, MERGER_AGENT_KIND, isTesterKind } from './ci.logic.js'
 import {
@@ -489,7 +490,11 @@ function composeRequirements(
     group: scrubbed(row.group),
     detail: verdictDetail(row.detail),
   }))
-  if (rows.length === 0) {
+  // A verdict against an id the spec does not carry has no row to land on. Counted rather than
+  // dropped: the difference between this table's rulings and the tester's own is otherwise
+  // unexplainable, and it reads as a miscount in whichever of the two the reviewer trusts less.
+  const unmatched = unmatchedVerdictIds(joined, verdicts)
+  if (rows.length === 0 && unmatched.length === 0) {
     return {
       status: 'absent',
       note:
@@ -501,15 +506,11 @@ function composeRequirements(
 
   // Counts are computed over EVERY row, before the cap — so a capped table still reports the
   // true totals and the `truncations` note says how much of the table was shown.
-  const known = new Set(joined.map((row) => row.id))
   return {
     status: 'reported',
     entries: selectRequirementEntries(rows, truncations),
     ...tallyRequirements(joined),
-    // A verdict against an id the spec does not carry has no row to land on. Counted rather than
-    // dropped: the difference between this table's rulings and the tester's own is otherwise
-    // unexplainable, and it reads as a miscount in whichever of the two the reviewer trusts less.
-    unmatchedVerdicts: [...verdicts.keys()].filter((id) => !known.has(id)).length,
+    unmatchedVerdicts: unmatched.length,
   }
 }
 
@@ -774,6 +775,24 @@ function renderRequirements(reqs: PrVerificationReport['requirements']): string[
     `**${reqs.met} met** · **${reqs.notMet} not met** · **${reqs.notCovered} not checked** ` +
       `(of ${reqs.total} requirement${reqs.total === 1 ? '' : 's'} in \`spec/\`)`,
     '',
+  )
+  // The count is computed for this reader and was, until now, computed and then not shown. A
+  // section reporting fewer rulings than the tester made, with nothing to explain the
+  // difference, is the miscount it exists to prevent.
+  // Optional on the schema (it post-dates report version 7), always set by the composer above.
+  const n = reqs.unmatchedVerdicts ?? 0
+  if (n > 0) {
+    out.push(
+      `_${n} tester verdict${n === 1 ? '' : 's'} ${n === 1 ? 'names a requirement id' : 'name requirement ids'} ` +
+        `\`spec/\` does not carry on this branch, so ${n === 1 ? 'it has' : 'they have'} no row above. ` +
+        `The spec moved under the run, or the tester keyed ${n === 1 ? 'it' : 'them'} by something else._`,
+      '',
+    )
+  }
+  // An empty join is a real state now that a spec declaring nothing no longer discards the
+  // verdicts standing against it. A header-only table would read as a rendering fault.
+  if (reqs.total === 0) return out
+  out.push(
     '| Requirement | Feature | State | Verdict | Observed |',
     '| --- | --- | --- | --- | --- |',
   )

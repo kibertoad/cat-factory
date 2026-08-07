@@ -987,14 +987,32 @@ disagree about what a run did.
 Both are composed by the same code over one read of the run's evidence, so the coverage counts
 (`met` / `notMet` / `notCovered` / `regressions` / `total`) and the regression rule are the same
 numbers on both endpoints and on the pull request. What differs is the SHAPE, deliberately: the
-report is bounded to what fits in a pull-request body and says what it dropped in `truncations`,
-while the outcome carries the full row set, so a tally taken off the report's capped tables would be
-quietly wrong. Every outcome section is `{ status: "reported" } | { status: "absent", gap }` where
+report is bounded to what FITS IN A PULL-REQUEST BODY, a budget of a few dozen rows, so a tally
+taken off its capped tables would be quietly wrong. The outcome's own caps are a ceiling on a
+pathological producer rather than a routine truncation (500 requirement rows, 200 tester areas or
+concerns, 2000 characters of any one free-text field), so an ordinary run is complete.
+
+Both name what they left out in `truncations`, in one vocabulary
+(`"requirements.entries: showing 500 of 640"`), and **neither endpoint's counts are ever affected**:
+every tally is computed over the whole join before any cap, so a bounded response reports a shorter
+table and never a smaller spec. `requirements.entries` is ordered by SEVERITY, so a cap drops the
+least severe rows and the note says so: a reader assuming the spec's own order would otherwise
+conclude the missing requirements were never ruled on. Free text is scrubbed before it is clamped,
+so a cut can never leave half a credential in the payload.
+
+Every outcome section is `{ status: "reported" } | { status: "absent", gap }` where
 `gap` is a machine-readable CODE (`no_tester_step`, `tester_not_reported`, `no_verdicts`,
 `no_requirements`, `run_unavailable`) rather than prose, since the platform does not localize:
 `requirements.spec` says whether coverage was counted against the service's `spec/` (`joined`) or
 only against the ids the tester reported (`not_read`, a narrower denominator), and
-`unmatchedVerdicts` counts rulings the spec could not place, on both endpoints.
+`unmatchedVerdicts` counts rulings the spec could not place, on both endpoints. A spec that
+declares no requirements is `no_requirements` only when the tester ruled on nothing either;
+with verdicts standing against it the section is `reported` with `total: 0` and every verdict
+unmatched, because a spec that moved under the run is not a run nobody tested.
+
+The `spec/` both endpoints join against is read from the branch the RUN pushed to, falling back to
+the repo default: the spec increment a task wrote has not merged while its pull request is open, so
+the default branch is missing exactly the requirements the tester just ruled on.
 
 The **artifact** rows are `{ artifactId, kind, view, contentType, byteSize, hash, createdAt }`.
 `kind` is `screenshot` (machine-captured during the run) or `reference` (the image a human uploaded

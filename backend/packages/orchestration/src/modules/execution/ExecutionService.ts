@@ -23,7 +23,7 @@ import type {
   RunInputGate,
 } from '@cat-factory/kernel'
 import { allPullRequests } from '@cat-factory/contracts'
-import type { PrVerificationReport, RunOutcome } from '@cat-factory/contracts'
+import type { PrVerificationReport, RunOutcome, ServiceSpecView } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { RunStartOptions } from './runStartOptions.js'
 import {
@@ -97,6 +97,7 @@ import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import type { ExecutionServiceDependencies } from './ExecutionServiceDependencies.js'
 import { createPipelineAdoption, type PipelineAdoption } from '../pipelines/pipelineAdoption.js'
+import { RunEvidenceReads } from './RunEvidenceReads.js'
 import { PrVerificationReportController } from './PrVerificationReportController.js'
 
 // The engine's injected-collaborator contract lives next door (a ~350-line declaration block
@@ -563,38 +564,37 @@ export class ExecutionService {
   }
 
   /**
-   * The run's verification report, composed for a READER rather than published onto a pull
-   * request: the read behind `GET /api/v1/runs/:runId/report`. Null when the workspace has no
-   * such run, or when the run's block is gone.
-   *
-   * The SAME composition the PR body carries (see
-   * {@link PrVerificationReportController.composeForRun} for the three differences the read
-   * path makes, all of them about audience rather than content).
+   * The three run-EVIDENCE reads, resolved by run id: the verification report, the outcome
+   * summary, and the `spec/` they join against. Thin delegates onto {@link RunEvidenceReads},
+   * which owns the one thing they must never disagree about (what "this run" resolves to).
    */
+  private readonly evidenceReads = new RunEvidenceReads({
+    getInstance: (workspaceId, executionId) =>
+      this.executionRepository.get(workspaceId, executionId),
+    composeReport: (workspaceId, instance) =>
+      this.prVerificationReport.composeForRun(workspaceId, instance),
+    composeOutcome: (workspaceId, instance) =>
+      this.prVerificationReport.composeOutcomeForRun(workspaceId, instance),
+    readSpec: (workspaceId, instance) =>
+      this.prVerificationReport.readRunSpec(workspaceId, instance),
+  })
+
+  /** The read behind `GET /api/v1/runs/:runId/report`. */
   async composeVerificationReport(
     workspaceId: string,
     executionId: string,
   ): Promise<PrVerificationReport | null> {
-    const instance = await this.executionRepository.get(workspaceId, executionId)
-    if (!instance) return null
-    return this.prVerificationReport.composeForRun(workspaceId, instance)
+    return this.evidenceReads.report(workspaceId, executionId)
   }
 
-  /**
-   * The run's OUTCOME summary: the read behind `GET /api/v1/runs/:runId/outcome`. Null when the
-   * workspace has no such run, or when the run's block is gone.
-   *
-   * The sibling of {@link composeVerificationReport} and deliberately routed through the same
-   * collaborator: the two documents answer the same question for different readers (a reviewer
-   * who will open the diff, and someone who never will), so they read one run's evidence once,
-   * through one loader, and share the coverage rules underneath. The SPA composes this same
-   * reduction live off its own store, which is why it is a pure function in
-   * `@cat-factory/contracts` rather than a projection invented on this side of the wire.
-   */
+  /** The read behind `GET /api/v1/runs/:runId/outcome`. */
   async composeRunOutcome(workspaceId: string, executionId: string): Promise<RunOutcome | null> {
-    const instance = await this.executionRepository.get(workspaceId, executionId)
-    if (!instance) return null
-    return this.prVerificationReport.composeOutcomeForRun(workspaceId, instance)
+    return this.evidenceReads.outcome(workspaceId, executionId)
+  }
+
+  /** The read behind `GET /workspaces/:ws/executions/:executionId/spec` (the outcome card). */
+  async readRunSpec(workspaceId: string, executionId: string): Promise<ServiceSpecView | null> {
+    return this.evidenceReads.spec(workspaceId, executionId)
   }
 
   /**

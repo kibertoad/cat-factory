@@ -17,6 +17,7 @@ import org.jspecify.annotations.Nullable;
  * @param regressions the {@code regressions} field.
  * @param spec the {@code spec} field.
  * @param status the {@code status} field.
+ * @param total the {@code total} field.
  * @param unmatchedVerdicts the {@code unmatchedVerdicts} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -34,6 +35,8 @@ public record GetPublicRunOutcomeResponseRequirementsVariant1(
     @JsonProperty("spec") GetPublicRunOutcomeResponseRequirementsVariant1Spec spec,
 
     @JsonProperty("status") String status,
+
+    @JsonProperty("total") Double total,
 
     @JsonProperty("unmatchedVerdicts") Double unmatchedVerdicts
 ) implements GetPublicRunOutcomeResponseRequirements {
@@ -57,6 +60,7 @@ public record GetPublicRunOutcomeResponseRequirementsVariant1(
         private @Nullable Double regressions;
         private @Nullable GetPublicRunOutcomeResponseRequirementsVariant1Spec spec;
         private @Nullable String status;
+        private @Nullable Double total;
         private @Nullable Double unmatchedVerdicts;
 
         /** Set {@code entries}. */
@@ -101,6 +105,12 @@ public record GetPublicRunOutcomeResponseRequirementsVariant1(
             return this;
         }
 
+        /** Set {@code total}. */
+        public Builder total(@Nullable Double total) {
+            this.total = total;
+            return this;
+        }
+
         /** Set {@code unmatchedVerdicts}. */
         public Builder unmatchedVerdicts(@Nullable Double unmatchedVerdicts) {
             this.unmatchedVerdicts = unmatchedVerdicts;
@@ -109,7 +119,7 @@ public record GetPublicRunOutcomeResponseRequirementsVariant1(
 
         /** Build the {@link GetPublicRunOutcomeResponseRequirementsVariant1}. */
         public GetPublicRunOutcomeResponseRequirementsVariant1 build() {
-            return new GetPublicRunOutcomeResponseRequirementsVariant1(entries, met, notCovered, notMet, regressions, spec, status, unmatchedVerdicts);
+            return new GetPublicRunOutcomeResponseRequirementsVariant1(entries, met, notCovered, notMet, regressions, spec, status, total, unmatchedVerdicts);
         }
     }
 }

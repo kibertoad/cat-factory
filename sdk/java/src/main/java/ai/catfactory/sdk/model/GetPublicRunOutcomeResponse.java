@@ -17,6 +17,7 @@ import org.jspecify.annotations.Nullable;
  * @param requirements the {@code requirements} field.
  * @param tests the {@code tests} field.
  * @param title the {@code title} field.
+ * @param truncations the {@code truncations} field.
  * @param version the {@code version} field.
  * @param visuals the {@code visuals} field.
  */
@@ -36,6 +37,8 @@ public record GetPublicRunOutcomeResponse(
     @JsonProperty("tests") GetPublicRunOutcomeResponseTests tests,
 
     @JsonProperty("title") String title,
+
+    @JsonProperty("truncations") List<String> truncations,
 
     @JsonProperty("version") Double version,
 
@@ -61,6 +64,7 @@ public record GetPublicRunOutcomeResponse(
         private @Nullable GetPublicRunOutcomeResponseRequirements requirements;
         private @Nullable GetPublicRunOutcomeResponseTests tests;
         private @Nullable String title;
+        private @Nullable List<String> truncations;
         private @Nullable Double version;
         private @Nullable GetPublicRunOutcomeResponseVisuals visuals;
 
@@ -106,6 +110,12 @@ public record GetPublicRunOutcomeResponse(
             return this;
         }
 
+        /** Set {@code truncations}. */
+        public Builder truncations(@Nullable List<String> truncations) {
+            this.truncations = truncations;
+            return this;
+        }
+
         /** Set {@code version}. */
         public Builder version(@Nullable Double version) {
             this.version = version;
@@ -120,7 +130,7 @@ public record GetPublicRunOutcomeResponse(
 
         /** Build the {@link GetPublicRunOutcomeResponse}. */
         public GetPublicRunOutcomeResponse build() {
-            return new GetPublicRunOutcomeResponse(ask, checks, disposition, pullRequests, requirements, tests, title, version, visuals);
+            return new GetPublicRunOutcomeResponse(ask, checks, disposition, pullRequests, requirements, tests, title, truncations, version, visuals);
         }
     }
 }

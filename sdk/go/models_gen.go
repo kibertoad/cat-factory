@@ -698,6 +698,7 @@ type GetPublicRunOutcomeResponse struct {
 	Requirements GetPublicRunOutcomeResponseRequirements  `json:"requirements"`
 	Tests        GetPublicRunOutcomeResponseTests         `json:"tests"`
 	Title        string                                   `json:"title"`
+	Truncations  []string                                 `json:"truncations"`
 	Version      float64                                  `json:"version"`
 	Visuals      GetPublicRunOutcomeResponseVisuals       `json:"visuals"`
 }
@@ -863,6 +864,7 @@ type GetPublicRunOutcomeResponseRequirementsVariant1 struct {
 	Regressions       float64                                                `json:"regressions"`
 	Spec              GetPublicRunOutcomeResponseRequirementsVariant1Spec    `json:"spec"`
 	Status            string                                                 `json:"status"`
+	Total             float64                                                `json:"total"`
 	UnmatchedVerdicts float64                                                `json:"unmatchedVerdicts"`
 }
 

@@ -514,6 +514,7 @@ export interface GetPublicRunOutcomeResponse {
   requirements: GetPublicRunOutcomeResponseRequirements
   tests: GetPublicRunOutcomeResponseTests
   title: string
+  truncations: string[]
   version: number
   visuals: GetPublicRunOutcomeResponseVisuals
 }
@@ -573,6 +574,7 @@ export interface GetPublicRunOutcomeResponseRequirementsVariant1 {
   regressions: number
   spec: GetPublicRunOutcomeResponseRequirementsVariant1Spec
   status: 'reported'
+  total: number
   unmatchedVerdicts: number
 }
 

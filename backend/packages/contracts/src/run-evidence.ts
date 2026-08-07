@@ -1,3 +1,4 @@
+import type { Block } from './entities.js'
 import type { PipelineStep } from './execution.js'
 import type { RequirementPriority, RequirementState, SpecDoc } from './spec.js'
 import type { RequirementVerdict, RequirementVerdictStatus, TestReport } from './testing.js'
@@ -19,7 +20,9 @@ import { UI_TESTER_AGENT_KIND } from './visual-pipeline.js'
 //  - what `not_covered` counts (the report enumerates the SPEC, so a requirement nobody looked
 //    at is reported as unchecked; the summary enumerated the tester's own verdicts, so the same
 //    requirement was invisible and both surfaces printed a number called "not covered");
-//  - what a REGRESSION is (the same rule, written out twice).
+//  - what a REGRESSION is (the same rule, written out twice);
+//  - which BRANCH the spec is read from, the one that decides whether the join has anything to
+//    match at all (see {@link runSpecBranch}).
 //
 // So the rules live here, in the package both the backend and the SPA compile against, and the
 // two reductions call them rather than restating them. What each surface still owns is its own
@@ -168,6 +171,47 @@ export function joinSpecRequirements(
     }
   }
   return rows
+}
+
+/**
+ * The verdict ids the join could NOT place: ids the tester ruled on that the spec does not
+ * carry.
+ *
+ * Shared for the same reason the join is: the difference between a coverage section's rulings
+ * and the tester's own is otherwise unexplainable, and it reads as a miscount in whichever of
+ * the two the reader trusts less. Two spellings of "which ids went missing" would be a third
+ * way for the two documents to print different numbers for one run.
+ *
+ * It is also the fact that tells an EMPTY join apart from an ABSENT one: a spec declaring no
+ * requirements against a tester that ruled on nothing is genuinely nothing to report, while the
+ * same spec against a tester that returned verdicts is a spec that moved on under the run, and
+ * the verdicts are the only evidence there is.
+ */
+export function unmatchedVerdictIds(
+  rows: readonly JoinedRequirement[],
+  verdicts: ReadonlyMap<string, RequirementVerdict>,
+): string[] {
+  const known = new Set(rows.map((row) => row.id))
+  return [...verdicts.keys()].filter((id) => !known.has(id))
+}
+
+/**
+ * The branch a run's `spec/` must be read from: the branch the run pushed its work to, else the
+ * repo's default.
+ *
+ * Stated here because THREE readers need the same answer and two of them had already disagreed:
+ * the engine's evidence loader read the run's branch while the SPA's spec fetch read the default,
+ * so an in-flight run's outcome card joined this run's verdicts against a spec that does not yet
+ * carry the requirements it just ruled on. Every one of those rows lands as "not checked", and
+ * the card's counts contradict `GET /api/v1/runs/:runId/outcome` for the same run.
+ *
+ * The run's branch, not the default, is the truthful denominator: the spec increment this task
+ * wrote has not merged yet, and the verdicts were made against the tree as it stands on that
+ * branch. Once the pull request merges the two answers converge, which is why the fallback is
+ * the default branch rather than an absence.
+ */
+export function runSpecBranch(block: Block, defaultBranch: string): string {
+  return block.pullRequest?.branch ?? defaultBranch
 }
 
 /**
