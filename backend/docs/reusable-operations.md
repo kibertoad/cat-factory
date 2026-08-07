@@ -250,15 +250,26 @@ fragment source).
 - **`promptFragmentRegistry.registerTaskTypeDefaults()` is NOT the seam for an operation.** It
   attaches defaults to a BUILT-IN type, which has no descriptor to carry them. A registered type
   declares `defaultFragmentIds` on its own registration, where boot validation can see it.
-- **A code-registered fragment is STATIC deployment content.** It lands on the `builtin` tier, and
-  `documentRef` is resolved only for the account/workspace tiers, so a registration carrying one is
-  refused at boot (`fragment_document_ref_unsupported`) rather than rendered as live and ignored.
-  The refusal is not an oversight to be lifted later: live resolution fetches through a CONNECTION
-  WORKSPACE, and a deployment-wide registration names none, so honouring it would pull one document
-  into every workspace's prompts on one tenant's stored credential and key that one document under
-  N per-workspace cache groups. A living ORG-WIDE document is an ACCOUNT-tier fragment created with
-  its `documentRef` and a fetch-via workspace, which is the supported path and the one the library
-  UI's "live" badge tells the truth about. See [ADR 0040](./adr/0040-deployment-extension-seam-reachability.md).
+- **A code-registered fragment is STATIC deployment content, because no document source has a
+  deployment-scoped CREDENTIAL HOME yet.** It lands on the `builtin` tier, and `documentRef` is
+  resolved only for the account/workspace tiers, so a registration carrying one is refused at boot
+  (`fragment_document_ref_unsupported`) rather than rendered as live and ignored.
+
+  The constraint is NOT the scope of the registration, which is correctly deployment-wide. It is
+  that every document source authenticates per WORKSPACE: `DocumentContentResolverService` reads
+  `connectionService.requireConnection(workspaceId, source)`, the one provider that stores no
+  credentials (`github-docs`) rides `resolveImplicitConnection(workspaceId)` (the WORKSPACE's App
+  installation), and `fetchDocument(credentials, externalId, workspaceId)` is workspace-parameterised
+  besides. So honouring the field on today's resolver would mean the engine PICKING a workspace to
+  fetch through on behalf of a fragment every workspace folds: one tenant's stored token pulling text
+  into every other tenant's prompts, and one document keyed under N per-workspace cache groups.
+
+  A deployment-scoped source is coherent and is the thing that is missing, not a category error (see
+  "Not yet done"). Until it exists, register the body inline, or make a living ORG-WIDE document an
+  ACCOUNT-tier fragment created with its `documentRef` and a fetch-via workspace, which is the
+  supported path and the one the library UI's "live" badge tells the truth about. See
+  [ADR 0040](./adr/0040-deployment-extension-seam-reachability.md).
+
 - **Seeding STATES an unregistered type.** A task created on a process whose package lacks the
   registration is accepted and gets NONE of the operation's fragments, and a later build does not
   go back for it, because only the id SET freezes at creation. `BoardService` logs a warning
@@ -655,3 +666,24 @@ Tracked in [`docs/initiatives/reusable-operations.md`](../../docs/initiatives/re
 - **Data-only operations** authored in the UI with no code: the descriptor/code split keeps the
   pure-JSON subset expressible, but there is no non-code registration path, matching the
   initiative-preset stance.
+- **A DEPLOYMENT-SCOPED document source**, which is what a living deployment-owned standard needs
+  (above). Not blocked on the idea: a deployment already configures credentials in its own
+  environment, and its fragments are already deployment-wide, so the shape is a provider
+  authenticated from deployment config, a `fetch` that takes no workspace, and ONE cache group
+  instead of N. Three pieces have to be decided together, which is why it is an initiative and not a
+  field on the registration:
+
+  1. **An owner scope below `account`.** `FragmentTier` and the connection model both bottom out at
+     the account, so `deployment` is a new tier the merge, the cache key and the library UI each
+     have to render honestly (a badge that says "live from the deployment", not "live from this
+     board's connection").
+  2. **A credential home.** Deployment config, which puts it beside `GITHUB_APP_*` rather than in
+     `document_source_connections`, and means every provider needs an env-configured construction
+     path beside its stored-connection one.
+  3. **Mothership routing**, the genuinely hard one. The credential lives on the mothership and
+     `ENCRYPTION_KEY` never reaches a laptop, so a node cannot resolve the document itself: it needs
+     the RESOLVED BODY over `/internal/*`, on the `builtin`-tier foundational-services pattern,
+     including the rule that the read THROWS rather than answering empty.
+
+  Until then the ACCOUNT tier is the supported path and the boot refusal is the honest report, since
+  the field genuinely does nothing today.

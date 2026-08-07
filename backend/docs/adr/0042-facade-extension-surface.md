@@ -105,10 +105,15 @@ while stopping at the top-level shape.
   list is a symmetry assertion rather than a derived one: a seam added to the Node classification
   without the Worker export fails the Worker's own test, but only because somebody kept the list in
   step. That is the residual gap, and it is bounded by the two derived guards on either side of it.
-- Deployment-owned `documentRef` remains refused (ADR 0040) and the reason is now stated in the
-  reusable-operation guide rather than only in the boot message. A living org-wide document is an
-  ACCOUNT-tier fragment; a deployment-scoped document source would need an owner scope, a credential
-  home and a mothership routing decision, and is its own initiative.
+- Deployment-owned `documentRef` remains refused (ADR 0040), and the guide now states WHY in terms
+  of the actual constraint rather than the scope of the registration. The registration is correctly
+  deployment-wide; what is missing is a deployment-scoped CREDENTIAL HOME, since every document
+  source authenticates per workspace (a stored connection, or `github-docs` riding the workspace's
+  App installation). Honouring the field on today's resolver would make the engine pick a workspace
+  to fetch through on behalf of a fragment every workspace folds. A deployment-scoped source is
+  coherent and is now scoped in the guide's "Not yet done" as the three decisions it needs together
+  (an owner tier below `account`, an env-configured credential home, and a mothership `/internal/*`
+  read of the resolved BODY, because `ENCRYPTION_KEY` never reaches a laptop).
 - The descriptor condition vocabulary stays `equals` / `includes`. A third predicate is a live
   option that rides the first operation that genuinely needs it, because it is published in
   `/api/v1/task-types`, rendered by four SDKs, and has to state how it contradicts the existing two

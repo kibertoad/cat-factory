@@ -323,19 +323,26 @@ export function collectRegistrationProblems(
  * lands on that tier, so the reference is preserved everywhere it is visible and honoured nowhere,
  * and the surface most confident about it is the one telling a human the body is live.
  *
- * An ERROR rather than a warning, because it is a dead seam rather than a degraded one: there is no
- * deployment state in which the reference starts resolving, and the failure it produces is a lie
- * rather than an omission.
+ * An ERROR rather than a warning, because it is a dead seam rather than a degraded one: no
+ * configuration a deployment can reach makes the reference resolve, and the failure it produces is
+ * a lie rather than an omission.
  *
  * The refusal is deliberately NOT "honour it at builtin tier", which is what the report that
- * surfaced this asked for. `resolveDocumentBody` needs a connection WORKSPACE to fetch through, and
- * a deployment-wide registration has none: resolving through an arbitrary tenant's stored
- * credential would fetch text into every other workspace's prompts on one workspace's connection,
- * and would key ONE deployment-wide document under N per-workspace cache groups. That is the exact
- * fan-out the existing guard refuses for the account tier, and it is not an oversight. A living
- * deployment-wide document needs a DEPLOYMENT-scoped document source (an owner-scope change, a
- * credential home and a mothership routing decision), which is its own initiative rather than a
- * field on a registration.
+ * surfaced this asked for, and the reason is the CREDENTIAL HOME rather than the scope of the
+ * registration, which is correctly deployment-wide. Every document source authenticates per
+ * WORKSPACE: `DocumentContentResolverService` reads `requireConnection(workspaceId, source)`, the
+ * one provider storing no credentials rides `resolveImplicitConnection(workspaceId)` (the
+ * WORKSPACE's App installation), and `fetchDocument` takes a workspace besides. So honouring it
+ * here would make the engine PICK a tenant to fetch through on behalf of a fragment every tenant
+ * folds: one workspace's stored credential pulling text into every other workspace's prompts, and
+ * ONE deployment-wide document keyed under N per-workspace cache groups. That is the exact fan-out
+ * the existing guard already refuses for the account tier.
+ *
+ * A deployment-scoped source is coherent and simply does not exist yet; it needs an owner tier below
+ * `account`, an env-configured credential home, and a mothership `/internal/*` read of the resolved
+ * BODY (the credential lives on the mothership and `ENCRYPTION_KEY` never reaches a laptop). Three
+ * decisions that have to be taken together, which is why it is an initiative rather than a field on
+ * a registration. Scoped in `backend/docs/reusable-operations.md` → "Not yet done".
  */
 function checkPromptFragments(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
   const registry = opts.registries.promptFragmentRegistry
@@ -349,11 +356,11 @@ function checkPromptFragments(opts: ValidateRegistrationsOptions): RegistrationP
       message:
         `Prompt fragment "${fragment.id}" is registered in code with a documentRef, which is ` +
         `carried through the catalog and rendered as a live source but is never resolved: a ` +
-        `code-registered fragment lands on the "builtin" tier, and live resolution needs a ` +
-        `connection workspace a deployment-wide registration cannot name. Register the body ` +
-        `inline instead, or create the fragment at the ACCOUNT tier (POST the fragment with its ` +
-        `documentRef and a fetch-via workspace), which is the supported path to an org-wide ` +
-        `living document.`,
+        `code-registered fragment lands on the "builtin" tier, and no document source has a ` +
+        `deployment-scoped credential yet, so live resolution needs a connection workspace this ` +
+        `registration has none of. Register the body inline instead, or create the fragment at the ` +
+        `ACCOUNT tier (POST the fragment with its documentRef and a fetch-via workspace), which is ` +
+        `the supported path to an org-wide living document.`,
     }))
 }
 
