@@ -21,12 +21,12 @@ import {
   type AnswerInput,
   type AnswerOutcome,
   type DecisionListShape,
-} from './approvals'
-import { GatekeeperError, PolicyError } from './errors'
-import type { Actor, KeyBroker } from './keys'
-import { applyMask } from './masking'
-import { describeBinding, type CompiledTier } from './policy'
-import type { ApprovalCard, GatekeeperState, RunState } from './state'
+} from './approvals.js'
+import { GatekeeperError, PolicyError } from './errors.js'
+import type { Actor, KeyBroker } from './keys.js'
+import { applyMask } from './masking.js'
+import { describeBinding, type CompiledTier } from './policy/compile.js'
+import type { ApprovalCard, GatekeeperState, RunState } from './state.js'
 
 /**
  * The methods a capability carries beyond its granted bindings.

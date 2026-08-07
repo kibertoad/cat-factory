@@ -27,6 +27,15 @@ Cloudflare OS Gatekeeper pattern; tracker:
 transport metadata, and invoke thunks over the TypeScript client using the MCP facade's argument
 convention. See [its README](./gatekeeper/README.md).
 
+[`sdk/gatekeeper-worker`](./gatekeeper-worker) (`@cat-factory/gatekeeper-worker`) is the ONE
+package in this tree that the generator does not touch: the Gatekeeper Worker machinery itself,
+hand-written on top of that table and the TypeScript client. It lives here rather than under
+`deploy/` because it is a published library an outside deployment installs, and the split it makes
+is the point: `deploy/gatekeeper` keeps the policy and the bindings an operator edits, this keeps
+the Cap'n Web capability surface, the key broker, the delivery receiver and the approval inbox, so
+upgrading the second is a version bump rather than a re-merge of the first. See
+[its README](./gatekeeper-worker/README.md).
+
 There is **no separate Kotlin SDK**, and that is a decision rather than an omission; see
 [Java and Kotlin](#java-and-kotlin) below.
 

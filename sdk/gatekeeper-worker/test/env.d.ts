@@ -1,5 +1,5 @@
 /// <reference types="@cloudflare/vitest-pool-workers/types" />
-import type { GatekeeperEnv } from '../src/env'
+import type { GatekeeperEnv } from '../src/env.js'
 
 // The `cloudflare:test` module (and the `SELF` binding the suite drives the Worker through) is
 // declared by the pool's own `/types` entry, which the bare package name does not resolve to.

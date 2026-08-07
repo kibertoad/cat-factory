@@ -1,6 +1,6 @@
 # Cloudflare OS Gatekeeper integration
 
-Status: in progress. Slices 1 to 4 have landed; slice 5 is open.
+Status: in progress. Slices 1 to 4 and slice 6 have landed; slice 5 is open.
 
 ## Goal and rationale
 
@@ -24,8 +24,10 @@ lands in the CORE packages is only what must not drift from the surface it descr
 the `sdk/mcp` precedent: a generated projection, so the operation table the Gatekeeper enforces
 policy with cannot disagree with the API it fronts.
 
-**The Worker itself lives in this repo, as an isolated and separately gated package** under
-`deploy/gatekeeper` (slice 4), beside the other example deployments. What makes it a consumer is
+**The Worker itself lives in this repo, as isolated and separately gated packages**: the machinery
+in `sdk/gatekeeper-worker`, published and installed, and the template an operator copies in
+`deploy/gatekeeper`, beside the other example deployments (slice 4 built one package; slice 6 split
+it along that line). What makes it a consumer is
 not which repository holds it but what it may reach: it depends on `@cat-factory/sdk` and
 `@cat-factory/gatekeeper-bindings` as an outside integrator would, nothing in core may import it,
 and its CI is its own `paths-filter` lane so it can neither gate nor be gated by the backend
@@ -176,7 +178,10 @@ Three constraints made "in the repo" and "isolated" both true, and all three hel
   `eks` already has. It must not join the aggregated `Test` gate while the Cloudflare OS protocol
   is still moving: a partner-side breaking change should not turn this repo's CI red.
 - **Not a published package.** `private: true`, no changeset, no npm release. It is read and
-  copied, not installed.
+  copied, not installed. (Slice 6 SPLIT this: the template is still copied and still unpublished,
+  but the machinery under it is now installed rather than copied. What that bullet got right is
+  the part that survived: what an operator wants to own is the source of their policy, and the
+  reason to publish the rest is that they never wanted to own THAT.)
 
 Four decisions worth carrying forward:
 
@@ -213,7 +218,8 @@ landed, and each is a rule worth carrying into anything else that consumes this 
   `approval-gate`, so a card raised for a requirements review, a fork, a judge verdict or a
   follow-up triage could never be answered from the inbox, and the failure was INVISIBLE, because
   it reported `stale`, which is also what a card whose run genuinely moved on reports. The fix is a
-  data table (`src/decisions.ts`) keyed on the SDK's own `PublicDecision['kind']` union with
+  data table (`policy/decisions.ts`, in the machinery package since slice 6) keyed on the SDK's own
+  `PublicDecision['kind']` union with
   `satisfies Record<…>`, so a park the platform adds fails this package's BUILD. The shipped
   `approver` tier derives its grants from that table for the same reason: fifteen hand-typed
   decision bindings against a surface carrying more than forty is a tier that answers the parks
@@ -314,6 +320,51 @@ disagreement the hermetic suite structurally cannot see.
   a partner commit, allowed to go red without blocking anyone. Do not fold it into the PR lane on
   the grounds that it passed a few times.
 
+### 6. Base and template: `@cat-factory/gatekeeper-worker` (landed)
+
+Slice 4 shipped one package that was two things: ~2,400 lines of machinery nobody wants to own,
+and ~120 lines of policy and wiring that are the whole reason a deployment exists. Copying the
+first is what makes an upgrade a re-merge against files the operator has edited, and it is also
+what makes "did you get the security-relevant fix" a question nobody can answer from a version
+number. So the machinery became a published library and the template became what it always claimed
+to be: `sdk/gatekeeper-worker` (`@cat-factory/gatekeeper-worker`) holds the Cap'n Web capability
+surface, the key broker, the delivery receiver and verifier, the approval inbox and its per-park
+answerers, and the Durable Object all four keep state in; `deploy/gatekeeper` keeps
+`policy.config.ts`, `wrangler.toml`, a three-line entry point and the test of its own tiers.
+
+Five decisions worth carrying forward:
+
+- **The policy is an ARGUMENT, never an import.** `createGatekeeperWorker({ policy })` and
+  `Gatekeeper.create(env, policy)` take it; nothing in the base reaches for a `policy.config.ts`.
+  A base that imported one would own the file the deployment is supposed to write, which is the
+  fork the split exists to prevent.
+- **The policy vocabulary is its OWN entry point** (`@cat-factory/gatekeeper-worker/policy`). The
+  package root reaches `cloudflare:workers` for the Durable Object, so a policy file importing
+  through it could only be loaded inside workerd, and a policy is precisely the thing an operator
+  authors, reviews and TESTS. With the split, `deploy/gatekeeper`'s suite is a plain Node run over
+  its own tiers, and the template carries no workerd harness for code it did not write.
+- **It sits under `sdk/`, beside the table it enforces policy against, not under `deploy/`.** It is
+  a published library an outside deployment installs, and `sdk/` is where this repo's other
+  consumers of the stable public surface live; `deploy/*` is for things that are copied. The cost
+  is that one member of that tree is hand-written rather than generated, which `sdk/AGENTS.md` and
+  `sdk/README.md` now say in as many words. The benefit is that `pnpm build` already covers it, so
+  the machinery's build and typecheck are gated by the required `Build & typecheck` check even
+  though its workerd suite stays in the non-blocking lane.
+- **The workerd suite went WITH the machinery**, driving a Worker this package's own factory builds
+  from a FIXTURE policy (`test/fixture-policy.ts`). Leaving it in the template would have published
+  a library tested only by a package nobody installs, and pinning it to the shipped example policy
+  would make every edit an operator is invited to make a failure in this repo. The fixture keeps
+  the example's tier names and actor ids so a reader comparing the two sees one shape.
+- **The template's entry point and the suite's are the same three lines.** `test/worker.ts` is
+  byte-for-byte what `deploy/gatekeeper/src/index.ts` is, which is the cheapest available check
+  that the base has a seam for everything a deployment needs: a line the suite's Worker needs and
+  the template's does not have would be a missing one.
+
+**Rejected: a second copy of the machinery's tests in the template.** Raised because a copied
+template with no end-to-end test looks under-covered. It would test the base, not the copy: what a
+deployment can get wrong is its policy, and that is exactly what `deploy/gatekeeper`'s remaining
+suite covers.
+
 ## Checklist
 
 - [x] Slice 1: scope as data, `x-min-scope`, `@cat-factory/gatekeeper-bindings`
@@ -324,6 +375,8 @@ disagreement the hermetic suite structurally cannot see.
       the review corrections above (every park answerable, card dispositions, atomic delivery,
       claimed minting, `approvals_inspect` / `runs_watched` / `POST /admin/retire`)
 - [ ] Slice 5: the two legs the scripted origin cannot cover (below)
+- [x] Slice 6: base/template split (`@cat-factory/gatekeeper-worker` published, `deploy/gatekeeper`
+      down to its policy, bindings and wiring)
 
 ## Gotchas the pilot surfaced
 

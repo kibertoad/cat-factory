@@ -1,9 +1,11 @@
 // The two refusals a Gatekeeper makes, kept apart because they need different fixes.
 //
-// A `PolicyError` is the OPERATOR's: this deployment's `policy.config.ts` names something the
-// surface does not have, or grants something its key could never call. It is raised while the
-// policy is compiled, before any capability exists, so a misconfigured Gatekeeper serves nothing
-// rather than serving a capability whose every method 403s.
+// A `PolicyError` is the OPERATOR's: the policy this deployment handed the Gatekeeper names
+// something the surface does not have, or grants something its key could never call. (Named by
+// what it IS, never by the file it arrived in: that file is the operator's to place, and the
+// template's `policy.config.ts` is one choice of name rather than this package's to assume.) It is
+// raised while the policy is compiled, before any capability exists, so a misconfigured Gatekeeper
+// serves nothing rather than serving a capability whose every method 403s.
 //
 // A `GatekeeperError` is the CALLER's: a request that reached a live Gatekeeper and was refused
 // by it (an unknown actor, an approval card that no longer exists). It carries a machine-readable

@@ -25,7 +25,7 @@
 
 import type { PublicApiScope } from '@cat-factory/gatekeeper-bindings'
 import type { PublicDecision } from '@cat-factory/sdk'
-import { GatekeeperError } from './errors'
+import { GatekeeperError } from '../errors.js'
 
 /**
  * Every kind of park the surface can list, taken from the SDK's own union.

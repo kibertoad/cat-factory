@@ -271,13 +271,22 @@ const DOC_ALLOWANCES = new Map([
 ])
 
 /** Roots scanned for source files (mirrors the workspace layout; deploy/* are one-liners). */
-// `sdk/**` is deliberately ABSENT. The ratchet is a split trigger for hand-written cohesion, and
-// the largest files there are GENERATED (`models_gen.go` alone is past the default), where the
-// remedy the guard exists to prompt — extract the concern your change touches — is not available:
-// what gets emitted is decided by the emitters in `scripts/sdk/`, and the size of one output file
-// says nothing about whether they are well factored. The SDK's hand-written halves are each well
-// under budget; `scripts/check-sdks.mjs` is what guards that tree.
-const SCAN_ROOTS = ['backend/packages', 'backend/runtimes', 'backend/internal', 'frontend/app']
+// `sdk/**` is deliberately ABSENT, with ONE named exception. The ratchet is a split trigger for
+// hand-written cohesion, and the largest files there are GENERATED (`models_gen.go` alone is past
+// the default), where the remedy the guard exists to prompt — extract the concern your change
+// touches — is not available: what gets emitted is decided by the emitters in `scripts/sdk/`, and
+// the size of one output file says nothing about whether they are well factored. The SDK's
+// hand-written halves are each well under budget; `scripts/check-sdks.mjs` is what guards that
+// tree. `sdk/gatekeeper-worker` is named because nothing about it is generated: it is an ordinary
+// hand-written library that happens to live beside the table it reads, so the argument for
+// exempting its neighbours does not reach it.
+const SCAN_ROOTS = [
+  'backend/packages',
+  'backend/runtimes',
+  'backend/internal',
+  'frontend/app',
+  'sdk/gatekeeper-worker',
+]
 
 // `.stryker-tmp` is a mutation-testing sandbox: a COPY of a package's source, so scanning it
 // reports every finding twice against a path nobody can fix. It is gitignored, so only a local

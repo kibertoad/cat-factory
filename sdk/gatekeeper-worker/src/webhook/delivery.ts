@@ -13,7 +13,7 @@
 // the answer the run may have moved on entirely.
 
 import type { NotificationType } from '@cat-factory/sdk'
-import type { ApprovalCard, DeliveryEffect } from '../state'
+import type { ApprovalCard, DeliveryEffect } from '../state.js'
 
 /** One delivery, classified. `unrecognised` is a real outcome, not an error. */
 export type Delivery =

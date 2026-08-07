@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { verifyDelivery } from '../src/webhook/signature'
+import { verifyDelivery } from '../src/webhook/signature.js'
 
 const SECRET = 'test-webhook-secret-0123456789ab'
 const NOW = 1_800_000_000_000

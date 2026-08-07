@@ -18,7 +18,7 @@ import {
   type GatekeeperBinding,
   type PublicApiScope,
 } from '@cat-factory/gatekeeper-bindings'
-import { PolicyError } from './errors'
+import { PolicyError } from '../errors.js'
 
 /**
  * What one tier of caller may do.

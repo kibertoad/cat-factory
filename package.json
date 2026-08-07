@@ -11,7 +11,7 @@
     "test": "turbo run test:run",
     "test:run": "turbo run test:run",
     "test:changed": "turbo run test:run --concurrency=50% --output-logs=errors-only --env-mode=loose --filter='...[origin/main]'",
-    "test:quick": "turbo run test:run --concurrency=50% --output-logs=errors-only --filter='!@cat-factory/worker' --filter='!@cat-factory/node-server' --filter='!@cat-factory/local-server'",
+    "test:quick": "turbo run test:run --concurrency=50% --output-logs=errors-only --filter='!@cat-factory/worker' --filter='!@cat-factory/node-server' --filter='!@cat-factory/local-server' --filter='!@cat-factory/gatekeeper-worker'",
     "lint": "oxlint && oxfmt --check .",
     "lint:fix": "oxlint --fix && oxfmt .",
     "lint:monorepo": "sherif -i typescript -i @types/node",

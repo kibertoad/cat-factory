@@ -26,8 +26,8 @@
 
 import { CatFactoryClient, CatFactoryUnauthorizedError } from '@cat-factory/sdk'
 import type { PublicApiScope } from '@cat-factory/gatekeeper-bindings'
-import { GatekeeperError } from './errors'
-import type { GatekeeperState, StoredKey } from './state'
+import { GatekeeperError } from './errors.js'
+import type { GatekeeperState, StoredKey } from './state.js'
 
 /** Who the OS says is calling. The Gatekeeper trusts this and NOTHING else the caller sends. */
 export interface Actor {

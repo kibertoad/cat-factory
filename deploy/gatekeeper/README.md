@@ -1,40 +1,28 @@
-# Cloudflare OS Gatekeeper (reference implementation)
+# Cloudflare OS Gatekeeper (deployment template)
 
 A Cloudflare Worker that lets a [Cloudflare OS](https://github.com/cloudflare/cloudflare-os)
 workspace drive cat-factory without any agent ever seeing a credential. It is a **consumer of the
-stable public surface**: it rides `/api/v1` and the outbound webhook contract through
-[`@cat-factory/sdk`](../../sdk/typescript) and
-[`@cat-factory/gatekeeper-bindings`](../../sdk/gatekeeper), and a cat-factory deployment that has
-never heard of Cloudflare OS is byte-for-byte unchanged by it.
+stable public surface**: it rides `/api/v1` and the outbound webhook contract, and a cat-factory
+deployment that has never heard of Cloudflare OS is byte-for-byte unchanged by it.
 
 Like its neighbours under `deploy/`, this is a **template you copy**, not a service you install.
-The artifact you want is the source, above all [`src/policy.config.ts`](./src/policy.config.ts),
-which is where your deployment's actual governance decision lives.
+What you copy is deliberately small:
 
-## What it does
+| File                                             | What it is                                                                       |
+| ------------------------------------------------ | -------------------------------------------------------------------------------- |
+| [`src/policy.config.ts`](./src/policy.config.ts) | **Your deployment's governance decision.** The one file that is really yours.    |
+| [`wrangler.toml`](./wrangler.toml)               | The bindings: two origins, the webhook id, the Durable Object, the hourly cron.  |
+| [`src/index.ts`](./src/index.ts)                 | Three lines of wiring: your policy, the factory, the re-exported Durable Object. |
+| [`test/policy.test.ts`](./test/policy.test.ts)   | What your tiers grant, compiled against the live operation table.                |
 
-- **Object-capability bindings over Cap'n Web.** An OS agent holds an object whose METHODS are the
-  operations policy granted it. There is no allow-list consulted per call, because there is nothing
-  to consult: an operation the tier does not carry is not a method that refuses, it is absent.
-- **Per-OS-user credentials.** Each actor gets their own cat-factory key, minted through
-  `POST /api/v1/keys` at the tier's scope and stamped with the OS's identity for that person
-  (`externalIdentity`), so a run traces back to a human and role-scoped merge policy stays real.
-  The keys are minted once and cached durably; the only credential this Worker is given is the
-  `admin` provisioning key, which never leaves it.
-- **Approvals as an inbox, for every park.** The platform's outbound webhook delivers
-  parked-decision cards here; the Worker verifies the HMAC over the raw bytes, dedupes on
-  `deliveryId`, and raises a card an OS approval Gadget can answer. A run can stop on THIRTEEN
-  different things (an approval gate, a requirements or clarity review, a fork, a judge verdict, a
-  follow-up triage, an interview, …) and `src/decisions.ts` carries an answerer for each, keyed on
-  the SDK's own kind union so a kind the platform gains fails this package's build. Answering
-  re-reads the run's live decisions and posts through the caller's own `decide` key.
-- **Run lifecycle without polling.** `run.started` / `run.completed` / `run.failed` land as a
-  `runs_watched()` projection, and a terminal event settles that run's open cards, so an inbox
-  never holds a question about a run that has ended.
-- **Self-enrolment and offboarding.** The endpoint registers itself under a caller-chosen webhook
-  id, hourly and idempotently, so a cold-booting Worker enrols with no create-or-discover round
-  trip and cannot displace another integration's registration. `POST /admin/retire?actorId=…`
-  revokes every key minted for one OS user, upstream first and then here.
+Everything else, the Cap'n Web capability surface, the per-actor key broker, the delivery receiver
+and its verifier, the approval inbox and the answerer for each of the platform's thirteen park
+kinds, is the published
+[`@cat-factory/gatekeeper-worker`](../../sdk/gatekeeper-worker), which this template installs as an
+ordinary dependency. That split is the point: upgrading the machinery is a version bump rather than
+a merge against files you have edited, and what a reviewer sees in your repository is your policy
+rather than a fork of somebody else's Worker. What the machinery does, in full, is
+[its README](../../sdk/gatekeeper-worker/README.md).
 
 ## Configure
 
@@ -86,9 +74,9 @@ rather than serving methods that 403. Three tiers ship as a starting point (`obs
 approver: {
   description: 'Everything an operator can do, plus answering a run’s parked decisions.',
   keyScope: 'decide',
-  // DECISION_BINDINGS is derived from the answerer table, not transcribed: a run can park on
-  // thirteen different things and the surface carries more than forty operations for answering
-  // them, so a hand-typed list is a tier that answers what somebody remembered.
+  // DECISION_BINDINGS is derived from the machinery's answerer table, not transcribed: a run can
+  // park on thirteen different things and the surface carries more than forty operations for
+  // answering them, so a hand-typed list is a tier that answers what somebody remembered.
   allow: [...DELIVERY_LOOP, ...DECISION_BINDINGS],
   mask: ['run.pullRequestUrl'],
 }
@@ -168,12 +156,16 @@ first.
 pnpm --filter @cat-factory/deploy-gatekeeper test:run
 ```
 
-The suite runs inside real `workerd` with this Worker's real Durable Object, real WebCrypto and a
-real Cap'n Web client, against a scripted cat-factory origin bound as the pool's `outboundService`.
-See [`test/fake-cat-factory.mjs`](./test/fake-cat-factory.mjs) for why a scripted origin is the
-right instrument here, and the initiative tracker
+What this package tests is its POLICY: that the shipped tiers compile, that none of them can reach
+a merge or a captured model prompt, and that `approver` holds everything answering a park takes. It
+is a plain Node run, because the `/policy` entry point it compiles through carries no Worker
+runtime. Keep this suite when you copy the template and edit it alongside your tiers.
+
+The machinery's own suite (real `workerd`, real Durable Object, real Cap'n Web, a scripted
+cat-factory origin) lives with the machinery, in
+[`sdk/gatekeeper-worker`](../../sdk/gatekeeper-worker). The initiative tracker
 ([`docs/initiatives/cloudflare-os-gatekeeper.md`](../../docs/initiatives/cloudflare-os-gatekeeper.md))
-for what that deliberately does not cover.
+says what that deliberately does not cover.
 
 ## Custody, and what it does not promise
 
@@ -184,9 +176,9 @@ cost of a key row per operation.
 
 Minting is claimed before it runs, so two concurrent first calls for one actor mint once rather
 than leaving the loser's credential live upstream with nothing here recording it. Revoking the
-provisioning key remains the kill switch, and it now heals: a call refused with a 401 drops the
-cached key and re-mints once, so a rotation costs one request rather than requiring the Durable
-Object to be wiped.
+provisioning key remains the kill switch, and it heals: a call refused with a 401 drops the cached
+key and re-mints once, so a rotation costs one request rather than requiring the Durable Object to
+be wiped.
 
 `allowedTools`-style scoping is not a substitute for the scope floor, and neither is this Worker.
 What it enforces is which operations an actor may reach and on whose credential; what a run then

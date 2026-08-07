@@ -1,0 +1,19 @@
+# The suite's Worker config. NOT a deployment: `deploy/gatekeeper/wrangler.toml` is the one an
+# operator copies, and this file exists only so `@cloudflare/vitest-pool-workers` can boot the
+# handler this package exports with a real Durable Object behind it.
+#
+# It mirrors the template's bindings deliberately. The Durable Object class name and the migration
+# tag are part of what this package asks a deployment for, so a suite that declared them
+# differently would stop testing the arrangement it documents.
+name = "cat-factory-gatekeeper-worker-test"
+main = "worker.ts"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[durable_objects.bindings]]
+name = "STATE"
+class_name = "GatekeeperState"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GatekeeperState"]
