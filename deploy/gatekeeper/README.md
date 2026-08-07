@@ -61,6 +61,20 @@ curl -X POST -H "Authorization: Bearer $OS_SHARED_TOKEN" https://your-gatekeeper
 A missing binding is answered as a `503` naming it, never defaulted: there is no safe stand-in for
 a credential or for the identity of the deployment it talks to.
 
+The Worker serves five routes:
+
+| Route                          | Auth              | What it is                                                    |
+| ------------------------------ | ----------------- | ------------------------------------------------------------- |
+| `POST /webhook`                | delivery HMAC     | The platform's outbound deliveries. Verified over raw bytes.  |
+| `ALL /rpc`                     | `OS_SHARED_TOKEN` | The Cap'n Web endpoint your OS deployment talks to.           |
+| `POST /admin/enroll`           | `OS_SHARED_TOKEN` | Re-assert the webhook registration. Also runs hourly on cron. |
+| `POST /admin/retire?actorId=…` | `OS_SHARED_TOKEN` | Offboarding: revoke every key minted for one OS user.         |
+| `GET /health`                  | none              | Liveness, plus whether the policy compiles.                   |
+
+`/rpc` is bearer-gated even though the intended path is a Worker service binding, which never
+traverses the internet: a Worker with a route attached is reachable by anyone who finds it, and a
+capability surface whose only defence is obscurity is not one.
+
 ## Write the policy
 
 Tiers are declared in `src/policy.config.ts` and compiled against the LIVE operation table, so a
@@ -101,7 +115,7 @@ const api = newWebSocketRpcSession('wss://your-gatekeeper/rpc') // Authorization
 const cat = api.connect({ actorId: 'someone@your-org.example' })
 
 await cat.tier() // { tier: 'approver', keyScope: 'decide', … }
-// Path and query parameters at the top level, the request body under `body` — the same flattened
+// Path and query parameters at the top level, the request body under `body`: the same flattened
 // convention the MCP projection uses, so the two describe one call shape.
 await cat.tasks_start({ taskId: 'blk_4', body: { pipelineId: 'pl_standard_build' } })
 

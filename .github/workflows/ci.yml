@@ -1242,8 +1242,8 @@ jobs:
   # The Cloudflare OS Gatekeeper reference deployment, in real workerd. NON-BLOCKING (deliberately
   # NOT in the aggregated `Test` gate's `needs`, the shape `test-eks` and `test-e2e` have): this
   # Worker tracks a partner protocol that is still moving, and a change on that side must not red
-  # this repo's required check. It needs no database and no cluster — the cat-factory origin it
-  # talks to is a scripted worker bound as the pool's outbound service — so it is a plain install,
+  # this repo's required check. It needs no database and no cluster (the cat-factory origin it
+  # talks to is a scripted worker bound as the pool's outbound service), so it is a plain install,
   # build and run.
   test-gatekeeper:
     name: Test Gatekeeper (workerd)
@@ -1283,7 +1283,7 @@ jobs:
   # Single aggregated status named "Test" so branch protection can require one
   # check regardless of the job/shard layout. Fails unless every test job passed OR was
   # legitimately skipped by the change-detection gate (no relevant changes → nothing to run).
-  # NOTE: `test-e2e`, `test-eks` and `test-gatekeeper` are intentionally NOT in `needs` — they're
+  # NOTE: `test-e2e`, `test-eks` and `test-gatekeeper` are intentionally NOT in `needs`: they're
   # non-blocking for now (see their job comments above), so their result does not gate this
   # required status.
   test-gate:

@@ -394,7 +394,7 @@ const ANSWERERS = {
             name: 'choice',
             required: true,
             detail:
-              'Taken verbatim, so it need not be one of the offered `options` — but answering ' +
+              'Taken verbatim, so it need not be one of the offered `options`, but answering ' +
               'off-list hands the agent an approach it did not propose.',
           },
         ],

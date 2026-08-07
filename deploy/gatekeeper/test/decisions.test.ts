@@ -77,7 +77,7 @@ describe('what a verb refuses rather than defaults', () => {
   })
 
   // And the mirror image: a gate at its rework cap used to default `choice` to `proceed`, which
-  // silently picks one of three settlements — the one that ships work nobody looked at.
+  // silently picks one of three settlements: the one that ships work nobody looked at.
   it('refuses resolve-exceeded with no choice rather than picking one', () => {
     const verb = answerer('approval-gate').verbs.find((v) => v.action === 'resolve-exceeded')!
     expect(() => verb.call({ kind: 'approval-gate', approvalId: 'ap_1' }, {})).toThrow(

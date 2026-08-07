@@ -1,4 +1,4 @@
-# Cloudflare OS Gatekeeper — Cloudflare Worker.
+# Cloudflare OS Gatekeeper: the Cloudflare Worker.
 #
 # This is a TEMPLATE, not a live deployment. Every origin below is an example.com
 # hostname or a REPLACE_WITH_* placeholder, so `wrangler deploy` fails loudly
@@ -14,7 +14,9 @@
 # The provisioning key is the only cat-factory credential this Worker holds. Every
 # per-user key it mints is derived from it and stored in the Durable Object, never
 # handed to an agent. Revoking the provisioning key revokes every key it minted,
-# which is the intended kill switch.
+# which is the intended kill switch: rotating it costs one refused call per actor,
+# because a 401 drops the cached key and mints again. To retire ONE person rather
+# than everybody, POST /admin/retire?actorId=<their OS identity>.
 name = "cat-factory-gatekeeper"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"

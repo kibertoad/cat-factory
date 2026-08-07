@@ -360,7 +360,7 @@ describe('the approval inbox', () => {
 
   // A card is a pointer, not the decision. Between the delivery and the answer the run can be
   // finished or held by a wait this surface cannot answer, and the run's own `unanswerable` entry
-  // is what says which — reporting a bare failure would send someone to the wrong place.
+  // is what says which; reporting a bare failure would send someone to the wrong place.
   //
   // The card STAYS OPEN. A stale answer settles nothing: the run may still be parked on something
   // a person has to clear, and the platform re-delivers a card under a NEW notification id, so a
