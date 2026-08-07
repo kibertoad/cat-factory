@@ -49,7 +49,9 @@ counterpart of `start({ … })` / `startLocal({ … })` on the Node and local fa
 
 ## Configure
 
-Edit `wrangler.toml`:
+Edit `wrangler.toml`. Everything deployment-specific in it ships as a
+`REPLACE_WITH_*` placeholder or an `example.com` hostname, so a copy you have not
+finished configuring fails the deploy instead of pointing at a stranger's account:
 
 - `name`, `[[d1_databases]].database_id`: your Worker name + D1 id
   (`wrangler d1 create cat_factory`).
@@ -106,12 +108,15 @@ Most deployments keep the stock one-line re-export and leave the default at Kimi
 
 ```sh
 cp .dev.vars.example .dev.vars     # local-only auth escape hatch
-pnpm dev                            # builds the library, then `wrangler dev`
+pnpm dev                            # `wrangler dev`
 
 # deploy (apply migrations first so the schema is live before the new code)
 pnpm db:migrate:remote              # wrangler d1 migrations apply cat_factory --remote
-pnpm deploy                         # builds the library, then `wrangler deploy`
+pnpm deploy                         # `wrangler deploy`
 ```
 
-`predev`/`predeploy` build `@cat-factory/worker` first so `wrangler` bundles the
-compiled `dist`.
+In a copied deployment `@cat-factory/worker` is the published package, which ships
+its compiled `dist`, so `wrangler` bundles it with no build step. Inside this repo
+the dependency is `workspace:*` and `dist` is gitignored, so run the deploy through
+Turbo, which builds the library first via the `^build` edge:
+`pnpm exec turbo run deploy --filter=@cat-factory/deploy-backend`.

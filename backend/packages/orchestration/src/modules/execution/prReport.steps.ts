@@ -1,5 +1,6 @@
 import type { ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
 import { hostMarkdown } from '@cat-factory/kernel'
+import { selectEvidenceStep } from '@cat-factory/contracts'
 
 // ---------------------------------------------------------------------------
 // Step selection for the PR verification report: which step of a run a section reports on.
@@ -19,17 +20,17 @@ import { hostMarkdown } from '@cat-factory/kernel'
  * `ci` gate after the coder and another after the tester, say), and the later run is the one
  * that describes the PR head as it stands now. Reporting the first would pin the section to a
  * verdict two steps of work out of date.
+ *
+ * The rule itself is `selectEvidenceStep` in `@cat-factory/contracts`, shared with the run
+ * outcome summary so the two documents cannot quote different sessions of the same run; this is
+ * the instance-shaped adapter every call site here already reads through.
  */
 export function findStep(
   instance: ExecutionInstance,
   matches: (step: PipelineStep) => boolean,
   hasEvidence: (step: PipelineStep) => boolean,
 ): PipelineStep | undefined {
-  const matching = instance.steps.filter(matches)
-  for (let i = matching.length - 1; i >= 0; i--) {
-    if (hasEvidence(matching[i]!)) return matching[i]
-  }
-  return matching[0]
+  return selectEvidenceStep(instance.steps, matches, hasEvidence)
 }
 
 /**

@@ -73,8 +73,8 @@ Package root (not under `src/`): `migrations/` + `telemetry-migrations/` +
 `sandbox-migrations/` + `migrations-provisioning/` + `audit-migrations/` hold the D1 schema, the
 twin of the Node facade's `drizzle/` + `db/schema.ts`. One lineage per BINDING: a new one is also a
 new `[[d1_databases]]` entry, a `files` entry in package.json, and a line in `deploy/backend`'s
-`db:migrate:*` scripts plus deploy.yml's `migrations` path filter, or its schema never reaches
-production.
+`db:migrate:*` scripts, or a deployment copying that template never applies the lineage and its
+schema never reaches production.
 
 ## The deployment extension surface
 

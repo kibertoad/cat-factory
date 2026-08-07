@@ -60,7 +60,7 @@ export function publicNotificationWebhookController(): Hono<AppEnv> {
   // "Am I already wired up?", the call an integration makes at startup. `{ webhook: null }` is a
   // real answer, not a 404: the workspace exists and simply has no endpoint registered.
   buildHonoRoute(app, getPublicNotificationWebhookContract, async (c) => {
-    const gate = await authorize(c, 'admin')
+    const gate = await authorize(c, getPublicNotificationWebhookContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const webhooks = webhooksOf(c)
     if (!webhooks) return unavailable(c)
@@ -71,7 +71,7 @@ export function publicNotificationWebhookController(): Hono<AppEnv> {
   // not this controller's), so an integration that only wants to add `runEvents` sends that one
   // field rather than restating an endpoint and secret it never meant to touch.
   buildHonoRoute(app, putPublicNotificationWebhookContract, async (c) => {
-    const gate = await authorize(c, 'admin')
+    const gate = await authorize(c, putPublicNotificationWebhookContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const webhooks = webhooksOf(c)
     if (!webhooks) return unavailable(c)
@@ -81,7 +81,7 @@ export function publicNotificationWebhookController(): Hono<AppEnv> {
 
   // Deregister. Idempotent, so a teardown script need not first ask whether anything is there.
   buildHonoRoute(app, deletePublicNotificationWebhookContract, async (c) => {
-    const gate = await authorize(c, 'admin')
+    const gate = await authorize(c, deletePublicNotificationWebhookContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const webhooks = webhooksOf(c)
     if (!webhooks) return unavailable(c)

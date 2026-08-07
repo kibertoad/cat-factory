@@ -110,7 +110,7 @@ function registerDecisionReadRoutes(app: Hono<AppEnv>): void {
   // what) is a monitoring concern, so a read-only integration can surface it to a human even
   // though it cannot answer.
   buildHonoRoute(app, listPublicRunDecisionsContract, async (c) => {
-    const gate = await authorize(c, 'read')
+    const gate = await authorize(c, listPublicRunDecisionsContract.minScope)
     if ('fail' in gate) {
       return c.json(failureBody(gate.fail), gate.fail.status)
     }

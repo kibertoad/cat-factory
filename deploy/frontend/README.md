@@ -59,19 +59,19 @@ pnpm dev                            # local dev against http://localhost:8787 (l
 
 # build the static SPA with your production API base, then deploy
 # (add NUXT_PUBLIC_UI_MODE=advanced to pin every visitor to the full interface)
-NUXT_PUBLIC_API_BASE=https://catfactory-api.kiberion.com pnpm generate
+NUXT_PUBLIC_API_BASE=https://api.example.com pnpm generate
 pnpm deploy                         # wrangler pages deploy (project + dir from wrangler.toml)
 ```
 
 PowerShell build step:
 
 ```powershell
-$env:NUXT_PUBLIC_API_BASE = "https://catfactory-api.kiberion.com"; pnpm generate
+$env:NUXT_PUBLIC_API_BASE = "https://api.example.com"; pnpm generate
 ```
 
-Sanity-check after deploying:
+Sanity-check after deploying (substitute your own two hostnames):
 
 ```sh
-curl -s https://catfactory-api.kiberion.com/health                              # {"status":"ok"}
-curl -s https://catfactory.kiberion.com | grep -o catfactory-api.kiberion.com   # baked API base
+curl -s https://api.example.com/health                        # {"status":"ok"}
+curl -s https://board.example.com | grep -o api.example.com   # baked API base
 ```
