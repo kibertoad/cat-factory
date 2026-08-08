@@ -98,7 +98,10 @@ describe('ContainerAgentExecutor artifact-upload seam', () => {
     const { executor, bodies } = makeExecutor()
     await executor.startJob(
       context('tester-ui', {
-        referenceScreenshots: [{ view: 'Checkout', artifactId: 'art_1', fileName: 'Checkout.png' }],
+        referenceScreenshots: {
+          files: [{ view: 'Checkout', artifactId: 'art_1', fileName: 'Checkout.png' }],
+          omitted: [],
+        },
       }),
     )
     // The bytes never ride the body: a design frame is a full-page PNG and this JSON crosses
@@ -111,11 +114,29 @@ describe('ContainerAgentExecutor artifact-upload seam', () => {
   })
 
   it('sends no manifest when the task holds no reference', async () => {
-    // The engine ASKED and found none (an empty array), which is a real answer, but an empty
+    // The engine ASKED and found none (an empty set), which is a real answer, but an empty
     // manifest would have the harness create a directory that reads as designs giving nothing.
     const { executor, bodies } = makeExecutor()
-    await executor.startJob(context('tester-ui', { referenceScreenshots: [] }))
+    await executor.startJob(
+      context('tester-ui', { referenceScreenshots: { files: [], omitted: [] } }),
+    )
     expect(bodies[0]!.referenceScreenshots).toBeUndefined()
+  })
+
+  it('sends the CAPPED views even when no file survived the cap', async () => {
+    // A set the cap emptied is not a task with no references: the agent still has to capture
+    // those views, and on disk "nobody mentioned it" and "the design has no such screen" are the
+    // same absence. So this manifest carries names and no files.
+    const { executor, bodies } = makeExecutor()
+    await executor.startJob(
+      context('tester-ui', { referenceScreenshots: { files: [], omitted: ['Settings'] } }),
+    )
+    expect(bodies[0]!.referenceScreenshots).toEqual({
+      url: 'https://proxy.test/v1/artifacts/reference',
+      token: 'SESSION-TOKEN',
+      files: [],
+      omitted: ['Settings'],
+    })
   })
 
   it('is withheld when the deployment wired no proxy for the token to reach', async () => {

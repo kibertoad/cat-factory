@@ -3,6 +3,7 @@ import type {
   BinaryArtifactStore,
   DocumentRepository,
   ReferenceScreenshot,
+  ReferenceScreenshotSet,
   ResolveBinaryArtifactStore,
 } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
@@ -64,6 +65,51 @@ export function nameReferenceFiles(references: readonly BlockReference[]): Refer
   })
 }
 
+/**
+ * How many references one dispatch is handed.
+ *
+ * A task's set is UNBOUNDED from here: a person may attach a hundred images to one block, and a
+ * design's retained frames sit beside them. The container downloads every one before the agent's
+ * first turn, in a pass deliberately budgeted well under the inactivity watchdog, so an unbounded
+ * set does not degrade gracefully — it spends the whole budget and delivers a random prefix of
+ * whatever finished. A ceiling here makes the set a decision the engine states rather than an
+ * accident of transfer speed. The harness keeps its own (higher) backstop against a malformed
+ * body; this is the number that should ever actually bind.
+ */
+export const MAX_REFERENCE_SCREENSHOTS = 24
+
+/**
+ * Apply {@link MAX_REFERENCE_SCREENSHOTS}, choosing what to DROP rather than truncating.
+ *
+ * A plain prefix would fall on the uploads, because {@link mergeBlockReferences} emits the design
+ * frames first and appends the views only the uploads introduce. That is exactly backwards: the
+ * same precedence rule that lets an upload override a design frame for one view says an upload is
+ * the more deliberate artifact, so it is the LAST thing a cap should discard. Uploads are kept
+ * first and design frames fill the remainder.
+ *
+ * Emission order is the original one either way, so a caller rendering the set still shows each
+ * design's frames contiguously and the file names stay in gallery order.
+ */
+export function capReferences(references: readonly BlockReference[]): {
+  kept: BlockReference[]
+  omitted: string[]
+} {
+  if (references.length <= MAX_REFERENCE_SCREENSHOTS) {
+    return { kept: [...references], omitted: [] }
+  }
+  const keep = new Set<BlockReference>()
+  for (const pass of ['upload', 'design'] as const) {
+    for (const reference of references) {
+      if (keep.size >= MAX_REFERENCE_SCREENSHOTS) break
+      if (reference.origin === pass) keep.add(reference)
+    }
+  }
+  return {
+    kept: references.filter((reference) => keep.has(reference)),
+    omitted: references.filter((reference) => !keep.has(reference)).map((r) => r.view),
+  }
+}
+
 /** What {@link resolveReferenceScreenshots} reads through; all of it already on the engine. */
 export interface ReferenceScreenshotDeps {
   documents?: DocumentRepository
@@ -81,7 +127,7 @@ export interface ReferenceScreenshotDeps {
  * kind is served by the same rule, and so every other kind never triggers the two reads.
  *
  * ABSENT and EMPTY are different answers and both are reachable: absent means this dispatch never
- * asked (a kind that captures nothing, a deployment with no artifact storage), an empty array
+ * asked (a kind that captures nothing, a deployment with no artifact storage), an empty `files`
  * means it asked and the task holds no reference at all. A tester with no references names its own
  * views, which is the documented fallback, so neither is a failure.
  */
@@ -96,5 +142,7 @@ export async function resolveReferenceScreenshots(
   const store: BinaryArtifactStore | null = await resolveStore(workspaceId)
   if (!store) return {}
   const { references } = await resolveBlockReferences(deps.documents, store, workspaceId, blockId)
-  return { referenceScreenshots: nameReferenceFiles(references) }
+  const { kept, omitted } = capReferences(references)
+  const set: ReferenceScreenshotSet = { files: nameReferenceFiles(kept), omitted }
+  return { referenceScreenshots: set }
 }

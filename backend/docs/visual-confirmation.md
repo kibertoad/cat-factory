@@ -170,12 +170,35 @@ correct on their own.
   yet would rename every view a run reports. Two views that slug to one name are suffixed rather
   than deduped: dropping one hands the agent a directory quietly missing a screen it was asked to
   compare.
-- **A reference that could not be fetched is NAMED in the prompt.** On disk an absent file and a
-  screen the design does not have are identical, so the guidance lists the misses beside the files
-  and tells the agent to capture those views anyway, under the same names.
-- **An empty set sends no manifest at all.** The engine resolving `[]` (the task has no reference) and
-  a kind that captures nothing are different facts, but neither should produce an empty directory:
-  that reads to the agent as designs that gave nothing.
+- **A reference that is not on disk is NAMED in the prompt.** On disk an absent file and a screen the
+  design does not have are identical, so the guidance lists the misses beside the files and tells the
+  agent to capture those views anyway, under the same names. It covers both causes of that absence,
+  because the agent's job is the same either way: a transfer that failed, and a view the cap below
+  dropped before the container was asked for it. The "these are on disk" sentence is bound to the
+  files that ARE, so a pass that wrote nothing does not send the agent after a path that may not
+  exist.
+- **The set is CAPPED, and the cap states what it dropped.** A task's references are unbounded (a
+  block may carry a hundred uploads beside a design's frames) while the download pass is deliberately
+  budgeted well under the inactivity watchdog, so an uncapped set spends the whole budget and
+  delivers whatever finished. `capReferences` bounds it at `MAX_REFERENCE_SCREENSHOTS` and carries
+  the dropped view names on the set's `omitted`. It drops DESIGN frames before uploads: the merge
+  emits frames first and appends upload-only views, so a plain prefix would discard exactly the half
+  the precedence rule calls more deliberate. The harness keeps a higher backstop against a malformed
+  body, and it too names what it drops rather than truncating.
+- **The download pass is IDEMPOTENT over the checkout.** An agent flow re-enters its workspace once
+  per repair round, so this runs several times per job. A file already on disk (non-empty: a
+  zero-length file is what a half-written transfer leaves) is counted and never re-fetched, so a
+  later round costs a stat per reference and cannot downgrade a view an earlier round delivered to
+  "NOT on disk". A view that MISSED is retried, which is the point: the next round is a fresh chance
+  at a blob backend that was briefly down.
+- **The per-image ceiling bounds the TRANSFER, not just the write.** The declared `content-length` is
+  refused before a byte is read, and the body is counted as it streams and cancelled the moment it
+  crosses the line, so a chunked or lying response cannot buffer past the ceiling (times the pass's
+  concurrency) in a container that has not started working yet.
+- **An empty set sends no manifest at all.** The engine resolving no files (the task has no reference)
+  and a kind that captures nothing are different facts, but neither should produce an empty
+  directory: that reads to the agent as designs that gave nothing. A set the CAP emptied is the
+  exception and does send one, carrying names and no files: those views still have to be captured.
 
 ---
 

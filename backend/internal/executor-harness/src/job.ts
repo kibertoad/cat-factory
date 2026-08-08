@@ -22,6 +22,13 @@ import {
   type SkillSpec,
 } from './agent-capabilities.js'
 import { type TestSecretSpec, parseInfraEnv, parseSecretEnvPairs, str } from './job-env.js'
+import {
+  parseContextFiles,
+  parseReferenceScreenshots,
+  type ContextFileSpec,
+  type ReferenceScreenshotSpec,
+  type ReferenceScreenshotsSpec,
+} from './context-manifests.js'
 
 // Re-exported so a handler describing a job keeps ONE import site (the env-pair shape is a job
 // body field like any other; only its VALIDATION moved out).
@@ -29,6 +36,10 @@ export type { TestSecretSpec }
 
 // Re-exported so the job body stays the one import site for a harness handler describing a job.
 export type { McpServerSpec, SkillResourceSpec, SkillSpec }
+
+// Same rule for the two staged-file manifests: their shapes and their defensive parsing moved to
+// `context-manifests.ts`, but they remain job body fields, so this stays the import site.
+export type { ContextFileSpec, ReferenceScreenshotSpec, ReferenceScreenshotsSpec }
 
 // The job the Worker's ContainerAgentExecutor POSTs to /run. Kept as plain
 // types with a hand-rolled validator so the image needs no schema dependency.
@@ -610,49 +621,6 @@ export interface AgentBootstrapSpec {
   fromScratch?: boolean
 }
 
-/**
- * A linked-context file the backend prepared (requirements / RFC / PRD / tracker issue)
- * for the harness to materialise under CONTEXT_DIR in the checkout, so the agent can read
- * it on demand. The harness can't reach Jira/GitHub itself, so all such context is fetched
- * and shipped here up front. `path` is sanitised to a safe basename on parse.
- */
-export interface ContextFileSpec {
-  path: string
-  title: string
-  url: string
-  content: string
-}
-
-/**
- * The REFERENCE DESIGN IMAGES the backend holds for this task, for the harness to download into
- * `.cat-context/reference-screenshots/` before the agent runs: the directory a UI tester's prompt
- * names and, until now, nothing wrote.
- *
- * A manifest rather than the bytes: a design frame is a full-page PNG, and a job body is JSON
- * that crosses every transport and is persisted with the dispatch. The bytes come back over the
- * SAME container session token the run already holds (`GET ${url}/<artifactId>`), so this needs
- * no extra credential and no publicly reachable URL.
- *
- * `view` is what the backend's gate pairs on, and `fileName` is the name the BACKEND chose for it,
- * never derived here. The file name is how the agent learns the view name, so deriving it in the
- * container would let a harness image the deployment has not rolled out yet rename every view a
- * run reports, and the pairing would come apart with nothing failing.
- */
-export interface ReferenceScreenshotsSpec {
-  /** Base URL of the reference download route; the artifact id is appended as a path segment. */
-  url: string
-  /** The run's container session token (the same one the LLM proxy is called with). */
-  token: string
-  files: ReferenceScreenshotSpec[]
-}
-
-/** One reference image in a {@link ReferenceScreenshotsSpec}. `fileName` is sanitised on parse. */
-export interface ReferenceScreenshotSpec {
-  artifactId: string
-  fileName: string
-  view: string
-}
-
 /** How an explore agent's reply is consumed. */
 export interface AgentOutputSpec {
   /** `prose` keeps the reply text; `structured` parses (and optionally repairs) it to JSON. */
@@ -1050,82 +1018,6 @@ function parseAgentBootstrapSpec(value: unknown): AgentBootstrapSpec | undefined
     target,
     ...(o.fromScratch === true ? { fromScratch: true } : {}),
   }
-}
-
-/**
- * Sanitise a body-supplied context filename to a safe basename within CONTEXT_DIR:
- * strip any directory part, allow only `[A-Za-z0-9._-]`, and reject empties / dotfiles
- * / `..` so a hostile value can't escape the directory or clobber repo files.
- */
-function sanitizeContextFileName(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
-  const base = value.replace(/\\/g, '/').split('/').pop() ?? ''
-  const cleaned = base.replace(/[^A-Za-z0-9._-]/g, '')
-  if (!cleaned || cleaned === '.' || cleaned === '..' || cleaned.startsWith('.')) return undefined
-  return cleaned
-}
-
-/** Parse the linked-context files, dropping any malformed/unsafe entry. */
-function parseContextFiles(value: unknown): ContextFileSpec[] {
-  if (!Array.isArray(value)) return []
-  const files: ContextFileSpec[] = []
-  const used = new Set<string>()
-  for (const entry of value) {
-    if (typeof entry !== 'object' || entry === null) continue
-    const e = entry as Record<string, unknown>
-    const path = sanitizeContextFileName(e.path)
-    if (!path || used.has(path)) continue
-    if (typeof e.content !== 'string') continue
-    used.add(path)
-    files.push({
-      path,
-      title: typeof e.title === 'string' ? e.title : path,
-      url: typeof e.url === 'string' ? e.url : '',
-      content: e.content,
-    })
-  }
-  return files
-}
-
-/**
- * How many reference images one job may be handed. The backend caps the gallery it builds well
- * below this (12 design views plus a task's own uploads), so this is the harness's own backstop
- * against a malformed or hostile body turning the pre-run setup into an unbounded download.
- */
-const MAX_REFERENCE_SCREENSHOTS = 40
-
-/**
- * Parse the reference-design manifest, or undefined when absent/unusable.
- *
- * The whole manifest is dropped when its transport half is unusable (no absolute http(s) URL, no
- * token): every file would fail the same way, and one stated cause beats N identical ones. An
- * individual entry is dropped only when it cannot name a file safely: the same basename
- * sanitisation every context file gets, so a hostile `fileName` can neither escape the directory
- * nor clobber a repo file.
- */
-function parseReferenceScreenshots(value: unknown): ReferenceScreenshotsSpec | undefined {
-  if (typeof value !== 'object' || value === null) return undefined
-  const o = value as Record<string, unknown>
-  const url = typeof o.url === 'string' ? o.url.trim() : ''
-  const token = typeof o.token === 'string' ? o.token : ''
-  if (!url || !token || !/^https?:\/\//i.test(url)) return undefined
-  if (!Array.isArray(o.files)) return undefined
-  const files: ReferenceScreenshotSpec[] = []
-  const used = new Set<string>()
-  for (const entry of o.files) {
-    if (files.length >= MAX_REFERENCE_SCREENSHOTS) break
-    if (typeof entry !== 'object' || entry === null) continue
-    const e = entry as Record<string, unknown>
-    const fileName = sanitizeContextFileName(e.fileName)
-    const artifactId = typeof e.artifactId === 'string' ? e.artifactId.trim() : ''
-    // The id becomes a path segment on the download URL, so it is held to the shape the platform
-    // mints rather than encoded and hoped for: anything else cannot be a real artifact anyway.
-    if (!fileName || used.has(fileName) || !/^[A-Za-z0-9_-]{1,64}$/.test(artifactId)) continue
-    used.add(fileName)
-    files.push({ artifactId, fileName, view: typeof e.view === 'string' ? e.view : fileName })
-  }
-  if (!files.length) return undefined
-  return { url: url.replace(/\/+$/, ''), token, files }
 }
 
 /** Parse the explore-mode infra stand-up spec, or undefined when absent/unrecognised. */

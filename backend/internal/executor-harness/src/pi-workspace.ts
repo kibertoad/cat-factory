@@ -294,6 +294,13 @@ export async function runAgentInWorkspace(
   // that capture views. Delivered here (beside the linked context, before either harness path
   // branches) so the Pi and subscription runs are handed the SAME directory and the SAME view
   // names; a per-path copy is how one of them would end up silently without it.
+  //
+  // This runs once per PASS, not once per job: a coding flow re-enters its workspace for every
+  // repair round. That is safe because the delivery is idempotent over the checkout (a file
+  // already on disk is counted, never re-fetched), so a later round costs a stat per reference and
+  // cannot report a view an earlier round successfully delivered as absent. A view that MISSED is
+  // retried, which is the behaviour worth having: the next round is a fresh chance at a blob
+  // backend that was briefly down.
   const referenceGuidance = await deliverReferenceScreenshots(spec.dir, spec.referenceScreenshots, {
     ...(opts.signal ? { signal: opts.signal } : {}),
     log: opts.log ?? log,

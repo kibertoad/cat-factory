@@ -259,17 +259,17 @@ function selectNodeObservabilityDeps(args: {
 }
 
 /**
- * The first half of the dependency literal: the app-owned registries, every persisted
- * repository the engine reads, and the module fragments that carry their own stores
- * (release-health / incident-enrichment / package-registry / tasks).
+ * The app-owned REGISTRIES, as one mixin: the extension seams a deployment registers onto, plus
+ * the mothership `*Source` reads that stand in for a registry when the node is one build behind
+ * the deployment that registered the entry.
+ *
+ * Its own selector (the `selectNodeObservabilityDeps` shape) because "which seams this deployment
+ * offers" is a different question from "which stores the engine reads", and keeping the two in one
+ * literal is what pushed it over the function-size budget. A new registry joins THIS list.
  */
-function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
+function selectNodeRegistryDeps(bundle: NodeCoreDepsBundle) {
   const {
-    config,
     options,
-    db,
-    repos,
-    sourced,
     environmentBackendRegistry,
     runnerBackendRegistry,
     customManifestTypeRegistry,
@@ -279,27 +279,8 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     stepResolverRegistry,
     initiativePresetRegistry,
     providerRegistry,
-    modelProviderResolver,
-    agentContextObservability,
-    searchQueryObservability,
-    resolveTestSecretRefs,
-    resolveValidationChecks,
-    tasks,
-    releaseHealthDeps,
-    packageRegistryDeps,
-    incidentEnrichmentDeps,
-    accountSettings,
-    resolveBinaryArtifactStore,
-    notificationSettingsRepository,
   } = bundle
   return {
-    ...releaseHealthDeps,
-    ...incidentEnrichmentDeps,
-    ...packageRegistryDeps,
-    // Fold the service frame's SENSITIVE test-credential refs (key + description, never values)
-    // into the tester prompt. Present when ENCRYPTION_KEY is set; absent ⇒ no advertised secrets.
-    ...(resolveTestSecretRefs ? { resolveTestSecretRefs } : {}),
-    resolveValidationChecks,
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,
@@ -354,6 +335,43 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // `listCustomTypes` so a programmatically-registered type surfaces in the infra editor + the
     // per-service provisioning picker.
     customManifestTypeRegistry,
+  }
+}
+
+/**
+ * The first half of the dependency literal: every persisted repository the engine reads, the
+ * app-owned registries ({@link selectNodeRegistryDeps}), and the module fragments that carry their
+ * own stores (release-health / incident-enrichment / package-registry / tasks).
+ */
+function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
+  const {
+    config,
+    options,
+    db,
+    repos,
+    sourced,
+    modelProviderResolver,
+    agentContextObservability,
+    searchQueryObservability,
+    resolveTestSecretRefs,
+    resolveValidationChecks,
+    tasks,
+    releaseHealthDeps,
+    packageRegistryDeps,
+    incidentEnrichmentDeps,
+    accountSettings,
+    resolveBinaryArtifactStore,
+    notificationSettingsRepository,
+  } = bundle
+  return {
+    ...releaseHealthDeps,
+    ...incidentEnrichmentDeps,
+    ...packageRegistryDeps,
+    // Fold the service frame's SENSITIVE test-credential refs (key + description, never values)
+    // into the tester prompt. Present when ENCRYPTION_KEY is set; absent ⇒ no advertised secrets.
+    ...(resolveTestSecretRefs ? { resolveTestSecretRefs } : {}),
+    resolveValidationChecks,
+    ...selectNodeRegistryDeps(bundle),
     ...(accountSettings ? { accountSettings } : {}),
     // Resolves the per-account binary-artifact store (screenshots) for the visual-confirmation
     // gate; resolving to null (no storage configured) ⇒ the gate passes through.

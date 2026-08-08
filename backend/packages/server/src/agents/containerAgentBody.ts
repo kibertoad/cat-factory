@@ -105,23 +105,28 @@ export function buildCommonBody(
   // crosses every transport and is persisted with the dispatch), and the bytes come back through
   // the container's own session token, so no extra credential and no public URL is involved.
   //
-  // Gated on a NON-EMPTY set: the engine already answered "this kind captures nothing" by
-  // resolving nothing at all, and a manifest of zero files would have the harness create an empty
-  // directory, which reads to the agent as designs that gave nothing rather than as a task with
-  // none linked.
-  const references = context.referenceScreenshots ?? []
+  // Gated on a set that says SOMETHING: the engine already answered "this kind captures nothing"
+  // by resolving nothing at all, and a manifest of zero files would have the harness create an
+  // empty directory, which reads to the agent as designs that gave nothing rather than as a task
+  // with none linked. `omitted` counts as something to say on its own, because a set the cap
+  // emptied entirely still owes the agent the view names it is expected to capture.
+  const references = context.referenceScreenshots
   const referenceScreenshots =
-    references.length &&
+    (references?.files.length || references?.omitted.length) &&
     typeof auth.proxyBaseUrl === 'string' &&
     typeof auth.sessionToken === 'string'
       ? {
           url: `${auth.proxyBaseUrl}/artifacts/reference`,
           token: auth.sessionToken,
-          files: references.map((reference) => ({
+          files: references.files.map((reference) => ({
             artifactId: reference.artifactId,
             fileName: reference.fileName,
             view: reference.view,
           })),
+          // The views the engine's cap dropped, carried so the harness can state them beside the
+          // ones that failed to transfer: from the agent's side both are a view it must capture
+          // with no image to compare against, and only the CAUSE differs.
+          ...(references.omitted.length ? { omitted: references.omitted } : {}),
         }
       : undefined
   return {

@@ -701,3 +701,24 @@ export interface ReferenceScreenshot {
   artifactId: string
   fileName: string
 }
+
+/**
+ * A capturing dispatch's whole reference answer: the files it is handed, and the views it is NOT.
+ *
+ * The second half exists because the set is CAPPED. A task can hold far more references than one
+ * run should spend its pre-run budget downloading (a block may carry a hundred uploads beside a
+ * design's frames), so the engine sends a bounded prefix of them. A cap that simply shortened the
+ * list would be the silent kind: on disk a view nobody mentioned and a screen the design does not
+ * have are the same absence, so the agent would never learn those views exist and the gate would
+ * later pair against captures nobody was asked for.
+ *
+ * So the dropped views are NAMED here and stated to the agent, which still captures them under
+ * their own names with no image to compare against — exactly the disposition a reference that
+ * failed to transfer already gets.
+ */
+export interface ReferenceScreenshotSet {
+  /** The references this run is handed, in the gallery order the set was resolved in. */
+  files: ReferenceScreenshot[]
+  /** The view names the cap dropped, in that same order. Empty when nothing was dropped. */
+  omitted: string[]
+}

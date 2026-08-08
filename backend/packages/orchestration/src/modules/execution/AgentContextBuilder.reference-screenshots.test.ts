@@ -99,9 +99,10 @@ describe('AgentContextBuilder: reference designs for a capturing dispatch', () =
 
     const context = await made.builder.buildContext('ws1', instance(s), s, true, TASK)
 
-    expect(context.referenceScreenshots).toEqual([
-      { view: 'Checkout', artifactId: 'art_1', fileName: 'Checkout.png' },
-    ])
+    expect(context.referenceScreenshots).toEqual({
+      files: [{ view: 'Checkout', artifactId: 'art_1', fileName: 'Checkout.png' }],
+      omitted: [],
+    })
   })
 
   it('never asks for a kind that captures nothing', async () => {

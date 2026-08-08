@@ -14,7 +14,7 @@ import type {
   PullRequestRef,
   PeerPullRequest,
   ReferenceRepo,
-  ReferenceScreenshot,
+  ReferenceScreenshotSet,
   AprioriBranch,
   ServiceProvisioning,
   StepSubtasks,
@@ -449,12 +449,12 @@ export interface AgentRunContext {
    *
    * ABSENT and EMPTY say different things and both are reachable: absent means this dispatch
    * never asked (a kind that captures nothing, or a deployment with no artifact storage), and an
-   * empty array means it asked and the task has no reference at all. Neither is an error (a
-   * tester with no references names its own views), but the executor only sends a manifest for a
-   * non-empty set, so the container never creates an empty directory that reads as "the designs
-   * gave nothing".
+   * empty `files` means it asked and the task has no reference at all. Neither is an error (a
+   * tester with no references names its own views), but the executor only sends a manifest when
+   * the set says SOMETHING, so the container never creates an empty directory that reads as "the
+   * designs gave nothing".
    */
-  referenceScreenshots?: ReferenceScreenshot[]
+  referenceScreenshots?: ReferenceScreenshotSet
   /**
    * A live ephemeral environment a deployer step provisioned earlier in this run
    * (resolved from the run's block). Present only when the environment

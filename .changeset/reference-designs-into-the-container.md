@@ -30,5 +30,15 @@ is exactly the join the gate performs. And the FILE NAMES are chosen by the engi
 because the name is how the agent learns the view name: a sanitiser change in an image a deployment
 has not rolled out yet would otherwise rename every view a run reports.
 
+The set is CAPPED by the engine, which is also what carries the dropped view names to the agent. A
+task's references are unbounded (a block may hold a hundred uploads beside a design's frames) while
+the download pass is budgeted well under the inactivity watchdog, so the ceiling is a decision the
+platform states rather than an accident of transfer speed. It drops design frames before uploads,
+mirroring the precedence that already lets an upload override a frame, and every dropped view is
+named in the prompt: capped and simply absent look identical on disk otherwise. The delivery is
+idempotent over the checkout, so the repair rounds of a coding flow re-cost a stat rather than a
+transfer and cannot report a view an earlier round delivered as missing, and the per-image ceiling
+now bounds the transfer (declared length, then a counted stream) instead of only the write.
+
 Runner image bump: harness `src/**` changed, so deployments must move to the newly pinned tag. A
 deployment on an older image simply receives no references, exactly as before this change.
