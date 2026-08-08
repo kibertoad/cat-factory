@@ -166,7 +166,15 @@ test.describe('result-window shell (nested lightbox)', () => {
       testReports: [greenWithShot],
       pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
     })
-    const pipeline = await createSimplePipeline(request, workspaceId, ['coder', 'tester-api'])
+    // The Deployer / Disposer pair rides along because a chain that tests has to spell the
+    // environment lifecycle out (`validatePipelineAuthoring`); both no-op on the seeded
+    // `infraless` board, so the step this spec routes to is reached exactly as before.
+    const pipeline = await createSimplePipeline(request, workspaceId, [
+      'coder',
+      'deployer',
+      'tester-api',
+      'disposer',
+    ])
 
     const card = taskCard(page, 'task_login')
     await startRun(request, workspaceId, 'task_login', pipeline.id)
