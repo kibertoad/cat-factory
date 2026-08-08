@@ -1,4 +1,4 @@
-import type { PublicTaskDocument } from '@cat-factory/contracts'
+import type { PublicTaskDocument, SourceDocument } from '@cat-factory/contracts'
 import type { UploadedDocument } from '@cat-factory/integrations'
 import { assertUploadReadable } from '@cat-factory/integrations'
 import type { DocumentOrigin, Logger } from '@cat-factory/kernel'
@@ -33,7 +33,15 @@ interface ResolvedDocument {
 
 /** The resolved corpus, as the single step that attaches it once a block exists. */
 export interface DocumentAttachment {
-  attach: (blockId: string) => Promise<void>
+  /**
+   * Link every resolved document to the block, in the order given, and return them AS STORED.
+   *
+   * The return value is what a single-document attach answers with, and it has to come from here
+   * rather than from a re-read: an `upload` is minted during the resolve, so its id is not
+   * something the caller sent and nothing else on the path knows it. Re-reading the block's
+   * documents and taking the last row would guess at an ordering the repositories do not promise.
+   */
+  attach: (blockId: string) => Promise<SourceDocument[]>
 }
 
 /**
@@ -93,7 +101,7 @@ export async function resolveDocuments(
   }
   const refs = resolved.filter((ref): ref is ResolvedDocument => ref !== null)
   return {
-    attach: (blockId) => module.linkService.linkManyToBlock(workspaceId, blockId, refs).then(),
+    attach: (blockId) => module.linkService.linkManyToBlock(workspaceId, blockId, refs),
   }
 }
 

@@ -16,6 +16,7 @@ import ai.catfactory.sdk.Transport;
 public abstract class Resources {
     private final JobsClient jobs;
     private final ServicesClient services;
+    private final ReposClient repos;
     private final TasksClient tasks;
     private final PipelinesClient pipelines;
     private final TaskTypesClient taskTypes;
@@ -31,6 +32,7 @@ public abstract class Resources {
     protected Resources(Transport transport) {
         this.jobs = new JobsClient(transport);
         this.services = new ServicesClient(transport);
+        this.repos = new ReposClient(transport);
         this.tasks = new TasksClient(transport);
         this.pipelines = new PipelinesClient(transport);
         this.taskTypes = new TaskTypesClient(transport);
@@ -49,12 +51,17 @@ public abstract class Resources {
         return jobs;
     }
 
-    /** The workspace's board services — the frames tasks are created under. */
+    /** The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository). */
     public ServicesClient services() {
         return services;
     }
 
-    /** A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete. */
+    /** The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation. */
+    public ReposClient repos() {
+        return repos;
+    }
+
+    /** A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete, plus the two relationships that outlive a create: the tasks it waits for, and the requirements documents it is built against. */
     public TasksClient tasks() {
         return tasks;
     }

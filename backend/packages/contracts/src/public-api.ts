@@ -241,6 +241,22 @@ export const publicTaskSchema = v.object({
   runId: v.nullable(v.string()),
   /** The web URL of the PR the run opened, once one exists; null otherwise. */
   pullRequestUrl: v.nullable(v.string()),
+  /**
+   * Task ids this task WAITS FOR: it cannot start until every one of them is `done`, and the
+   * engine's start gate refuses it until they are.
+   *
+   * Served so a caller that declared an ordering can read back what the board holds, which is what
+   * makes `POST /api/v1/tasks/{taskId}/dependencies` verifiable rather than fire-and-forget. Empty
+   * for a task nothing blocks, which is the normal state.
+   */
+  dependsOn: v.array(v.string()),
+  /**
+   * Whether merging this task's pull request STARTS the tasks that depend on it.
+   *
+   * The other half of an ordering, and the one that makes a declared chain run itself: without it a
+   * dependent is merely refused until its blocker lands, and something has to notice and start it.
+   */
+  autoStartDependents: v.boolean(),
 })
 export type PublicTask = v.InferOutput<typeof publicTaskSchema>
 
@@ -489,6 +505,17 @@ export const updatePublicTaskSchema = v.object({
    * run does not review; send the description you want alongside the new target to resolve it.
    */
   fields: v.optional(descriptorFieldValuesSchema),
+  /**
+   * Whether merging this task's pull request STARTS the tasks that depend on it (the toggle
+   * {@link publicTaskSchema} reports).
+   *
+   * Here rather than on the create call because it is a property of the ORDERING, and an ordering
+   * is declared after both ends exist: a caller filing a batch of related tasks creates them all,
+   * links them with `POST /api/v1/tasks/{taskId}/dependencies`, and then decides which blockers
+   * pull their dependents along. Offering it at creation would ask for the answer at the one moment
+   * the caller cannot have it.
+   */
+  autoStartDependents: v.optional(v.boolean()),
 })
 export type UpdatePublicTaskInput = v.InferOutput<typeof updatePublicTaskSchema>
 
@@ -518,6 +545,34 @@ export const publicRunStepSchema = v.object({
   subtasks: v.nullable(
     v.object({ completed: v.number(), inProgress: v.number(), total: v.number() }),
   ),
+  /**
+   * The step's prose output (the agent's final reply), or null while it has produced none.
+   *
+   * This is what a board task running an INLINE-only pipeline delivers, and until it was served
+   * here the API could not read it: `publicJob` carries a `result` because a headless job is a
+   * one-step inline run, while a board run's deliverable had to be inferred from the pull request
+   * the pipeline opened. A pipeline that opens none (a research pass, an estimate, a written
+   * assessment) produced a result readable only in the app.
+   *
+   * Served WHOLE rather than as a sized excerpt, which is deliberate: `publicJobResult.output`
+   * already serves the same class of content whole, and two surfaces that disagree about the same
+   * fact are worse than a large response. The size is a step's own output budget, not a log tail
+   * (`GET /api/v1/debug/runs/:runId` is where raw diagnostics live, and it reports `outputChars`
+   * for exactly this reason). The SSE stream re-emits a frame only when the projection CHANGES, so
+   * an output lands on the wire once per step that produced one, not once per poll.
+   */
+  output: v.nullable(v.string()),
+  /**
+   * The step's STRUCTURED result (`step.custom`), when the agent produced one; null otherwise.
+   *
+   * The counterpart of {@link publicJobResultSchema}'s `data`, and the same rule applies: what a
+   * step puts here is decided by its agent kind, so it is `unknown` on the wire rather than a
+   * shape this contract would have to keep in step with every kind a deployment registers.
+   *
+   * Null and an empty object are DIFFERENT facts: null means the step produced no structured
+   * result at all, which is the normal state for an agent whose deliverable is its prose.
+   */
+  data: v.nullable(v.unknown()),
 })
 export type PublicRunStep = v.InferOutput<typeof publicRunStepSchema>
 

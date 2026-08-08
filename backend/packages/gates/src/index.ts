@@ -102,9 +102,17 @@ export function registerBuiltinGates(registry: GateRegistry): void {
   })
   registry.register(POST_RELEASE_HEALTH_AGENT_KIND, postReleaseHealthGate, {
     configFields: POST_RELEASE_HEALTH_GATE_CONFIG_FIELDS,
+    // A watch window that outlasts the driver's poll budget saw NO regression, which is a
+    // healthy pass rather than a timeout.
+    pollExhaustion: 'pass',
   })
   registry.register(HUMAN_REVIEW_AGENT_KIND, humanReviewGate, {
     configFields: HUMAN_REVIEW_GATE_CONFIG_FIELDS,
+    // There is no deadline for a human reviewer, so a spent poll budget is not a verdict: this
+    // gate re-arms and the run waits. Declared HERE rather than on the built definition because
+    // public-API admission reads it at request time to refuse a `write` key a start that would
+    // park on a person (`parkSurfacesOf`), where building the definition is not an option.
+    pollExhaustion: 'rearm',
   })
   registry.register(DOC_QUALITY_AGENT_KIND, docQualityGate, {
     configFields: DOC_QUALITY_GATE_CONFIG_FIELDS,

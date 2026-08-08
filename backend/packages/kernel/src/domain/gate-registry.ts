@@ -164,22 +164,6 @@ export interface GateDefinition {
   /** Step output recorded when the gate passes through (no provider configured). */
   unwiredOutput: string
   /**
-   * What to do when the durable driver's poll budget (ciMaxPolls × ciPollInterval) is
-   * spent while the gate is still `pending` — distinct from the attempt budget (helper
-   * dispatches) handled by {@link onExhausted}:
-   *   - `fail` (default) — the precheck never settled, which is a failure for the CI /
-   *     conflicts gates (CI never went green / the PR never became mergeable).
-   *   - `pass` — for a time-windowed watch gate (post-release-health), running out of
-   *     polls just means the watch window outlasted the budget with NO regression seen,
-   *     which is a healthy pass — not a timeout failure.
-   *   - `rearm` — for an unbounded human-wait gate (`human-review`): there is no deadline
-   *     for a human reviewer, so running out of polls is NOT a verdict. Always re-arm
-   *     another poll cycle (never pass, never fail); the waiting is surfaced via the gate's
-   *     notification (which the severity sweep escalates), not by killing the run.
-   * Resolved by {@link ExecutionService.resolveGatePollExhaustion}.
-   */
-  pollExhaustion?: 'pass' | 'fail' | 'rearm'
-  /**
    * Run the precheck against the provider and classify it. Receives the live gate
    * state so a time-windowed gate (post-release-health) can read its `watchSince`.
    */
@@ -308,16 +292,21 @@ export class GateRegistry {
    * `kind` is passed explicitly because the factory's result isn't built until the engine
    * invokes it.
    *
-   * `options.configFields` declares the gate's own per-step parameters (see
-   * {@link GateRegistration.configFields}). They sit on the REGISTRATION rather than on the
-   * {@link GateDefinition} because the boundary that needs them most — pipeline save — has no
-   * {@link GateContext} to build a definition with, and a declaration reachable only after the
-   * engine has booted could not refuse a bad pipeline at authoring time.
+   * `options.configFields` declares the gate's own per-step parameters and
+   * `options.pollExhaustion` what running out of polls MEANS for this gate (see
+   * {@link GateRegistration}). Both sit on the REGISTRATION rather than on the
+   * {@link GateDefinition} because the boundaries that need them most have no
+   * {@link GateContext} to build a definition with: pipeline save, which must refuse a bad
+   * pipeline at authoring time, and public-API admission, which must decide at HTTP request
+   * time whether a start can park the run on a person.
    */
   register(
     kind: string,
     factory: GateFactory,
-    options: { configFields?: readonly DescriptorField[] } = {},
+    options: {
+      configFields?: readonly DescriptorField[]
+      pollExhaustion?: GatePollExhaustion
+    } = {},
   ): void {
     this.registry.set(kind, { factory, ...options })
   }
@@ -330,6 +319,23 @@ export class GateRegistry {
   /** Whether a gate is registered for this step kind — the "may this step carry gate config" test. */
   has(kind: string): boolean {
     return this.registry.has(kind)
+  }
+
+  /**
+   * What running out of polls MEANS for this gate, as it declared at registration, or
+   * `undefined` when the kind is not registered here at all.
+   *
+   * `undefined` is therefore a THIRD answer and never "the default": a registered gate that
+   * declared nothing answers `'fail'`, the disposition the engine applies to it, while an
+   * unregistered kind answers `undefined` because there is nothing to ask. Two readers depend on
+   * the distinction. The engine resolves the disposition of a spent poll budget; the public API
+   * decides at request time whether a start can park the run on a person forever, and reporting
+   * an unregistered kind as a bounded gate would be a guess about a gate this process cannot see.
+   */
+  pollExhaustion(kind: string): GatePollExhaustion | undefined {
+    const registration = this.registry.get(kind)
+    if (!registration) return undefined
+    return registration.pollExhaustion ?? 'fail'
   }
 
   /**
@@ -357,9 +363,43 @@ export class GateRegistry {
  */
 export type GateConfigFields = DescriptorFieldValues
 
+/**
+ * What running out of the durable driver's gate-poll budget (ciMaxPolls × ciPollInterval) MEANS,
+ * while the gate is still `pending`. Distinct from the attempt budget (helper dispatches), which
+ * {@link GateDefinition.onExhausted} handles:
+ *
+ *   - `fail` (the default when a registration declares none): the precheck never settled, which
+ *     is a failure for the CI / conflicts gates (CI never went green / the PR never became
+ *     mergeable).
+ *   - `pass`: for a time-windowed watch gate (post-release-health), running out of polls just
+ *     means the watch window outlasted the budget with NO regression seen, which is a healthy
+ *     pass rather than a timeout failure.
+ *   - `rearm`: for an unbounded human-wait gate (`human-review`), there is no deadline for a
+ *     human reviewer, so running out of polls is NOT a verdict. Always re-arm another poll cycle
+ *     (never pass, never fail); the waiting is surfaced via the gate's notification (which the
+ *     severity sweep escalates), not by killing the run.
+ *
+ * Resolved by `ExecutionService.resolveGatePollExhaustion`, and read at HTTP request time by
+ * public-API admission, for which `rearm` IS the definition of a gate that parks on a person.
+ */
+export type GatePollExhaustion = 'pass' | 'fail' | 'rearm'
+
 /** What a {@link GateRegistry} stores per kind: the factory, plus what the gate declares about itself. */
 export interface GateRegistration {
   factory: GateFactory
+  /**
+   * What a spent poll budget means for this gate ({@link GatePollExhaustion}); absent ⇒ `fail`.
+   *
+   * On the REGISTRATION rather than on the {@link GateDefinition} the factory builds, because the
+   * two readers that most need it hold no {@link GateContext}: standing a fake one up per HTTP
+   * request to interrogate a static declaration would be a shortcut, not a design. That is why
+   * this used to be mirrored by a hand-kept constant in `@cat-factory/contracts` naming the
+   * shipped human-wait gates, with a drift guard to keep the copy honest, and why a gate a
+   * DEPLOYMENT registered was invisible to the rule, so a plain `write` key could start a
+   * pipeline that then parked on it forever. Declared here, every gate answers for itself and
+   * there is no copy to drift.
+   */
+  pollExhaustion?: GatePollExhaustion
   /**
    * The gate's own per-step parameters, declared as descriptor fields so ONE declaration drives
    * validation at pipeline save, re-validation at run start, and the authoring form the SPA

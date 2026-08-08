@@ -10,6 +10,8 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code PublicRunStep} wire model.
  * @param agentKind the {@code agentKind} field.
+ * @param data Always present; {@code null} when the server has no value for it.
+ * @param output Always present; {@code null} when the server has no value for it.
  * @param progress the {@code progress} field.
  * @param state the {@code state} field.
  * @param subtasks Always present; {@code null} when the server has no value for it.
@@ -17,6 +19,12 @@ import org.jspecify.annotations.Nullable;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicRunStep(
     @JsonProperty("agentKind") String agentKind,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("data") @Nullable Object data,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("output") @Nullable String output,
 
     @JsonProperty("progress") Double progress,
 
@@ -39,6 +47,8 @@ public record PublicRunStep(
      */
     public static final class Builder {
         private @Nullable String agentKind;
+        private @Nullable Object data;
+        private @Nullable String output;
         private @Nullable Double progress;
         private @Nullable StepState state;
         private @Nullable RunSubtaskCounts subtasks;
@@ -46,6 +56,18 @@ public record PublicRunStep(
         /** Set {@code agentKind}. */
         public Builder agentKind(@Nullable String agentKind) {
             this.agentKind = agentKind;
+            return this;
+        }
+
+        /** Set {@code data}. */
+        public Builder data(@Nullable Object data) {
+            this.data = data;
+            return this;
+        }
+
+        /** Set {@code output}. */
+        public Builder output(@Nullable String output) {
+            this.output = output;
             return this;
         }
 
@@ -69,7 +91,7 @@ public record PublicRunStep(
 
         /** Build the {@link PublicRunStep}. */
         public PublicRunStep build() {
-            return new PublicRunStep(agentKind, progress, state, subtasks);
+            return new PublicRunStep(agentKind, data, output, progress, state, subtasks);
         }
     }
 }

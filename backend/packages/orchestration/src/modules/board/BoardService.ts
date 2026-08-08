@@ -67,9 +67,9 @@ import type { ReviewFrictionNotificationReader } from './reviewFrictionGuard.js'
 import { ReviewFrictionGuard } from './reviewFrictionGuard.js'
 import type { WorkspaceSettingsReader } from './workspaceSettingsReader.js'
 import type { NewServiceFrameDefaults } from './newServiceFrameDefaults.js'
-import { resolveNewServiceFrameDefaults } from './newServiceFrameDefaults.js'
+import { nextFrameSlot, resolveNewServiceFrameDefaults } from './newServiceFrameDefaults.js'
 import { createInternalAnchors } from './internalAnchors.js'
-import { PublicBoardReads } from './publicBoardReads.js'
+import { PublicBoardReads, type PublicRepoOption } from './publicBoardReads.js'
 import { buildReviewDescription, resolveReviewTaskTarget } from './reviewTaskTarget.js'
 import type { BlockPatchNarrowing } from './blockPatchNarrowing.js'
 import { createBlockPatchNarrowing } from './blockPatchNarrowing.js'
@@ -395,6 +395,8 @@ export class BoardService {
     })
     this.publicReads = new PublicBoardReads({
       blockRepository,
+      repoProjectionRepository,
+      serviceRepository,
       requireWorkspace: (workspaceId) => this.requireWorkspace(workspaceId),
       addTask: (workspaceId, containerId, input, editor, createdBy) =>
         this.addTask(workspaceId, containerId, input, editor, createdBy),
@@ -565,7 +567,14 @@ export class BoardService {
     return workspaceId
   }
 
-  /** Add a top-level frame (service/api/database/…) to the board. */
+  /**
+   * Add a top-level frame (service/api/database/…) to the board.
+   *
+   * `title`, `description` and `position` are each optional and each falls back to what drag-drop
+   * has always produced. The fallbacks are what let a caller with NO CANVAS create a frame at all:
+   * the public API's service creation deliberately publishes no coordinate system (a board layout
+   * is ergonomics for a human looking at one), so it names the service and lets the board place it.
+   */
   async addFrame(workspaceId: string, input: AddFrameInput): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     const blocks = await this.blockRepository.listByWorkspace(workspaceId)
@@ -574,10 +583,11 @@ export class BoardService {
     const { serviceFragmentIds, provisioning } = await this.newFrameDefaults(workspaceId)
     const block: Block = {
       id: this.idGenerator.next('blk'),
-      title: `${BLOCK_TYPE_LABEL[type]} ${count}`,
+      title: input.title ?? `${BLOCK_TYPE_LABEL[type]} ${count}`,
       type,
-      description: 'Newly dropped building block. Drag a pipeline onto it to start.',
-      position: input.position,
+      description:
+        input.description ?? 'Newly dropped building block. Drag a pipeline onto it to start.',
+      position: input.position ?? nextFrameSlot(blocks),
       status: 'planned',
       progress: 0,
       dependsOn: [],
@@ -658,19 +668,20 @@ export class BoardService {
         throw new ValidationError(`A service for '${directory}' already exists in this repository`)
       }
     }
-    const frames = blocks.filter((b) => b.level === 'frame').length
     const title = directory ? (directory.split('/').pop() ?? repo.name) : repo.name
     const { serviceFragmentIds, provisioning } = await this.newFrameDefaults(workspaceId)
     const frameType = input.type ?? 'service'
     const roleLabel = BLOCK_TYPE_LABEL[frameType]
     const block: Block = {
       id: this.idGenerator.next('blk'),
-      title,
+      title: input.title ?? title,
       type: frameType,
-      description: directory
-        ? `${roleLabel} backed by ${repo.owner}/${repo.name} (${directory}/).`
-        : `${roleLabel} backed by ${repo.owner}/${repo.name}.`,
-      position: input.position ?? { x: 80 + (frames % 5) * 48, y: 80 + (frames % 5) * 48 },
+      description:
+        input.description ??
+        (directory
+          ? `${roleLabel} backed by ${repo.owner}/${repo.name} (${directory}/).`
+          : `${roleLabel} backed by ${repo.owner}/${repo.name}.`),
+      position: input.position ?? nextFrameSlot(blocks),
       status: 'ready',
       progress: 0,
       dependsOn: [],
@@ -964,6 +975,11 @@ export class BoardService {
   /** Public-API: the workspace's board services (visible service frames). */
   listServices(workspaceId: string): Promise<Block[]> {
     return this.publicReads.listServices(workspaceId)
+  }
+
+  /** Public-API: the repositories a service can be created against, and what already backs each. */
+  listRepoOptions(workspaceId: string): Promise<PublicRepoOption[]> {
+    return this.publicReads.listRepoOptions(workspaceId)
   }
 
   /** Public-API: create a task under a visible service frame the workspace owns. */
@@ -1351,6 +1367,37 @@ export class BoardService {
 
   /** Toggle a dependency edge: target dependsOn source. */
   async toggleDependency(workspaceId: string, targetId: string, sourceId: string): Promise<Block> {
+    return this.writeDependency(workspaceId, targetId, sourceId, 'toggle')
+  }
+
+  /**
+   * Set a dependency edge EXPLICITLY: `linked` true declares that `targetId` waits for `sourceId`,
+   * false drops the edge. Idempotent in both directions: an edge already in the requested state
+   * is a no-op returning the block as it stands.
+   *
+   * The explicit form beside {@link toggleDependency} rather than instead of it, because the two
+   * doors want different things and neither is the other's read-modify-write. The board CANVAS
+   * toggles: a human clicks an edge they can see, so "flip it" is exactly the intent. An API caller
+   * declares: a provisioning integration re-running its own setup must converge, and a toggle would
+   * INVERT every edge it declared last time, silently, since both calls succeed and the graph it
+   * asked for is the one it does not get. Deriving the explicit form from the toggle would mean the
+   * caller reading the graph first and racing whoever else is editing it.
+   */
+  async setDependency(
+    workspaceId: string,
+    targetId: string,
+    sourceId: string,
+    linked: boolean,
+  ): Promise<Block> {
+    return this.writeDependency(workspaceId, targetId, sourceId, linked ? 'add' : 'remove')
+  }
+
+  private async writeDependency(
+    workspaceId: string,
+    targetId: string,
+    sourceId: string,
+    mode: 'toggle' | 'add' | 'remove',
+  ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     if (targetId === sourceId) {
       throw new ValidationError('A block cannot depend on itself')
@@ -1359,7 +1406,14 @@ export class BoardService {
     // The source need only be visible to this board (it may be homed elsewhere); the edge is
     // stored as an id on the target, which lives at `homeWorkspaceId`.
     const { block: source } = await this.resolveBlock(workspaceId, sourceId)
-    const i = target.dependsOn.indexOf(sourceId)
+    const existing = target.dependsOn.indexOf(sourceId)
+    // Idempotent for the explicit modes: an edge already where the caller asked for it is returned
+    // untouched rather than re-written, so no event fans out for a change nobody made.
+    if ((mode === 'add' && existing >= 0) || (mode === 'remove' && existing < 0)) return target
+    // Past that guard the three modes agree: `add` can only be here with no edge, `remove` only
+    // with one, and `toggle` means whichever it found. So the branches below stay written against
+    // the edge's ACTUAL presence rather than against the mode, and there is one write path.
+    const i = existing
     if (i < 0) {
       // Adding a NEW edge. Both endpoints must be tasks: only a task ever reaches `done`, so an
       // edge onto a frame/module/epic (which never executes) would wedge the engine's start gate

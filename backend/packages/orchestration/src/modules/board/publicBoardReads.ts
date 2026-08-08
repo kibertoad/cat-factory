@@ -1,5 +1,11 @@
-import type { AddTaskInput, BlockEditAuthority } from '@cat-factory/contracts'
-import type { Block, BlockRepository, BlockStatus } from '@cat-factory/kernel'
+import type { AddTaskInput, BlockEditAuthority, GitHubRepo } from '@cat-factory/contracts'
+import type {
+  Block,
+  BlockRepository,
+  BlockStatus,
+  RepoProjectionRepository,
+  ServiceRepository,
+} from '@cat-factory/kernel'
 import { NotFoundError, ValidationError } from '@cat-factory/kernel'
 import { serviceOf } from './board.logic.js'
 
@@ -14,8 +20,24 @@ import { serviceOf } from './board.logic.js'
 // BLOCK id (`serviceId` in the wire contract) and always exclude the headless `internal` anchors,
 // exactly as the board snapshot does.
 
+/** A repository the workspace can back a service with, and the service already backing it. */
+export interface PublicRepoOption {
+  repo: GitHubRepo
+  /**
+   * The frame block id of the WHOLE-REPO service this repository already backs, or null.
+   *
+   * Null for a monorepo even when its subdirectories back services, because a monorepo can back
+   * more: the field answers "is this choice already spent", and for a monorepo it never is.
+   */
+  serviceBlockId: string | null
+}
+
 export interface PublicBoardReadsDeps {
   blockRepository: BlockRepository
+  /** The workspace's projected repositories; absent ⇒ no VCS integration wired on this facade. */
+  repoProjectionRepository?: RepoProjectionRepository
+  /** The account-owned services frames map onto; absent ⇒ nothing can report a repo's service. */
+  serviceRepository?: ServiceRepository
   /** Throws when the workspace does not exist; bound from the owning service. */
   requireWorkspace(workspaceId: string): Promise<unknown>
   /** The normal task-creation path, reused verbatim so placement + task-type validation applies. */
@@ -36,6 +58,53 @@ export class PublicBoardReads {
     await this.deps.requireWorkspace(workspaceId)
     const blocks = await this.deps.blockRepository.listByWorkspace(workspaceId)
     return blocks.filter((b) => b.level === 'frame' && !b.internal && !b.archived)
+  }
+
+  /**
+   * The repositories this workspace can back a service with, each paired with the service that
+   * already backs it.
+   *
+   * The discovery read behind headless service creation: the create takes a provider repo id, and
+   * before this nothing on the external surface served one, so the one act of board setup a
+   * deployment could not perform without a browser was also the one it could not even DESCRIBE.
+   *
+   * Three reads, all batched, never per-repo: the projection list, the workspace's frames, and ONE
+   * `listByFrameBlocks` for their services. The pairing is then an in-memory index: a `getByRepo`
+   * per repository would be the N+1 this codebase bans, and on a workspace with a hundred
+   * repositories it is a hundred queries to render one picker.
+   *
+   * An unwired VCS integration answers an EMPTY list rather than throwing: this is a discovery
+   * read, and "you have connected no repositories" and "this deployment has no VCS integration" are
+   * the same instruction to the caller, connect one before creating a repo-backed service. The
+   * CREATE is where the distinction bites, and it refuses there with the reason.
+   */
+  async listRepoOptions(workspaceId: string): Promise<PublicRepoOption[]> {
+    await this.deps.requireWorkspace(workspaceId)
+    if (!this.deps.repoProjectionRepository) return []
+    const repos = await this.deps.repoProjectionRepository.list(workspaceId)
+    if (repos.length === 0) return []
+    const frames = (await this.deps.blockRepository.listByWorkspace(workspaceId)).filter(
+      (block) => block.level === 'frame' && !block.internal && !block.archived,
+    )
+    const services = this.deps.serviceRepository
+      ? await this.deps.serviceRepository.listByFrameBlocks(frames.map((frame) => frame.id))
+      : []
+    // Whole-repo services only (no `directory`), which is exactly what `serviceBlockId` claims.
+    const byRepo = new Map(
+      services
+        .filter((service) => service.repoGithubId != null && !service.directory)
+        .map((service) => [service.repoGithubId as number, service.frameBlockId]),
+    )
+    const visibleFrames = new Set(frames.map((frame) => frame.id))
+    return repos.map((repo) => {
+      const frameBlockId = byRepo.get(repo.githubId)
+      return {
+        repo,
+        // A service homed on another board (a mounted shared service) is not a frame of THIS
+        // workspace, so it is not reported here: the id would name a block this key cannot read.
+        serviceBlockId: frameBlockId && visibleFrames.has(frameBlockId) ? frameBlockId : null,
+      }
+    })
   }
 
   /**

@@ -15,6 +15,7 @@ import org.jspecify.annotations.Nullable;
  * @param createdAt the {@code createdAt} field.
  * @param hash the {@code hash} field.
  * @param kind the {@code kind} field.
+ * @param scope the {@code scope} field.
  * @param view Always present; {@code null} when the server has no value for it.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -30,6 +31,8 @@ public record PublicRunArtifact(
     @JsonProperty("hash") String hash,
 
     @JsonProperty("kind") PublicRunArtifactKind kind,
+
+    @JsonProperty("scope") PublicRunArtifactScope scope,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("view") @Nullable String view
@@ -53,6 +56,7 @@ public record PublicRunArtifact(
         private @Nullable Double createdAt;
         private @Nullable String hash;
         private @Nullable PublicRunArtifactKind kind;
+        private @Nullable PublicRunArtifactScope scope;
         private @Nullable String view;
 
         /** Set {@code artifactId}. */
@@ -91,6 +95,12 @@ public record PublicRunArtifact(
             return this;
         }
 
+        /** Set {@code scope}. */
+        public Builder scope(@Nullable PublicRunArtifactScope scope) {
+            this.scope = scope;
+            return this;
+        }
+
         /** Set {@code view}. */
         public Builder view(@Nullable String view) {
             this.view = view;
@@ -99,7 +109,7 @@ public record PublicRunArtifact(
 
         /** Build the {@link PublicRunArtifact}. */
         public PublicRunArtifact build() {
-            return new PublicRunArtifact(artifactId, byteSize, contentType, createdAt, hash, kind, view);
+            return new PublicRunArtifact(artifactId, byteSize, contentType, createdAt, hash, kind, scope, view);
         }
     }
 }

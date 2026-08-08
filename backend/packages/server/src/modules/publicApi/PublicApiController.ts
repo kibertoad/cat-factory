@@ -25,10 +25,7 @@ import {
   type PublicPipeline,
   type PublicApiScope,
   type PublicRun,
-  type PublicService,
-  type PublicTask,
 } from '@cat-factory/contracts'
-import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
   CredentialRequiredError,
   inputGateInputOf,
@@ -48,10 +45,13 @@ import {
 } from '../notifications/notificationActions.js'
 import type { AppEnv } from '../../http/env.js'
 import { authorize } from './publicApiAuth.js'
+import { toPublicService, toPublicTask } from './boardProjection.js'
 import { createTaskWithAttachments, taskCreationDeps } from './taskCreation.js'
 import { resolveTaskTypeFieldsPatch } from './taskTypeFields.js'
 import {
   type AdmissiblePipelineShape,
+  type AdmissionRegistries,
+  admissionRegistries,
   publicRunParkSurfaces,
   isHeadlessInlinePipeline,
   isInlineOnlyPipeline,
@@ -151,34 +151,6 @@ function toPublicJob(execution: ExecutionInstance, readerIdentity: string | null
   }
 }
 
-/** Project a board task block onto the external task resource (no block/board internals). */
-function toPublicTask(block: Block, serviceId: string): PublicTask {
-  return {
-    taskId: block.id,
-    serviceId,
-    title: block.title,
-    description: block.description,
-    taskType: block.taskType ?? 'feature',
-    status: block.status,
-    progress: block.progress,
-    // The public name is `runId`, one vocabulary with `publicRun.runId` and `/runs/:runId/...`;
-    // `executionId` is the internal engine name for the same id.
-    runId: block.executionId,
-    pullRequestUrl: block.pullRequest?.url ?? null,
-  }
-}
-
-/** Project a service frame block onto the external service resource. */
-function toPublicService(frame: Block): PublicService {
-  return {
-    serviceId: frame.id,
-    title: frame.title,
-    description: frame.description,
-    type: frame.type,
-    status: frame.status,
-  }
-}
-
 /**
  * Project a task's persisted run + its block onto the RICH external run resource: per-step
  * state/progress/subtasks, the failure kind+message, and the PR (url + branch). The run's
@@ -211,6 +183,12 @@ function toPublicRun(
             total: s.subtasks.total,
           }
         : null,
+      // The step's deliverable. An EMPTY output is projected as null, matching the way
+      // `toPublicJob` reads "produced something": a step that ran and wrote nothing and a step
+      // that has not run yet are the same fact to a caller reading for a result, and the step's
+      // own `state` is what distinguishes them.
+      output: (s.output ?? '') === '' ? null : (s.output ?? null),
+      data: s.custom ?? null,
     })),
     // Who the run was started for, as pinned at admission; null for a run the app, a schedule or
     // an identity-less key started, and withheld (flagged, not blanked) from a key that acts for
@@ -243,14 +221,14 @@ function toPublicPipeline(
     gates?: boolean[]
     public?: boolean
   },
-  registry: AgentKindRegistry,
+  registries: AdmissionRegistries,
 ): PublicPipeline {
   return {
     pipelineId: pipeline.id,
     name: pipeline.name,
     steps: pipeline.agentKinds.filter((_, i) => pipeline.enabled?.[i] !== false),
     public: pipeline.public === true,
-    headlessStartable: isHeadlessInlinePipeline(pipeline, registry),
+    headlessStartable: isHeadlessInlinePipeline(pipeline, registries),
   }
 }
 
@@ -328,7 +306,7 @@ async function unanswerableParkRefusal(
   gateInput: InputGateInput,
   cancelPath: string,
 ): Promise<string | null> {
-  const surfaces = publicRunParkSurfaces(pipeline, container.agentKindRegistry, {
+  const surfaces = publicRunParkSurfaces(pipeline, admissionRegistries(container), {
     inputGateBlocks: await container.executionService.inputGateWouldBlock(
       auth.workspaceId,
       gateInput,
@@ -1240,7 +1218,7 @@ function registerPipelineRoutes(app: Hono<AppEnv>): void {
       {
         pipelines: pipelines
           .filter((p) => !p.archived)
-          .map((p) => toPublicPipeline(p, container.agentKindRegistry)),
+          .map((p) => toPublicPipeline(p, admissionRegistries(container))),
       },
       200,
     )

@@ -397,6 +397,7 @@ export {
   type GateContext,
   type GateFactory,
   type GateRegistration,
+  type GatePollExhaustion,
   type GateConfigFields,
   recordGateAttempt,
   GateRegistry,
