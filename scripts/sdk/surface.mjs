@@ -26,6 +26,12 @@ const SURFACE = {
   listPublicServices: { group: 'services', method: 'list' },
   createPublicService: { group: 'services', method: 'create' },
 
+  // ---- The service SPEC: what a service is committed to honouring -------------------------
+  // Its own group rather than a `services.getSpec`, because the spec is a resource in its own
+  // right (the join partner of `evidence.getReport`) and the group is where the phase-2 sibling
+  // that serves the rendered Gherkin alone would land.
+  getPublicServiceSpec: { group: 'spec', method: 'get' },
+
   // ---- Repositories: what a service can be created against --------------------------------
   listPublicRepos: { group: 'repos', method: 'list' },
 
@@ -216,6 +222,7 @@ export const GROUP_DOCS = {
   jobs: 'Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one.',
   services:
     "The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository).",
+  spec: "A service's in-repo specification: the structured requirement tree (modules → feature groups → requirements, with their acceptance criteria and domain rules), the Gherkin rendered from it, and the branch and commit the read describes. Read-only; the requirement ids are the join key onto a run's report and outcome.",
   repos:
     'The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation.',
   tasks:

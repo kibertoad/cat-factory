@@ -78,6 +78,8 @@ type Client struct {
 	Jobs *JobsService
 	// The workspace's board services.
 	Services *ServicesService
+	// A service's in-repo specification: its requirement tree and the Gherkin rendered from it.
+	Spec *SpecService
 	// The repositories a service can be created against.
 	Repos *ReposService
 	// Board tasks: create, edit, start, stop, retry, watch, delete.
@@ -145,6 +147,7 @@ func New(options Options) (*Client, error) {
 	}
 	client.Jobs = &JobsService{client: client}
 	client.Services = &ServicesService{client: client}
+	client.Spec = &SpecService{client: client}
 	client.Repos = &ReposService{client: client}
 	client.Tasks = &TasksService{client: client}
 	client.Pipelines = &PipelinesService{client: client}

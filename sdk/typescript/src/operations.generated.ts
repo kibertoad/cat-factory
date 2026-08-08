@@ -70,6 +70,7 @@ import type {
   PublicRunArtifactList,
   PublicService,
   PublicServiceList,
+  PublicServiceSpec,
   PublicSetFindingStatus,
   PublicTask,
   PublicTaskList,
@@ -280,6 +281,28 @@ export class ServicesResource {
     return this.#transport.request<PublicServiceList>({
       method: 'GET',
       path: `/api/v1/services`,
+      options,
+    })
+  }
+}
+
+/** A service's in-repo specification: the structured requirement tree (modules → feature groups → requirements, with their acceptance criteria and domain rules), the Gherkin rendered from it, and the branch and commit the read describes. Read-only; the requirement ids are the join key onto a run's report and outcome. */
+export class SpecResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Get a service's in-repo specification
+   * The prescriptive specification stored in the service’s own repository under `spec/`: modules → feature groups → requirement items, each with its MoSCoW priority, its `aspirational`/`established` implementation state and its Given/When/Then acceptance criteria, plus the domain rules scoped to each group and the Gherkin `.feature` files rendered from the same tree. `provenance` names the branch and commit the read describes, because the default branch is not what a run with an open pull request is working against. The requirement ids here are the join key onto `requirements` on a run’s report and outcome, so criterion → evidence is a map lookup. Four outcomes are kept apart rather than folded: `present: false` means the default branch holds no spec, a `503` with `reason: "spec_read_failed"` means the repository could not be read, a `503` with `reason: "vcs_not_configured"` means the deployment or workspace wired no version control, and a partially readable spec is SERVED with `issues` naming each file that did not survive. Read-only: the spec’s write path is a reviewed commit.
+   * `GET /api/v1/services/{serviceId}/spec` — operation `getPublicServiceSpec`.
+   */
+  get(serviceId: string, options: RequestOptions = {}): Promise<PublicServiceSpec> {
+    return this.#transport.request<PublicServiceSpec>({
+      method: 'GET',
+      path: `/api/v1/services/${encodePathSegment(serviceId)}/spec`,
       options,
     })
   }
@@ -1694,6 +1717,8 @@ export abstract class CatFactoryResources {
   readonly jobs: JobsResource
   /** The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository). */
   readonly services: ServicesResource
+  /** A service's in-repo specification: the structured requirement tree (modules → feature groups → requirements, with their acceptance criteria and domain rules), the Gherkin rendered from it, and the branch and commit the read describes. Read-only; the requirement ids are the join key onto a run's report and outcome. */
+  readonly spec: SpecResource
   /** The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation. */
   readonly repos: ReposResource
   /** A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete, plus the two relationships that outlive a create: the tasks it waits for, and the requirements documents it is built against. */
@@ -1722,6 +1747,7 @@ export abstract class CatFactoryResources {
   protected constructor(transport: Transport) {
     this.jobs = new JobsResource(transport)
     this.services = new ServicesResource(transport)
+    this.spec = new SpecResource(transport)
     this.repos = new ReposResource(transport)
     this.tasks = new TasksResource(transport)
     this.pipelines = new PipelinesResource(transport)

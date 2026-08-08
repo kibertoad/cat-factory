@@ -194,6 +194,49 @@ export const specFeatureFileSchema = v.object({
 export type SpecFeatureFile = v.InferOutput<typeof specFeatureFileSchema>
 
 /**
+ * What became of ONE file the reader touched. The reader is deliberately total and salvaging
+ * (a flaky read or a malformed shard degrades to a partial tree rather than a thrown error), and
+ * a salvage that reports nothing is indistinguishable from a repo that genuinely holds less:
+ *
+ *  - `read_failed`: the provider answered with something other than "absent" (rate limit, 5xx,
+ *    a permission the installation lost). The file may well exist; we cannot say.
+ *  - `unparsed`:    the file was read and NOTHING could be recovered from it (unreadable JSON,
+ *    or a shard whose own identity is missing), so its whole subtree is missing from the view.
+ *  - `partial`:     the file was read and salvaged item by item; `dropped` says how many
+ *    requirements/rules failed validation and are therefore absent from an otherwise valid group.
+ */
+export const specReadIssueKindSchema = v.picklist(['read_failed', 'unparsed', 'partial'])
+export type SpecReadIssueKind = v.InferOutput<typeof specReadIssueKindSchema>
+
+/** One file the reader could not fully account for, named rather than silently dropped. */
+export const specReadIssueSchema = v.object({
+  /** Repo-relative path of the file (or directory, for a failed listing). */
+  path: v.string(),
+  kind: specReadIssueKindSchema,
+  /** Items lost from a `partial` file; 0 on the other kinds. */
+  dropped: v.optional(v.number(), 0),
+})
+export type SpecReadIssue = v.InferOutput<typeof specReadIssueSchema>
+
+/**
+ * How the PRESENCE ANCHOR (`spec/service.json`) resolved. Four states rather than the boolean
+ * `present` beside it, because three of them produce the same empty tree and demand different
+ * reactions: a branch with no spec is a normal answer, a provider outage is a retry, and a corrupt
+ * anchor is a repo somebody has to fix. Collapsing them is how "this service has no requirements"
+ * comes to be reported during every VCS incident.
+ */
+export const specAnchorStateSchema = v.picklist(['present', 'absent', 'read_failed', 'unparsed'])
+export type SpecAnchorState = v.InferOutput<typeof specAnchorStateSchema>
+
+/** What the reader could and could not account for on this pass. */
+export const specReadDiagnosticsSchema = v.object({
+  anchor: specAnchorStateSchema,
+  /** Every file the pass could not fully account for. Empty on a clean read. */
+  issues: v.array(specReadIssueSchema),
+})
+export type SpecReadDiagnostics = v.InferOutput<typeof specReadDiagnosticsSchema>
+
+/**
  * The service-spec view served to the SPA: the reassembled prescriptive spec tree read
  * from the service repo's default branch, plus its rendered Gherkin feature files.
  * `present` is false (and `spec` null) when no spec exists on the default branch, or when
@@ -208,6 +251,13 @@ export const serviceSpecViewSchema = v.object({
    * sends this field (`[]` when there are none), and the SPA dereferences it unguarded, so
    * it is required — not optional — to keep the wire shape and its sole consumer in lockstep. */
   features: v.array(specFeatureFileSchema),
+  /**
+   * What the READ itself could account for, as distinct from what the spec says. Optional
+   * because absent means "this producer diagnosed nothing", which is a different fact from a
+   * clean pass and is the honest answer for the callers that assemble a view by hand (a memo, a
+   * test fixture). `readServiceSpec` always sets it.
+   */
+  diagnostics: v.optional(specReadDiagnosticsSchema),
 })
 export type ServiceSpecView = v.InferOutput<typeof serviceSpecViewSchema>
 

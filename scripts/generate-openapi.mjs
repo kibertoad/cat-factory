@@ -213,7 +213,18 @@ const API_PREFIX = '/api/v1'
 // which it is. A consumer counting rows off that list to mean "screenshots this run captured" must
 // filter on `scope: 'run'`; one comparing a screenshot against the design it was judged against
 // finally has both, which is why the list was half the truth before.
-const API_VERSION = '1.31.0'
+//
+// 1.32.0, not 1.31.0: `GET /api/v1/services/:serviceId/spec`, the service's in-repo requirement
+// tree. One new operation and its schemas; nothing existing is renamed, retyped or re-scoped, so a
+// consumer built against 1.31.0 is unaffected.
+//
+// One consequence is worth stating rather than leaving for a reader to discover, because it is a
+// commitment rather than an addition: the response serves `SpecDoc` and everything under it
+// (`SpecModule`, `RequirementGroup`, `RequirementItem`, `AcceptanceCriterion`, `DomainRule`) as the
+// SAME shapes the app's requirements window consumes, deliberately, so the two surfaces cannot
+// drift about one artifact. Those schemas were internal and freely breakable until this version;
+// from here they are part of the stable `/api/v1` surface and change on its terms.
+const API_VERSION = '1.32.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -353,6 +364,24 @@ const COMPONENT_SCHEMAS = {
   // an inline enum named after the first path that reaches it, which is what every other
   // vocabulary on this surface does (`PublicTaskSourceDocumentSource`, `PrReportCiStatus`).
   // `sdk/typescript/test/contract-conformance.test.ts` is what refuses the empty interface.
+  // The service SPEC read. The tree is served as the SAME shapes the app's requirements window
+  // consumes rather than a re-projection, so every level of it is hoisted: un-hoisted, a
+  // requirement item ships as `PublicServiceSpecSpecModulesItemGroupsItemRequirementsItem` in four
+  // languages, which is not a type an integrator should have to write code against. The bare
+  // picklists under them (priority, kind, state, issue kind, truncation section) stay INLINE, for
+  // the reason `DocumentFreshness`'s note gives: the SDK emitter renders a hoisted picklist as an
+  // empty interface.
+  PublicServiceSpec: 'publicServiceSpecSchema',
+  PublicSpecProvenance: 'publicSpecProvenanceSchema',
+  PublicSpecFeatureFile: 'publicSpecFeatureFileSchema',
+  PublicSpecTruncation: 'publicSpecTruncationSchema',
+  SpecReadIssue: 'specReadIssueSchema',
+  SpecDoc: 'specDocSchema',
+  SpecModule: 'specModuleSchema',
+  RequirementGroup: 'requirementGroupSchema',
+  RequirementItem: 'requirementItemSchema',
+  AcceptanceCriterion: 'acceptanceCriterionSchema',
+  DomainRule: 'domainRuleSchema',
   PrReportRequirements: 'prReportRequirementsSchema',
   PrReportEnvironments: 'prReportEnvironmentsSchema',
   PrReportMerge: 'prReportMergeSchema',
@@ -888,6 +917,12 @@ const OPERATION_DOCS = {
     summary: "List a run's captured artifacts",
     description:
       'The binary artifacts the run captured (UI screenshots) plus the reference images they were reviewed against: id, kind, view, content type, exact byte size and content hash. Unpaged: the capture path caps how many one run may store, so the response size is bounded before the request. Fetch the bytes with the blob endpoint.',
+  },
+  getPublicServiceSpec: {
+    tag: 'Spec',
+    summary: "Get a service's in-repo specification",
+    description:
+      'The prescriptive specification stored in the service’s own repository under `spec/`: modules → feature groups → requirement items, each with its MoSCoW priority, its `aspirational`/`established` implementation state and its Given/When/Then acceptance criteria, plus the domain rules scoped to each group and the Gherkin `.feature` files rendered from the same tree. `provenance` names the branch and commit the read describes, because the default branch is not what a run with an open pull request is working against. The requirement ids here are the join key onto `requirements` on a run’s report and outcome, so criterion → evidence is a map lookup. Four outcomes are kept apart rather than folded: `present: false` means the default branch holds no spec, a `503` with `reason: "spec_read_failed"` means the repository could not be read, a `503` with `reason: "vcs_not_configured"` means the deployment or workspace wired no version control, and a partially readable spec is SERVED with `issues` naming each file that did not survive. Read-only: the spec’s write path is a reviewed commit.',
   },
   listPublicKeys: {
     tag: 'Keys',

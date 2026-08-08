@@ -79,8 +79,15 @@ describe('RunEvidenceLoader', () => {
     const target = block({ pullRequest: { branch: PR_BRANCH } as never })
     const view = await loaderFor(target, repo).specViewForRun('ws_1', instance())
     expect(new Set(refs)).toEqual(new Set([PR_BRANCH]))
-    // A repo carrying no `spec/` is stated, never rendered as a clean empty section.
-    expect(view).toEqual({ present: false, spec: null, features: [] })
+    // A repo carrying no `spec/` is stated, never rendered as a clean empty section, and the
+    // reader says WHICH kind of nothing it found, so an outage can never be reported as a
+    // service that declared no requirements.
+    expect(view).toEqual({
+      present: false,
+      spec: null,
+      features: [],
+      diagnostics: { anchor: 'absent', issues: [] },
+    })
   })
 
   it('reads nothing at all until a tester has actually reported', async () => {

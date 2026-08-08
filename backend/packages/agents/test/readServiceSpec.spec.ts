@@ -38,7 +38,14 @@ function fakeRepo(files: Record<string, string>): RepoFiles {
 describe('readServiceSpec', () => {
   it('returns an empty (absent) view when no spec/service.json exists', async () => {
     const view = await readServiceSpec(fakeRepo({}), 'main')
-    expect(view).toEqual({ present: false, spec: null, features: [] })
+    expect(view).toEqual({
+      present: false,
+      spec: null,
+      features: [],
+      // ABSENT, not `read_failed`: the branch simply holds no spec. The two produce the same
+      // empty tree and are the pair every consumer of this reader has to be able to separate.
+      diagnostics: { anchor: 'absent', issues: [] },
+    })
   })
 
   it('reassembles the sharded tree (modules → groups → requirements) and Gherkin files', async () => {
@@ -175,12 +182,115 @@ describe('readServiceSpec', () => {
     expect(group?.rules?.map((r) => r.id)).toEqual(['rule-1'])
   })
 
-  it('never throws when a repo read fails — degrades to an empty view', async () => {
+  it('never throws when a repo read fails, and the empty view SAYS the read failed', async () => {
     const repo = fakeRepo({})
     repo.getFile = async () => {
       throw new Error('GitHub 502')
     }
     const view = await readServiceSpec(repo, 'main')
-    expect(view).toEqual({ present: false, spec: null, features: [] })
+    // Same empty tree as the absent case above, and a different diagnosis. This pair is the
+    // whole reason the field exists: without it a VCS outage is indistinguishable from a
+    // service that has written no requirements, and every caller reports the wrong one.
+    expect(view).toEqual({
+      present: false,
+      spec: null,
+      features: [],
+      diagnostics: {
+        anchor: 'read_failed',
+        issues: [{ path: 'spec/service.json', kind: 'read_failed', dropped: 0 }],
+      },
+    })
+  })
+
+  it('separates a CORRUPT anchor from an absent one, naming the file', async () => {
+    const view = await readServiceSpec(fakeRepo({ 'spec/service.json': '{ not json' }), 'main')
+    // A half-written anchor is a repo state somebody has to fix, not a branch with no spec and
+    // not a provider outage: three empty trees, three different remedies.
+    expect(view.present).toBe(false)
+    expect(view.diagnostics).toEqual({
+      anchor: 'unparsed',
+      issues: [{ path: 'spec/service.json', kind: 'unparsed', dropped: 0 }],
+    })
+  })
+
+  it('names a shard that failed to READ, and keeps the rest of the tree', async () => {
+    const files = {
+      'spec/service.json': JSON.stringify({ service: 'S' }),
+      'spec/modules/m/_module.json': JSON.stringify({ name: 'M' }),
+      'spec/modules/m/good.json': JSON.stringify({ name: 'Good', requirements: [] }),
+      'spec/modules/m/flaky.json': JSON.stringify({ name: 'Flaky', requirements: [] }),
+    }
+    const repo = fakeRepo(files)
+    const underlying = repo.getFile
+    repo.getFile = async (path, ref) => {
+      if (path === 'spec/modules/m/flaky.json') throw new Error('GitHub 502')
+      return underlying(path, ref)
+    }
+
+    const view = await readServiceSpec(repo, 'main')
+    expect(view.present).toBe(true)
+    expect(view.spec?.modules?.[0]?.groups?.map((g) => g.name)).toEqual(['Good'])
+    // The group that did not arrive is NAMED. Dropped silently it would read as a service that
+    // never declared it, which is the same lie the anchor cases above avoid, one file smaller.
+    expect(view.diagnostics?.issues).toEqual([
+      { path: 'spec/modules/m/flaky.json', kind: 'read_failed', dropped: 0 },
+    ])
+  })
+
+  it('reports a SALVAGED group as partial, counting the items it lost', async () => {
+    const repo = fakeRepo({
+      'spec/service.json': JSON.stringify({ service: 'S' }),
+      'spec/modules/m/_module.json': JSON.stringify({ name: 'M' }),
+      'spec/modules/m/g.json': JSON.stringify({
+        name: 'Group',
+        requirements: [
+          {
+            id: 'req-toolong',
+            title: 'x'.repeat(200),
+            statement: 'S.',
+            kind: 'functional',
+            priority: 'must',
+          },
+          { id: 'req-ok', title: 'Valid', statement: 'S.', kind: 'functional', priority: 'should' },
+        ],
+        rules: [
+          { id: 'rule-1', rule: 'An invariant holds.' },
+          { id: '', rule: '' },
+        ],
+      }),
+    })
+
+    const view = await readServiceSpec(repo, 'main')
+    // The salvage rebuilds a VALID-LOOKING group that is quietly missing items, so a reader
+    // counting coverage off it would report a smaller spec as a complete one. `partial` and its
+    // count are what make that visible.
+    expect(view.diagnostics?.issues).toEqual([
+      { path: 'spec/modules/m/g.json', kind: 'partial', dropped: 2 },
+    ])
+  })
+
+  it('reports an UNPARSED shard, and a clean read carries no issues at all', async () => {
+    const broken = await readServiceSpec(
+      fakeRepo({
+        'spec/service.json': JSON.stringify({ service: 'S' }),
+        'spec/modules/m/_module.json': JSON.stringify({ name: 'M' }),
+        'spec/modules/m/broken.json': '{ not json',
+      }),
+      'main',
+    )
+    expect(broken.diagnostics).toEqual({
+      anchor: 'present',
+      issues: [{ path: 'spec/modules/m/broken.json', kind: 'unparsed', dropped: 0 }],
+    })
+
+    const clean = await readServiceSpec(
+      fakeRepo({
+        'spec/service.json': JSON.stringify({ service: 'S' }),
+        'spec/modules/m/_module.json': JSON.stringify({ name: 'M' }),
+        'spec/modules/m/g.json': JSON.stringify({ name: 'G', requirements: [] }),
+      }),
+      'main',
+    )
+    expect(clean.diagnostics).toEqual({ anchor: 'present', issues: [] })
   })
 })

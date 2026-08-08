@@ -78,6 +78,7 @@ from .models import (
     PublicRunArtifactList,
     PublicService,
     PublicServiceList,
+    PublicServiceSpec,
     PublicSetFindingStatus,
     PublicTask,
     PublicTaskList,
@@ -239,6 +240,43 @@ class ServicesResource:
             timeout=timeout,
         )
         return PublicServiceList.from_dict(raw)
+
+
+class SpecResource:
+    """A service's in-repo specification: the structured requirement tree (modules → feature
+    groups → requirements, with their acceptance criteria and domain rules), the Gherkin
+    rendered from it, and the branch and commit the read describes. Read-only; the
+    requirement ids are the join key onto a run's report and outcome.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def get(self, service_id: str, timeout: float | None = None) -> PublicServiceSpec:
+        """Get a service's in-repo specification
+        The prescriptive specification stored in the service’s own repository under `spec/`:
+        modules → feature groups → requirement items, each with its MoSCoW priority, its
+        `aspirational`/`established` implementation state and its Given/When/Then acceptance
+        criteria, plus the domain rules scoped to each group and the Gherkin `.feature`
+        files rendered from the same tree. `provenance` names the branch and commit the read
+        describes, because the default branch is not what a run with an open pull request is
+        working against. The requirement ids here are the join key onto `requirements` on a
+        run’s report and outcome, so criterion → evidence is a map lookup. Four outcomes are
+        kept apart rather than folded: `present: false` means the default branch holds no
+        spec, a `503` with `reason: "spec_read_failed"` means the repository could not be
+        read, a `503` with `reason: "vcs_not_configured"` means the deployment or workspace
+        wired no version control, and a partially readable spec is SERVED with `issues`
+        naming each file that did not survive. Read-only: the spec’s write path is a
+        reviewed commit.
+        `GET /api/v1/services/{serviceId}/spec` (operation `getPublicServiceSpec`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/services/{_quote(service_id)}/spec",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicServiceSpec.from_dict(raw)
 
 
 class ReposResource:
@@ -1903,6 +1941,7 @@ def build_resources(transport: Transport) -> dict[str, Any]:
     return {
         "jobs": JobsResource(transport),
         "services": ServicesResource(transport),
+        "spec": SpecResource(transport),
         "repos": ReposResource(transport),
         "tasks": TasksResource(transport),
         "pipelines": PipelinesResource(transport),

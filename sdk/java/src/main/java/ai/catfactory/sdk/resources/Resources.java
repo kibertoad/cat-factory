@@ -16,6 +16,7 @@ import ai.catfactory.sdk.Transport;
 public abstract class Resources {
     private final JobsClient jobs;
     private final ServicesClient services;
+    private final SpecClient spec;
     private final ReposClient repos;
     private final TasksClient tasks;
     private final PipelinesClient pipelines;
@@ -32,6 +33,7 @@ public abstract class Resources {
     protected Resources(Transport transport) {
         this.jobs = new JobsClient(transport);
         this.services = new ServicesClient(transport);
+        this.spec = new SpecClient(transport);
         this.repos = new ReposClient(transport);
         this.tasks = new TasksClient(transport);
         this.pipelines = new PipelinesClient(transport);
@@ -54,6 +56,11 @@ public abstract class Resources {
     /** The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository). */
     public ServicesClient services() {
         return services;
+    }
+
+    /** A service's in-repo specification: the structured requirement tree (modules → feature groups → requirements, with their acceptance criteria and domain rules), the Gherkin rendered from it, and the branch and commit the read describes. Read-only; the requirement ids are the join key onto a run's report and outcome. */
+    public SpecClient spec() {
+        return spec;
     }
 
     /** The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation. */
