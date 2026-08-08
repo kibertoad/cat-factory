@@ -6153,6 +6153,18 @@
     "history": {
       "heading": "Verlauf (keine Runden) | Verlauf ({count} Runde) | Verlauf ({count} Runden)",
       "fixRequested": "Korrektur angefordert"
+    },
+    "design": {
+      "summary": "Keine Frames stammen aus dem verknüpften Design. | 1 Frame aus dem verknüpften Design. | {count} Frames aus dem verknüpften Design.",
+      "dropped": "Es sind keine weiteren ausgeblendet. | 1 weiterer wird hier nicht angezeigt. | {count} weitere werden hier nicht angezeigt.",
+      "gapLine": "{title}:",
+      "gap": {
+        "partial": "nur ein Teil seiner Frames wurde gespeichert; aktualisiere das Dokument, um es erneut zu versuchen.",
+        "failed": "seine Frames konnten beim letzten Import nicht geladen werden; aktualisiere das Dokument, um es erneut zu versuchen.",
+        "none": "es enthält keine Frames zum Anzeigen.",
+        "storage_unavailable": "beim Import war kein Bildspeicher konfiguriert, daher wurde nichts heruntergeladen.",
+        "not_retained": "es sind keine Bilder dazu gespeichert. Die Quelle rendert möglicherweise keine Frames, oder das Dokument wurde importiert, bevor Frames aufbewahrt wurden; ein erneuter Import zeigt, was zutrifft."
+      }
     }
   },
   "outcome": {
@@ -6399,6 +6411,7 @@
       },
       "actual": "Tatsächlich",
       "reference": "Referenz",
+      "fromLinkedDesign": "· aus dem verknüpften Design",
       "actualAlt": "{view} (tatsächlich)",
       "referenceAlt": "{view} (Referenz)",
       "replace": "Ersetzen",

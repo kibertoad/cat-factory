@@ -66,9 +66,11 @@ design under active iteration it meant the agent routinely built the previous re
 
 ### 4. Pixels exist upstream and reach nobody
 
-**Closed on the RETENTION half by Track D slice 1**: an import now downloads the frames and keeps
-them as `reference` artifacts. Delivery (the gate, then the model) is what remains, and the survey
-finding is kept below because it is what the remaining two slices are measured against.
+**Closed on the RETENTION half by Track D slice 1** (an import downloads the frames and keeps them
+as `reference` artifacts) **and on the GATE half by slice 2** (a linked design populates the
+actual-vs-reference gallery itself). What remains is delivery INTO a container: the reference files
+the UI tester reads, then the pixels the model sees. The survey finding is kept below because it is
+what those slices are measured against.
 
 The provider asks Figma for a rendered PNG URL, stores the URL as a `### References` line, and
 never downloads the bytes (`fetchPreviewUrl`); the `design.context` fragment then explicitly
@@ -409,11 +411,40 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
       source identity rather than by the block: an import runs before the document is attached to
       anything, the attachment can move later, and a hand-uploaded reference on the same block must
       survive a re-import that replaces the design's own frames.
-- [ ] **Feed the visual-confirmation gate.** Auto-pair a block's design-origin reference
-      artifacts into the gate gallery beside the hand-uploaded ones, and write them into
-      `.cat-context/reference-screenshots/` via the reference pre-op the handover doc already
-      names as unwired (its "What's left" item 3). A designer linking a Figma frame then gets
-      screenshot-vs-design comparison with zero manual uploads.
+- [x] **Feed the visual-confirmation GATE.** A task's linked designs have their retained frames
+      folded into the gate gallery beside the hand-uploaded ones, so a designer linking a Figma
+      frame gets screenshot-vs-design comparison with zero manual uploads.
+      **Split from the container half below**, which the plan above carried in the same bullet and
+      which is a different KIND of change: writing `.cat-context/reference-screenshots/` means real
+      PNG bytes in a subdirectory of the job's context, and an `InjectedContextFile` is UTF-8 text
+      by type while the harness flattens a context file's path to a bare name. That is an
+      image-bumping harness slice; this one is backend-only and ships the designer-visible half now.
+      Four things it had to get right. **A hand upload OUTRANKS a design frame for the same view**:
+      an upload is a deliberate act against this one task and survives every re-import, while a
+      design render is a projection the next body-changing import replaces wholesale, so the design
+      fold runs first and the uploads assign over it. **A view name TWO designs both claim is
+      qualified on both sides**, the same rule Track D slice 1 applied within one file, because
+      leaving the first bare hands the plain name to whichever design is listed first and
+      re-ordering the links would then silently re-point a reviewed view at a different screen (the
+      cost, that neither qualified name pairs with a capture called plain "Checkout", is the honest
+      one: nothing knows which design that capture is of). **A pair says WHERE its reference came
+      from**, and says nothing when the CAPTURE named its own reference, since a reference the gate
+      did not source is one whose provenance it can only guess at. And **`designReferences` is
+      present whenever a design is linked**, even when everything worked, because "no design is
+      attached" and "one is attached and gave nothing" are different facts and the second needs a
+      per-design reason: `partial` / `failed` / `none` / `storage_unavailable` / `not_retained`,
+      each naming a different fix, derived from what the store actually HOLDS rather than from
+      `render_status` alone (a row claiming `stored` over an empty shelf is exactly the case a
+      reviewer must not read as a design with no screens). It is kept apart from `degradedReason`,
+      which gates the approve button behind an acknowledgement: a design that gave fewer frames
+      than it has is not a degraded review BASIS, since references have always been optional.
+      The reads are LIVE at gather time (one batched `listByDocuments`, never a read per design),
+      so **recapture** picks up a design linked while the gate is parked, exactly as it already
+      does for an upload.
+- [ ] **Write the references INTO the container.** `.cat-context/reference-screenshots/`, which
+      the UI-tester prompt already names and nothing writes (the handover doc's "What's left"
+      item 3). Needs a binary + subdirectory-capable context-file channel through the harness, so
+      it is an image-bumping slice with the pinned-tag rollout recipe.
 - [ ] **Multimodal delivery to agents.** Hand the stored render to image-capable harness/model
       pairs as an image content part (job body + proxy + prompt assembly; the OpenAI-shape
       `image_url` translation already exists on the Workers AI upstream with no producer).

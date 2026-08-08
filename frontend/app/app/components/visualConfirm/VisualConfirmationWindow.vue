@@ -8,7 +8,7 @@
 // (per-view notes + a freeform box, composed into the Tester's fixer findings), or recapture.
 // References can be dropped straight onto a pair, or uploaded for any view below.
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
-import type { VisualConfirmStepState } from '~/types/execution'
+import type { VisualConfirmDesignGapReason, VisualConfirmStepState } from '~/types/execution'
 import { useArtifactBlobs } from '~/composables/useArtifactBlobs'
 import ImageCompare from '~/components/media/ImageCompare.vue'
 import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
@@ -61,6 +61,23 @@ const PHASE_LABEL = computed<Record<NonNullable<VisualConfirmStepState['phase']>
 const OUTCOME_LABELS = computed<Record<'completed' | 'failed', string>>(() => ({
   completed: t('visualConfirm.outcome.completed'),
   failed: t('visualConfirm.outcome.failed'),
+}))
+
+// What the task's LINKED DESIGNS contributed. Present whenever a design is linked, including
+// when everything worked: a reviewer comparing a screen against a Figma frame needs to know the
+// frame is the design's own, and one seeing no design frames needs to know whether a design is
+// linked at all. Absent ⇒ the task links none, which this panel must not invent a line about.
+const design = computed(() => vc.value?.designReferences ?? null)
+
+// Exhaustive map of the gap vocabulary → copy, literal-keyed for the same drift-guard reason as
+// the outcome labels above. Each names a DIFFERENT fix, which is why the backend keeps them apart
+// instead of collapsing them into one "no images" absence.
+const DESIGN_GAP_LABELS = computed<Record<VisualConfirmDesignGapReason, string>>(() => ({
+  partial: t('visualConfirm.design.gap.partial'),
+  failed: t('visualConfirm.design.gap.failed'),
+  none: t('visualConfirm.design.gap.none'),
+  storage_unavailable: t('visualConfirm.design.gap.storage_unavailable'),
+  not_retained: t('visualConfirm.design.gap.not_retained'),
 }))
 
 // Resolve every pair's artifacts (the gallery + the lightbox share this one cache).
@@ -212,6 +229,29 @@ async function onFilePicked(e: Event) {
           {{ vc.degradedReason }}
         </p>
 
+        <!-- What the linked designs contributed. Rendered even when nothing is missing, so a
+             reference the reviewer is judging against is never anonymous. -->
+        <section
+          v-if="design"
+          class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-[12px] text-slate-300"
+        >
+          <p class="flex items-center gap-1.5">
+            <UIcon name="i-lucide-figma" class="h-3.5 w-3.5 shrink-0 text-amber-300" />
+            <span>{{
+              t('visualConfirm.design.summary', { count: design.images }, design.images)
+            }}</span>
+            <span v-if="design.dropped" class="text-slate-500">
+              {{ t('visualConfirm.design.dropped', { count: design.dropped }, design.dropped) }}
+            </span>
+          </p>
+          <ul v-if="design.gaps?.length" class="mt-1.5 space-y-1 text-[11px] text-amber-300/90">
+            <li v-for="gap in design.gaps" :key="`${gap.title}-${gap.reason}`">
+              {{ t('visualConfirm.design.gapLine', { title: gap.title }) }}
+              {{ DESIGN_GAP_LABELS[gap.reason] }}
+            </li>
+          </ul>
+        </section>
+
         <p
           v-if="working"
           class="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-[12px] text-slate-300"
@@ -228,6 +268,7 @@ async function onFilePicked(e: Event) {
               :view="p.view"
               :actual-id="p.actualArtifactId"
               :reference-id="p.referenceArtifactId"
+              :reference-origin="p.referenceOrigin"
               :blobs="blobs"
               :busy="busy"
               @expand="expand"

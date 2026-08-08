@@ -6153,6 +6153,18 @@
     "history": {
       "heading": "Cronologia (nessun round) | Cronologia ({count} round) | Cronologia ({count} round)",
       "fixRequested": "Correzione richiesta"
+    },
+    "design": {
+      "summary": "Nessun frame proviene dal design collegato. | 1 frame dal design collegato. | {count} frame dal design collegato.",
+      "dropped": "Non ce ne sono altri nascosti. | 1 altro non è mostrato qui. | Altri {count} non sono mostrati qui.",
+      "gapLine": "{title}:",
+      "gap": {
+        "partial": "solo una parte dei suoi frame è stata conservata; aggiorna il documento per riprovare.",
+        "failed": "non è stato possibile scaricare i suoi frame nell'ultimo import; aggiorna il documento per riprovare.",
+        "none": "non ha frame da mostrare.",
+        "storage_unavailable": "quando è stato importato non era configurato alcuno spazio per le immagini, quindi non è stato scaricato nulla.",
+        "not_retained": "non ci sono immagini conservate per esso. La sua origine potrebbe non generare frame, oppure è stato importato prima che i frame venissero conservati; un nuovo import chiarisce quale dei due."
+      }
     }
   },
   "outcome": {
@@ -6399,6 +6411,7 @@
       },
       "actual": "Effettivo",
       "reference": "Riferimento",
+      "fromLinkedDesign": "· dal design collegato",
       "actualAlt": "{view} (effettivo)",
       "referenceAlt": "{view} (riferimento)",
       "replace": "Sostituisci",

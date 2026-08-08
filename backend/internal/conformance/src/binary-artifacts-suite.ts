@@ -195,6 +195,28 @@ export function defineBinaryArtifactsSuite(
       expect((await store.getMetadata(ws, first.id))?.document).toEqual(design)
       expect((await store.getMetadata(ws, uploaded.id))?.document).toBeNull()
 
+      // The batched read the visual-confirmation gate uses: the union of both documents' renders
+      // in ONE call, ordered like the single-document read across the whole result (which is what
+      // makes "the newest render for a view wins" hold however many designs a task links), with
+      // the hand-uploaded reference (which names no document) left out.
+      expect((await store.listByDocuments(ws, [design, other])).map((r) => r.id)).toEqual([
+        first.id,
+        second.id,
+        sibling.id,
+      ])
+      // A repeated ref must not double the rows it matches, and an unknown one must not fail the
+      // refs beside it.
+      expect(
+        (
+          await store.listByDocuments(ws, [
+            design,
+            design,
+            { source: 'figma' as const, externalId: 'nothing-imported' },
+          ])
+        ).map((r) => r.id),
+      ).toEqual([first.id, second.id])
+      expect(await store.listByDocuments(ws, [])).toEqual([])
+
       expect(await store.pruneByDocument(ws, design)).toBe(2)
       expect(await store.listByDocument(ws, design)).toEqual([])
       // Bytes go with the rows — a reclaim that left the blobs would leak them permanently.
