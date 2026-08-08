@@ -1,4 +1,4 @@
-import { DOCS } from '../config/docs.js'
+import { DOCS, SITE_DOCS } from '../config/docs.js'
 import { logger } from '../observability/logger.js'
 
 // ---------------------------------------------------------------------------
@@ -55,7 +55,7 @@ const PROVIDER_COPY: Record<WebhookSignatureProvider, ProviderCopy> = {
     envVar: 'GITLAB_WEBHOOK_SECRET',
     header: 'X-Gitlab-Token',
     providerSecretField: "the webhook's 'Secret token' (GitLab project/group Settings → Webhooks)",
-    docsUrl: DOCS.vcsProviders('setup'),
+    docsUrl: SITE_DOCS.vcsSetup,
   },
 }
 

@@ -2,8 +2,9 @@
 
 > **Setup is on the website**:
 > [GitHub App](https://www.catfactory.ai/deploy/github-app.html) owns registering the App and
-> connecting a workspace; [`vcs-providers.md`](./vcs-providers.md) owns what each provider can do.
-> This page is the integration DESIGN.
+> connecting a workspace; the
+> [support matrix](https://www.catfactory.ai/reference/vcs-support-matrix.html) owns what each
+> provider can do. This page is the integration DESIGN.
 
 cat-factory connects each **workspace** (architecture board) to a GitHub
 organization or account so its agents and blocks can operate on real code:

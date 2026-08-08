@@ -337,32 +337,27 @@ cloning this repo reads the website, and a doc here links it rather than restati
 ([`docs/initiatives/documentation-revamp.md`](./docs/initiatives/documentation-revamp.md) is the
 model and its checklist).
 
-| Capability                       | Using it                                                                                                                                                  | How it is built                                                                                                                                                                       |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Boards, services & repo linkage  | [Designing your board](https://www.catfactory.ai/guide/designing-your-board.html)                                                                         | [`CLAUDE.md` → Board / service / repo-linkage model](./CLAUDE.md)                                                                                                                     |
-| Execution & real-time events     | [Running pipelines](https://www.catfactory.ai/guide/running-pipelines.html)                                                                               | [Backend → Execution & real-time events](./backend/README.md)                                                                                                                         |
-| Model support & subscriptions    | [Model providers](https://www.catfactory.ai/guide/model-providers.html)                                                                                   | [`model-support.md`](./backend/docs/model-support.md)                                                                                                                                 |
-| Requirements review              | [Requirements](https://www.catfactory.ai/guide/requirements.html)                                                                                         | [`requirements-review.md`](./backend/docs/requirements-review.md)                                                                                                                     |
-| Authentication & SSO             | [Configuration → Authentication](https://www.catfactory.ai/deploy/configuration.html#authentication)                                                      | [`auth.md`](./backend/docs/auth.md)                                                                                                                                                   |
-| Public API, SDKs, MCP            | [Public API](https://www.catfactory.ai/reference/public-api.html) (SDKs and the MCP server: not on the website yet)                                       | [reference](./backend/docs/public-api.md) · [`sdk/README.md`](./sdk/README.md) · [ADR 0030](./backend/docs/adr/0030-public-api-surface.md)                                            |
-| Source control (GitHub, GitLab)  | [GitHub App](https://www.catfactory.ai/deploy/github-app.html) (the GitHub/GitLab support matrix is repo-only)                                            | [design](./backend/docs/github-integration.md) · [runbook](./backend/docs/github-operations.md) · [provider layer](./backend/docs/vcs-providers.md)                                   |
-| Document & task sources          | [Documents](https://www.catfactory.ai/guide/documents.html) · [Issue sources](https://www.catfactory.ai/guide/issue-sources.html)                         | [`document-sources.md`](./backend/docs/document-sources.md)                                                                                                                           |
-| Ephemeral environments           | [Environments](https://www.catfactory.ai/deploy/environments.html)                                                                                        | [`environments-integration.md`](./backend/docs/environments-integration.md) · [native adapters](./backend/docs/native-environment-adapter.md)                                         |
-| Prompt fragments                 | [Prompt fragments](https://www.catfactory.ai/guide/prompt-fragments.html)                                                                                 | [ADR 0006](./backend/docs/adr/0006-prompt-fragment-library.md)                                                                                                                        |
-| Self-hosted runner pools         | [Runner pools](https://www.catfactory.ai/deploy/runner-pools.html)                                                                                        | [protocol](./backend/docs/runner-pool-integration.md) · [Kubernetes topology](./backend/docs/kubernetes-topology.md) · [ADR 0004](./backend/docs/adr/0004-self-hosted-runner-pool.md) |
-| Custom agents, gates & providers | [Custom agents & gates](https://www.catfactory.ai/deploy/custom-agents.html) · [Custom providers](https://www.catfactory.ai/deploy/custom-providers.html) | [`custom-agents.md`](./backend/docs/custom-agents.md) · [roles](./backend/docs/custom-agent-roles.md) · [ergonomics](./backend/docs/custom-agent-gate-ergonomics.md)                  |
-| Storage, retention & upgrades    | not on the website yet                                                                                                                                    | [`storage-and-retention.md`](./backend/docs/storage-and-retention.md) · [custom artifact stores](./backend/docs/custom-binary-stores.md)                                              |
-| Observability & telemetry        | [Observability](https://www.catfactory.ai/deploy/observability.html)                                                                                      | [`llm-telemetry.md`](./backend/docs/llm-telemetry.md) · [`reports.md`](./backend/docs/reports.md) · [`debug-api.md`](./backend/docs/debug-api.md)                                     |
-| The agent trust boundary         | [Agent isolation](https://www.catfactory.ai/reference/agent-isolation.html) (the hardening checklist is repo-only)                                        | [`security-model.md`](./backend/docs/security-model.md)                                                                                                                               |
+| Capability                       | Using it                                                                                                                                                                             | How it is built                                                                                                                                                                       |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Boards, services & repo linkage  | [Designing your board](https://www.catfactory.ai/guide/designing-your-board.html)                                                                                                    | [`CLAUDE.md` → Board / service / repo-linkage model](./CLAUDE.md)                                                                                                                     |
+| Execution & real-time events     | [Running pipelines](https://www.catfactory.ai/guide/running-pipelines.html)                                                                                                          | [Backend → Execution & real-time events](./backend/README.md)                                                                                                                         |
+| Model support & subscriptions    | [Model providers](https://www.catfactory.ai/guide/model-providers.html)                                                                                                              | [`model-support.md`](./backend/docs/model-support.md)                                                                                                                                 |
+| Requirements review              | [Requirements](https://www.catfactory.ai/guide/requirements.html)                                                                                                                    | [`requirements-review.md`](./backend/docs/requirements-review.md)                                                                                                                     |
+| Authentication & SSO             | [Configuration → Authentication](https://www.catfactory.ai/deploy/configuration.html#authentication)                                                                                 | [`auth.md`](./backend/docs/auth.md)                                                                                                                                                   |
+| Public API, SDKs, MCP            | [Public API](https://www.catfactory.ai/extend/public-api.html) · [SDKs](https://www.catfactory.ai/extend/sdks.html) · [MCP server](https://www.catfactory.ai/extend/mcp-server.html) | [reference](./backend/docs/public-api.md) · [`sdk/README.md`](./sdk/README.md) · [ADR 0030](./backend/docs/adr/0030-public-api-surface.md)                                            |
+| Source control (GitHub, GitLab)  | [GitHub App](https://www.catfactory.ai/deploy/github-app.html) · [support matrix](https://www.catfactory.ai/reference/vcs-support-matrix.html)                                       | [design](./backend/docs/github-integration.md) · [runbook](./backend/docs/github-operations.md) · [provider layer](./backend/docs/vcs-providers.md)                                   |
+| Document & task sources          | [Documents](https://www.catfactory.ai/guide/documents.html) · [Issue sources](https://www.catfactory.ai/guide/issue-sources.html)                                                    | [`document-sources.md`](./backend/docs/document-sources.md)                                                                                                                           |
+| Ephemeral environments           | [Environments](https://www.catfactory.ai/operate/environments.html)                                                                                                                  | [`environments-integration.md`](./backend/docs/environments-integration.md) · [native adapters](./backend/docs/native-environment-adapter.md)                                         |
+| Prompt fragments                 | [Prompt fragments](https://www.catfactory.ai/guide/prompt-fragments.html)                                                                                                            | [ADR 0006](./backend/docs/adr/0006-prompt-fragment-library.md)                                                                                                                        |
+| Self-hosted runner pools         | [Runner pools](https://www.catfactory.ai/operate/runner-pools.html)                                                                                                                  | [protocol](./backend/docs/runner-pool-integration.md) · [Kubernetes topology](./backend/docs/kubernetes-topology.md) · [ADR 0004](./backend/docs/adr/0004-self-hosted-runner-pool.md) |
+| Custom agents, gates & providers | [Custom agents & gates](https://www.catfactory.ai/extend/custom-agents.html) · [Custom providers](https://www.catfactory.ai/extend/custom-providers.html)                            | [`custom-agents.md`](./backend/docs/custom-agents.md) · [roles](./backend/docs/custom-agent-roles.md) · [ergonomics](./backend/docs/custom-agent-gate-ergonomics.md)                  |
+| Storage, retention & upgrades    | [Upgrades & data retention](https://www.catfactory.ai/operate/upgrades-and-retention.html)                                                                                           | [`storage-and-retention.md`](./backend/docs/storage-and-retention.md) · [custom artifact stores](./backend/docs/custom-binary-stores.md)                                              |
+| Observability & telemetry        | [Observability](https://www.catfactory.ai/operate/observability.html)                                                                                                                | [`llm-telemetry.md`](./backend/docs/llm-telemetry.md) · [`reports.md`](./backend/docs/reports.md) · [`debug-api.md`](./backend/docs/debug-api.md)                                     |
+| The agent trust boundary         | [Agent isolation](https://www.catfactory.ai/reference/agent-isolation.html) · [Security model](https://www.catfactory.ai/reference/security-model.html)                              | [`security-model.md`](./backend/docs/security-model.md)                                                                                                                               |
 
 Two capabilities have no website page because nobody outside this repo operates them: container
 reaping ([`container-reaping.md`](./backend/docs/container-reaping.md)) and benchmarking
 ([`benchmark-harness` README](./backend/internal/benchmark-harness/README.md)).
-
-**A "not on the website yet" cell is a real gap, not a shrug**: the doc in the right-hand column is
-serving both audiences until the page lands, so it may not be reduced to a pointer first. The
-remaining slices are tracked in
-[`docs/initiatives/documentation-revamp.md`](./docs/initiatives/documentation-revamp.md).
 
 ## Documentation index
 
@@ -398,7 +393,7 @@ currently open and what each one is trying to change.
 - [`docs/glossary.md`](./docs/glossary.md): the CODE-LEVEL naming map (block vs task vs
   card, the dir↔package names, runner/executor/transport, and where gates / agent kinds /
   migration parity live). The product vocabulary is the website's
-  [Core concepts](https://www.catfactory.ai/guide/core-concepts.html).
+  [Glossary](https://www.catfactory.ai/reference/glossary.html).
 - [`docs/README.md`](./docs/README.md): a map of the repo-wide docs, sorted into
   reference, in-flight initiatives, contributor-only material and point-in-time
   records.
@@ -416,15 +411,18 @@ currently open and what each one is trying to change.
 - [Document sources](./backend/docs/document-sources.md)
 - [Bug hunt: rate a tracker board's unassigned bugs and pick one](./backend/docs/bug-hunt.md)
 - [Public API (`/api/v1`): endpoint reference](./backend/docs/public-api.md)
-  (using it: [Public API](https://www.catfactory.ai/reference/public-api.html))
-- [SDK clients (TypeScript / Python / Go / Java+Kotlin): design, generation, releases](./sdk/README.md)
+  (using it: [Public API](https://www.catfactory.ai/extend/public-api.html))
+- [SDK clients (TypeScript / Python / Go / Java+Kotlin): generation & releases](./sdk/README.md)
+  (using them: [SDKs](https://www.catfactory.ai/extend/sdks.html))
 - [MCP server: the public API as tools an MCP host can drive](./sdk/mcp/README.md)
+  (using it: [MCP server](https://www.catfactory.ai/extend/mcp-server.html))
 - [Remote run debugging API: telemetry + logs for an agent diagnosing a run](./backend/docs/debug-api.md)
 - [Ephemeral environments](./backend/docs/environments-integration.md) ·
   [native adapters](./backend/docs/native-environment-adapter.md)
 - [Self-hosted runner pool](./backend/docs/runner-pool-integration.md) ·
   [Kubernetes topology](./backend/docs/kubernetes-topology.md)
-- [GitHub vs GitLab: what each provider supports](./backend/docs/vcs-providers.md)
+- [The provider-neutral VCS layer](./backend/docs/vcs-providers.md)
+  (what each provider supports: [support matrix](https://www.catfactory.ai/reference/vcs-support-matrix.html))
 
 **Agents & pipelines**
 
@@ -444,15 +442,15 @@ currently open and what each one is trying to change.
 
 **Operations**
 
-- [Security model: what stands between an agent and your repository](./backend/docs/security-model.md),
-  including the operator hardening checklist
+- [Security model: what stands between an agent and your repository](./backend/docs/security-model.md)
+  (the operator hardening checklist: [Security model](https://www.catfactory.ai/reference/security-model.html))
 - [Environment variables: every knob, and which are reserved](./docs/environment-variables.md)
-  (the canonical list, and the only one until the website renders a copy)
+  (the canonical list; the website renders it at [Environment variables](https://www.catfactory.ai/reference/environment-variables.html))
 - [Structured logging: the `Logger` port and what gets bound where](./backend/docs/logging.md)
 - [LLM telemetry: what every model call records, and where it lands](./backend/docs/llm-telemetry.md)
 - [Reports: where the spend and the work actually go](./backend/docs/reports.md)
-- [Storage & retention](./backend/docs/storage-and-retention.md), including the windows an
-  operator sets
+- [Storage & retention](./backend/docs/storage-and-retention.md)
+  (the windows an operator sets: [Upgrades & data retention](https://www.catfactory.ai/operate/upgrades-and-retention.html))
 - [Custom binary artifact stores](./backend/docs/custom-binary-stores.md)
 - [Container reaping & deletion](./backend/docs/container-reaping.md)
 

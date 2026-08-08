@@ -1,7 +1,7 @@
 # Reports: design
 
 > Reading the reports is on the website
-> ([Observability](https://www.catfactory.ai/deploy/observability.html)). This page is the
+> ([Observability](https://www.catfactory.ai/operate/observability.html)). This page is the
 > design record: what the windows read, why long windows read a rollup, and the decisions that
 > shaped the wire shape.
 

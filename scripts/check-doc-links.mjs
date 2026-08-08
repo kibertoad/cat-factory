@@ -3,12 +3,12 @@
 //
 // Two halves, both explained at length in `doc-links.mjs` (the detection module):
 //
-//   1. A `https://www.catfactory.ai/...` link in markdown must name a page recorded in
-//      `docs/website-pages.txt`. The website page lands first; the inventory line is how a
-//      reviewer sees that it did.
-//   2. A doc URL built in CODE (`DOCS.*`, `VCS_DOC_URLS`) must name a markdown file that exists,
-//      and any section anchor it deep-links must exist as a heading in that file. These URLs sit
-//      in operator-facing error messages, so the reader who follows one is already stuck.
+//   1. A `https://www.catfactory.ai/...` URL, in markdown OR in source, must name a page recorded
+//      in `docs/website-pages.txt`. The website page lands first; the inventory line is how a
+//      reviewer sees that it did, without holding another repository's deploy state in their head.
+//   2. An IN-REPO doc URL built in code (`DOCS.*`, `VCS_DOC_URLS`) must name a markdown file that
+//      exists, and any section anchor it deep-links must exist as a heading in that file. These
+//      URLs sit in operator-facing error messages, so whoever follows one is already stuck.
 //
 // Usage:  node scripts/check-doc-links.mjs
 // Exit 0 = clean; exit 1 = at least one link cannot be followed.
@@ -24,6 +24,7 @@ import {
   parseEnvVarAnchors,
   parseWebsitePages,
   unknownWebsiteLinks,
+  websiteTemplatePaths,
 } from './doc-links.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -40,7 +41,11 @@ const SKIP_DIRS = new Set([
 // CHANGELOGs are generated from merged changesets: a link inside one is a historical record of what
 // a past release said, not a claim this checkout is making, and rewriting one to satisfy a guard
 // would falsify the history it exists to keep.
-const SKIP_FILES = /(^|\/)CHANGELOG\.md$/
+//
+// The guards' own fixtures are exempt for the reason every detector's fixtures are: they must be
+// free to spell the thing being banned. `doc-links.test.mjs` asserts that an unrecorded page IS
+// caught, which it can only do by containing one.
+const SKIP_FILES = /(^|\/)CHANGELOG\.md$|(^|\/)scripts\/[\w-]+\.test\.mjs$/
 
 function* walk(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -64,14 +69,25 @@ const readDoc = (path) => {
 const failures = []
 
 // ---------------------------------------------------------------------------
-// 1. Website links name a recorded page.
+// 1. Website URLs name a recorded page, in prose and in code alike.
 // ---------------------------------------------------------------------------
+// `.txt` is in the list only so the inventory cannot quietly list a page under a typo'd path that
+// nothing else references; it is checked against itself and passes trivially.
+const LINKING_FILE = /\.(md|mts|mjs|ts|tsx|js|vue|txt)$/
 const pages = parseWebsitePages(read('docs/website-pages.txt'))
 for (const file of walk(repoRoot)) {
   const rel = relative(repoRoot, file).split('\\').join('/')
-  if (!rel.endsWith('.md') || SKIP_FILES.test(rel)) continue
-  for (const target of unknownWebsiteLinks(readFileSync(file, 'utf8'), pages)) {
+  if (!LINKING_FILE.test(rel) || SKIP_FILES.test(rel)) continue
+  const text = readFileSync(file, 'utf8')
+  for (const target of unknownWebsiteLinks(text, pages)) {
     failures.push({ where: rel, detail: `${target} is not a page in docs/website-pages.txt` })
+  }
+  for (const path of websiteTemplatePaths(text)) {
+    if (pages.has(path.split('#')[0].split('?')[0])) continue
+    failures.push({
+      where: rel,
+      detail: `a URL composed onto the site base names ${path}, which is not in docs/website-pages.txt`,
+    })
   }
 }
 

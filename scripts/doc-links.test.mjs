@@ -22,6 +22,7 @@ import {
   parseEnvVarAnchors,
   parseWebsitePages,
   unknownWebsiteLinks,
+  websiteTemplatePaths,
 } from './doc-links.mjs'
 
 test('parses the website page inventory, dropping comments and normalising the leading slash', () => {
@@ -33,7 +34,7 @@ test('parses the website page inventory, dropping comments and normalising the l
   assert.deepEqual([...pages].sort(), ['', 'deploy/local.html', 'guide/budgets.html'])
 })
 
-test('flags a website link whose page is not recorded, and passes one that is', () => {
+test('flags a website URL whose page is not recorded, in markdown and in source alike', () => {
   const pages = parseWebsitePages('guide/budgets.html\ndeploy/configuration.html\n')
   const md = [
     'Recorded: [budgets](https://www.catfactory.ai/guide/budgets.html).',
@@ -46,6 +47,56 @@ test('flags a website link whose page is not recorded, and passes one that is', 
     'https://www.catfactory.ai/extend/sdks.html',
     'https://catfactory.ai/operate/observability.html',
   ])
+})
+
+test('reads a URL out of source, not only out of markdown link syntax', () => {
+  const pages = parseWebsitePages('guide/budgets.html\n')
+  assert.deepEqual(
+    unknownWebsiteLinks("const b = 'https://www.catfactory.ai/guide/budgets.html'", pages),
+    [],
+  )
+  assert.deepEqual(
+    unknownWebsiteLinks("const x = 'https://www.catfactory.ai/extend/gone.html'", pages),
+    ['https://www.catfactory.ai/extend/gone.html'],
+  )
+})
+
+test('resolves a path composed onto a site-base constant, which raw scanning cannot see', () => {
+  // The shape `config/docs.ts` actually uses. Scanned raw, the origin and the interpolated tail are
+  // two unrelated strings and NEITHER is checked, so the guard would report green over the one
+  // place a dead link reaches an operator mid-failure. This is the assertion that closes that.
+  const source = [
+    "const SITE_BASE = 'https://www.catfactory.ai'",
+    'export const SITE_DOCS = {',
+    '  vcsSetup: `${SITE_BASE}/reference/vcs-support-matrix.html#setting-each-one-up`,',
+    '  gone: `${SITE_BASE}/extend/gone.html`,',
+    '} as const',
+  ].join('\n')
+  assert.deepEqual(websiteTemplatePaths(source), [
+    'reference/vcs-support-matrix.html#setting-each-one-up',
+    'extend/gone.html',
+  ])
+  // The base constant's NAME is read from the file, so a second module picking its own is covered.
+  const renamed = [
+    "const DOCS_SITE = 'https://catfactory.ai'",
+    'a: `${DOCS_SITE}/guide/skills.html`,',
+  ].join('\n')
+  assert.deepEqual(websiteTemplatePaths(renamed), ['guide/skills.html'])
+  // No base constant means nothing to compose: never guess a bare interpolation is a site URL.
+  assert.deepEqual(websiteTemplatePaths('x: `${OTHER}/guide/skills.html`,'), [])
+})
+
+test('trims prose punctuation that ran into a URL, and stops at markdown and quote delimiters', () => {
+  const pages = parseWebsitePages('guide/budgets.html\n')
+  for (const text of [
+    'See https://www.catfactory.ai/guide/budgets.html.',
+    'See https://www.catfactory.ai/guide/budgets.html, then stop.',
+    '[b](https://www.catfactory.ai/guide/budgets.html)',
+    "'https://www.catfactory.ai/guide/budgets.html'",
+    '`https://www.catfactory.ai/guide/budgets.html`',
+  ]) {
+    assert.deepEqual(unknownWebsiteLinks(text, pages), [], text)
+  }
 })
 
 test('slugifies a heading the way GitHub does, dropping punctuation rather than replacing it', () => {
@@ -159,16 +210,13 @@ test('separates a missing document from a missing heading, and passes a live anc
   )
 })
 
-test('reads inline links and reference definitions, ignoring prose', () => {
+test('reads inline links and reference definitions for the anchor extractor', () => {
   const md = [
-    'See [the guide](https://www.catfactory.ai/guide/budgets.html).',
+    'See [the guide](./guide.md) and [the ADR](../adr/0031.md).',
     '',
-    '[ref]: https://www.catfactory.ai/deploy/local.html',
+    '[ref]: ./sibling.md',
     '',
-    'A bare https://www.catfactory.ai/extend/sdks.html in prose is not a link.',
+    'A bare path like ./not-a-link.md in prose is not one.',
   ].join('\n')
-  assert.deepEqual(linkTargets(md), [
-    'https://www.catfactory.ai/guide/budgets.html',
-    'https://www.catfactory.ai/deploy/local.html',
-  ])
+  assert.deepEqual(linkTargets(md), ['./guide.md', '../adr/0031.md', './sibling.md'])
 })

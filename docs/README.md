@@ -51,11 +51,11 @@ would otherwise outdate it.
   card, directory ⇄ package names, runner/executor/transport, and where gates,
   agent kinds and migration parity live. Read this first if a term is ambiguous;
   the PRODUCT vocabulary is the website's
-  [Core concepts](https://www.catfactory.ai/guide/core-concepts.html).
+  [Glossary](https://www.catfactory.ai/reference/glossary.html).
 - [`environment-variables.md`](./environment-variables.md): every configuration
   variable, and which names are reserved so they can never be resolved into an
-  agent process. The canonical list, read by `scripts/check-reserved-env-keys.mjs`,
-  and the one an operator reads until the website renders a copy of it.
+  agent process. The canonical list, read by `scripts/check-reserved-env-keys.mjs`
+  and rendered onto the website by its `scripts/sync-env-vars.mjs`.
 - [`execution-state-machine.md`](./execution-state-machine.md): the run
   lifecycle, its states and transitions, and why it is not XState.
 - [`benchmarks/`](./benchmarks): agent benchmark runs and candidate models.

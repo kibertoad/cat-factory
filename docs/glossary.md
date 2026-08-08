@@ -4,11 +4,11 @@ A single lookup for the vocabulary and naming traps that otherwise take grepping
 When code and docs use different words for the same thing, this is the reconciliation.
 
 > **This is the CODE-LEVEL map**: directory ⇄ package names, which layer calls one entity by which
-> word, where a cross-cutting concept's implementation lives. A term earns its place here by
-> resolving an ambiguity you can only hit with the source open. The PRODUCT vocabulary (what a user
-> means by a block, a gate, a preset) is the website's job and it has no glossary page yet, so
-> until it does, a purely user-facing term is covered by
-> [Core concepts](https://www.catfactory.ai/guide/core-concepts.html) rather than added here.
+> word, where a cross-cutting concept's implementation lives. The PRODUCT vocabulary (what a user
+> means by a block, a gate, a preset) is the website's
+> [Glossary](https://www.catfactory.ai/reference/glossary.html). A term whose whole content is "what
+> this word means to someone using the product" belongs there; a term here earns its place by
+> resolving an ambiguity you can only hit with the source open.
 
 ## Domain nouns: the unit of work
 

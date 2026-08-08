@@ -1,9 +1,9 @@
 # MCP tool servers: external tools for agents, without forking
 
 > Not to be confused with the platform's OWN public API served as MCP
-> ([`sdk/mcp/README.md`](../../sdk/mcp/README.md)): that is the serving side, this is the consuming
-> side. What a deployment author does is summarised on
-> [Custom Agents & Gates](https://www.catfactory.ai/deploy/custom-agents.html#skills-and-tool-servers);
+> ([MCP Server](https://www.catfactory.ai/extend/mcp-server.html) on the website): that is the
+> serving side, this is the consuming side. What a deployment author does is summarised on
+> [Custom Agents & Gates](https://www.catfactory.ai/extend/custom-agents.html#skills-and-tool-servers);
 > this page is the full model.
 
 The authority for the CONSUMING side of MCP on this platform: how a deployment gives its agents

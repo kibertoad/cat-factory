@@ -3,21 +3,24 @@
 //
 // One rule, two mechanisms: a documentation link this repository publishes must RESOLVE.
 //
-// Mechanism 1: a website link names a page that exists. The docs split sends readers to
-// catfactory.ai for anything actionable without a checkout, and a link to a page that was planned
+// Mechanism 1: a website link names a page the site actually serves. The docs split sends readers
+// to catfactory.ai for anything actionable without a checkout, and a link to a page that is planned
 // rather than published is invisible to everyone who works here: nothing typechecks it, no test
-// covers it, and it renders as a perfectly ordinary link. `docs/website-pages.txt` is the recorded
-// inventory, so adding a link to a new page is a two-line diff a reviewer sees rather than a claim
-// they have to take on trust.
+// covers it, and it renders as a perfectly ordinary link. It is invisible in the OTHER direction
+// too, which is the half nobody expects: the two repositories merge independently, so a link can be
+// correct when written, dead for a week, and correct again, and reviewing it means holding a moving
+// third-party deployment in your head. `docs/website-pages.txt` replaces that with a diff. It reads
+// markdown and SOURCE alike, because a remedy in `SITE_DOCS` reaches an operator who is already
+// stuck and can least afford a 404.
 //
-// Mechanism 2: a doc URL built in CODE resolves to a real file AND a real heading. `DOCS.*`
+// Mechanism 2: an in-repo doc URL built in CODE resolves to a real file AND a real heading. `DOCS.*`
 // (server) and `VCS_DOC_URLS` (kernel) put GitHub blob URLs into operator-facing error messages and
 // boot warnings, several of them deep-linked to a section anchor. That anchor is a string in one
-// file and a heading in another, with nothing joining them: deleting `## Setup` from
-// `vcs-providers.md` left the GitLab webhook-rejection warning pointing an operator at a page with
-// no setup section, in the same commit that removed the `GITLAB_WEBHOOK_SECRET` content they were
-// sent for. The unit test asserting the message contains `vcs-providers.md#setup` still passed,
-// because it only ever knew about the string.
+// file and a heading in another, with nothing joining them: reducing `vcs-providers.md` deleted the
+// `## Setup` the GitLab webhook-rejection warning pointed at, in the same commit that removed the
+// `GITLAB_WEBHOOK_SECRET` content the operator was sent for. The unit test asserting the message
+// contains `vcs-providers.md#setup` passed throughout, because it only ever knew about the string.
+// (That remedy now names the website page that owns setup, which is what mechanism 1 covers.)
 //
 // Both halves stay pure: the caller supplies the files. That keeps the fixtures free of a tmpdir
 // and keeps this module honest about what it can actually see.
@@ -49,22 +52,30 @@ export function parseWebsitePages(text) {
   return pages
 }
 
-const WEBSITE_LINK_RE = /^https:\/\/(?:www\.)?catfactory\.ai\/(.*)$/
+/**
+ * Every website URL in a body of text, found RAW rather than through markdown link syntax.
+ *
+ * Raw is what makes this work on a `.ts` remedy string and a `.md` link with one rule, and it is
+ * also the stricter reading for prose: a bare URL in a paragraph is a URL somebody will follow.
+ * The terminators are the characters that end a URL in markdown, in a template literal and in a
+ * quoted string; trailing prose punctuation is trimmed after the match rather than excluded from
+ * it, since a `.` is legal inside a path but never ends one here.
+ */
+const WEBSITE_URL_RE = /https:\/\/(?:www\.)?catfactory\.ai\/[^\s)"'`<>\]]*/g
 
 /**
- * Website links in `markdown` whose page is not in `pages`.
+ * Website URLs in `text` whose page is not in `pages`.
  *
- * The fragment and query are stripped before the lookup: a heading on a page that exists is a
- * different (weaker) claim than the page existing at all, and only the second one is checkable from
- * here. A trailing `.` or `,` is prose punctuation that ran into the URL, not part of it.
+ * The fragment and query are stripped before the lookup: whether a HEADING exists on a page is a
+ * different and weaker claim than whether the page does, and only the second is checkable without
+ * the network. So an anchor is carried into the message but never decides the verdict.
  */
-export function unknownWebsiteLinks(markdown, pages) {
+export function unknownWebsiteLinks(text, pages) {
   const unknown = []
-  for (const target of linkTargets(markdown)) {
-    const match = WEBSITE_LINK_RE.exec(target.replace(/[.,]$/, ''))
-    if (!match) continue
-    const path = match[1].split('#')[0].split('?')[0]
-    if (!pages.has(path)) unknown.push(target)
+  for (const raw of text.match(WEBSITE_URL_RE) ?? []) {
+    const url = raw.replace(/[.,;:]+$/, '')
+    const path = url.slice(url.indexOf('catfactory.ai/') + 'catfactory.ai/'.length)
+    if (!pages.has(path.split('#')[0].split('?')[0])) unknown.push(url)
   }
   return unknown
 }
@@ -128,6 +139,27 @@ export function parseEnvVarAnchors(source) {
 /** Repo-relative markdown paths named by a `${REPO_DOC_BLOB_BASE}/...` template literal. */
 export function parseBlobTemplatePaths(source) {
   return [...source.matchAll(/\$\{REPO_DOC_BLOB_BASE\}\/([^`\s]+\.md)/g)].map((m) => m[1])
+}
+
+/**
+ * Website paths a source file composes from a local base constant, as
+ * `const SITE_BASE = 'https://www.catfactory.ai'` plus `` `${SITE_BASE}/guide/budgets.html` ``.
+ *
+ * Without this the raw scanner sees the bare origin and the interpolated tail as two unrelated
+ * strings and checks NEITHER, which is worse than not scanning source at all: the guard reports
+ * green over exactly the shape the code actually uses. The constant's name is read from the file
+ * rather than hard-coded, so a second module adopting the idiom is covered by construction.
+ */
+export function websiteTemplatePaths(source) {
+  const bases = [
+    ...source.matchAll(/const\s+(\w+)\s*=\s*'https:\/\/(?:www\.)?catfactory\.ai\/?'/g),
+  ].map((m) => m[1])
+  const paths = []
+  for (const base of bases) {
+    const re = new RegExp(`\\$\\{${base}\\}/([^\`\\s'"]+)`, 'g')
+    for (const match of source.matchAll(re)) paths.push(match[1])
+  }
+  return paths
 }
 
 /**

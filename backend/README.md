@@ -861,7 +861,8 @@ Design + runbook: [`docs/github-integration.md`](./docs/github-integration.md) Â
 
 **GitLab is also supported**, as an opt-in alternative/addition to GitHub (single
 shared token rather than an App installation). See
-[`docs/vcs-providers.md`](./docs/vcs-providers.md) for the provider layer, the
+[`docs/vcs-providers.md`](./docs/vcs-providers.md) for the provider layer, and the website's
+[support matrix](https://www.catfactory.ai/reference/vcs-support-matrix.html) for the
 feature-by-feature comparison and setup.
 
 **Creating repos directly (two-app tier, opt-in).** Programmatic repo creation
