@@ -121,5 +121,6 @@ surface built on those seams is still open, as
 ### Engineering hygiene
 
 - [Contracts parse-boundary test backfill](./contracts-test-backfill.md)
+- [Documentation revamp: the repo ⇄ website split](./documentation-revamp.md)
 - [Ratchet down oxlint complexity and size ceilings](./lint-complexity-size-ratchet.md)
 - [System audit: data lifecycle, runtime parity, robustness](./system-audit-improvements.md)
