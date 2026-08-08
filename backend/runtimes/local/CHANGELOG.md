@@ -1,5 +1,47 @@
 # @cat-factory/local-server
 
+## 0.125.3
+
+### Patch Changes
+
+- f0e1c45: Issue writeback is a `TaskSourceProvider` capability, and GitLab Issues accept webhooks
+
+  The engine's writeback (a comment when the PR opens, comment + resolve on merge, the intake
+  pickup claim, a parked review's questions and the acknowledgement of a reply) dispatched on a
+  hard-coded `github | jira | linear` chain inside one service. GitLab Issues, a shipped task
+  source, therefore had full intake and no way to answer it, and a tracker a deployment registers
+  could not have one however it was wired. Providers now declare `writeback`, the outbound mirror
+  of the existing `webhook` capability, and the service dispatches through the registry.
+
+  `GitLabIssuesProvider` also gains the inbound half: GitLab echoes a shared secret in
+  `x-gitlab-token` rather than signing the body, so its adapter compares that in constant time and
+  still fails closed on an empty secret. Board equality is now the source's own rule
+  (`TaskSourceProvider.sameBoard`), because GitLab project paths are case-sensitive where every
+  other board id folds.
+
+  A writeback adapter declares where it gets its authority (`authenticates`), which decides what an
+  unreadable tracker connection costs. Jira and Linear post with the stored bag, so a row that will
+  not open takes their writeback with it. GitHub Issues and GitLab Issues authenticate through the
+  workspace's VCS installation and read that row only for the inbound reply secret, so they keep
+  posting and lose just the reply grammar, which is withheld rather than promised.
+
+  Two internal breaks, per the pre-1.0 policy. The facades' `commentOnGitHubIssue` /
+  `closeGitHubIssue` / `labelGitHubIssue` writeback seams are gone (the source resolves its own
+  installation now), and a writeback for a workspace with no stored connection REFUSES where the
+  Jira and Linear legs used to return quietly: that silent return let the parked-review echo record
+  its idempotency marker for a comment the tracker never received.
+
+- Updated dependencies [f0e1c45]
+  - @cat-factory/kernel@0.279.0
+  - @cat-factory/integrations@0.153.0
+  - @cat-factory/gitlab@0.19.0
+  - @cat-factory/server@0.260.0
+  - @cat-factory/orchestration@0.248.2
+  - @cat-factory/node-server@0.195.3
+  - @cat-factory/executor-harness@1.104.0
+  - @cat-factory/agents@0.121.1
+  - @cat-factory/prompt-fragments@1.0.33
+
 ## 0.125.2
 
 ### Patch Changes
