@@ -23,8 +23,7 @@ One remedy changes target as part of that split. The GitLab webhook-rejection wa
 `SITE_DOCS` beside `DOCS` for that class of remedy: the site owns a SETUP instruction, this repo
 owns its own internals.
 
-`scripts/check-doc-links.mjs` makes both couplings mechanical. A catfactory.ai URL, in markdown or
-in source, must name a page recorded in `docs/website-pages.txt`, so a link cannot outrun the page
-it points at across two repositories that merge independently. And every in-repo doc URL built in
-code must resolve to a file AND a heading, which no test could previously see: the one asserting the
-GitLab remedy contains `vcs-providers.md#setup` passed the whole time the heading was gone.
+`scripts/check-doc-anchors.mjs` makes that coupling mechanical: every doc URL built in code, across
+the three modules that build them, must resolve to a file AND a heading. Nothing could see it
+before, which is why the test asserting the GitLab remedy contains `vcs-providers.md#setup` passed
+the whole time that heading was gone.

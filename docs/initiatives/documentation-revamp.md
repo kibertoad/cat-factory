@@ -195,12 +195,14 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       several of its anchors are linked from published package READMEs and from error messages in
       code. The website owns the integrator's first read; moving the reference itself needs its own
       slice, with the anchor inventory done first.
-- [x] 14. Enforce the split's two couplings, after slice 9 broke one of them silently.
-      `docs/website-pages.txt` records every page the site serves and `scripts/check-doc-links.mjs`
-      refuses a catfactory.ai URL, in markdown or in SOURCE, whose path is not in it; the same guard
-      resolves every in-repo doc URL built in code (`DOCS.*`, `VCS_DOC_URLS`) to a file AND a
-      heading. Both couplings were previously invisible: one spans two repositories that merge
-      independently, the other joins a string in a `.ts` file to a heading in a `.md` one.
+- [x] 14. Enforce the coupling slice 9 broke silently. `scripts/check-doc-anchors.mjs` resolves
+      every doc URL built in code to a file AND a heading, across all THREE modules that build them
+      (`config/docs.ts`, `vcs-errors.ts`, `providers/docs.ts`: each layer sits below the last and
+      cannot import it). Deliberately NOT guarded: whether a catfactory.ai link resolves. That needs
+      either the network, which fails on the website's outages rather than on our mistakes, or a
+      checked-in copy of the site's page list, which is a second routing table to keep in step and
+      rots in the direction that matters most, since a page deleted from the site would stay listed
+      and keep passing.
 - [ ] 15. **Finish the reductions the pointers only announced.** A pointer at the top of a doc is
       not the split; it is the promise of one, and the promise reads as done on a checklist. What
       has actually been reduced: `sdk/README.md` (-92 lines), `security-model.md` (-60),
@@ -258,14 +260,15 @@ Checked against `main` on 2026-08-08, after the tracker's base commit:
   `vcs-providers.md#setup` and passed throughout, because a test on a composed string cannot see
   whether the heading exists. The fix is the general one, not a restored heading: setup now belongs
   to the website, so the remedy names the page that owns it (`SITE_DOCS.vcsSetup`), and
-  `check-doc-links.mjs` resolves both kinds of target. **Before reducing a doc, grep `config/docs.ts`
-  and `vcs-errors.ts` for it**; a remedy whose instruction the website now owns moves to `SITE_DOCS`,
+  `check-doc-anchors.mjs` resolves every such target. **Before reducing a doc, grep `config/docs.ts`,
+  `vcs-errors.ts` and `providers/docs.ts` for it**; a remedy whose instruction the website now owns moves to `SITE_DOCS`,
   and one about this repo's internals keeps its heading.
 - **The ordering rule cuts both ways across two repositories.** "Land the website page FIRST" is
   right, but the two repos merge independently and neither CI can see the other, so a link is not
   self-evidently correct at review time and a reviewer cannot be asked to hold the site's deploy
-  state in their head. That is what `docs/website-pages.txt` is for: it turns "is this page live?"
-  into a line in the diff. Add the path in the PR that links it, having loaded the page first.
+  state in their head. There is no guard for this and a checked-in page list was tried and rejected
+  (item 14 says why), so it stays a human step: LOAD the page before you link it, and say in the PR
+  that you did.
 - **`check-reserved-env-keys.mjs` is a SAME-REPO coupling, not a file-path one.** It reads
   `docs/environment-variables.md` and fails when a documented variable is missing from the reserved
   set, and its whole value is that this fires in the PR that adds the variable: the documentation

@@ -114,9 +114,9 @@ radius (a one-line internal fix needs none; a new export / env var / capability 
 - This file, only for a new CROSS-CUTTING convention or a change to a flow it indexes; detail about one flow
   goes in that flow's doc, and a higher-level doc POINTS AT a new deeper one or the deeper one is lost.
 - **Does this change behaviour a catfactory.ai page describes?** OWNERSHIP FOLLOWS THE READER: the website
-  owns what anyone can act on with NO checkout, a doc here keeps the internal design plus a LINK, and the two
-  split by DEPTH, never mirrored. Say so in the PR or open the website PR, landing it FIRST: a doc may never
-  be reduced to a pointer at a page that does not exist yet. Model: `docs/initiatives/documentation-revamp.md`.
+  owns what anyone can act on with NO checkout, a doc here keeps internal design plus a LINK, the two split by
+  DEPTH, never mirrored. Land the website page FIRST, and before reducing a doc check what deep-links its
+  HEADINGS from code (`check-doc-anchors.mjs`). Model: `docs/initiatives/documentation-revamp.md`.
 
 ### Bigger initiatives get a tracker document
 
@@ -583,7 +583,7 @@ recipe, release-PR re-sync, new-published-package checklist: [`docs/internal/rel
 - `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is RESERVED, so it can never be named as a capability credential.
 - `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through `buildStepApproval`.
 - `node scripts/check-shipped-doc-links.mjs`: a published tarball's docs never link out of the package.
-- `node scripts/check-doc-links.mjs`: a catfactory.ai link names a page in `docs/website-pages.txt`, and a code-built doc URL resolves to a file AND a heading.
+- `node scripts/check-doc-anchors.mjs`: every doc URL built in code resolves to a file AND a heading.
 - `node scripts/check-test-lane-parity.mjs`: `pnpm test:quick` excludes what CI's no-DB lane does.
 - `node scripts/check-deploy-placeholders.mjs`: the `deploy/*` templates hold placeholders, never real ids.
 - `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs them all).

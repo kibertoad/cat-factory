@@ -38,9 +38,9 @@ const SITE_BASE = 'https://www.catfactory.ai'
  * when the reader may be somewhere a browser is inconvenient: a GitHub blob URL renders in a
  * terminal-adjacent tab and survives a checkout that has no docs.
  *
- * A page named here must exist. `scripts/check-doc-links.mjs` resolves these against
- * `docs/website-pages.txt` exactly as it does a markdown link, because a remedy pointing at a 404
- * fails the one reader who is already stuck.
+ * A page named here must be one that is LIVE. Nothing in CI can confirm that (the site deploys from
+ * its own repository), so load it before adding an entry: a remedy pointing at a 404 fails the one
+ * reader who is already stuck.
  */
 export const SITE_DOCS = {
   /** VCS support matrix — including per-provider setup and the webhook secrets. */
