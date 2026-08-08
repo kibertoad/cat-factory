@@ -90,6 +90,7 @@ describe('seedPipelines — named-gate lowering', () => {
       'conflicts',
       'ci',
       'merger',
+      'disposer',
     ])
   })
 
@@ -118,6 +119,7 @@ describe('seedPipelines — named-gate lowering', () => {
       'ci',
       'human-review',
       'merger',
+      'disposer',
     ])
     // The gating array is index-aligned with agentKinds, so a step inserted above can never shift a
     // threshold onto its neighbour — the whole point of the named-step seed form.

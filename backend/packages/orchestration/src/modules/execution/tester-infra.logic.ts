@@ -1,7 +1,5 @@
 import type { ProvisionType } from '@cat-factory/kernel'
-import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
-import { HUMAN_TEST_AGENT_KIND, TESTER_KINDS } from './ci.logic.js'
-import { ACCEPTANCE_AGENT_KINDS } from '@cat-factory/agents'
+import { DEPLOYER_AGENT_KIND, ENV_CONSUMER_AGENT_KINDS } from '@cat-factory/contracts'
 
 // Pure decision for the Tester's start-time infra gate — no IO, no ports. Given the
 // service's declared provision type and whether a workspace handler resolves for the type,
@@ -75,12 +73,13 @@ export function decideTesterInfra(input: TesterInfraInput): TesterInfraDecision 
  * acceptance (`playwright`) runner, and the human-test gate. On a `kubernetes`/`custom` service each
  * needs a `deployer` to have stood the environment up first (they read its coordinates, they never
  * provision themselves), so a chain that reaches one without a preceding deployer would dead-end.
+ *
+ * Re-exported from `@cat-factory/contracts`, which owns the list: the SPA's pipeline builder warns
+ * about the same set while a draft is being composed, and the save boundary refuses it. This
+ * module's remaining job is the SERVICE-AWARE half — whether the service under test stands an
+ * environment up at all — which only the run door can answer.
  */
-export const ENV_CONSUMER_KINDS: readonly string[] = [
-  ...TESTER_KINDS,
-  ...ACCEPTANCE_AGENT_KINDS,
-  HUMAN_TEST_AGENT_KIND,
-]
+export { ENV_CONSUMER_AGENT_KINDS as ENV_CONSUMER_KINDS } from '@cat-factory/contracts'
 
 /**
  * For a Deployer-provisioned service (`docker-compose`/`kubernetes`/`custom`): whether the ENABLED
@@ -108,7 +107,7 @@ export function needsDeployerBeforeConsumer(
     if (enabled?.[i] === false) continue
     const kind = agentKinds[i]!
     if (kind === DEPLOYER_AGENT_KIND) deployerSeen = true
-    else if (!deployerSeen && ENV_CONSUMER_KINDS.includes(kind)) return true
+    else if (!deployerSeen && ENV_CONSUMER_AGENT_KINDS.includes(kind)) return true
   }
   return false
 }

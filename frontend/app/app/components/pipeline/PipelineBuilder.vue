@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { purposeAllowsAgentCategory } from '@cat-factory/contracts'
+import { pipelineEnvironmentProblems, purposeAllowsAgentCategory } from '@cat-factory/contracts'
 import type { AgentKind, Pipeline, PipelinePurpose } from '~/types/domain'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
@@ -394,6 +394,21 @@ const gatingNeedsEstimator = computed(() => {
   return false
 })
 
+// Surfaced as inline hints: the environment lifecycle a draft has to spell out — provision
+// (Deployer) → consume (a tester / acceptance / human-test step) → reclaim (Disposer). The rule
+// itself lives in `@cat-factory/contracts` and is the SAME function the save boundary refuses on,
+// rather than a second hand-written copy that could disagree about which draft is savable. One
+// message per distinct fault: a draft missing both a Deployer and a Disposer says so at once.
+const environmentHintKeys = computed(() => {
+  const byReason = {
+    consumer_without_deployer: 'pipeline.builder.envNeedsDeployer',
+    deployer_without_disposer: 'pipeline.builder.envNeedsDisposer',
+    disposer_without_deployer: 'pipeline.builder.envDisposerNeedsDeployer',
+  } as const
+  const problems = pipelineEnvironmentProblems(pipelines.draft, pipelines.draftEnabled)
+  return [...new Set(problems.map((p) => byReason[p.reason]))]
+})
+
 // ---- draft labels ----------------------------------------------------------
 const newLabel = ref('')
 function addLabel() {
@@ -582,6 +597,16 @@ async function clone(p: Pipeline) {
           >
             <UIcon name="i-lucide-alert-triangle" class="h-3.5 w-3.5 shrink-0" />
             {{ t('pipeline.builder.gatingNeedsEstimator') }}
+          </p>
+
+          <p
+            v-for="key in environmentHintKeys"
+            :key="key"
+            class="mb-2 flex items-center gap-1.5 rounded-md border border-amber-800/50 bg-amber-950/30 px-2 py-1 text-[11px] text-amber-300"
+            data-testid="env-lifecycle-hint"
+          >
+            <UIcon name="i-lucide-alert-triangle" class="h-3.5 w-3.5 shrink-0" />
+            {{ t(key) }}
           </p>
 
           <p

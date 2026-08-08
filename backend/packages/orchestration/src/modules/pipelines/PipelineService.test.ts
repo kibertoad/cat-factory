@@ -190,23 +190,25 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
     const service = svc()
     const p = await service.create(WS, {
       name: 'Build + test, no QC',
-      agentKinds: ['coder', 'tester-api'],
-      testerQuality: [null, { enabled: false }],
+      // The Tester rides the full environment lifecycle (deployer → tester → disposer), which the
+      // authoring rules require of any chain that tests; the QC opt-out under test is orthogonal.
+      agentKinds: ['coder', 'deployer', 'tester-api', 'disposer'],
+      testerQuality: [null, null, { enabled: false }, null],
     })
-    expect(p.testerQuality?.[1]).toEqual({ enabled: false })
+    expect(p.testerQuality?.[2]).toEqual({ enabled: false })
     // Aligned-null on the non-Tester index.
     expect(p.testerQuality?.[0]).toBeNull()
     // A round-trip through update preserves the opt-out.
     const updated = await service.update(WS, p.id, { name: 'renamed' })
-    expect(updated.testerQuality?.[1]).toEqual({ enabled: false })
+    expect(updated.testerQuality?.[2]).toEqual({ enabled: false })
   })
 
   it('does not persist a testerQuality array when every Tester step keeps the default', async () => {
     const p = await svc().create(WS, {
       name: 'Build + test, default QC',
-      agentKinds: ['coder', 'tester-api'],
+      agentKinds: ['coder', 'deployer', 'tester-api', 'disposer'],
       // Explicit "enabled, ungated" is the default — not worth an array.
-      testerQuality: [null, { enabled: true }],
+      testerQuality: [null, null, { enabled: true }, null],
     })
     expect(p.testerQuality).toBeUndefined()
   })
@@ -251,14 +253,16 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
   it('accepts a QC-gated Tester step when a task-estimator runs earlier, persisting it', async () => {
     const p = await svc().create(WS, {
       name: 'QC-gated',
-      agentKinds: ['task-estimator', 'coder', 'tester-api'],
+      agentKinds: ['task-estimator', 'coder', 'deployer', 'tester-api', 'disposer'],
       testerQuality: [
         null,
         null,
+        null,
         { enabled: true, gating: { enabled: true, minImpact: 0.7, onMissingEstimate: 'run' } },
+        null,
       ],
     })
-    expect(p.testerQuality?.[2]).toEqual({
+    expect(p.testerQuality?.[3]).toEqual({
       enabled: true,
       gating: { enabled: true, minImpact: 0.7, onMissingEstimate: 'run' },
     })
@@ -473,5 +477,85 @@ describe('PipelineService — retirement (removing a built-in that is no longer 
     await expect(
       svc(store, { pipelineRegistry: retiringRegistry() }).reseed(WS, RETIRED),
     ).rejects.toThrow(/retired/i)
+  })
+})
+
+// The environment lifecycle a composed chain has to spell out: provision (`deployer`) → consume
+// (a tester / acceptance / human-test step) → reclaim (`disposer`). Enforced at the AUTHORING
+// boundary only (see `validatePipelineAuthoring`), so these pin both that a save refuses the dead
+// ends and that the rule stays off the paths that merely copy or re-file an existing chain.
+describe('PipelineService — environment-lifecycle authoring rules', () => {
+  const service = (store = new Map<string, Pipeline>()) =>
+    new PipelineService({
+      workspaceRepository: workspaceRepo(),
+      pipelineRepository: pipelineRepo(store),
+      idGenerator,
+    })
+
+  it('refuses to create a chain whose tester has nothing to run against', async () => {
+    await expect(
+      service().create(WS, { name: 'Untested', agentKinds: ['coder', 'tester-api'] }),
+    ).rejects.toThrow(/no enabled 'deployer' step comes before it/)
+  })
+
+  it('refuses to create a chain that provisions an environment nothing reclaims', async () => {
+    await expect(
+      service().create(WS, { name: 'Leaky', agentKinds: ['coder', 'deployer', 'tester-api'] }),
+    ).rejects.toThrow(/no enabled 'disposer' step comes after it/)
+  })
+
+  it('refuses a disposer with nothing to reclaim', async () => {
+    await expect(
+      service().create(WS, { name: 'Reclaim what', agentKinds: ['coder', 'disposer'] }),
+    ).rejects.toThrow(/would have nothing to reclaim/)
+  })
+
+  it('carries the fault on the error so a client reacts to it without matching the message', async () => {
+    const error = await service()
+      .create(WS, { name: 'Untested', agentKinds: ['coder', 'tester-api'] })
+      .catch((e: unknown) => e as ValidationError)
+    expect(error).toBeInstanceOf(ValidationError)
+    expect(error.details).toMatchObject({
+      reason: 'consumer_without_deployer',
+      problems: [{ reason: 'consumer_without_deployer', index: 1, agentKind: 'tester-api' }],
+    })
+  })
+
+  it('accepts the full lifecycle', async () => {
+    const p = await service().create(WS, {
+      name: 'Complete',
+      agentKinds: ['coder', 'deployer', 'tester-api', 'merger', 'disposer'],
+    })
+    expect(p.agentKinds).toContain('disposer')
+  })
+
+  it('refuses an EDIT that removes the deployer from a chain that still tests', async () => {
+    const store = new Map<string, Pipeline>()
+    const svc = service(store)
+    const created = await svc.create(WS, {
+      name: 'Complete',
+      agentKinds: ['coder', 'deployer', 'tester-api', 'disposer'],
+    })
+    await expect(
+      svc.update(WS, created.id, { agentKinds: ['coder', 'tester-api'] }),
+    ).rejects.toBeInstanceOf(ValidationError)
+    // Disabling it is the same edit by another route, and the rule reads the enabled subset.
+    await expect(
+      svc.update(WS, created.id, { enabled: [true, false, true, true] }),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('leaves an already-stored chain alone: only what a human COMPOSES is judged', async () => {
+    // A pipeline authored before this rule still runs, and every workspace holds seeded copies of
+    // built-ins that predate it. So `clone` (a copy, composing nothing) does not re-judge the
+    // source, and neither does `organize` (labels and archive state). Both would otherwise strand
+    // a workspace behind a rule it has no way to satisfy without first reseeding.
+    const store = new Map<string, Pipeline>([
+      ['pl_legacy', { id: 'pl_legacy', name: 'Legacy', agentKinds: ['coder', 'deployer'] }],
+    ])
+    const svc = service(store)
+    const copy = await svc.clone(WS, 'pl_legacy', {})
+    expect(copy.agentKinds).toEqual(['coder', 'deployer'])
+    await expect(svc.organize(WS, 'pl_legacy', { archived: true })).resolves.toBeDefined()
   })
 })

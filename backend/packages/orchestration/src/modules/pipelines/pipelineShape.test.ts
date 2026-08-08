@@ -12,6 +12,7 @@ import {
   assertValidTesterQualityGating,
   validatePipelineShape,
 } from './pipelineShape.js'
+import { validatePipelineAuthoring } from './pipelineAuthoring.js'
 
 /** A gate config that sets a threshold, so only the rule under test can be the failure. */
 const gated = { enabled: true as const, minRisk: 0.5, onMissingEstimate: 'run' as const }
@@ -33,6 +34,18 @@ describe('validatePipelineShape', () => {
     }
   })
 
+  it('every built-in seed pipeline satisfies the AUTHORING rules too, so one can be edited', () => {
+    // A built-in that failed these would be a preset the platform ships and its own builder
+    // refuses to save: clone it, change the name, and the save is rejected for a fault the user
+    // did not introduce. The catalog is the one place that cannot be allowed to drift from them.
+    for (const p of seedPipelines()) {
+      expect(() =>
+        validatePipelineAuthoring({ agentKinds: p.agentKinds, enabled: p.enabled }),
+        p.id,
+      ).not.toThrow()
+    }
+  })
+
   it('pl_build is the positional default: the design phase plus the everyday loop', () => {
     const pipelines = seedPipelines()
     // The POSITIONAL default: a plain "Start" with no pinned pipeline resolves `pipelines[0]`, so
@@ -50,6 +63,7 @@ describe('validatePipelineShape', () => {
       'conflicts',
       'ci',
       'merger',
+      'disposer',
     ])
     // It includes the design phase but stops short of the requirements interview, which is the
     // whole point of this rung sitting between pl_simple and pl_full.
@@ -83,7 +97,11 @@ describe('validatePipelineShape', () => {
     // or a red build. Asserted as an ORDERING rather than the literal last three kinds, because
     // `pl_full` legitimately slots its risk-gated `human-review` between `ci` and `merger`.
     for (const p of [simple, build, byId.get('pl_full')!]) {
-      const kinds = p.agentKinds
+      // The `disposer` is the one step allowed AFTER the merge, and it is dropped here rather
+      // than asserted around: it reclaims the environment and owns no terminal status, so it
+      // neither delays nor overwrites `done`. The claim being pinned is about what DECIDES the
+      // change's fate, and the merge stays the last of those.
+      const kinds = p.agentKinds.filter((k) => k !== 'disposer')
       expect(kinds.at(-1), `${p.id} must end at the merger`).toBe('merger')
       for (const guard of ['conflicts', 'ci']) {
         const at = kinds.indexOf(guard)

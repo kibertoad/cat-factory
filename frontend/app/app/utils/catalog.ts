@@ -210,12 +210,14 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
   },
   {
     // Provisions the ephemeral environment the tester / human-test / playwright steps read, which
-    // is why it leads the testing group. A palette block for the same reason `disposer` is one:
-    // `assertDeployerBeforeConsumer` REFUSES a run whose chain reaches an env consumer with no
-    // Deployer in front of it on a deployable service, and a hand-built pipeline that hits that
-    // refusal has no reseed to fall back on.
+    // is why it leads the testing group.
+    //
+    // `basic`, and it has to be: a pipeline that reaches an env consumer with no Deployer in
+    // front of it is refused at SAVE (`validatePipelineAuthoring`), and the API Tester it serves
+    // is itself `basic`. Leaving the Deployer out of the basic palette would leave a basic-mode
+    // user composing a pipeline they cannot save and cannot see the fix for.
     kind: 'deployer',
-    tier: 'intermediate',
+    tier: 'basic',
     label: 'Deployer',
     icon: 'i-lucide-cloud-upload',
     color: '#34d399',
@@ -276,8 +278,11 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     // is the point of it: after the automated tester, or after a human has finished with the live
     // URL. Without one, the TTL sweep reclaims environments on a timer long after the run
     // settled, which is a fine backstop and cannot close the run's own teardown proof.
+    //
+    // `basic` for the same reason the Deployer is: a chain that deploys and never reclaims is
+    // refused at save, so the fix has to be reachable wherever the fault can be composed.
     kind: 'disposer',
-    tier: 'intermediate',
+    tier: 'basic',
     label: 'Disposer',
     icon: 'i-lucide-cloud-off',
     color: '#34d399',
