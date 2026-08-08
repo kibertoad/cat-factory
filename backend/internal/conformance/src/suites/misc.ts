@@ -175,6 +175,7 @@ function registerRecurringIntakeTests(harness: ConformanceHarness): void {
     // A single-step inline pipeline keeps the run deterministic across runtimes.
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Recurring inline',
+      purpose: 'build',
       agentKinds: ['architect'],
     })
     const created = await app.call<PipelineSchedule>(
@@ -237,6 +238,7 @@ function registerRecurringIntakeTests(harness: ConformanceHarness): void {
     // proves the run advances past intake when an issue is picked up.
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Bug triage',
+      purpose: 'build',
       agentKinds: ['bug-intake', 'architect'],
       availability: 'recurring',
     })
@@ -301,6 +303,7 @@ function registerRecurringIntakeTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Bug triage',
+      purpose: 'build',
       agentKinds: ['bug-intake', 'architect'],
       availability: 'recurring',
     })
@@ -350,6 +353,7 @@ function registerRecurringIntakeTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Bug triage',
+      purpose: 'build',
       agentKinds: ['bug-intake', 'architect'],
       availability: 'recurring',
     })
@@ -489,6 +493,7 @@ function registerTrackerWritebackTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'On-demand inline',
+      purpose: 'build',
       agentKinds: ['architect'],
     })
     // No `recurrence` on the body — an on-demand schedule needs none.
@@ -686,6 +691,7 @@ function registerBugTriagePhaseTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Triage & investigate',
+        purpose: 'build',
         agentKinds: ['bug-investigator', 'clarity-review', 'architect'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -727,6 +733,7 @@ function registerBugTriagePhaseTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Triage & investigate',
+        purpose: 'build',
         agentKinds: ['bug-investigator', 'clarity-review', 'architect'],
       })
       await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -789,6 +796,7 @@ function registerBugTriagePhaseTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: `Reproduce & fix (${outcome})`,
+        purpose: 'build',
         agentKinds: ['repro-test', 'coder'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {

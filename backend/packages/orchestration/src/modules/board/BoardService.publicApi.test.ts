@@ -94,6 +94,27 @@ describe('BoardService — public-API board reads/writes', () => {
     })
   })
 
+  describe('getService', () => {
+    it('resolves exactly the population listServices reports, and nothing else', async () => {
+      // Derived from the list rather than pinned to `['f1']`: the point read backs the per-service
+      // endpoints (the spec read), and a `serviceId` a key can SEE in one place answering a 404 in
+      // another is the drift worth a test. Asserting the same literal twice would not see it.
+      const svc = build(seed())
+      const listed = (await svc.listServices(WS)).map((b) => b.id)
+      for (const id of listed) expect((await svc.getService(WS, id))?.id).toBe(id)
+      const rejected = seed()
+        .map((b) => b.id)
+        .filter((id) => !listed.includes(id))
+      for (const id of rejected) expect(await svc.getService(WS, id)).toBeNull()
+    })
+
+    it('returns null for an unknown id and for another workspace', async () => {
+      const svc = build(seed())
+      expect(await svc.getService(WS, 'nope')).toBeNull()
+      expect(await svc.getService('ws_other', 'f1')).toBeNull()
+    })
+  })
+
   describe('getServiceTask', () => {
     it('resolves the enclosing service frame for a frame- and a module-nested task', async () => {
       const svc = build(seed())

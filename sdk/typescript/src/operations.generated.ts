@@ -10,6 +10,7 @@ import type { RequestOptions, Transport } from './http.ts'
 import { encodePathSegment } from './http.ts'
 import { repeatedCursorError } from './errors.ts'
 import type {
+  ActPublicNotificationRequest,
   AddPublicTaskDependencyRequest,
   AttachPublicTaskDocumentRequest,
   CreateHeadlessPublicApiKey,
@@ -22,6 +23,8 @@ import type {
   DebugRunOverview,
   DetachPublicTaskDocumentRequest,
   GetDebugLlmCallView,
+  GetDebugLlmExportResponse,
+  GetPublicMergeRecordResponse,
   GetPublicRunOutcomeResponse,
   ListDebugAgentContextResponse,
   ListDebugLlmCallsOrder,
@@ -33,6 +36,7 @@ import type {
   ListDebugToolCallsOutcome,
   ListDebugToolCallsResponse,
   ListPublicJobsResponse,
+  ListPublicMergeClassRollupsResponse,
   ListPublicReposResponse,
   ListPublicTaskDocumentsResponse,
   ListPublicTaskDocumentsResponseDocument,
@@ -70,13 +74,18 @@ import type {
   PublicRunArtifactList,
   PublicService,
   PublicServiceList,
+  PublicServiceSpec,
   PublicSetFindingStatus,
+  PublicSpend,
+  PublicSpendDimension,
+  PublicSpendWindow,
   PublicTask,
   PublicTaskList,
   PublicUsage,
   PutNotificationWebhook,
   RunStatus,
   StartPublicTask,
+  TagPublicMergeReviewEffortRequest,
   TaskStatus,
   UpdatePublicTask,
 } from './models.generated.ts'
@@ -92,6 +101,20 @@ export type DebugGetLlmCallQuery = {
   bodyChars?: number
   bodyOffset?: number
   view?: GetDebugLlmCallView
+}
+
+/** Query parameters for `client.debug.getLlmExport()`. */
+export type DebugGetLlmExportQuery = {
+  limit?: number
+  order?: ListDebugLlmCallsOrder
+  bodyChars?: number
+}
+
+/** Query parameters for `client.usage.spend()`. */
+export type UsageSpendQuery = {
+  dimension: PublicSpendDimension
+  window?: PublicSpendWindow
+  limit?: number
 }
 
 /** Query parameters for `client.debug.listAgentContext()`. */
@@ -262,7 +285,7 @@ export class ServicesResource {
    * Create a board service, optionally backed by a repository from `GET /api/v1/repos`. The repository link is what makes the service runnable: execution resolves a task’s repository by walking up to its enclosing service frame, so a service with none holds tasks and can start none of them. A whole-repo repository that already backs a service in this account is MOUNTED rather than duplicated; a monorepo service must name its subdirectory. The board lays the service out itself: this surface publishes no coordinates. Requires an `admin` key.
    * `POST /api/v1/services` — operation `createPublicService`.
    */
-  create(body: CreatePublicServiceRequest, options: RequestOptions = {}): Promise<PublicService> {
+  create(body: CreatePublicServiceRequest = {}, options: RequestOptions = {}): Promise<PublicService> {
     return this.#transport.request<PublicService>({
       method: 'POST',
       path: `/api/v1/services`,
@@ -280,6 +303,28 @@ export class ServicesResource {
     return this.#transport.request<PublicServiceList>({
       method: 'GET',
       path: `/api/v1/services`,
+      options,
+    })
+  }
+}
+
+/** A service's in-repo specification: the structured requirement tree (modules → feature groups → requirements, with their acceptance criteria and domain rules), the Gherkin rendered from it, and the branch and commit the read describes. Read-only; the requirement ids are the join key onto a run's report and outcome. */
+export class SpecResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Get a service's in-repo specification
+   * The prescriptive specification stored in the service’s own repository under `spec/`: modules → feature groups → requirement items, each with its MoSCoW priority, its `aspirational`/`established` implementation state and its Given/When/Then acceptance criteria, plus the domain rules scoped to each group and the Gherkin `.feature` files rendered from the same tree. `provenance` names the branch and commit the read describes, because the default branch is not what a run with an open pull request is working against. The requirement ids here are the join key onto `requirements` on a run’s report and outcome, so criterion → evidence is a map lookup. Four outcomes are kept apart rather than folded: `present: false` means the default branch holds no spec, a `503` with `reason: "spec_read_failed"` means the repository could not be read, a `503` with `reason: "vcs_not_configured"` means the deployment or workspace wired no version control, and a partially readable spec is SERVED with `issues` naming each file that did not survive. Read-only: the spec’s write path is a reviewed commit.
+   * `GET /api/v1/services/{serviceId}/spec` — operation `getPublicServiceSpec`.
+   */
+  get(serviceId: string, options: RequestOptions = {}): Promise<PublicServiceSpec> {
+    return this.#transport.request<PublicServiceSpec>({
+      method: 'GET',
+      path: `/api/v1/services/${encodePathSegment(serviceId)}/spec`,
       options,
     })
   }
@@ -485,7 +530,7 @@ export class TasksResource {
    * Start a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned pipeline. A pipeline that can park on a human decision requires a `decide`-scope key. A task on an individual-usage model cannot be started through the API (no headless personal-credential unlock).
    * `POST /api/v1/tasks/{taskId}/start` — operation `startPublicTask`.
    */
-  start(taskId: string, body: StartPublicTask, options: RequestOptions = {}): Promise<PublicTask> {
+  start(taskId: string, body: StartPublicTask = {}, options: RequestOptions = {}): Promise<PublicTask> {
     return this.#transport.request<PublicTask>({
       method: 'POST',
       path: `/api/v1/tasks/${encodePathSegment(taskId)}/start`,
@@ -525,7 +570,7 @@ export class TasksResource {
    * Edit a task’s human-authored inputs before it runs: its title, its description, and `fields`, the per-case values for its own task type (checked against the descriptors `GET /api/v1/task-types` serves). All are optional. `fields` is MERGED over what the task already carries — a key you send is written, a key you omit keeps its stored value — because this API does not serve the bag back. This is what makes an input the pre-dispatch gate refused repairable: supply the value it named, then recheck the parked run.
    * `PATCH /api/v1/tasks/{taskId}` — operation `updatePublicTask`.
    */
-  update(taskId: string, body: UpdatePublicTask, options: RequestOptions = {}): Promise<PublicTask> {
+  update(taskId: string, body: UpdatePublicTask = {}, options: RequestOptions = {}): Promise<PublicTask> {
     return this.#transport.request<PublicTask>({
       method: 'PATCH',
       path: `/api/v1/tasks/${encodePathSegment(taskId)}`,
@@ -589,13 +634,14 @@ export class NotificationsResource {
 
   /**
    * Act on a notification
-   * Run a notification’s typed side-effect and resolve it: merge the PR (merge_review / pipeline_complete) or retry the run (ci_failed / test_failed). Performs a real GitHub merge, so it requires an admin-scoped key. Only these automated-action types are actionable through the API — a notification that parks a run on an interactive human decision cannot be acted on headlessly (dismiss it instead). A card that would retry a run on an individual-usage model likewise cannot be acted on through the API.
+   * Run a notification’s typed side-effect and resolve it: merge the PR (merge_review / pipeline_complete) or retry the run (ci_failed / test_failed). Performs a real GitHub merge, so it requires an admin-scoped key. Only these automated-action types are actionable through the API — a notification that parks a run on an interactive human decision cannot be acted on headlessly (dismiss it instead). A card that would retry a run on an individual-usage model likewise cannot be acted on through the API. To record how much review a merged pull request needed, call `POST /api/v1/merge-records/{recordId}/effort` (a `write` key) before or after this; a `merge_tag_request` card carries its record id on the payload and is resolved by tagging that record and dismissing the card.
    * `POST /api/v1/notifications/{id}/act` — operation `actPublicNotification`.
    */
-  act(id: string, options: RequestOptions = {}): Promise<Notification> {
+  act(id: string, body: ActPublicNotificationRequest = {}, options: RequestOptions = {}): Promise<Notification> {
     return this.#transport.request<Notification>({
       method: 'POST',
       path: `/api/v1/notifications/${encodePathSegment(id)}/act`,
+      body,
       options,
     })
   }
@@ -705,7 +751,7 @@ export class WebhookResource {
    * Register the HTTPS endpoint deliveries are POSTed to, or update the one already registered. Every omitted field keeps its stored value, so subscribing to run events is a one-field call that re-sends neither the URL nor the secret. `url` is required only on the first call, when there is nothing registered to keep; omitting it otherwise leaves the endpoint alone. Supplying `secret` rotates the signing secret; omitting it keeps the current one. The endpoint must be `https:` and publicly routable unless the deployment widened its allow-list.
    * `PUT /api/v1/notification-webhook` — operation `putPublicNotificationWebhook`.
    */
-  set(body: PutNotificationWebhook, options: RequestOptions = {}): Promise<NotificationWebhook> {
+  set(body: PutNotificationWebhook = {}, options: RequestOptions = {}): Promise<NotificationWebhook> {
     return this.#transport.request<NotificationWebhook>({
       method: 'PUT',
       path: `/api/v1/notification-webhook`,
@@ -719,7 +765,7 @@ export class WebhookResource {
    * Register an endpoint under an id YOU choose (1-63 characters of lowercase letters, digits, `-` or `_`), or update the one already there. Idempotent by id, so an integration can enroll its own receiver on every cold start without tracking whether it has enrolled before, and without displacing anything else the workspace registered. Every field follows the same keep-on-omit rule as the unnamed route, `url` being required only when there is nothing under this id to keep, and a supplied `secret` rotating this endpoint's own signing secret. Refused with `reason: "invalid_webhook_id"` for an id that is not a slug, and `reason: "webhook_limit_reached"` (409) when registering a NEW id would exceed the per-workspace cap; editing an existing one is admitted either way.
    * `PUT /api/v1/notification-webhooks/{webhookId}` — operation `putPublicNamedNotificationWebhook`.
    */
-  setNamed(webhookId: string, body: PutNotificationWebhook, options: RequestOptions = {}): Promise<NotificationWebhook> {
+  setNamed(webhookId: string, body: PutNotificationWebhook = {}, options: RequestOptions = {}): Promise<NotificationWebhook> {
     return this.#transport.request<NotificationWebhook>({
       method: 'PUT',
       path: `/api/v1/notification-webhooks/${encodePathSegment(webhookId)}`,
@@ -729,7 +775,7 @@ export class WebhookResource {
   }
 }
 
-/** The billing period's metered budget position and the per-model breakdown behind it. */
+/** The workspace's money, two ways: the billing period's metered budget position with the per-model breakdown behind it, and spend over a window sliced by the dimension a budget is kept against (a repository, a tracker ticket, one run). */
 export class UsageResource {
   readonly #transport: Transport
 
@@ -746,6 +792,20 @@ export class UsageResource {
     return this.#transport.request<PublicUsage>({
       method: 'GET',
       path: `/api/v1/usage`,
+      options,
+    })
+  }
+
+  /**
+   * Break the workspace's spend down by repository, ticket, run or step kind
+   * Group the board’s spend over a window (`24h`, `7d`, `30d`, `90d`) by ONE dimension: `repo`, `ticket` and `run` are the cost-attribution axes an organisation budgets against, and `model` / `agentKind` / `service` / `taskType` slice the same money the other ways. `meteredCost` is real money and `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage, so never sum them. The EMPTY `key` is the unattributed bucket, a real slice rather than a dropped row, never dropped from the breakdown. `rows` is the heaviest `limit` slices (default 100, max 500) and `truncated` says when there was a tail, while `totals` aggregates the WHOLE window either way, so a capped answer still reports what the board spent. `source` says which store answered: the short windows scan the live ledger, which resolves a repository or a ticket through today’s links, while the long ones read the durable daily rollup, which froze that attribution while the money was spent and is never pruned. Read `rolledUpThrough` before reporting a quiet quarter, since a rollup that has never run and a board that spent nothing look identical. Workspace-scoped: the account-wide view is not reachable through this surface.
+   * `GET /api/v1/usage/spend` — operation `getPublicSpend`.
+   */
+  spend(query: UsageSpendQuery, options: RequestOptions = {}): Promise<PublicSpend> {
+    return this.#transport.request<PublicSpend>({
+      method: 'GET',
+      path: `/api/v1/usage/spend`,
+      query,
       options,
     })
   }
@@ -828,7 +888,7 @@ export class DecisionsResource {
    * Approve the proposal a gated step is holding up, optionally replacing it with an edited one (the edit is what flows to every downstream step), and advance the run. The `approvalId` comes from the run's decision list; passing it back is what makes a racing app user and a racing integration resolve the same gate. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/approve` — operation `approvePublicRunStep`.
    */
-  approveStep(runId: string, approvalId: string, body: PublicApproveStep, options: RequestOptions = {}): Promise<PublicDecisionList> {
+  approveStep(runId: string, approvalId: string, body: PublicApproveStep = {}, options: RequestOptions = {}): Promise<PublicDecisionList> {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/approvals/${encodePathSegment(approvalId)}/approve`,
@@ -855,7 +915,7 @@ export class DecisionsResource {
    * Dispatch a read-only investigator to re-examine one finding against the full source, optionally with a specific concern. It upholds, strengthens or retracts the finding, and the review re-parks carrying the verdict. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/challenge` — operation `challengePublicRunPrReviewFinding`.
    */
-  challengePrReviewFinding(runId: string, findingId: string, body: PublicChallengePrReviewFinding, options: RequestOptions = {}): Promise<PublicDecisionList> {
+  challengePrReviewFinding(runId: string, findingId: string, body: PublicChallengePrReviewFinding = {}, options: RequestOptions = {}): Promise<PublicDecisionList> {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/pr-review/findings/${encodePathSegment(findingId)}/challenge`,
@@ -869,7 +929,7 @@ export class DecisionsResource {
    * Pick one of the proposed implementation forks (by id) or submit your own approach. The Coder then runs with the choice folded in as a binding directive. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/fork/choose` — operation `choosePublicRunFork`.
    */
-  chooseFork(runId: string, body: PublicChooseFork, options: RequestOptions = {}): Promise<PublicDecisionList> {
+  chooseFork(runId: string, body: PublicChooseFork = {}, options: RequestOptions = {}): Promise<PublicDecisionList> {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/fork/choose`,
@@ -948,7 +1008,7 @@ export class DecisionsResource {
    * Fold the recorded answers into one standardized requirements document. Asynchronous — the run re-reviews in the background, so the response shows the review `incorporating`. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/requirements/incorporate` — operation `incorporatePublicRunRequirements`.
    */
-  incorporate(runId: string, body: PublicIncorporate, options: RequestOptions = {}): Promise<PublicDecisionList> {
+  incorporate(runId: string, body: PublicIncorporate = {}, options: RequestOptions = {}): Promise<PublicDecisionList> {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/requirements/incorporate`,
@@ -962,7 +1022,7 @@ export class DecisionsResource {
    * Fold the picks into one converged direction. ASYNCHRONOUS: the response shows the session `incorporating` while the durable driver folds and re-runs in the background. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/incorporate` — operation `incorporatePublicRunBrainstorm`.
    */
-  incorporateBrainstorm(runId: string, stage: string, body: PublicIncorporate, options: RequestOptions = {}): Promise<PublicDecisionList> {
+  incorporateBrainstorm(runId: string, stage: string, body: PublicIncorporate = {}, options: RequestOptions = {}): Promise<PublicDecisionList> {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/brainstorm/${encodePathSegment(stage)}/incorporate`,
@@ -976,7 +1036,7 @@ export class DecisionsResource {
    * Fold the recorded answers into one standardized bug report. ASYNCHRONOUS: the response shows the review `incorporating` while the durable driver folds and re-reviews in the background. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/clarity/incorporate` — operation `incorporatePublicRunClarity`.
    */
-  incorporateClarity(runId: string, body: PublicIncorporate, options: RequestOptions = {}): Promise<PublicDecisionList> {
+  incorporateClarity(runId: string, body: PublicIncorporate = {}, options: RequestOptions = {}): Promise<PublicDecisionList> {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/clarity/incorporate`,
@@ -1055,7 +1115,7 @@ export class DecisionsResource {
    * Reject the gated proposal: the run stops entirely, recording a terminal `rejected` failure the board can retry. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/reject` — operation `rejectPublicRunStep`.
    */
-  rejectStep(runId: string, approvalId: string, body: PublicRejectStep, options: RequestOptions = {}): Promise<PublicDecisionList> {
+  rejectStep(runId: string, approvalId: string, body: PublicRejectStep = {}, options: RequestOptions = {}): Promise<PublicDecisionList> {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/approvals/${encodePathSegment(approvalId)}/reject`,
@@ -1262,7 +1322,7 @@ export class DecisionsResource {
    * Record the curated finding selection and say what to do with it: `finish` completes the read-only review, `fix` hands the selected findings to a fixer that commits onto the reviewed PR branch, `post` publishes them as inline PR review comments. `fix` and `post` need at least one selected finding and act on the real pull request. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/pr-review/resolve` — operation `resolvePublicRunPrReview`.
    */
-  resolvePrReview(runId: string, body: PublicResolvePrReview, options: RequestOptions = {}): Promise<PublicDecisionList> {
+  resolvePrReview(runId: string, body: PublicResolvePrReview = {}, options: RequestOptions = {}): Promise<PublicDecisionList> {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/pr-review/resolve`,
@@ -1341,7 +1401,7 @@ export class DecisionsResource {
   }
 }
 
-/** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
+/** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs, and the whole model-activity bundle as one document. */
 export class DebugResource {
   readonly #transport: Transport
 
@@ -1372,6 +1432,20 @@ export class DebugResource {
     return this.#transport.request<DebugLlmCall>({
       method: 'GET',
       path: `/api/v1/debug/llm-calls/${encodePathSegment(callId)}`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * Export a run's model activity as one bundle
+   * The whole of a run’s model activity as one self-describing document, for handing straight to a model asked why the run truncated, spent or stalled: the SQL rollups (run totals, per agent kind, per phase, with the carry cost that says which slice burdened everything after it) plus a bounded window of the individual calls behind them. The rollups cover EVERY recorded call and do not move with `limit`, so a windowed bundle still reports what the run actually cost; `truncated` says the calls are a window and `order` says which end was kept. Bodies are omitted unless `bodyChars` asks, and the resumable call list is the way to walk a long run whole.
+   * `GET /api/v1/debug/runs/{runId}/llm-export` — operation `getDebugLlmExport`.
+   */
+  getLlmExport(runId: string, query: DebugGetLlmExportQuery = {}, options: RequestOptions = {}): Promise<GetDebugLlmExportResponse> {
+    return this.#transport.request<GetDebugLlmExportResponse>({
+      method: 'GET',
+      path: `/api/v1/debug/runs/${encodePathSegment(runId)}/llm-export`,
       query,
       options,
     })
@@ -1632,6 +1706,68 @@ export class EvidenceResource {
   }
 }
 
+/** The evidence behind the auto-merge policy: what kind of change each merged run made, what the merger scored it, what happened to the pull request, and how much review a human actually spent, plus the per-class rollups that justify widening a rule. Reading takes a `read` key and recording an effort tag a `write` one: neither merges anything. */
+export class MergeRecordsResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Get one merge record
+   * The same record addressed by its own id, for a caller that holds one without the run: the id a `merge_tag_request` notification carries on its payload, for instance. Scoped to the calling key’s workspace.
+   * `GET /api/v1/merge-records/{recordId}` — operation `getPublicMergeRecord`.
+   */
+  get(recordId: string, options: RequestOptions = {}): Promise<GetPublicMergeRecordResponse> {
+    return this.#transport.request<GetPublicMergeRecordResponse>({
+      method: 'GET',
+      path: `/api/v1/merge-records/${encodePathSegment(recordId)}`,
+      options,
+    })
+  }
+
+  /**
+   * Get the merge decision a run left behind
+   * What kind of change the run’s pull request made (a change class derived on the backend from the changed-file list, never from an agent’s opinion), what the merger scored it, which merge-threshold preset the decision was compared against, what ultimately happened to the pull request, and how much review a human spent if anybody has tagged it. The entry point of the merge-evidence loop for a caller holding a run id: it also hands back the `recordId` the effort-tag route takes. A run whose pipeline had no `merger` step made no merge decision and answers `404` with `details.reason: "no_merge_record"`, distinct from the `"run_not_found"` a run this key cannot read gets.
+   * `GET /api/v1/runs/{runId}/merge-record` — operation `getPublicRunMergeRecord`.
+   */
+  getForRun(runId: string, options: RequestOptions = {}): Promise<GetPublicMergeRecordResponse> {
+    return this.#transport.request<GetPublicMergeRecordResponse>({
+      method: 'GET',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/merge-record`,
+      options,
+    })
+  }
+
+  /**
+   * List the per-change-class merge rollups
+   * Every change class’s accumulated track record for the workspace, as one aggregate: how many records it holds, how many landed and by which route (auto-merged, merged through the app, merged directly on the provider), how many were rejected or are still awaiting review, and the distribution of reviewer-effort tags. This is the evidence that justifies widening a per-class auto-merge rule; nothing widens one automatically. A class with no records is present as zeros rather than absent, so "nothing has landed here yet" never reads as a class the response left out. `unknown` is a real class (no changed-file list was available) and never matches a per-class rule.
+   * `GET /api/v1/merge-records/rollups` — operation `listPublicMergeClassRollups`.
+   */
+  listRollups(options: RequestOptions = {}): Promise<ListPublicMergeClassRollupsResponse> {
+    return this.#transport.request<ListPublicMergeClassRollupsResponse>({
+      method: 'GET',
+      path: `/api/v1/merge-records/rollups`,
+      options,
+    })
+  }
+
+  /**
+   * Tag the reviewer effort a merge took
+   * Record how much review a landed pull request actually needed (`none` for zero blocking comments, `minor` for a nit pass, `major` for real rework), or `null` to clear the tag. This is the ground truth the auto-merge score thresholds are trying to approximate, and it is never mandatory: an untagged merge records a null tag and nothing downstream breaks. A `write` key, not an `admin` one: the pull request already landed, so tagging it merges nothing. Idempotent, and orthogonal to the decision, so a record can be tagged whenever the effort becomes known, before or after the `act` that merged it.
+   * `POST /api/v1/merge-records/{recordId}/effort` — operation `tagPublicMergeReviewEffort`.
+   */
+  tagEffort(recordId: string, body: TagPublicMergeReviewEffortRequest, options: RequestOptions = {}): Promise<GetPublicMergeRecordResponse> {
+    return this.#transport.request<GetPublicMergeRecordResponse>({
+      method: 'POST',
+      path: `/api/v1/merge-records/${encodePathSegment(recordId)}/effort`,
+      body,
+      options,
+    })
+  }
+}
+
 /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */
 export class KeysResource {
   readonly #transport: Transport
@@ -1694,6 +1830,8 @@ export abstract class CatFactoryResources {
   readonly jobs: JobsResource
   /** The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository). */
   readonly services: ServicesResource
+  /** A service's in-repo specification: the structured requirement tree (modules → feature groups → requirements, with their acceptance criteria and domain rules), the Gherkin rendered from it, and the branch and commit the read describes. Read-only; the requirement ids are the join key onto a run's report and outcome. */
+  readonly spec: SpecResource
   /** The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation. */
   readonly repos: ReposResource
   /** A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete, plus the two relationships that outlive a create: the tasks it waits for, and the requirements documents it is built against. */
@@ -1706,22 +1844,25 @@ export abstract class CatFactoryResources {
   readonly notifications: NotificationsResource
   /** The workspace's outbound endpoints: register, inspect or remove the receivers that notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address the `default` endpoint; the named ones let an integration enroll its own receiver, with its own signing secret and filters, beside whatever else is registered. */
   readonly webhook: WebhookResource
-  /** The billing period's metered budget position and the per-model breakdown behind it. */
+  /** The workspace's money, two ways: the billing period's metered budget position with the per-model breakdown behind it, and spend over a window sliced by the dimension a budget is kept against (a repository, a tracker ticket, one run). */
   readonly usage: UsageResource
   /** What the calling key is and what it may do — the self-check an integration runs at startup. */
   readonly me: MeResource
   /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates. */
   readonly decisions: DecisionsResource
-  /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
+  /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs, and the whole model-activity bundle as one document. */
   readonly debug: DebugResource
   /** What a run proved: the engine's verification report, the outcome summary behind it, and the artifacts it captured, bytes included. */
   readonly evidence: EvidenceResource
+  /** The evidence behind the auto-merge policy: what kind of change each merged run made, what the merger scored it, what happened to the pull request, and how much review a human actually spent, plus the per-class rollups that justify widening a rule. Reading takes a `read` key and recording an effort tag a `write` one: neither merges anything. */
+  readonly mergeRecords: MergeRecordsResource
   /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */
   readonly keys: KeysResource
 
   protected constructor(transport: Transport) {
     this.jobs = new JobsResource(transport)
     this.services = new ServicesResource(transport)
+    this.spec = new SpecResource(transport)
     this.repos = new ReposResource(transport)
     this.tasks = new TasksResource(transport)
     this.pipelines = new PipelinesResource(transport)
@@ -1733,6 +1874,7 @@ export abstract class CatFactoryResources {
     this.decisions = new DecisionsResource(transport)
     this.debug = new DebugResource(transport)
     this.evidence = new EvidenceResource(transport)
+    this.mergeRecords = new MergeRecordsResource(transport)
     this.keys = new KeysResource(transport)
   }
 }

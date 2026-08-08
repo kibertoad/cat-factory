@@ -12,6 +12,7 @@ import {
   assertValidTesterQualityGating,
   validatePipelineShape,
 } from './pipelineShape.js'
+import { validatePipelineAuthoring } from './pipelineAuthoring.js'
 
 /** A gate config that sets a threshold, so only the rule under test can be the failure. */
 const gated = { enabled: true as const, minRisk: 0.5, onMissingEstimate: 'run' as const }
@@ -50,6 +51,7 @@ describe('validatePipelineShape', () => {
       'conflicts',
       'ci',
       'merger',
+      'disposer',
     ])
     // It includes the design phase but stops short of the requirements interview, which is the
     // whole point of this rung sitting between pl_simple and pl_full.
@@ -83,7 +85,11 @@ describe('validatePipelineShape', () => {
     // or a red build. Asserted as an ORDERING rather than the literal last three kinds, because
     // `pl_full` legitimately slots its risk-gated `human-review` between `ci` and `merger`.
     for (const p of [simple, build, byId.get('pl_full')!]) {
-      const kinds = p.agentKinds
+      // The `disposer` is the one step allowed AFTER the merge, and it is dropped here rather
+      // than asserted around: it reclaims the environment and owns no terminal status, so it
+      // neither delays nor overwrites `done`. The claim being pinned is about what DECIDES the
+      // change's fate, and the merge stays the last of those.
+      const kinds = p.agentKinds.filter((k) => k !== 'disposer')
       expect(kinds.at(-1), `${p.id} must end at the merger`).toBe('merger')
       for (const guard of ['conflicts', 'ci']) {
         const at = kinds.indexOf(guard)
@@ -632,5 +638,29 @@ describe('assertValidBinaryOutputSteps', () => {
 
   it('skips the check entirely with no registry in view (the built-in-catalog caller)', () => {
     expect(() => assertValidBinaryOutputSteps({ agentKinds: ['image-generator'] })).not.toThrow()
+  })
+})
+
+// The AUTHORING rules (`validatePipelineAuthoring`) are a layer above the shape validation: what
+// is INCOMPLETE rather than what is BROKEN, and so bound to the save door alone. Their own
+// behaviour is unit-tested beside the rule in contracts; what belongs HERE is the one claim that
+// needs the shipped catalog in view.
+describe('validatePipelineAuthoring — against the shipped catalog', () => {
+  it('accepts every built-in seed pipeline, so one can be cloned and edited', () => {
+    // A built-in that failed these would be a preset the platform ships and its own builder
+    // refuses to save: clone it, change the name, and the save is rejected for a fault the user
+    // did not introduce, with no reseed to escape by. The catalog is the one place that cannot
+    // be allowed to drift from them.
+    for (const p of seedPipelines()) {
+      expect(
+        () =>
+          validatePipelineAuthoring({
+            agentKinds: p.agentKinds,
+            enabled: p.enabled,
+            stepOptions: p.stepOptions,
+          }),
+        p.id,
+      ).not.toThrow()
+    }
   })
 })

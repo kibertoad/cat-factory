@@ -32,6 +32,7 @@ describe('[local] delegate-agents-to-runner-pool start gate', () => {
     // Tester-infra gate.
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Code only',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     expect(pipeline.status).toBe(201)

@@ -20,6 +20,7 @@ function builtin(agentKinds: string[], over: Partial<Pipeline> = {}): Pipeline {
   return {
     id: `pl_test_${nextId++}`,
     name: 'Test',
+    purpose: 'build',
     agentKinds,
     builtin: true,
     version: 1,

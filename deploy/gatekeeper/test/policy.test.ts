@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 import {
   compilePolicy,
   DECISION_BINDINGS,
+  TELEMETRY_BINDINGS,
   tierForActor,
 } from '@cat-factory/gatekeeper-worker/policy'
 import { POLICY } from '../src/policy.config'
@@ -43,26 +44,26 @@ describe('the shipped policy', () => {
 
   // These carry model prompts, captured command output and agent search text. Every one is within
   // a `read` key's floor, so only the policy's own deny list keeps them from an OS agent.
-  it('grants no tier the debug operations that return captured bodies', () => {
-    const withBodies = [
-      'debug_get_agent_context',
-      'debug_get_llm_call',
-      'debug_list_agent_context',
-      'debug_list_llm_calls',
-      'debug_list_logs',
-      'debug_list_search_queries',
-      'debug_list_tool_calls',
-    ]
+  //
+  // Asserted against `TELEMETRY_BINDINGS` rather than a transcribed list of names, per the repo's
+  // rule about relations over populations a test does not own. The transcribed version was the
+  // bug: it named the seven operations that existed when it was written, so the eighth (the LLM
+  // export) shipped granted to a read-only tier with this test passing.
+  it('grants no tier a read of captured run telemetry', () => {
     for (const tier of compiled.tiers.values()) {
       const granted = new Set(tier.granted.map((binding) => binding.name))
-      expect(withBodies.filter((name) => granted.has(name))).toEqual([])
+      expect(TELEMETRY_BINDINGS.filter((name) => granted.has(name))).toEqual([])
     }
   })
 
+  // The other half of the same relation, and the reason the deny set is per-operation rather than
+  // the whole `/debug` prefix: what a status Gadget needs must survive it.
   it('keeps the body-free run overviews readable for the observer tier', () => {
     const granted = new Set(compiled.tiers.get('observer')?.granted.map((binding) => binding.name))
     expect(granted).toContain('debug_list_runs')
     expect(granted).toContain('debug_get_run')
+    expect(TELEMETRY_BINDINGS).not.toContain('debug_list_runs')
+    expect(TELEMETRY_BINDINGS).not.toContain('debug_get_run')
   })
 
   // The relation that makes `approver` a tier rather than a transcription. A run can park on

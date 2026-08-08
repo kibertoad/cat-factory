@@ -1,5 +1,171 @@
 # @cat-factory/kernel
 
+## 0.278.0
+
+### Minor Changes
+
+- 6ad1d8b: Let the pipeline builder's purpose dial narrow the palette per agent KIND, not per section
+
+  The dial filtered on the palette's display CATEGORY, so it could only ever remove whole sections
+  and a kind whose section survived stayed offered however plainly it contradicted the purpose. A
+  `review` pipeline reviews an existing pull request and opens none, yet it was offered the two
+  agents that WRITE documentation into the repo, because `docs` had to stay for the Domain Rules
+  Reviewer; a `planning` pipeline was offered the bug triage and PR-review kinds; and `document` and
+  `research` had identical rows, so moving the dial between those two settings narrowed nothing at
+  all.
+
+  `AgentPresentation` gains an optional `purposes`, and `purposeSuggestsAgentKind` is what the
+  palette now filters on. The two narrowings INTERSECT: a declaration may only hide more, never buy
+  a kind back into a purpose its section is not offered to, which is what keeps palette relevance
+  inside what the save gate will accept whatever a deployment declares. Declaring nothing is the
+  normal case and behaves exactly as before, so a registered kind that says nothing is as visible as
+  it was; a declared list naming only purposes the reader cannot name is read as no declaration
+  rather than as excluding everything.
+
+  The built-ins that belong to one use-case now say so (the document-authoring family, the bug
+  triage and PR-review kinds, the spec/blueprint/architecture kinds, the initiative breakdown), which
+  is a visible narrowing of what the palette offers at every purpose, `build` included: the six
+  document-authoring kinds belong to `document` alone and the initiative breakdown to `planning`
+  alone, so a build pipeline stops being offered them as well. Nothing changes
+  about what an existing pipeline may CONTAIN or save: `purposeAllowsAgentCategory` is untouched, so
+  a stored pipeline stays editable in the builder it was built in.
+
+### Patch Changes
+
+- Updated dependencies [6ad1d8b]
+  - @cat-factory/contracts@0.283.0
+
+## 0.277.0
+
+### Minor Changes
+
+- a596b9c: Refuse a pipeline whose environment lifecycle does not add up when it is saved: a tester /
+  acceptance / human-test step with no live environment to run against (nothing provisioned one, or
+  the `disposer` reclaimed it first), a `deployer` that neither reclaims nor declares that its
+  environment outlives the run, or a `disposer` with nothing standing to reclaim. The rule is
+  enforced at pipeline create and update only, so a stored pipeline authored before it keeps running;
+  the builder shows the same faults inline off the one shared rule in `@cat-factory/contracts`, and
+  the run door now reads that same rule for the two faults that would genuinely dead-end a run,
+  rather than re-deriving the ordering beside it.
+
+  An environment that is MEANT to outlive its run stays expressible: the deployer step declares it
+  (`stepOptions.retainEnvironment`), which is also what lets the PR verification report render the
+  teardown leg as `retained` instead of a `pending` reclaim that is never coming. That adds one enum
+  value to the report's `teardown` field on `/api/v1` (spec 1.35.0, additive).
+
+  Every built-in preset that deploys now ends with a terminal `disposer` (`pl_build`, `pl_simple`,
+  `pl_full`, `pl_visual`, `pl_frontend`, `pl_tech_debt`), each with a version bump so seeded
+  workspaces are offered the reseed.
+
+### Patch Changes
+
+- Updated dependencies [a596b9c]
+  - @cat-factory/contracts@0.282.0
+
+## 0.276.0
+
+### Minor Changes
+
+- 2585b2f: Narrow the pipeline builder's saved-pipeline library on the purpose being edited, and make a
+  pipeline's purpose mandatory
+
+  The purpose dial narrowed the agent palette beside it and gated the save, but the library in the
+  third column listed the whole workspace catalog whatever the draft was for. `pipelineMatchesPurpose`
+  is the membership predicate, applied through `narrowPipelineLibrary` alongside the label and archive
+  filters. Each of those dials now counts what relaxing IT alone would reveal, so the "Archived (n)"
+  toggle no longer promises rows the current purpose is hiding either way, and the purpose hint is
+  itself the control that lists every purpose again: the draft's purpose is an authoring field that is
+  saved, so browsing past it may not require editing it.
+
+  Breaking change (internal surfaces, pre-1.0). `Pipeline.purpose` is now REQUIRED, which is what lets
+  those four narrowings drop their private policies for the pipelines that skipped it:
+
+  - `POST /workspaces/:ws/pipelines` requires `purpose`; `PATCH` still treats it as an optional patch
+    field. Not part of `/api/v1`, so no published SDK or external integration is affected.
+  - `PipelineRegistry.register` requires it at compile time, so a deployment's own pipeline can no
+    longer land unclassified and fall silently out of a narrowed picker. Same for the built-in seed
+    catalog, where it was previously only asserted in a test.
+  - A row persisted before the field was mandatory still reads: the shared `rowToPipeline` resolves an
+    empty column to `build`, which is byte-for-byte the behaviour such a row already had. A stored
+    classifier this build cannot NAME passes through untouched instead, and every narrowing predicate
+    reads it default-open, because "never set" and "a member this build has no name for" are different
+    facts that must not render the same.
+
+### Patch Changes
+
+- Updated dependencies [2585b2f]
+  - @cat-factory/contracts@0.281.0
+
+## 0.275.4
+
+### Patch Changes
+
+- Updated dependencies [faddbf5]
+  - @cat-factory/contracts@0.280.0
+
+## 0.275.3
+
+### Patch Changes
+
+- Updated dependencies [8a06abc]
+- Updated dependencies [8a06abc]
+  - @cat-factory/contracts@0.279.0
+
+## 0.275.2
+
+### Patch Changes
+
+- Updated dependencies [11f9efa]
+  - @cat-factory/contracts@0.278.0
+
+## 0.275.1
+
+### Patch Changes
+
+- Updated dependencies [c44e9d7]
+  - @cat-factory/contracts@0.277.0
+
+## 0.275.0
+
+### Minor Changes
+
+- dfa4a8e: Hand a run's reference designs to the container that captures against them.
+
+  `.cat-context/reference-screenshots/` has been in the UI-tester prompt since the visual-confirmation
+  gate landed, and nothing wrote it. So a designer whose task links a Figma frame got a gate gallery
+  built from that frame while the tester itself worked blind, naming views of its own that then had to
+  be matched to design frames named by somebody else.
+
+  A dispatch of a kind declaring the `ui` image now resolves the task's reference set (its designs'
+  retained frames plus the images a person uploaded against it) and the harness downloads them into the
+  checkout before the agent's first turn, with each file's view name stated in the prompt.
+
+  The bytes do not ride the job body. A design frame is a full-page PNG and a job body is JSON that
+  crosses every transport and is persisted with the dispatch, so only a manifest of ids and file names
+  travels; the harness fetches the images from a new `GET ${proxyBaseUrl}/artifacts/reference/:id` on
+  the same container session token the run already holds for the LLM proxy. That route is the mirror of
+  the screenshot ingest route beside it and is bounded the same way, plus one more: it serves
+  `kind:'reference'` only, so it cannot become a way for one container to read another run's captures.
+
+  Two things a reviewer should look at. The reference SET now has two readers (the gate and a dispatch)
+  and therefore one module: derived twice, the two would eventually disagree about a view name, which
+  is exactly the join the gate performs. And the FILE NAMES are chosen by the engine, not the harness,
+  because the name is how the agent learns the view name: a sanitiser change in an image a deployment
+  has not rolled out yet would otherwise rename every view a run reports.
+
+  The set is CAPPED by the engine, which is also what carries the dropped view names to the agent. A
+  task's references are unbounded (a block may hold a hundred uploads beside a design's frames) while
+  the download pass is budgeted well under the inactivity watchdog, so the ceiling is a decision the
+  platform states rather than an accident of transfer speed. It drops design frames before uploads,
+  mirroring the precedence that already lets an upload override a frame, and every dropped view is
+  named in the prompt: capped and simply absent look identical on disk otherwise. The delivery is
+  idempotent over the checkout, so the repair rounds of a coding flow re-cost a stat rather than a
+  transfer and cannot report a view an earlier round delivered as missing, and the per-image ceiling
+  now bounds the transfer (declared length, then a counted stream) instead of only the write.
+
+  Runner image bump: harness `src/**` changed, so deployments must move to the newly pinned tag. A
+  deployment on an older image simply receives no references, exactly as before this change.
+
 ## 0.274.0
 
 ### Minor Changes

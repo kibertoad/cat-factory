@@ -133,6 +133,8 @@ export const ENVIRONMENT_ANALYST_AGENT_KINDS: AgentKindDefinition[] = [
         'Read-only repo analysis that drafts a declarative Docker Compose stack recipe (setup ' +
         'steps, prerequisites, health gate) for review in the environment setup wizard.',
       category: 'design',
+      // Analyses how a service runs and reports findings: research, or the groundwork for a build.
+      purposes: ['build', 'research'],
       tier: 'advanced',
       // The structured draft opens in the shared generic viewer (no bespoke window); the wizard
       // reads it off the step and merges it over the deterministic recommendation.

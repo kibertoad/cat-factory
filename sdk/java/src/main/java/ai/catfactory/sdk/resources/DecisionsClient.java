@@ -60,6 +60,13 @@ public final class DecisionsClient {
     }
 
     /**
+     * Approve a parked step (no body).
+     */
+    public PublicDecisionList approveStep(String runId, String approvalId) {
+        return approveStep(runId, approvalId, PublicApproveStep.builder().build());
+    }
+
+    /**
      * Approve a parked step
      * Approve the proposal a gated step is holding up, optionally replacing it with an edited one
      * (the edit is what flows to every downstream step), and advance the run. The `approvalId`
@@ -86,6 +93,13 @@ public final class DecisionsClient {
     }
 
     /**
+     * Challenge a PR review finding (no body).
+     */
+    public PublicDecisionList challengePrReviewFinding(String runId, String findingId) {
+        return challengePrReviewFinding(runId, findingId, PublicChallengePrReviewFinding.builder().build());
+    }
+
+    /**
      * Challenge a PR review finding
      * Dispatch a read-only investigator to re-examine one finding against the full source,
      * optionally with a specific concern. It upholds, strengthens or retracts the finding, and the
@@ -95,6 +109,13 @@ public final class DecisionsClient {
      */
     public PublicDecisionList challengePrReviewFinding(String runId, String findingId, PublicChallengePrReviewFinding body) {
         return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/pr-review/findings/" + Transport.pathSegment(findingId) + "/challenge", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Choose an implementation approach (no body).
+     */
+    public PublicDecisionList chooseFork(String runId) {
+        return chooseFork(runId, PublicChooseFork.builder().build());
     }
 
     /**
@@ -169,6 +190,13 @@ public final class DecisionsClient {
     }
 
     /**
+     * Incorporate the answers (no body).
+     */
+    public PublicDecisionList incorporate(String runId) {
+        return incorporate(runId, PublicIncorporate.builder().build());
+    }
+
+    /**
      * Incorporate the answers
      * Fold the recorded answers into one standardized requirements document. Asynchronous — the
      * run re-reviews in the background, so the response shows the review `incorporating`. Requires
@@ -181,6 +209,13 @@ public final class DecisionsClient {
     }
 
     /**
+     * Incorporate brainstorm picks (no body).
+     */
+    public PublicDecisionList incorporateBrainstorm(String runId, String stage) {
+        return incorporateBrainstorm(runId, stage, PublicIncorporate.builder().build());
+    }
+
+    /**
      * Incorporate brainstorm picks
      * Fold the picks into one converged direction. ASYNCHRONOUS: the response shows the session
      * `incorporating` while the durable driver folds and re-runs in the background. Requires a
@@ -190,6 +225,13 @@ public final class DecisionsClient {
      */
     public PublicDecisionList incorporateBrainstorm(String runId, String stage, PublicIncorporate body) {
         return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/brainstorm/" + Transport.pathSegment(stage) + "/incorporate", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Incorporate clarity answers (no body).
+     */
+    public PublicDecisionList incorporateClarity(String runId) {
+        return incorporateClarity(runId, PublicIncorporate.builder().build());
     }
 
     /**
@@ -265,6 +307,13 @@ public final class DecisionsClient {
      */
     public PublicDecisionList proceedInterview(String runId) {
         return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/interview/proceed", null, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Reject a parked step (no body).
+     */
+    public PublicDecisionList rejectStep(String runId, String approvalId) {
+        return rejectStep(runId, approvalId, PublicRejectStep.builder().build());
     }
 
     /**
@@ -437,6 +486,13 @@ public final class DecisionsClient {
      */
     public PublicDecisionList resolveJudge(String runId, PublicResolveJudge body) {
         return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/judge/resolve", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Resolve a parked PR deep review (no body).
+     */
+    public PublicDecisionList resolvePrReview(String runId) {
+        return resolvePrReview(runId, PublicResolvePrReview.builder().build());
     }
 
     /**

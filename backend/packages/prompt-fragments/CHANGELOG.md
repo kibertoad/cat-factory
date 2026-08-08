@@ -1,5 +1,69 @@
 # @cat-factory/prompt-fragments
 
+## 1.0.32
+
+### Patch Changes
+
+- Updated dependencies [6ad1d8b]
+  - @cat-factory/contracts@0.283.0
+  - @cat-factory/kernel@0.278.0
+
+## 1.0.31
+
+### Patch Changes
+
+- Updated dependencies [a596b9c]
+  - @cat-factory/contracts@0.282.0
+  - @cat-factory/kernel@0.277.0
+
+## 1.0.30
+
+### Patch Changes
+
+- Updated dependencies [2585b2f]
+  - @cat-factory/contracts@0.281.0
+  - @cat-factory/kernel@0.276.0
+
+## 1.0.29
+
+### Patch Changes
+
+- Updated dependencies [faddbf5]
+  - @cat-factory/contracts@0.280.0
+  - @cat-factory/kernel@0.275.4
+
+## 1.0.28
+
+### Patch Changes
+
+- Updated dependencies [8a06abc]
+- Updated dependencies [8a06abc]
+  - @cat-factory/contracts@0.279.0
+  - @cat-factory/kernel@0.275.3
+
+## 1.0.27
+
+### Patch Changes
+
+- Updated dependencies [11f9efa]
+  - @cat-factory/contracts@0.278.0
+  - @cat-factory/kernel@0.275.2
+
+## 1.0.26
+
+### Patch Changes
+
+- Updated dependencies [c44e9d7]
+  - @cat-factory/contracts@0.277.0
+  - @cat-factory/kernel@0.275.1
+
+## 1.0.25
+
+### Patch Changes
+
+- Updated dependencies [dfa4a8e]
+  - @cat-factory/kernel@0.275.0
+
 ## 1.0.24
 
 ### Patch Changes

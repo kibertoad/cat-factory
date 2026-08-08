@@ -80,6 +80,12 @@ agentKindRegistry.register({
     color: '#ef4444',
     description: 'Read-only security audit; renders a compliance report into the repo.',
     category: 'review',
+    // The pipeline purposes the palette offers the kind to, WITHIN the ones its category
+    // already admits. Omitted ⇒ the category alone decides, which is the normal case; declare
+    // it only to opt OUT of a purpose the section would admit. It can never widen (relevance
+    // stays inside what the save gate accepts), and an EMPTY list is refused at registration
+    // because the palette cannot tell one from declaring nothing.
+    purposes: ['build', 'review'],
     // How specialist the kind is: `basic` puts it in the palette's default view, `advanced`
     // only at the widest setting. Omitted ⇒ `intermediate` (see `DEFAULT_AGENT_TIER`).
     tier: 'intermediate',
@@ -103,7 +109,7 @@ pipelineRegistry.register({
 | `userPrompt?`                                         | Custom user-prompt builder; omitted ⇒ the generic block-context prompt.                                                                                                                                                                                                                                                                                                    |
 | `agent?`                                              | The LLM step's `AgentStepSpec` (`surface`, `output`, `clone`, `infra`). Omitted ⇒ pure pre/post-op work, no LLM.                                                                                                                                                                                                                                                           |
 | `preOps?` / `postOps?`                                | `RepoOp[]`: deterministic backend hooks over `RepoFiles`.                                                                                                                                                                                                                                                                                                                  |
-| `presentation?`                                       | Frontend `label`/`icon`/`color`/`category`/`tier`/`resultView`. Declaring it is what makes the kind a PLACEABLE palette block (it is the filter `snapshotCustomAgentKinds` applies); omit it only for a kind no one should add to a pipeline of their own.                                                                                                                 |
+| `presentation?`                                       | Frontend `label`/`icon`/`color`/`category`/`purposes`/`tier`/`resultView`. Declaring it is what makes the kind a PLACEABLE palette block (it is the filter `snapshotCustomAgentKinds` applies); omit it only for a kind no one should add to a pipeline of their own.                                                                                                      |
 | `traits?`, `configContributions?`, `webResearchHint?` | Optional capability traits, task-level config params, web-search nudge.                                                                                                                                                                                                                                                                                                    |
 | `skills?` / `toolServers?`                            | The procedural playbooks the kind applies and the MCP tool servers it may call: see "Capabilities: skills and tools" below.                                                                                                                                                                                                                                                |
 | `standardsDelivery?`                                  | `'prompt'` (default) folds a `code-aware`/`doc-aware` kind's resolved standards into its system prompt; `'context-files'` skips that fold: the kind's own preOp MUST write them as `.cat-context/standard-<id>.md` files (see `pr-reviewer`). Right for a kind that DELEGATES review to subagents, so the delegating agent isn't charged for every standard on every turn. |

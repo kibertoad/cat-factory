@@ -20,42 +20,45 @@ import type { AppSlots } from './slots'
 export const WORKSPACE_CAPABILITIES_MANIFEST_ID = 'cat-factory:workspace-capabilities'
 
 /**
+ * Every key of `value`, recursively, in sorted order: the canonical form
+ * {@link workspaceCapabilitiesVersion} signs. Arrays keep their order (a capability list's order is
+ * content: it is the order the palette and the picker render in); objects lose theirs, so a
+ * re-serialization with reordered keys can't spuriously differ.
+ */
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize)
+  if (value === null || typeof value !== 'object') return value
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([key, entry]) => [key, canonicalize(entry)]),
+  )
+}
+
+/**
  * A deterministic, key-order-independent content signature covering BOTH capability lists, used as
  * the manifest `version`. The workspace snapshot re-delivers the SAME deployment capabilities on
  * every board-event refresh (a full `workspace.refresh()` re-hydrates each time), so a
- * content-derived version lets each store skip re-projecting an UNCHANGED catalog — otherwise every
+ * content-derived version lets each store skip re-projecting an UNCHANGED catalog: otherwise every
  * refresh would replace its read-model and needlessly invalidate every `agentKindMeta` /
  * `taskTypeMeta` consumer. It still changes (and swaps wholesale) when a different workspace's
- * capabilities genuinely differ. Serialized as fixed-order tuples of only the fields that affect
- * display/pairing, so a re-serialization with reordered object keys can't spuriously differ.
+ * capabilities genuinely differ.
+ *
+ * Signs the WHOLE entry, canonicalized, rather than a hand-listed tuple of the fields that seemed
+ * to matter. The two mistakes are not symmetric: folding in a field nothing renders costs one
+ * re-projection nobody sees, while OMITTING one costs correctness, because `hydrateCapabilities`
+ * short-circuits on an unchanged version and the store then keeps serving the PREVIOUS declaration
+ * until something else swaps the manifest. A field list drifts silently into that: it was missing
+ * `tier` and `binaryOutput` before `purposes` was added to it, so a backend that re-declared any of
+ * the three reached an open tab as the catalog it had replaced. There is nothing volatile in either
+ * shape (no timestamps, no ids minted per request), so signing all of it costs nothing.
  */
 export function workspaceCapabilitiesVersion(
   kinds: readonly CustomAgentKind[],
   taskTypes: readonly CustomTaskType[],
 ): string {
-  return JSON.stringify([
-    kinds.map((k) => [
-      k.kind,
-      k.container,
-      k.presentation.label,
-      k.presentation.icon,
-      k.presentation.color,
-      k.presentation.description,
-      k.presentation.category ?? null,
-      k.presentation.resultView ?? null,
-    ]),
-    taskTypes.map((t) => [
-      t.taskType,
-      t.presentation.label,
-      t.presentation.icon,
-      t.presentation.color,
-      t.presentation.description,
-      t.defaultPipelineId ?? null,
-      t.formPanel ?? null,
-      // The descriptor list affects the create-form, so fold its shape into the signature too.
-      (t.fields ?? []).map((f) => [f.key, f.type, f.label, f.required ?? false]),
-    ]),
-  ])
+  return JSON.stringify([canonicalize(kinds), canonicalize(taskTypes)])
 }
 
 /**

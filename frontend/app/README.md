@@ -265,6 +265,94 @@ picking what each of them runs on are halves of the same job.
   whatever the tier: the same rule `showOverrideField` states for a single field: a row the
   user can neither read nor clear is worse than a longer list.
 
+### The palette's second dial: the pipeline's purpose
+
+The builder's palette narrows on two axes, and both controls sit on one row above the catalog
+(`PipelinePurposeSelect` above `AgentTierSelect`), each with its own "n hidden" hint so neither
+narrowing reads as an empty catalog. The tier says how deep to look; the **purpose** says what
+the pipeline is for (`build` / `document` / `review` / `research` / `planning`), and the palette
+drops the categories that purpose has no use for. It reaches past the palette: the saved-pipeline
+library in the builder's third column lists the pipelines built for the purpose being edited, so
+one dial narrows both ends of the slideover. The purpose is not a view preference either: it is
+saved on the pipeline and also decides which task pickers offer it, which is why the control
+writes through to the draft while the tier writes to its own store.
+
+`Pipeline.purpose` is MANDATORY, so there is no unclassified state for any of these surfaces to
+invent a policy for: a new draft starts at `build` (what an unclassified pipeline always behaved
+as) and the dial only moves it. What each surface still has to read carefully is a purpose the
+BUNDLE cannot name, which the persisted, closed vocabulary makes reachable in both directions (a
+browser older than a new member, a row older than a retired one).
+
+Purpose is filtered by three predicates in `@cat-factory/contracts`, and the difference between
+the first two is the point:
+
+- `purposeSuggestsAgentKind` is **relevance**: what the palette OFFERS. Opinionated (a
+  review pipeline designs nothing; a planning pipeline has no pull request to gate), because a
+  wrong guess costs one purpose switch. It reads the kind's `category` through
+  `purposeSuggestsAgentCategory` and then the kind's OWN `presentation.purposes`, and the two
+  INTERSECT: a declaration may only hide more, never buy a kind back into a purpose its section
+  is not offered to, which is what keeps relevance inside compatibility whatever a deployment
+  declares.
+- `purposeAllowsAgentCategory` is **compatibility**: what the builder will SAVE. It states only
+  what is contradictory (a pipeline that writes no code carrying an implementation step) and
+  drives the draft's conflict warning.
+- `pipelineMatchesPurpose` is **membership**: which SAVED pipelines the builder's library lists,
+  reduced with the label and archive dials in `utils/pipelineLibrary.ts`. The one dial in that
+  column whose control is elsewhere, so it is the one that owes a "n hidden" hint. It may be
+  exact where the pickers' `pipelineAllowedForTaskType` is permissive, because it narrows a list
+  somebody is BROWSING rather than one they are about to run from: two known purposes never mix,
+  while a pipeline whose classifier this build cannot NAME is listed at every purpose rather than
+  vanishing from the editor that has to fix it.
+
+The library's purpose is a BROWSING dial of its own, defaulting to the draft's and relaxed by the
+hint itself ("show every purpose"). Reading the draft directly is the trap: it is an authoring
+field with no "off" setting, so a hint that only NAMES the absence would send the reader to a
+control whose every setting narrows and whose every change is saved. A dial that hides rows owes
+both a count and a way back, and the way back may not be an edit.
+
+Relevance is a subset of compatibility, asserted over the whole grid in `pipeline.spec.ts`. Keep
+it that way: the palette may hide what the save gate tolerates, so tightening the relevance table
+never turns a stored pipeline into one its own editor refuses, but offering a kind the save gate
+then rejects would be a dead end with the refusal arriving after the work.
+
+**A category is a shelf label, not a statement of what a kind does**, which is why relevance is
+asked of the KIND. Keeping `docs` for a `review` pipeline so the Domain Rules Reviewer survives
+also handed it the two kinds that WRITE documentation into the repo, and `document` and `research`
+had identical rows, so moving the dial between them narrowed nothing at all. A kind that belongs
+to one use-case says so in `presentation.purposes` and leaves a section its siblings stay in; the
+section keeps deciding for every kind that declares nothing, which is the normal case and the one
+a deployment-registered kind falls into for free. Declare it only to opt OUT: it can never widen,
+and a list naming only purposes this build cannot name is read as no declaration at all rather
+than as excluding everything, the same default-open reading the unknown `purpose` gets. An EMPTY
+list is refused at registration instead (`agentPresentationSchema`, and `catalog.spec.ts` for the
+static half valibot never parses): the reader cannot tell one from declaring nothing, so it would
+offer the kind everywhere its section is offered, which is the inverse of what writing it means.
+
+**Each hint counts what relaxing THAT dial alone would reveal**, which is why each reduction is one
+function (`utils/agentPalette.ts` for the catalog, `utils/pipelineLibrary.ts` for the library)
+rather than chained filters at the call site. Chaining them
+and subtracting the lengths gives the second dial an honest count and hands the first one the whole
+rest of the catalog: at the default `basic` tier a `planning` pipeline claimed thirteen kinds hidden
+for its purpose when switching back to Build revealed three, the other ten being tier-hidden either
+way. So a kind BOTH dials hide is counted by neither, correctly, and a new dial measures itself
+against what the others already admit rather than against the raw catalog.
+
+**A purpose or category this build does not recognise narrows nothing.** Both are closed
+vocabularies and both are persisted, so a reader is total against the type and partial against the
+data: a `Pipeline.purpose` outlives the build that wrote it, and a `presentation.category` arrives
+in the snapshot from a kind a deployment registered. Narrow with the schema-derived
+`isPipelinePurpose` / `isAgentCategory` before indexing anything by one, never with an optional
+call, so adding a member still fails the build. The two predicates read the unknown value through
+one helper because they have to agree about it: one narrowing by a purpose the other no longer
+recognises is exactly the subset violation above. On the control itself an unrecognised purpose is
+NAMED and quoted back rather than left to render blank, which would read as a pipeline nobody
+classified while the saved row says otherwise.
+
+Offering such a kind is only half of keeping it: `groupAgentPalette` puts whatever no section
+CLAIMED into the trailing custom bucket, derived from the sections rather than from an absent
+`category`. A kind whose category has no section matches neither test, so filtering on the absent
+one alone deleted it from a palette its own save gate accepts.
+
 ## In-app tutorial tours
 
 On first launch (once the board is up and no other startup advisory is open) the app asks

@@ -17,6 +17,7 @@ public enum PrReportEnvironmentsTeardown {
     CONFIRMED("confirmed"),
     UNCONFIRMED("unconfirmed"),
     PENDING("pending"),
+    RETAINED("retained"),
     FAILED("failed"),
     NOT_APPLICABLE("not_applicable"),
 

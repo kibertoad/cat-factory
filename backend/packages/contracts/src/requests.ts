@@ -353,9 +353,12 @@ export const createPipelineSchema = v.object({
   ),
   /**
    * The pipeline's use-case classifier (`build` / `document` / `review` / `research` /
-   * `planning`). Omitted ⇒ unclassified. Drives the task pickers + the builder palette gate.
+   * `planning`). REQUIRED, like the field it writes: every pipeline says what it exists to do, so
+   * the pickers, the palette and the library never have to guess for the ones that skipped it. The
+   * builder's dial defaults to `build`, so a caller who has not thought about it still states the
+   * classifier it would have behaved as.
    */
-  purpose: v.optional(pipelinePurposeSchema),
+  purpose: pipelinePurposeSchema,
 })
 export type CreatePipelineInput = v.InferOutput<typeof createPipelineSchema>
 

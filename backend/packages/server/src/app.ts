@@ -113,7 +113,10 @@ import { publicApiKeyController } from './modules/publicApi/PublicApiKeyControll
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
 import { publicDebugController } from './modules/publicApi/PublicDebugController.js'
 import { publicEvidenceController } from './modules/publicApi/PublicEvidenceController.js'
+import { publicSpecController } from './modules/publicApi/PublicSpecController.js'
+import { publicMergeEvidenceController } from './modules/publicApi/PublicMergeEvidenceController.js'
 import { publicDiscoveryController } from './modules/publicApi/PublicDiscoveryController.js'
+import { publicSpendController } from './modules/publicApi/PublicSpendController.js'
 import { publicKeyController } from './modules/publicApi/PublicKeyController.js'
 import { publicMcpController } from './modules/publicApi/PublicMcpController.js'
 import { publicNotificationWebhookController } from './modules/publicApi/PublicNotificationWebhookController.js'
@@ -142,8 +145,10 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // OpenAI-compatible LLM proxy for implementation containers (authenticated by a
   // signed, model-locked container token; upstream/in-process via the llmUpstream gateway).
   app.route('/', llmProxyController())
-  // In-container screenshot ingest for the UI tester (same container session token as the
-  // LLM proxy; reachable at `${proxyBaseUrl}/artifacts/ingest`). 503 when no blob storage.
+  // In-container screenshot ingest for the UI tester plus the reference-design download its
+  // job body's manifest names (same container session token as the LLM proxy; reachable at
+  // `${proxyBaseUrl}/artifacts/ingest` and `${proxyBaseUrl}/artifacts/reference/:id`). 503
+  // when no blob storage.
   app.route('/', harnessArtifactController())
   // SearXNG-compatible web-search proxy for implementation containers (same
   // model-locked container token; the search runs server-side under the deployment's
@@ -246,6 +251,21 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // and the artifacts a run captured, for a consumer whose job is to JUDGE the run rather than
   // debug it. See backend/docs/public-api.md.
   app.route('/', publicEvidenceController())
+  // The public MERGE-EVIDENCE surface (`/api/v1/runs/:runId/merge-record`,
+  // `/api/v1/merge-records/*`): the change class and merger scores behind a merge decision, the
+  // workspace's per-class rollups, and the reviewer-effort tag. Reads are `read`; the tag is
+  // `write`, since recording how much review a landed PR took merges nothing. See
+  // backend/docs/adr/0046-merge-track-record.md.
+  app.route('/', publicMergeEvidenceController())
+  // The public SPEND-ANALYTICS read (`/api/v1/usage/spend`): the workspace's money over a window
+  // sliced by repository, ticket, run or step kind: the TCO question the period breakdown on
+  // `/api/v1/usage` carries no axis for. `read` scope. See backend/docs/public-api.md.
+  app.route('/', publicSpendController())
+  // The public SPEC read (`/api/v1/services/:serviceId/spec`): the service's in-repo requirement
+  // tree and the Gherkin rendered from it, read-scoped, so an integrator judging a run's outcome
+  // can fetch the criteria it was scored against without a repository clone. Read-only by design:
+  // the spec's write path is a reviewed commit. See backend/docs/public-api.md.
+  app.route('/', publicSpecController())
   // HEADLESS key provisioning (`/api/v1/keys`): the external counterpart of the session-authed
   // key panel, `admin` scope, bounded so a minted key can never mint another and revoking a key
   // revokes what it minted.

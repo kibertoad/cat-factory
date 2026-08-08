@@ -171,7 +171,12 @@ function definePipeline(spec: {
   id: string
   name: string
   description?: string
-  purpose?: Pipeline['purpose']
+  /**
+   * What this preset exists to do. Required, and required HERE rather than only asserted in the
+   * seed test: the catalog is ours, so every entry can say what it is for, and a preset that
+   * skipped it would fall silently out of a narrowed picker rather than fail anything.
+   */
+  purpose: Pipeline['purpose']
   steps: readonly SeedStep[]
   availability?: Pipeline['availability']
   labels?: string[]
@@ -207,7 +212,7 @@ function definePipeline(spec: {
     ...(gating.some((g) => g !== null) ? { gating } : {}),
     ...(stepOptions.some((o) => o !== null) ? { stepOptions } : {}),
     ...(spec.availability ? { availability: spec.availability } : {}),
-    ...(spec.purpose ? { purpose: spec.purpose } : {}),
+    purpose: spec.purpose,
     ...(spec.labels ? { labels: spec.labels } : {}),
     ...(spec.version !== undefined ? { version: spec.version } : {}),
     ...(spec.public ? { public: spec.public } : {}),
@@ -260,7 +265,10 @@ function buildDeliveryPipelines(): Pipeline[] {
       purpose: 'build',
       description:
         'The default: design the solution and challenge the design, implement and review the change, run the tests, then gate on conflicts + CI and merge. Every step always runs — no requirements interview, no human pauses.',
-      version: 1,
+      // Version 2 appends the terminal `disposer`: a Deployer that stands an environment up now
+      // has to say where it comes down again (see `validatePipelineAuthoring`), and the bump is
+      // what offers an already-seeded workspace the reseed that adopts it.
+      version: 2,
       agentKinds: [
         'architect',
         'architect-companion',
@@ -271,6 +279,7 @@ function buildDeliveryPipelines(): Pipeline[] {
         'conflicts',
         'ci',
         'merger',
+        'disposer',
       ],
     },
     // The TRIVIAL rung: the plainest thing that can ship a change. `pl_build` minus the design
@@ -288,9 +297,18 @@ function buildDeliveryPipelines(): Pipeline[] {
       description:
         'For trivial work whose approach is not in question: implement and review the change, run the tests, then gate on conflicts + CI and merge. No design phase, no human pauses, no surprises.',
       // Version 5 is the catalog collapse: `mocker` dropped, because authoring stub mappings is not
-      // part of the plainest path to a merged change.
-      version: 5,
-      agentKinds: ['coder', 'reviewer', 'deployer', 'tester-api', 'conflicts', 'ci', 'merger'],
+      // part of the plainest path to a merged change. Version 6 appends the terminal `disposer`.
+      version: 6,
+      agentKinds: [
+        'coder',
+        'reviewer',
+        'deployer',
+        'tester-api',
+        'conflicts',
+        'ci',
+        'merger',
+        'disposer',
+      ],
     },
     // The ADAPTIVE rung: the same delivery loop, but it sizes the task up first and switches the
     // expensive optional steps on only when the work warrants them. Pick this over the fixed rungs
@@ -328,8 +346,8 @@ function buildDeliveryPipelines(): Pipeline[] {
       // Version 6 is the catalog collapse: the preset went from 15 unconditional steps to a gated
       // 7-to-10 and absorbed pl_quick / pl_dep_update / pl_pr_review / pl_human_review /
       // pl_fullstack / pl_integrate, which are retired (see buildRetiredPipelines). The bump is what
-      // offers an already-seeded workspace the reseed.
-      version: 6,
+      // offers an already-seeded workspace the reseed. Version 7 appends the terminal `disposer`.
+      version: 7,
       steps: [
         // Sizes the task so every gate below has an estimate to read. Inline + cheap, and
         // `assertValidGating` requires it to precede any gated step.
@@ -364,6 +382,12 @@ function buildDeliveryPipelines(): Pipeline[] {
           gating: { enabled: true, minRisk: 0.8, onMissingEstimate: 'skip' },
         },
         'merger',
+        // Terminal, for the same reason it is terminal in `pl_bug_triage`: every earlier slot
+        // would reclaim the environment while a later step might still want it, and the merge is
+        // the last thing in this chain that can. Unconditional even though its provider (the
+        // tester) is estimate-gated: the Deployer above is unconditional too, so a trivial task
+        // still stands an environment up and still has to give it back.
+        'disposer',
       ],
     }),
     // A bug-fix preset, front-loaded with the investigate → triage pair: `bug-investigator` reads
@@ -444,7 +468,10 @@ function buildBuildVariantPipelines(): Pipeline[] {
       description:
         'Implement and UI-test, then pause for a person to compare the captured screenshots against the reference designs before gating and merging.',
       labels: ['experimental'],
-      version: 4,
+      // Version 5 appends the terminal `disposer`. It lands AFTER the human visual-confirmation
+      // gate for the reason that gate exists: a person is looking at the live environment, so
+      // reclaiming it before they have finished would take the thing under review away.
+      version: 5,
       agentKinds: [
         'coder',
         'reviewer',
@@ -455,6 +482,7 @@ function buildBuildVariantPipelines(): Pipeline[] {
         'conflicts',
         'ci',
         'merger',
+        'disposer',
       ],
     },
     // A self-contained FRONTEND build + UI-test pipeline: implement → review → mock →
@@ -484,7 +512,8 @@ function buildBuildVariantPipelines(): Pipeline[] {
       description:
         'A self-contained frontend build that drives a real browser against the app the platform stands up, then gates on conflicts + CI and ships the PR.',
       labels: ['experimental'],
-      version: 4,
+      // Version 5 appends the terminal `disposer`.
+      version: 5,
       agentKinds: [
         'coder',
         'reviewer',
@@ -494,6 +523,7 @@ function buildBuildVariantPipelines(): Pipeline[] {
         'conflicts',
         'ci',
         'merger',
+        'disposer',
       ],
     },
     // The recurring TECH-DEBT preset: a read-only `analysis` agent audits the repo and a
@@ -508,7 +538,8 @@ function buildBuildVariantPipelines(): Pipeline[] {
       purpose: 'build',
       description:
         'Audit the repository, file a tracker ticket from the findings, then implement, test, and ship the fix.',
-      version: 4,
+      // Version 5 appends the terminal `disposer`.
+      version: 5,
       agentKinds: [
         'analysis',
         'tracker',
@@ -521,6 +552,7 @@ function buildBuildVariantPipelines(): Pipeline[] {
         'conflicts',
         'ci',
         'merger',
+        'disposer',
       ],
     },
     definePipeline({
@@ -569,13 +601,12 @@ function buildBuildVariantPipelines(): Pipeline[] {
         'conflicts',
         'ci',
         'merger',
-        // THE ONE SHIPPED PRESET THAT CLOSES ITS OWN TEARDOWN PROOF, and this is the preset for
-        // it because nobody is watching a scheduled run. Everywhere else the environment
-        // outliving the run is an affordance: someone opens the merged task and pokes at the live
-        // URL until the TTL sweep takes it. A recurring triage fires on a cadence into an empty
-        // room, so that affordance is worth nothing and the cost compounds once per fire, held
-        // by a 2-minute sweep on `expires_at` that lands long after the run settled and after the
-        // PR has already published "still live" as its third lifecycle leg.
+        // Closes the run's own teardown proof, and this preset had it first because nobody is
+        // watching a scheduled run: a recurring triage fires on a cadence into an empty room, so
+        // leaving the environment to the 2-minute `expires_at` sweep compounds the cost once per
+        // fire and publishes "still live" as the PR's third lifecycle leg. Every deploying preset
+        // now ends this way, because a Deployer with nowhere to come down again is the shape
+        // `validatePipelineAuthoring` refuses.
         //
         // TERMINAL, after `merger`, for the same reason the deferred plan recommended it: every
         // earlier slot would reclaim the environment while a later step might still want it, and

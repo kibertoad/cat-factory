@@ -25,14 +25,6 @@ export function isAgentTier(value: unknown): value is AgentTier {
   return typeof value === 'string' && (AGENT_TIERS as readonly string[]).includes(value)
 }
 
-/** Keep only the archetypes visible at `level` (cumulative — see `agentTierVisibleAt`). */
-export function filterByAgentTier<T extends Pick<AgentArchetype, 'tier'>>(
-  archetypes: readonly T[],
-  level: AgentTier,
-): T[] {
-  return archetypes.filter((a) => agentTierVisibleAt(a.tier, level))
-}
-
 /**
  * Keep the archetypes visible at `level`, PLUS any the caller marks as pinned — the model
  * preset editor's kinds that already carry an override. An entity can hold a setting written

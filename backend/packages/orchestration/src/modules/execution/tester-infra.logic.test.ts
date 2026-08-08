@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { ENV_CONSUMER_STARVATION_REASONS } from '@cat-factory/contracts'
 import {
+  CONSUMER_ENVIRONMENT_FAULT_MESSAGES,
+  consumerEnvironmentFault,
   decideTesterInfra,
-  needsDeployerBeforeConsumer,
   type TesterInfraInput,
 } from './tester-infra.logic.js'
 
@@ -79,54 +81,96 @@ describe('decideTesterInfra', () => {
   })
 })
 
-describe('needsDeployerBeforeConsumer', () => {
+describe('consumerEnvironmentFault', () => {
+  /** The reason the guard returned, or null: the shape every assertion below reads. */
+  const fault = (
+    agentKinds: string[],
+    enabled: boolean[] | undefined,
+    provisionType: Parameters<typeof consumerEnvironmentFault>[2],
+  ) => consumerEnvironmentFault(agentKinds, enabled, provisionType)?.reason ?? null
+
   it('refuses a kubernetes chain whose tester has no deployer before it', () => {
-    expect(
-      needsDeployerBeforeConsumer(['coder', 'tester-api', 'merger'], undefined, 'kubernetes'),
-    ).toBe(true)
+    expect(fault(['coder', 'tester-api', 'merger'], undefined, 'kubernetes')).toBe(
+      'consumer_without_deployer',
+    )
   })
 
-  it('passes once a deployer precedes the first consumer', () => {
+  it('refuses a chain whose disposer reclaims the environment before its tester reads it', () => {
+    // The other direction of the same dead end, and the one a deployer-presence check misses:
+    // something DID provision, and it is gone again by the time the tester runs.
+    expect(fault(['coder', 'deployer', 'disposer', 'tester-api'], undefined, 'kubernetes')).toBe(
+      'consumer_after_disposer',
+    )
+  })
+
+  it('anchors the fault on the starved step, so the message can name it', () => {
     expect(
-      needsDeployerBeforeConsumer(
-        ['coder', 'deployer', 'tester-api', 'merger'],
+      consumerEnvironmentFault(
+        ['coder', 'deployer', 'disposer', 'human-test'],
         undefined,
         'custom',
       ),
-    ).toBe(false)
+    ).toEqual({ reason: 'consumer_after_disposer', index: 3, agentKind: 'human-test' })
+  })
+
+  it('passes once a deployer precedes the first consumer', () => {
+    expect(fault(['coder', 'deployer', 'tester-api', 'merger'], undefined, 'custom')).toBeNull()
+  })
+
+  it('passes a chain that re-provisions for the consumer after the disposer', () => {
+    expect(
+      fault(['deployer', 'tester-api', 'disposer', 'deployer', 'human-test'], undefined, 'custom'),
+    ).toBeNull()
   })
 
   it('passes a chain with no env-consumer at all', () => {
-    expect(
-      needsDeployerBeforeConsumer(['coder', 'reviewer', 'merger'], undefined, 'kubernetes'),
-    ).toBe(false)
+    expect(fault(['coder', 'reviewer', 'merger'], undefined, 'kubernetes')).toBeNull()
   })
 
   it('fires for docker-compose (now Deployer-provisioned like kubernetes/custom)', () => {
-    expect(
-      needsDeployerBeforeConsumer(['coder', 'tester-api', 'merger'], undefined, 'docker-compose'),
-    ).toBe(true)
+    expect(fault(['coder', 'tester-api', 'merger'], undefined, 'docker-compose')).toBe(
+      'consumer_without_deployer',
+    )
   })
 
   it('never fires for infraless / undeclared services', () => {
     const chain = ['coder', 'tester-api', 'merger']
-    expect(needsDeployerBeforeConsumer(chain, undefined, 'infraless')).toBe(false)
-    expect(needsDeployerBeforeConsumer(chain, undefined, undefined)).toBe(false)
+    expect(fault(chain, undefined, 'infraless')).toBeNull()
+    expect(fault(chain, undefined, undefined)).toBeNull()
   })
 
   it('covers human-test and playwright as env-consumers', () => {
-    expect(needsDeployerBeforeConsumer(['coder', 'human-test'], undefined, 'kubernetes')).toBe(true)
-    expect(needsDeployerBeforeConsumer(['coder', 'playwright'], undefined, 'kubernetes')).toBe(true)
+    expect(fault(['coder', 'human-test'], undefined, 'kubernetes')).toBe(
+      'consumer_without_deployer',
+    )
+    expect(fault(['coder', 'playwright'], undefined, 'kubernetes')).toBe(
+      'consumer_without_deployer',
+    )
   })
 
   it('ignores a DISABLED deployer but honours a disabled consumer', () => {
     // A disabled deployer never runs, so it does not satisfy the guard.
-    expect(
-      needsDeployerBeforeConsumer(['deployer', 'tester-api'], [false, true], 'kubernetes'),
-    ).toBe(true)
-    // A disabled consumer imposes no requirement.
-    expect(needsDeployerBeforeConsumer(['coder', 'tester-api'], [true, false], 'kubernetes')).toBe(
-      false,
+    expect(fault(['deployer', 'tester-api'], [false, true], 'kubernetes')).toBe(
+      'consumer_without_deployer',
     )
+    // A disabled consumer imposes no requirement.
+    expect(fault(['coder', 'tester-api'], [true, false], 'kubernetes')).toBeNull()
+  })
+
+  it('says nothing about a lifecycle that is merely untidy, which the run door does not own', () => {
+    // A deployer nobody reclaims is refused when a pipeline is AUTHORED and still runs when a
+    // stored one is started: every workspace seeded before that rule holds such a chain.
+    expect(fault(['deployer', 'tester-api'], undefined, 'kubernetes')).toBeNull()
+    expect(fault(['disposer', 'deployer', 'tester-api'], undefined, 'kubernetes')).toBeNull()
+  })
+
+  it('keeps a message for every reason it can return', () => {
+    // Derived from the same list the guard filters by, so a reason added to one half cannot ship
+    // without the copy the other half renders.
+    for (const reason of ENV_CONSUMER_STARVATION_REASONS) {
+      expect(CONSUMER_ENVIRONMENT_FAULT_MESSAGES[reason]('tester-api', 'kubernetes')).toContain(
+        'tester-api',
+      )
+    }
   })
 })

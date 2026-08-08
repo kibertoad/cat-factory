@@ -1,3 +1,4 @@
+import type { AgentPresentation } from '@cat-factory/contracts'
 import type { Block, JudgeModelPin, JudgeVerdict, PipelineStep, RiskPolicy } from './types.js'
 import type { RaiseNotificationInput } from '../ports/notification-channel.js'
 import type { Clock } from '../ports/runtime.js'
@@ -201,16 +202,17 @@ export interface JudgeDefinition {
    * Display metadata, so a registered judge becomes a first-class palette block and opens the
    * shared `judge` result window. Omitted ⇒ the kind is not a palette block (it can still be
    * placed by a registered pipeline).
+   *
+   * The SHAPE is contracts' `AgentPresentation` minus `tier`, which a judge does not carry: the
+   * snapshot projection (`snapshotCustomAgentKinds`) spreads this object straight into the wire
+   * `CustomAgentKind.presentation`, so the two are one shape and restating the fields here is a
+   * copy with nothing holding it in step. It was exactly that before, and both its vocabularies
+   * were hand-written literal unions: retiring an `AgentCategory` or a `PipelinePurpose` member
+   * left this copy still accepting it, and adding one left every judge unable to declare it,
+   * neither of which fails a build. `resultView` defaults to the built-in `judge` window (applied
+   * at the projection); a deployment may name its own namespaced view instead.
    */
-  presentation?: {
-    label: string
-    icon: string
-    color: string
-    description: string
-    category?: 'review' | 'design' | 'build' | 'test' | 'docs' | 'gates'
-    /** Defaults to the built-in `judge` window; a deployment may name its own namespaced view. */
-    resultView?: string
-  }
+  presentation?: Omit<AgentPresentation, 'tier'>
 }
 
 /**

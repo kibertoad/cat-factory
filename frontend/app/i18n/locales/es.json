@@ -4652,7 +4652,7 @@
       "strategy": "Estrategia",
       "rounds": "Rondas",
       "purposeLabel": "Propósito",
-      "purposePlaceholder": "Seleccionar un propósito",
+      "purposeUnrecognized": "No reconocido ({purpose})",
       "purposeOption": {
         "build": "Desarrollo",
         "document": "Documentación",
@@ -4670,6 +4670,10 @@
       "removeParticipant": "Quitar participante (mín. 2)",
       "addParticipant": "Añadir participante",
       "savedPipelines": "Pipelines guardados",
+      "purposeHiddenPipelines": "{count} pipeline guardado oculto para este propósito. | {count} pipelines guardados ocultos para este propósito.",
+      "everyPurposeListed": "Se muestran los pipelines guardados de todos los propósitos.",
+      "listEveryPurpose": "Mostrar todos los propósitos",
+      "narrowToDraftPurpose": "Limitar a este propósito",
       "hideArchived": "Ocultar archivados",
       "archivedCount": "Archivados ({count})",
       "allLabels": "Todas",
@@ -4728,6 +4732,13 @@
       "binaryOutputPlaceholder": "Elige un servicio de almacenamiento",
       "binaryOutputContextPlaceholder": "Opcional: servicios que delimitan la generación",
       "binaryOutputNeedsPick": "Un paso que genera salidas binarias no tiene servicio de almacenamiento elegido. Elige uno antes de guardar.",
+      "envNeedsDeployer": "Un paso de Tester, prueba manual o Playwright necesita un Deployer antes. Añade uno o la canalización no se guardará (no hace nada en un servicio que no aprovisiona).",
+      "envNeedsDisposer": "Un Deployer necesita un Disposer después para liberar el entorno que levanta. Añade uno, o marca el Deployer para que conserve su entorno más allá de la ejecución; de lo contrario la canalización no se guardará.",
+      "envDisposerNeedsDeployer": "Este Disposer no tiene ningún Deployer antes, así que no hay nada que liberar. Añade un Deployer o quita el Disposer.",
+      "envConsumerAfterDisposer": "Un paso de Tester, prueba manual o Playwright se ejecuta después de que el Disposer ya haya liberado el entorno, así que no quedaría nada contra lo que ejecutarlo. Mueve el Disposer por debajo de ese paso, o añade otro Deployer antes.",
+      "envRetainedButReclaimed": "Este Deployer está marcado para conservar su entorno más allá de la ejecución, pero un Disposer posterior libera exactamente ese entorno. Quita el Disposer o desmarca la opción de conservar el entorno.",
+      "retainEnvironmentSetTooltip": "Se libera al terminar la ejecución. Haz clic para mantener este entorno en marcha después (una vista previa que los revisores usan con el PR abierto); luego lo retirará su TTL o un operador.",
+      "retainEnvironmentClearTooltip": "Se mantiene en marcha tras la ejecución. Haz clic para volver a liberarlo con un paso Disposer.",
       "binaryOutputNoStorage": "Ningún servicio del catálogo de este tablero declara la capacidad {capability}. Registra uno, o añade la capacidad al servicio que tenías en mente, en servicios fundamentales.",
       "binaryOutputMissing": "Este servicio de almacenamiento ya no está en el catálogo; elige otro.",
       "binaryOutputNotStorage": "Este servicio ya no declara la capacidad {capability}, así que las ejecuciones se rechazarán; elige otro.",
@@ -4903,7 +4914,8 @@
   },
   "palette": {
     "hint": "Haz clic en un agente para añadirlo al pipeline.",
-    "customAgents": "Agentes personalizados"
+    "customAgents": "Agentes personalizados",
+    "purposeHidden": "{count} agente oculto para este propósito. | {count} agentes ocultos para este propósito."
   },
   "gates": {
     "subtitle": {

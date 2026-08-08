@@ -42,6 +42,7 @@ export {
   type ToolServerDispatchContainer,
 } from './tool-servers-probe.js'
 export { makeIncorporatedReview, makeReadyReviewWithOpenItem } from './requirements-fixtures.js'
+export { seedLegacyPipeline } from './legacyPipeline.js'
 export { makeIncorporatedClarityReview, makeReadyClarityReview } from './clarity-fixtures.js'
 export {
   defineConformanceSuite,

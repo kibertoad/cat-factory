@@ -4652,7 +4652,7 @@
       "strategy": "戦略",
       "rounds": "ラウンド",
       "purposeLabel": "目的",
-      "purposePlaceholder": "目的を選択",
+      "purposeUnrecognized": "認識できません ({purpose})",
       "purposeOption": {
         "build": "開発",
         "document": "ドキュメント",
@@ -4670,6 +4670,10 @@
       "removeParticipant": "参加者を削除(最低2)",
       "addParticipant": "参加者を追加",
       "savedPipelines": "保存済みパイプライン",
+      "purposeHiddenPipelines": "この目的では {count} 件の保存済みパイプラインが非表示です。",
+      "everyPurposeListed": "すべての目的の保存済みパイプラインを表示しています。",
+      "listEveryPurpose": "すべての目的を表示",
+      "narrowToDraftPurpose": "この目的に絞り込む",
       "hideArchived": "アーカイブを非表示",
       "archivedCount": "アーカイブ済み({count})",
       "allLabels": "すべて",
@@ -4728,6 +4732,13 @@
       "binaryOutputPlaceholder": "保存サービスを選択",
       "binaryOutputContextPlaceholder": "任意: 生成の範囲を定めるサービス",
       "binaryOutputNeedsPick": "バイナリ成果物を生成するステップに保存サービスが選択されていません。保存前に選んでください。",
+      "envNeedsDeployer": "Tester、手動テスト、または Playwright のステップの前には Deployer が必要です。追加しないとパイプラインは保存できません（プロビジョニングしないサービスでは何もしません）。",
+      "envNeedsDisposer": "Deployer の後には、用意した環境を解放する Disposer が必要です。追加するか、Deployer に実行後も環境を残す設定を付けてください。どちらもない場合、パイプラインは保存できません。",
+      "envDisposerNeedsDeployer": "この Disposer の前に Deployer がないため、解放する対象がありません。Deployer を追加するか、Disposer を削除してください。",
+      "envConsumerAfterDisposer": "Tester、手動テスト、または Playwright のステップが、Disposer が環境を解放した後に実行されるため、実行対象が残りません。Disposer をそのステップより後ろに移すか、その前にもう一つ Deployer を追加してください。",
+      "envRetainedButReclaimed": "この Deployer には実行後も環境を残す設定が付いていますが、後続の Disposer がまさにその環境を解放します。Disposer を削除するか、環境を残す設定を解除してください。",
+      "retainEnvironmentSetTooltip": "実行の終了時に解放されます。クリックすると実行後も環境を残します（PR を開いた後にレビュアーが使うプレビュー用）。その後は TTL または運用者が停止します。",
+      "retainEnvironmentClearTooltip": "実行の終了後も環境を残します。クリックすると Disposer ステップで解放する動作に戻ります。",
       "binaryOutputNoStorage": "このボードのカタログに {capability} 機能を宣言するサービスがありません。基盤サービスで新たに登録するか、意図したサービスにこの機能を追加してください。",
       "binaryOutputMissing": "この保存サービスはカタログに存在しません。別のサービスを選んでください。",
       "binaryOutputNotStorage": "このサービスは {capability} 機能を宣言しなくなったため、実行は拒否されます。別のサービスを選んでください。",
@@ -4903,7 +4914,8 @@
   },
   "palette": {
     "hint": "エージェントをクリックするとパイプラインに追加されます。",
-    "customAgents": "カスタムエージェント"
+    "customAgents": "カスタムエージェント",
+    "purposeHidden": "この目的では {count} 件のエージェントが非表示です。"
   },
   "gates": {
     "subtitle": {

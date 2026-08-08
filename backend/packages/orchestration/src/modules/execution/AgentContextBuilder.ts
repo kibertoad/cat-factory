@@ -26,6 +26,7 @@ import type {
   ModelPresetRepository,
   PipelineStep,
   RequirementReviewRepository,
+  ResolveBinaryArtifactStore,
   ResolvedSkill,
   SkillVersionPin,
   TaskRepository,
@@ -78,6 +79,8 @@ import {
 } from './builder-context-files.js'
 import { type FoundationalServiceResolver } from './run-foundational-services.js'
 import { CatalogRunContext } from './run-catalog-context.js'
+import { resolveReferenceScreenshots } from './run-reference-screenshots.js'
+import { buildBlockPayload } from './builder-block-payload.js'
 import { getFragment, withDesignContextFragment } from '@cat-factory/prompt-fragments'
 import {
   type DocumentUrlResolver,
@@ -349,6 +352,13 @@ export interface AgentContextBuilderDeps {
    */
   binaryGeneratorSource?: BinaryGeneratorSource
   /**
+   * Optional: the per-account binary-artifact store, resolved for a dispatch of a CAPTURING kind
+   * so the task's reference design images can be handed to the container as files. Absent (the
+   * deployment stores no binary artifacts) ⇒ no reference manifest, and the tester names its own
+   * views: the documented fallback, not a degradation.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
+  /**
    * Optional: the run logger, used to report a capability that was declared but skipped (an
    * unregistered bundled-skill id, an optional catalog skill that could not resolve). Absent ⇒
    * those degradations are silent, which is why every facade wires it.
@@ -494,6 +504,10 @@ export class AgentContextBuilder {
       // failure policy and (on a mothership-mode node) a transport, so the collaborator owns
       // the fan-out and the shared reads inside it; see `CatalogRunContext.sliceFor`.
       catalogSlice,
+      // The reference design images this task already holds, named as the files a CAPTURING kind
+      // reads under `.cat-context/reference-screenshots/`. A spread-ready partial, empty for every
+      // kind that captures nothing, which is what keeps the two reads off their dispatch path.
+      referenceScreenshots,
     ] = await Promise.all([
       linked.linkedContext,
       this.resolveEnvironment(workspaceId, block, serviceFrame),
@@ -523,6 +537,7 @@ export class AgentContextBuilder {
       // step costs one extra batched query and nothing else.
       this.resolveConsensusConfig(workspaceId, step, block),
       this.catalogContext().sliceFor(workspaceId, agentKind, step, instance),
+      resolveReferenceScreenshots(this.deps, agentKind, workspaceId, block.id),
     ])
     const agentConfig = block.agentConfig
     const customTaskType = this.customTaskTypeFor(block)
@@ -583,7 +598,7 @@ export class AgentContextBuilder {
       // harness-aware by the container executor. Catalog versions are pinned onto the step
       // (skillVersions) inside the resolver. Absent when the run applies no skills.
       ...(runSkills.skills.length ? { skills: runSkills.skills } : {}),
-      block: this.buildBlockPayload({
+      block: buildBlockPayload({
         block,
         description,
         resolved,
@@ -632,6 +647,9 @@ export class AgentContextBuilder {
       ...(catalogSlice.binaryGenerators.length
         ? { binaryGenerators: catalogSlice.binaryGenerators }
         : {}),
+      // The task's reference designs, as the files the container downloads them into (empty when
+      // this dispatch asked and the task holds none; absent when it never asked).
+      ...referenceScreenshots,
       priorOutputs,
       decisions: instance.steps
         .filter((s, i) => i < instance.currentStep && s.decision?.chosen)
@@ -668,71 +686,6 @@ export class AgentContextBuilder {
       this.deps.taskTypeRegistry?.get(block.taskType),
     )
     return customTaskType ? { customTaskType } : {}
-  }
-
-  /**
-   * Assemble the `block` sub-payload of the agent context — the block identity plus its many
-   * OPTIONAL fields (resolved fragments, technical label, model preset, PR + peer PRs, linked
-   * context docs/tasks, estimate, per-type creation fields, doc-authoring template/exemplars/
-   * brief). Extracted verbatim from {@link buildContext} so that hot builder stays within the
-   * cyclomatic-complexity budget; behaviour is byte-identical.
-   */
-  private buildBlockPayload(args: {
-    block: Block
-    description: string
-    resolved: Awaited<ReturnType<AgentContextBuilder['resolveFragments']>>
-    agentConfig: Block['agentConfig']
-    contextDocs: Awaited<ReturnType<AgentContextBuilder['resolveLinkedContext']>>['docs']
-    contextTasks: Awaited<ReturnType<AgentContextBuilder['resolveLinkedContext']>>['tasks']
-    docAuthoring: Awaited<ReturnType<AgentContextBuilder['resolveDocAuthoringContext']>>
-  }): AgentRunContext['block'] {
-    const { block, description, resolved, agentConfig, contextDocs, contextTasks, docAuthoring } =
-      args
-    return {
-      id: block.id,
-      title: block.title,
-      type: block.type,
-      description,
-      fragmentIds: block.fragmentIds,
-      ...(resolved ? { resolvedFragments: resolved.fragments } : {}),
-      // The resolved technical label, threaded whenever a concrete determination exists
-      // (true ⇒ task definition is primary + spec-writer may skip specs; false ⇒ explicit
-      // business, spec-writer must produce specs). Omitted only when unset, so an
-      // undetermined task keeps the unchanged spec-led behaviour.
-      ...(typeof block.technical === 'boolean' ? { technical: block.technical } : {}),
-      modelId: block.modelId,
-      ...(block.modelPresetId ? { modelPresetId: block.modelPresetId } : {}),
-      ...(agentConfig ? { agentConfig } : {}),
-      ...(block.pullRequest ? { pullRequest: block.pullRequest } : {}),
-      // Peer PRs from a multi-repo run (own-service PR stays on `pullRequest`) — the merger
-      // reads these to clone each peer's PR branch and score the combined cross-repo diff.
-      ...(block.peerPullRequests?.length ? { peerPullRequests: block.peerPullRequests } : {}),
-      // The source id each resolved doc carries is dropped here: it exists so the DISPATCH RECORD
-      // can key a document across the steps that read it, and an agent reads a page rather than
-      // an id. Projected explicitly rather than spread, so a field added to the resolver has to
-      // be decided into or out of the container payload.
-      ...(contextDocs.length
-        ? { contextDocs: contextDocs.map(({ externalId: _externalId, ...doc }) => doc) }
-        : {}),
-      ...(contextTasks.length ? { contextTasks } : {}),
-      // The task-estimator's triage, when produced earlier in this run — the
-      // consensus executor's gating input.
-      ...(block.estimate ? { estimate: block.estimate } : {}),
-      // Per-type creation fields (a `document` task's docKind/audience/targetPath/…),
-      // so a kind's user-prompt builder can specialise on them — the document-authoring
-      // agents read these. Sparse; omitted when none were collected.
-      ...(block.taskTypeFields ? { taskTypeFields: block.taskTypeFields } : {}),
-      // Workspace-linked template / exemplar documents for a doc-authoring kind (WS1). Omitted
-      // when nothing is linked (the prompts then fall back to the built-in skeleton / built-in
-      // exemplars) or the kind isn't doc-aware.
-      ...(docAuthoring.docTemplateBody ? { docTemplateBody: docAuthoring.docTemplateBody } : {}),
-      ...(docAuthoring.docExemplars?.length ? { docExemplars: docAuthoring.docExemplars } : {}),
-      // The converged interactive-interview authoring brief (WS5), when the interview ran and
-      // synthesized one — the doc-writer folds it in as the refined spec to write from.
-      ...(docAuthoring.docInterviewBrief
-        ? { docInterviewBrief: docAuthoring.docInterviewBrief }
-        : {}),
-    }
   }
 
   /**

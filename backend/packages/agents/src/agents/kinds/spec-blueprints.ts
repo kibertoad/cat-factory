@@ -276,6 +276,8 @@ export const SPEC_BLUEPRINT_AGENT_KINDS: AgentKindDefinition[] = [
       color: '#22d3ee',
       description: 'Maps the repository into the service → modules blueprint.',
       category: 'design',
+      // Decomposes a repository onto the board (mirrors the SPA's static archetype).
+      purposes: ['build', 'planning'],
       tier: 'intermediate',
     },
   },
@@ -302,6 +304,9 @@ export const SPEC_BLUEPRINT_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         "Aggregates every task's clarified requirements into the service's in-repo specification (spec.json) with full acceptance-scenario coverage, derived into Gherkin.",
       category: 'design',
+      // Writes the in-repo spec an implementation is built against (mirrors the SPA's static
+      // archetype).
+      purposes: ['build', 'planning'],
       tier: 'intermediate',
     },
   },

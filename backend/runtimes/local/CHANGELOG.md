@@ -1,5 +1,160 @@
 # @cat-factory/local-server
 
+## 0.125.2
+
+### Patch Changes
+
+- Updated dependencies [6ad1d8b]
+  - @cat-factory/contracts@0.283.0
+  - @cat-factory/kernel@0.278.0
+  - @cat-factory/agents@0.121.0
+  - @cat-factory/gitlab@0.18.15
+  - @cat-factory/integrations@0.152.8
+  - @cat-factory/orchestration@0.248.1
+  - @cat-factory/prompt-fragments@1.0.32
+  - @cat-factory/server@0.259.2
+  - @cat-factory/node-server@0.195.2
+  - @cat-factory/executor-harness@1.104.0
+
+## 0.125.1
+
+### Patch Changes
+
+- Updated dependencies [a596b9c]
+  - @cat-factory/contracts@0.282.0
+  - @cat-factory/orchestration@0.248.0
+  - @cat-factory/kernel@0.277.0
+  - @cat-factory/integrations@0.152.7
+  - @cat-factory/agents@0.120.2
+  - @cat-factory/gitlab@0.18.14
+  - @cat-factory/prompt-fragments@1.0.31
+  - @cat-factory/server@0.259.1
+  - @cat-factory/node-server@0.195.1
+  - @cat-factory/executor-harness@1.104.0
+
+## 0.125.0
+
+### Minor Changes
+
+- 2585b2f: Narrow the pipeline builder's saved-pipeline library on the purpose being edited, and make a
+  pipeline's purpose mandatory
+
+  The purpose dial narrowed the agent palette beside it and gated the save, but the library in the
+  third column listed the whole workspace catalog whatever the draft was for. `pipelineMatchesPurpose`
+  is the membership predicate, applied through `narrowPipelineLibrary` alongside the label and archive
+  filters. Each of those dials now counts what relaxing IT alone would reveal, so the "Archived (n)"
+  toggle no longer promises rows the current purpose is hiding either way, and the purpose hint is
+  itself the control that lists every purpose again: the draft's purpose is an authoring field that is
+  saved, so browsing past it may not require editing it.
+
+  Breaking change (internal surfaces, pre-1.0). `Pipeline.purpose` is now REQUIRED, which is what lets
+  those four narrowings drop their private policies for the pipelines that skipped it:
+
+  - `POST /workspaces/:ws/pipelines` requires `purpose`; `PATCH` still treats it as an optional patch
+    field. Not part of `/api/v1`, so no published SDK or external integration is affected.
+  - `PipelineRegistry.register` requires it at compile time, so a deployment's own pipeline can no
+    longer land unclassified and fall silently out of a narrowed picker. Same for the built-in seed
+    catalog, where it was previously only asserted in a test.
+  - A row persisted before the field was mandatory still reads: the shared `rowToPipeline` resolves an
+    empty column to `build`, which is byte-for-byte the behaviour such a row already had. A stored
+    classifier this build cannot NAME passes through untouched instead, and every narrowing predicate
+    reads it default-open, because "never set" and "a member this build has no name for" are different
+    facts that must not render the same.
+
+### Patch Changes
+
+- Updated dependencies [2585b2f]
+  - @cat-factory/contracts@0.281.0
+  - @cat-factory/kernel@0.276.0
+  - @cat-factory/orchestration@0.247.0
+  - @cat-factory/server@0.259.0
+  - @cat-factory/node-server@0.195.0
+  - @cat-factory/agents@0.120.1
+  - @cat-factory/gitlab@0.18.13
+  - @cat-factory/integrations@0.152.6
+  - @cat-factory/prompt-fragments@1.0.30
+  - @cat-factory/executor-harness@1.104.0
+
+## 0.124.6
+
+### Patch Changes
+
+- Updated dependencies [faddbf5]
+  - @cat-factory/contracts@0.280.0
+  - @cat-factory/agents@0.120.0
+  - @cat-factory/orchestration@0.246.0
+  - @cat-factory/server@0.258.0
+  - @cat-factory/gitlab@0.18.12
+  - @cat-factory/integrations@0.152.5
+  - @cat-factory/kernel@0.275.4
+  - @cat-factory/prompt-fragments@1.0.29
+  - @cat-factory/node-server@0.194.6
+  - @cat-factory/executor-harness@1.104.0
+
+## 0.124.5
+
+### Patch Changes
+
+- Updated dependencies [8a06abc]
+- Updated dependencies [8a06abc]
+  - @cat-factory/contracts@0.279.0
+  - @cat-factory/server@0.257.0
+  - @cat-factory/orchestration@0.245.0
+  - @cat-factory/agents@0.119.3
+  - @cat-factory/gitlab@0.18.11
+  - @cat-factory/integrations@0.152.4
+  - @cat-factory/kernel@0.275.3
+  - @cat-factory/prompt-fragments@1.0.28
+  - @cat-factory/node-server@0.194.5
+  - @cat-factory/executor-harness@1.104.0
+
+## 0.124.4
+
+### Patch Changes
+
+- Updated dependencies [11f9efa]
+  - @cat-factory/contracts@0.278.0
+  - @cat-factory/orchestration@0.244.0
+  - @cat-factory/server@0.256.0
+  - @cat-factory/agents@0.119.2
+  - @cat-factory/gitlab@0.18.10
+  - @cat-factory/integrations@0.152.3
+  - @cat-factory/kernel@0.275.2
+  - @cat-factory/prompt-fragments@1.0.27
+  - @cat-factory/node-server@0.194.4
+  - @cat-factory/executor-harness@1.104.0
+
+## 0.124.3
+
+### Patch Changes
+
+- Updated dependencies [c44e9d7]
+  - @cat-factory/contracts@0.277.0
+  - @cat-factory/agents@0.119.1
+  - @cat-factory/gitlab@0.18.9
+  - @cat-factory/integrations@0.152.2
+  - @cat-factory/kernel@0.275.1
+  - @cat-factory/orchestration@0.243.1
+  - @cat-factory/prompt-fragments@1.0.26
+  - @cat-factory/server@0.255.1
+  - @cat-factory/node-server@0.194.3
+  - @cat-factory/executor-harness@1.104.0
+
+## 0.124.2
+
+### Patch Changes
+
+- Updated dependencies [dfa4a8e]
+  - @cat-factory/executor-harness@1.104.0
+  - @cat-factory/orchestration@0.243.0
+  - @cat-factory/kernel@0.275.0
+  - @cat-factory/agents@0.119.0
+  - @cat-factory/server@0.255.0
+  - @cat-factory/node-server@0.194.2
+  - @cat-factory/gitlab@0.18.8
+  - @cat-factory/integrations@0.152.1
+  - @cat-factory/prompt-fragments@1.0.25
+
 ## 0.124.1
 
 ### Patch Changes

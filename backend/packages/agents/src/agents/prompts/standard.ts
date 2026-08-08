@@ -413,6 +413,18 @@ export function customTaskTypeSection(context: AgentRunContext): string {
 export const CONTEXT_DIR = '.cat-context'
 
 /**
+ * Subdirectory of {@link CONTEXT_DIR} holding the REFERENCE DESIGN images a run was handed: the
+ * frames the task's linked designs retained plus the images a person uploaded against it.
+ *
+ * Named here because the tester prompt points the agent at it, and written by the harness, which
+ * depends on no workspace package. So, like {@link CONTEXT_DIR}, the constant exists twice and
+ * the two copies are pinned byte-for-byte by the harness's contract conformity suite. A drift
+ * would leave the agent looking in an empty directory beside a full one, which reads to it
+ * exactly like a task with no designs linked.
+ */
+export const REFERENCE_SCREENSHOT_DIR = `${CONTEXT_DIR}/reference-screenshots`
+
+/**
  * Render the linked extra-context section — documents (requirements / RFCs /
  * PRDs) and tracker issues attached to the block — or an empty string when none
  * are linked. Shared by every agent kind (standard phases and the generic roles

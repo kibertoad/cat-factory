@@ -23,7 +23,7 @@ import {
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries } from '@cat-factory/integrations'
-import type { ExecutionInstance, Service, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type { ExecutionInstance, Pipeline, Service, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
 import type {
   LocalRunner,
@@ -427,6 +427,13 @@ export function makeConformanceApp(
     return maxPolls
   }
 
+  function seedPipeline(workspaceId: string, pipeline: Pipeline) {
+    return createDrizzleRepositories(db, { now: () => Date.now() }).pipelineRepository.insert(
+      workspaceId,
+      pipeline,
+    )
+  }
+
   function seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string) {
     return new DrizzleRequirementReviewRepository(db).upsert(
       workspaceId,
@@ -485,6 +492,7 @@ export function makeConformanceApp(
     driveEnvConfigRepair,
     executionEmits,
     boardEmits,
+    seedPipeline,
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,

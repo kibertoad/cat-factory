@@ -16,6 +16,7 @@ import ai.catfactory.sdk.Transport;
 public abstract class Resources {
     private final JobsClient jobs;
     private final ServicesClient services;
+    private final SpecClient spec;
     private final ReposClient repos;
     private final TasksClient tasks;
     private final PipelinesClient pipelines;
@@ -27,11 +28,13 @@ public abstract class Resources {
     private final DecisionsClient decisions;
     private final DebugClient debug;
     private final EvidenceClient evidence;
+    private final MergeRecordsClient mergeRecords;
     private final KeysClient keys;
 
     protected Resources(Transport transport) {
         this.jobs = new JobsClient(transport);
         this.services = new ServicesClient(transport);
+        this.spec = new SpecClient(transport);
         this.repos = new ReposClient(transport);
         this.tasks = new TasksClient(transport);
         this.pipelines = new PipelinesClient(transport);
@@ -43,6 +46,7 @@ public abstract class Resources {
         this.decisions = new DecisionsClient(transport);
         this.debug = new DebugClient(transport);
         this.evidence = new EvidenceClient(transport);
+        this.mergeRecords = new MergeRecordsClient(transport);
         this.keys = new KeysClient(transport);
     }
 
@@ -54,6 +58,11 @@ public abstract class Resources {
     /** The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository). */
     public ServicesClient services() {
         return services;
+    }
+
+    /** A service's in-repo specification: the structured requirement tree (modules → feature groups → requirements, with their acceptance criteria and domain rules), the Gherkin rendered from it, and the branch and commit the read describes. Read-only; the requirement ids are the join key onto a run's report and outcome. */
+    public SpecClient spec() {
+        return spec;
     }
 
     /** The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation. */
@@ -86,7 +95,7 @@ public abstract class Resources {
         return webhook;
     }
 
-    /** The billing period's metered budget position and the per-model breakdown behind it. */
+    /** The workspace's money, two ways: the billing period's metered budget position with the per-model breakdown behind it, and spend over a window sliced by the dimension a budget is kept against (a repository, a tracker ticket, one run). */
     public UsageClient usage() {
         return usage;
     }
@@ -101,7 +110,7 @@ public abstract class Resources {
         return decisions;
     }
 
-    /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
+    /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs, and the whole model-activity bundle as one document. */
     public DebugClient debug() {
         return debug;
     }
@@ -109,6 +118,11 @@ public abstract class Resources {
     /** What a run proved: the engine's verification report, the outcome summary behind it, and the artifacts it captured, bytes included. */
     public EvidenceClient evidence() {
         return evidence;
+    }
+
+    /** The evidence behind the auto-merge policy: what kind of change each merged run made, what the merger scored it, what happened to the pull request, and how much review a human actually spent, plus the per-class rollups that justify widening a rule. Reading takes a `read` key and recording an effort tag a `write` one: neither merges anything. */
+    public MergeRecordsClient mergeRecords() {
+        return mergeRecords;
     }
 
     /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */

@@ -4213,7 +4213,7 @@
       "strategy": "Strategie",
       "rounds": "Runden",
       "purposeLabel": "Zweck",
-      "purposePlaceholder": "Zweck auswählen",
+      "purposeUnrecognized": "Nicht erkannt ({purpose})",
       "purposeOption": {
         "build": "Entwicklung",
         "document": "Dokumentation",
@@ -4231,6 +4231,10 @@
       "removeParticipant": "Teilnehmer entfernen (min. 2)",
       "addParticipant": "Teilnehmer hinzufügen",
       "savedPipelines": "Gespeicherte Pipelines",
+      "purposeHiddenPipelines": "{count} gespeicherte Pipeline ist für diesen Zweck ausgeblendet. | {count} gespeicherte Pipelines sind für diesen Zweck ausgeblendet.",
+      "everyPurposeListed": "Gespeicherte Pipelines aller Zwecke werden aufgelistet.",
+      "listEveryPurpose": "Alle Zwecke anzeigen",
+      "narrowToDraftPurpose": "Auf diesen Zweck eingrenzen",
       "hideArchived": "Archivierte ausblenden",
       "archivedCount": "Archiviert ({count})",
       "allLabels": "Alle",
@@ -4289,6 +4293,13 @@
       "binaryOutputPlaceholder": "Speicherdienst wählen",
       "binaryOutputContextPlaceholder": "Optional: Dienste, die den Umfang bestimmen",
       "binaryOutputNeedsPick": "Für einen Schritt, der binäre Ausgaben erzeugt, ist kein Speicherdienst gewählt. Wähle einen vor dem Speichern.",
+      "envNeedsDeployer": "Vor einem Tester-, manuellen Test- oder Playwright-Schritt wird ein Deployer benötigt. Füge einen hinzu, sonst lässt sich die Pipeline nicht speichern (bei einem Service ohne Provisionierung bleibt er wirkungslos).",
+      "envNeedsDisposer": "Nach einem Deployer wird ein Disposer benötigt, der die bereitgestellte Umgebung wieder freigibt. Füge einen hinzu oder markiere den Deployer so, dass er seine Umgebung über den Lauf hinaus behält, sonst lässt sich die Pipeline nicht speichern.",
+      "envDisposerNeedsDeployer": "Vor diesem Disposer steht kein Deployer, es gibt also nichts freizugeben. Füge einen Deployer hinzu oder entferne den Disposer.",
+      "envConsumerAfterDisposer": "Ein Tester-, manueller Test- oder Playwright-Schritt läuft erst, nachdem der Disposer die Umgebung bereits freigegeben hat, es bliebe also nichts übrig, wogegen er laufen könnte. Verschiebe den Disposer hinter diesen Schritt oder füge davor einen weiteren Deployer ein.",
+      "envRetainedButReclaimed": "Dieser Deployer ist so markiert, dass er seine Umgebung über den Lauf hinaus behält, aber ein nachfolgender Disposer gibt genau diese Umgebung frei. Entferne den Disposer oder hebe die Markierung auf.",
+      "retainEnvironmentSetTooltip": "Wird am Ende des Laufs freigegeben. Klicke, um diese Umgebung danach weiterlaufen zu lassen (eine Vorschau, die Prüfende nach dem Öffnen des PR nutzen); die TTL oder ein Betreiber fährt sie dann herunter.",
+      "retainEnvironmentClearTooltip": "Läuft nach dem Ende des Laufs weiter. Klicke, um sie wieder per Disposer-Schritt freizugeben.",
       "binaryOutputNoStorage": "Kein Dienst im Katalog dieses Boards deklariert die Fähigkeit {capability}. Registriere einen, oder ergänze die Fähigkeit beim gemeinten Dienst unter den grundlegenden Diensten.",
       "binaryOutputMissing": "Dieser Speicherdienst ist nicht mehr im Katalog; wähle einen anderen.",
       "binaryOutputNotStorage": "Dieser Dienst deklariert die Fähigkeit {capability} nicht mehr, deshalb werden Läufe abgelehnt; wähle einen anderen.",
@@ -6734,7 +6745,8 @@
   },
   "palette": {
     "hint": "Klicke auf einen Agenten, um ihn an die Pipeline anzuhängen.",
-    "customAgents": "Benutzerdefinierte Agenten"
+    "customAgents": "Benutzerdefinierte Agenten",
+    "purposeHidden": "{count} Agent ist für diesen Zweck ausgeblendet. | {count} Agenten sind für diesen Zweck ausgeblendet."
   },
   "forkDecision": {
     "title": "Implementierungsansatz wählen",

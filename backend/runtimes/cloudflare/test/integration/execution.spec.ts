@@ -134,6 +134,7 @@ describe('execution engine', () => {
     // A two-step pipeline gated after the first step.
     const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Gated',
+      purpose: 'build',
       agentKinds: ['architect', 'coder'],
       gates: [true, false],
     })
@@ -181,6 +182,7 @@ describe('execution engine', () => {
 
     const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Gated',
+      purpose: 'build',
       agentKinds: ['architect', 'coder'],
       gates: [true, false],
     })

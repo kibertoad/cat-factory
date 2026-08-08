@@ -1,6 +1,34 @@
 {
   "components": {
     "schemas": {
+      "AcceptanceCriterion": {
+        "properties": {
+          "given": {
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "outcome": {
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "when": {
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "given",
+          "when",
+          "outcome"
+        ],
+        "type": "object"
+      },
       "CreateHeadlessPublicApiKey": {
         "properties": {
           "externalIdentity": {
@@ -200,6 +228,39 @@
             "type": "object"
           }
         ]
+      },
+      "DomainRule": {
+        "properties": {
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "rationale": {
+            "default": "",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "rule": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "sourceBlockIds": {
+            "default": [],
+            "items": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "rule"
+        ],
+        "type": "object"
       },
       "ErrorResponse": {
         "properties": {
@@ -1134,6 +1195,7 @@
               "confirmed",
               "unconfirmed",
               "pending",
+              "retained",
               "failed",
               "not_applicable"
             ],
@@ -4525,6 +4587,62 @@
         ],
         "type": "object"
       },
+      "PublicServiceSpec": {
+        "properties": {
+          "anchor": {
+            "enum": [
+              "present",
+              "absent",
+              "unparsed"
+            ],
+            "type": "string"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/PublicSpecFeatureFile"
+            },
+            "type": "array"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/SpecReadIssue"
+            },
+            "type": "array"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/PublicSpecProvenance"
+          },
+          "serviceId": {
+            "type": "string"
+          },
+          "spec": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpecDoc"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "truncations": {
+            "items": {
+              "$ref": "#/components/schemas/PublicSpecTruncation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "serviceId",
+          "anchor",
+          "spec",
+          "features",
+          "provenance",
+          "issues",
+          "truncations"
+        ],
+        "type": "object"
+      },
       "PublicSetFindingStatus": {
         "properties": {
           "status": {
@@ -4537,6 +4655,250 @@
         },
         "required": [
           "status"
+        ],
+        "type": "object"
+      },
+      "PublicSpecFeatureFile": {
+        "properties": {
+          "chars": {
+            "type": "number"
+          },
+          "content": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "totalChars": {
+            "type": "number"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "module",
+          "group",
+          "path",
+          "content",
+          "chars",
+          "totalChars",
+          "truncated"
+        ],
+        "type": "object"
+      },
+      "PublicSpecProvenance": {
+        "properties": {
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "owner": {
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "gitlab"
+            ],
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "owner",
+          "repo",
+          "ref",
+          "commit"
+        ],
+        "type": "object"
+      },
+      "PublicSpecTruncation": {
+        "properties": {
+          "section": {
+            "enum": [
+              "requirements",
+              "rules",
+              "acceptance",
+              "features",
+              "issues"
+            ],
+            "type": "string"
+          },
+          "shown": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "section",
+          "shown",
+          "total"
+        ],
+        "type": "object"
+      },
+      "PublicSpend": {
+        "properties": {
+          "currency": {
+            "type": "string"
+          },
+          "dimension": {
+            "enum": [
+              "model",
+              "agentKind",
+              "service",
+              "repo",
+              "taskType",
+              "ticket",
+              "run"
+            ],
+            "type": "string"
+          },
+          "generatedAt": {
+            "type": "number"
+          },
+          "rolledUpThrough": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/PublicSpendRow"
+            },
+            "type": "array"
+          },
+          "since": {
+            "type": "number"
+          },
+          "source": {
+            "enum": [
+              "ledger",
+              "daily-rollup"
+            ],
+            "type": "string"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/PublicSpendTotals"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "enum": [
+              "24h",
+              "7d",
+              "30d",
+              "90d"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "dimension",
+          "window",
+          "generatedAt",
+          "since",
+          "currency",
+          "source",
+          "rolledUpThrough",
+          "totals",
+          "truncated",
+          "rows"
+        ],
+        "type": "object"
+      },
+      "PublicSpendRow": {
+        "properties": {
+          "calls": {
+            "type": "number"
+          },
+          "inputTokens": {
+            "type": "number"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meteredCost": {
+            "type": "number"
+          },
+          "outputTokens": {
+            "type": "number"
+          },
+          "subscriptionCost": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "inputTokens",
+          "outputTokens",
+          "calls",
+          "meteredCost",
+          "subscriptionCost"
+        ],
+        "type": "object"
+      },
+      "PublicSpendTotals": {
+        "properties": {
+          "calls": {
+            "type": "number"
+          },
+          "inputTokens": {
+            "type": "number"
+          },
+          "meteredCost": {
+            "type": "number"
+          },
+          "outputTokens": {
+            "type": "number"
+          },
+          "subscriptionCost": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens",
+          "calls",
+          "meteredCost",
+          "subscriptionCost"
         ],
         "type": "object"
       },
@@ -5034,6 +5396,185 @@
         "required": [],
         "type": "object"
       },
+      "RequirementGroup": {
+        "properties": {
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "requirements": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RequirementItem"
+            },
+            "type": "array"
+          },
+          "rules": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DomainRule"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "default": "",
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "RequirementItem": {
+        "properties": {
+          "acceptance": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AcceptanceCriterion"
+            },
+            "type": "array"
+          },
+          "id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "functional",
+              "nonfunctional",
+              "constraint"
+            ],
+            "type": "string"
+          },
+          "priority": {
+            "enum": [
+              "must",
+              "should",
+              "could"
+            ],
+            "type": "string"
+          },
+          "sourceBlockIds": {
+            "default": [],
+            "items": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "state": {
+            "default": "aspirational",
+            "enum": [
+              "aspirational",
+              "established"
+            ],
+            "type": "string"
+          },
+          "statement": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "statement",
+          "kind",
+          "priority"
+        ],
+        "type": "object"
+      },
+      "SpecDoc": {
+        "properties": {
+          "modules": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SpecModule"
+            },
+            "type": "array"
+          },
+          "service": {
+            "default": "",
+            "maxLength": 120,
+            "type": "string"
+          },
+          "summary": {
+            "default": "",
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "SpecModule": {
+        "properties": {
+          "groups": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RequirementGroup"
+            },
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "summary": {
+            "default": "",
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "SpecReadIssue": {
+        "properties": {
+          "dropped": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 0
+          },
+          "kind": {
+            "enum": [
+              "read_failed",
+              "unparsed",
+              "partial",
+              "unread"
+            ],
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "kind"
+        ],
+        "type": "object"
+      },
       "StartPublicTask": {
         "properties": {
           "pipelineId": {
@@ -5109,7 +5650,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.31.0"
+    "version": "1.35.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -8164,6 +8705,849 @@
         "x-min-scope": "read"
       }
     },
+    "/api/v1/debug/runs/{runId}/llm-export": {
+      "get": {
+        "description": "The whole of a run’s model activity as one self-describing document, for handing straight to a model asked why the run truncated, spent or stalled: the SQL rollups (run totals, per agent kind, per phase, with the carry cost that says which slice burdened everything after it) plus a bounded window of the individual calls behind them. The rollups cover EVERY recorded call and do not move with `limit`, so a windowed bundle still reports what the run actually cost; `truncated` says the calls are a window and `order` says which end was kept. Bodies are omitted unless `bodyChars` asks, and the resumable call list is the way to walk a long run whole.",
+        "operationId": "getDebugLlmExport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "enum": [
+                "oldest",
+                "newest"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bodyChars",
+            "required": false,
+            "schema": {
+              "maximum": 4000,
+              "minimum": 0,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "available": {
+                      "type": "boolean"
+                    },
+                    "calls": {
+                      "items": {
+                        "properties": {
+                          "agentKind": {
+                            "type": "string"
+                          },
+                          "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "cacheWriteTokens": {
+                            "type": "number"
+                          },
+                          "callId": {
+                            "type": "string"
+                          },
+                          "completionTokens": {
+                            "type": "number"
+                          },
+                          "createdAt": {
+                            "type": "number"
+                          },
+                          "elidedLeadingMessages": {
+                            "type": "number"
+                          },
+                          "errorMessage": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "finishReason": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "httpStatus": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "messageCount": {
+                            "type": "number"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "ok": {
+                            "type": "boolean"
+                          },
+                          "outcome": {
+                            "enum": [
+                              "ok",
+                              "warning",
+                              "error"
+                            ],
+                            "type": "string"
+                          },
+                          "overheadMs": {
+                            "type": "number"
+                          },
+                          "phase": {
+                            "type": "string"
+                          },
+                          "prompt": {
+                            "properties": {
+                              "chars": {
+                                "type": "number"
+                              },
+                              "matchOffset": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "offset": {
+                                "type": "number"
+                              },
+                              "text": {
+                                "type": "string"
+                              },
+                              "totalChars": {
+                                "type": "number"
+                              },
+                              "truncated": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "text",
+                              "chars",
+                              "offset",
+                              "totalChars",
+                              "truncated"
+                            ],
+                            "type": "object"
+                          },
+                          "promptMessages": {
+                            "anyOf": [
+                              {
+                                "items": {
+                                  "properties": {
+                                    "content": {
+                                      "properties": {
+                                        "chars": {
+                                          "type": "number"
+                                        },
+                                        "matchOffset": {
+                                          "anyOf": [
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "offset": {
+                                          "type": "number"
+                                        },
+                                        "text": {
+                                          "type": "string"
+                                        },
+                                        "totalChars": {
+                                          "type": "number"
+                                        },
+                                        "truncated": {
+                                          "type": "boolean"
+                                        }
+                                      },
+                                      "required": [
+                                        "text",
+                                        "chars",
+                                        "offset",
+                                        "totalChars",
+                                        "truncated"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "index": {
+                                      "type": "number"
+                                    },
+                                    "name": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "role": {
+                                      "type": "string"
+                                    },
+                                    "toolCallId": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "toolCalls": {
+                                      "items": {
+                                        "properties": {
+                                          "args": {
+                                            "properties": {
+                                              "chars": {
+                                                "type": "number"
+                                              },
+                                              "matchOffset": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "number"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "offset": {
+                                                "type": "number"
+                                              },
+                                              "text": {
+                                                "type": "string"
+                                              },
+                                              "totalChars": {
+                                                "type": "number"
+                                              },
+                                              "truncated": {
+                                                "type": "boolean"
+                                              }
+                                            },
+                                            "required": [
+                                              "text",
+                                              "chars",
+                                              "offset",
+                                              "totalChars",
+                                              "truncated"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "args"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "type": "array"
+                                    }
+                                  },
+                                  "required": [
+                                    "index",
+                                    "role",
+                                    "name",
+                                    "toolCallId",
+                                    "toolCalls",
+                                    "content"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "promptTokens": {
+                            "type": "number"
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "reasoning": {
+                            "properties": {
+                              "chars": {
+                                "type": "number"
+                              },
+                              "matchOffset": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "offset": {
+                                "type": "number"
+                              },
+                              "text": {
+                                "type": "string"
+                              },
+                              "totalChars": {
+                                "type": "number"
+                              },
+                              "truncated": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "text",
+                              "chars",
+                              "offset",
+                              "totalChars",
+                              "truncated"
+                            ],
+                            "type": "object"
+                          },
+                          "requestMaxTokens": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "response": {
+                            "properties": {
+                              "chars": {
+                                "type": "number"
+                              },
+                              "matchOffset": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "offset": {
+                                "type": "number"
+                              },
+                              "text": {
+                                "type": "string"
+                              },
+                              "totalChars": {
+                                "type": "number"
+                              },
+                              "truncated": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "text",
+                              "chars",
+                              "offset",
+                              "totalChars",
+                              "truncated"
+                            ],
+                            "type": "object"
+                          },
+                          "runId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "streaming": {
+                            "type": "boolean"
+                          },
+                          "toolCount": {
+                            "type": "number"
+                          },
+                          "totalMs": {
+                            "type": "number"
+                          },
+                          "totalTokens": {
+                            "type": "number"
+                          },
+                          "turnIndex": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "upstreamMs": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "callId",
+                          "runId",
+                          "agentKind",
+                          "provider",
+                          "model",
+                          "createdAt",
+                          "outcome",
+                          "ok",
+                          "httpStatus",
+                          "errorMessage",
+                          "finishReason",
+                          "streaming",
+                          "phase",
+                          "turnIndex",
+                          "messageCount",
+                          "toolCount",
+                          "requestMaxTokens",
+                          "promptTokens",
+                          "cacheReadTokens",
+                          "cacheWriteTokens",
+                          "completionTokens",
+                          "totalTokens",
+                          "upstreamMs",
+                          "overheadMs",
+                          "totalMs",
+                          "elidedLeadingMessages",
+                          "prompt",
+                          "response",
+                          "reasoning"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "generatedAt": {
+                      "type": "number"
+                    },
+                    "kind": {
+                      "const": "cat-factory.run-llm-export"
+                    },
+                    "llm": {
+                      "properties": {
+                        "byAgentKind": {
+                          "items": {
+                            "properties": {
+                              "agentKind": {
+                                "type": "string"
+                              },
+                              "cacheHitRate": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "cacheReadTokens": {
+                                "type": "number"
+                              },
+                              "cacheWriteTokens": {
+                                "type": "number"
+                              },
+                              "calls": {
+                                "type": "number"
+                              },
+                              "completionTokens": {
+                                "type": "number"
+                              },
+                              "costEstimate": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "errors": {
+                                "type": "number"
+                              },
+                              "maxOutputTokens": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "outputHeadroomRatio": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "overheadMs": {
+                                "type": "number"
+                              },
+                              "peakCompletionTokens": {
+                                "type": "number"
+                              },
+                              "promptTokens": {
+                                "type": "number"
+                              },
+                              "transportOverheadRatio": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "truncatedCalls": {
+                                "type": "number"
+                              },
+                              "upstreamMs": {
+                                "type": "number"
+                              },
+                              "warnings": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "agentKind",
+                              "calls",
+                              "promptTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
+                              "cacheHitRate",
+                              "completionTokens",
+                              "peakCompletionTokens",
+                              "maxOutputTokens",
+                              "outputHeadroomRatio",
+                              "truncatedCalls",
+                              "upstreamMs",
+                              "overheadMs",
+                              "transportOverheadRatio",
+                              "errors",
+                              "warnings",
+                              "costEstimate"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "byPhase": {
+                          "items": {
+                            "properties": {
+                              "cacheHitRate": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "cacheReadTokens": {
+                                "type": "number"
+                              },
+                              "cacheWriteTokens": {
+                                "type": "number"
+                              },
+                              "calls": {
+                                "type": "number"
+                              },
+                              "carryCostShare": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "carryCostTokens": {
+                                "type": "number"
+                              },
+                              "completionTokens": {
+                                "type": "number"
+                              },
+                              "costEstimate": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "errors": {
+                                "type": "number"
+                              },
+                              "overheadMs": {
+                                "type": "number"
+                              },
+                              "phase": {
+                                "type": "string"
+                              },
+                              "promptTokens": {
+                                "type": "number"
+                              },
+                              "truncatedCalls": {
+                                "type": "number"
+                              },
+                              "upstreamMs": {
+                                "type": "number"
+                              },
+                              "warnings": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "phase",
+                              "calls",
+                              "promptTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
+                              "cacheHitRate",
+                              "completionTokens",
+                              "carryCostTokens",
+                              "carryCostShare",
+                              "upstreamMs",
+                              "overheadMs",
+                              "errors",
+                              "warnings",
+                              "truncatedCalls",
+                              "costEstimate"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "costCurrency": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "totals": {
+                          "properties": {
+                            "cacheHitRate": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "cacheReadTokens": {
+                              "type": "number"
+                            },
+                            "cacheWriteTokens": {
+                              "type": "number"
+                            },
+                            "calls": {
+                              "type": "number"
+                            },
+                            "completionTokens": {
+                              "type": "number"
+                            },
+                            "costEstimate": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "errors": {
+                              "type": "number"
+                            },
+                            "overheadMs": {
+                              "type": "number"
+                            },
+                            "promptTokens": {
+                              "type": "number"
+                            },
+                            "transportOverheadRatio": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "truncatedCalls": {
+                              "type": "number"
+                            },
+                            "upstreamMs": {
+                              "type": "number"
+                            },
+                            "warnings": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "calls",
+                            "promptTokens",
+                            "cacheReadTokens",
+                            "cacheWriteTokens",
+                            "cacheHitRate",
+                            "completionTokens",
+                            "upstreamMs",
+                            "overheadMs",
+                            "transportOverheadRatio",
+                            "errors",
+                            "warnings",
+                            "truncatedCalls",
+                            "costEstimate"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "totals",
+                        "byAgentKind",
+                        "byPhase",
+                        "costCurrency"
+                      ],
+                      "type": "object"
+                    },
+                    "order": {
+                      "enum": [
+                        "oldest",
+                        "newest"
+                      ],
+                      "type": "string"
+                    },
+                    "runId": {
+                      "type": "string"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "const": 1
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "version",
+                    "runId",
+                    "generatedAt",
+                    "available",
+                    "llm",
+                    "order",
+                    "truncated",
+                    "calls"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Export a run's model activity as one bundle",
+        "tags": [
+          "Debug"
+        ],
+        "x-min-scope": "read"
+      }
+    },
     "/api/v1/debug/runs/{runId}/logs": {
       "get": {
         "description": "The run’s provisioning event log — how its environment, runner pool and containers came up, or why they did not.",
@@ -9209,6 +10593,671 @@
         "x-min-scope": "read"
       }
     },
+    "/api/v1/merge-records/rollups": {
+      "get": {
+        "description": "Every change class’s accumulated track record for the workspace, as one aggregate: how many records it holds, how many landed and by which route (auto-merged, merged through the app, merged directly on the provider), how many were rejected or are still awaiting review, and the distribution of reviewer-effort tags. This is the evidence that justifies widening a per-class auto-merge rule; nothing widens one automatically. A class with no records is present as zeros rather than absent, so \"nothing has landed here yet\" never reads as a class the response left out. `unknown` is a real class (no changed-file list was available) and never matches a per-class rule.",
+        "operationId": "listPublicMergeClassRollups",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "rollups": {
+                      "items": {
+                        "properties": {
+                          "autoMerged": {
+                            "type": "number"
+                          },
+                          "changeClass": {
+                            "enum": [
+                              "docs",
+                              "test",
+                              "dependency",
+                              "config",
+                              "source",
+                              "schema",
+                              "unknown"
+                            ],
+                            "type": "string"
+                          },
+                          "effort": {
+                            "properties": {
+                              "major": {
+                                "type": "number"
+                              },
+                              "minor": {
+                                "type": "number"
+                              },
+                              "none": {
+                                "type": "number"
+                              },
+                              "untagged": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "none",
+                              "minor",
+                              "major",
+                              "untagged"
+                            ],
+                            "type": "object"
+                          },
+                          "externalMerged": {
+                            "type": "number"
+                          },
+                          "humanMerged": {
+                            "type": "number"
+                          },
+                          "merged": {
+                            "type": "number"
+                          },
+                          "pendingReview": {
+                            "type": "number"
+                          },
+                          "rejected": {
+                            "type": "number"
+                          },
+                          "total": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "changeClass",
+                          "total",
+                          "merged",
+                          "autoMerged",
+                          "humanMerged",
+                          "externalMerged",
+                          "rejected",
+                          "pendingReview",
+                          "effort"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "rollups"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the per-change-class merge rollups",
+        "tags": [
+          "Merge records"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/merge-records/{recordId}": {
+      "get": {
+        "description": "The same record addressed by its own id, for a caller that holds one without the run: the id a `merge_tag_request` notification carries on its payload, for instance. Scoped to the calling key’s workspace.",
+        "operationId": "getPublicMergeRecord",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recordId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "changeClass": {
+                      "enum": [
+                        "docs",
+                        "test",
+                        "dependency",
+                        "config",
+                        "source",
+                        "schema",
+                        "unknown"
+                      ],
+                      "type": "string"
+                    },
+                    "changedFileCount": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "complexity": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "decision": {
+                      "enum": [
+                        "pending_review",
+                        "auto_merged",
+                        "human_merged",
+                        "external_merged",
+                        "rejected"
+                      ],
+                      "type": "string"
+                    },
+                    "impact": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "mergePresetId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "mergePresetName": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "prNumber": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "prUrl": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "provider": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "github",
+                            "gitlab"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "recordId": {
+                      "type": "string"
+                    },
+                    "repoId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "resolvedAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "reviewEffort": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "none",
+                            "minor",
+                            "major"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "risk": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "runId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "taggedAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "taskId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "recordId",
+                    "taskId",
+                    "runId",
+                    "changeClass",
+                    "changedFileCount",
+                    "complexity",
+                    "risk",
+                    "impact",
+                    "mergePresetId",
+                    "mergePresetName",
+                    "decision",
+                    "reviewEffort",
+                    "prNumber",
+                    "prUrl",
+                    "repoId",
+                    "provider",
+                    "createdAt",
+                    "resolvedAt",
+                    "taggedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get one merge record",
+        "tags": [
+          "Merge records"
+        ],
+        "x-min-scope": "read"
+      }
+    },
+    "/api/v1/merge-records/{recordId}/effort": {
+      "post": {
+        "description": "Record how much review a landed pull request actually needed (`none` for zero blocking comments, `minor` for a nit pass, `major` for real rework), or `null` to clear the tag. This is the ground truth the auto-merge score thresholds are trying to approximate, and it is never mandatory: an untagged merge records a null tag and nothing downstream breaks. A `write` key, not an `admin` one: the pull request already landed, so tagging it merges nothing. Idempotent, and orthogonal to the decision, so a record can be tagged whenever the effort becomes known, before or after the `act` that merged it.",
+        "operationId": "tagPublicMergeReviewEffort",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recordId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "reviewEffort": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "none",
+                          "minor",
+                          "major"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "reviewEffort"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "changeClass": {
+                      "enum": [
+                        "docs",
+                        "test",
+                        "dependency",
+                        "config",
+                        "source",
+                        "schema",
+                        "unknown"
+                      ],
+                      "type": "string"
+                    },
+                    "changedFileCount": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "complexity": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "decision": {
+                      "enum": [
+                        "pending_review",
+                        "auto_merged",
+                        "human_merged",
+                        "external_merged",
+                        "rejected"
+                      ],
+                      "type": "string"
+                    },
+                    "impact": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "mergePresetId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "mergePresetName": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "prNumber": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "prUrl": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "provider": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "github",
+                            "gitlab"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "recordId": {
+                      "type": "string"
+                    },
+                    "repoId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "resolvedAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "reviewEffort": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "none",
+                            "minor",
+                            "major"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "risk": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "runId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "taggedAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "taskId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "recordId",
+                    "taskId",
+                    "runId",
+                    "changeClass",
+                    "changedFileCount",
+                    "complexity",
+                    "risk",
+                    "impact",
+                    "mergePresetId",
+                    "mergePresetName",
+                    "decision",
+                    "reviewEffort",
+                    "prNumber",
+                    "prUrl",
+                    "repoId",
+                    "provider",
+                    "createdAt",
+                    "resolvedAt",
+                    "taggedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Tag the reviewer effort a merge took",
+        "tags": [
+          "Merge records"
+        ],
+        "x-min-scope": "write"
+      }
+    },
     "/api/v1/notification-webhook": {
       "delete": {
         "description": "Deregister the endpoint; deliveries stop. Idempotent.",
@@ -9583,7 +11632,7 @@
     },
     "/api/v1/notifications/{id}/act": {
       "post": {
-        "description": "Run a notification’s typed side-effect and resolve it: merge the PR (merge_review / pipeline_complete) or retry the run (ci_failed / test_failed). Performs a real GitHub merge, so it requires an admin-scoped key. Only these automated-action types are actionable through the API — a notification that parks a run on an interactive human decision cannot be acted on headlessly (dismiss it instead). A card that would retry a run on an individual-usage model likewise cannot be acted on through the API.",
+        "description": "Run a notification’s typed side-effect and resolve it: merge the PR (merge_review / pipeline_complete) or retry the run (ci_failed / test_failed). Performs a real GitHub merge, so it requires an admin-scoped key. Only these automated-action types are actionable through the API — a notification that parks a run on an interactive human decision cannot be acted on headlessly (dismiss it instead). A card that would retry a run on an individual-usage model likewise cannot be acted on through the API. To record how much review a merged pull request needed, call `POST /api/v1/merge-records/{recordId}/effort` (a `write` key) before or after this; a `merge_tag_request` card carries its record id on the payload and is resolved by tagging that record and dismissing the card.",
         "operationId": "actPublicNotification",
         "parameters": [
           {
@@ -9595,6 +11644,34 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "reviewEffort": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "none",
+                          "minor",
+                          "major"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
@@ -12525,6 +14602,262 @@
         "x-min-scope": "decide"
       }
     },
+    "/api/v1/runs/{runId}/merge-record": {
+      "get": {
+        "description": "What kind of change the run’s pull request made (a change class derived on the backend from the changed-file list, never from an agent’s opinion), what the merger scored it, which merge-threshold preset the decision was compared against, what ultimately happened to the pull request, and how much review a human spent if anybody has tagged it. The entry point of the merge-evidence loop for a caller holding a run id: it also hands back the `recordId` the effort-tag route takes. A run whose pipeline had no `merger` step made no merge decision and answers `404` with `details.reason: \"no_merge_record\"`, distinct from the `\"run_not_found\"` a run this key cannot read gets.",
+        "operationId": "getPublicRunMergeRecord",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "changeClass": {
+                      "enum": [
+                        "docs",
+                        "test",
+                        "dependency",
+                        "config",
+                        "source",
+                        "schema",
+                        "unknown"
+                      ],
+                      "type": "string"
+                    },
+                    "changedFileCount": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "complexity": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    },
+                    "decision": {
+                      "enum": [
+                        "pending_review",
+                        "auto_merged",
+                        "human_merged",
+                        "external_merged",
+                        "rejected"
+                      ],
+                      "type": "string"
+                    },
+                    "impact": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "mergePresetId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "mergePresetName": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "prNumber": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "prUrl": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "provider": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "github",
+                            "gitlab"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "recordId": {
+                      "type": "string"
+                    },
+                    "repoId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "resolvedAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "reviewEffort": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "none",
+                            "minor",
+                            "major"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "risk": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "runId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "taggedAt": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "taskId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "recordId",
+                    "taskId",
+                    "runId",
+                    "changeClass",
+                    "changedFileCount",
+                    "complexity",
+                    "risk",
+                    "impact",
+                    "mergePresetId",
+                    "mergePresetName",
+                    "decision",
+                    "reviewEffort",
+                    "prNumber",
+                    "prUrl",
+                    "repoId",
+                    "provider",
+                    "createdAt",
+                    "resolvedAt",
+                    "taggedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get the merge decision a run left behind",
+        "tags": [
+          "Merge records"
+        ],
+        "x-min-scope": "read"
+      }
+    },
     "/api/v1/runs/{runId}/outcome": {
       "get": {
         "description": "What the run changed and what backs that up, in product language, for a reader who will not open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, and the machine checks that ran. The same reduction the app’s outcome card renders, over the same evidence the verification report is built from, so the two cannot state different totals for one run. Nothing here is asserted by a model: every count is derived from recorded verdicts. Prefer the verification report when you need a reviewer’s full bundle; prefer this when you need to say what shipped. Sections state `reported` or `absent` with a machine-readable gap code, and `truncations` names any list the response had to bound.",
@@ -13356,6 +15689,59 @@
           "Services"
         ],
         "x-min-scope": "admin"
+      }
+    },
+    "/api/v1/services/{serviceId}/spec": {
+      "get": {
+        "description": "The prescriptive specification stored in the service’s own repository under `spec/`: modules → feature groups → requirement items, each with its MoSCoW priority, its `aspirational`/`established` implementation state and its Given/When/Then acceptance criteria, plus the domain rules scoped to each group and the Gherkin `.feature` files rendered from the same tree. `provenance` names the branch and commit the read describes, because the default branch is not what a run with an open pull request is working against. The requirement ids here are the join key onto `requirements` on a run’s report and outcome, so criterion → evidence is a map lookup. Four outcomes are kept apart rather than folded: `present: false` means the default branch holds no spec, a `503` with `reason: \"spec_read_failed\"` means the repository could not be read, a `503` with `reason: \"vcs_not_configured\"` means the deployment or workspace wired no version control, and a partially readable spec is SERVED with `issues` naming each file that did not survive. Read-only: the spec’s write path is a reviewed commit.",
+        "operationId": "getPublicServiceSpec",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "serviceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicServiceSpec"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get a service's in-repo specification",
+        "tags": [
+          "Spec"
+        ],
+        "x-min-scope": "read"
       }
     },
     "/api/v1/services/{serviceId}/tasks": {
@@ -14602,6 +16988,93 @@
         ],
         "x-min-scope": "read"
       }
+    },
+    "/api/v1/usage/spend": {
+      "get": {
+        "description": "Group the board’s spend over a window (`24h`, `7d`, `30d`, `90d`) by ONE dimension: `repo`, `ticket` and `run` are the cost-attribution axes an organisation budgets against, and `model` / `agentKind` / `service` / `taskType` slice the same money the other ways. `meteredCost` is real money and `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage, so never sum them. The EMPTY `key` is the unattributed bucket, a real slice rather than a dropped row, never dropped from the breakdown. `rows` is the heaviest `limit` slices (default 100, max 500) and `truncated` says when there was a tail, while `totals` aggregates the WHOLE window either way, so a capped answer still reports what the board spent. `source` says which store answered: the short windows scan the live ledger, which resolves a repository or a ticket through today’s links, while the long ones read the durable daily rollup, which froze that attribution while the money was spent and is never pruned. Read `rolledUpThrough` before reporting a quiet quarter, since a rollup that has never run and a board that spent nothing look identical. Workspace-scoped: the account-wide view is not reachable through this surface.",
+        "operationId": "getPublicSpend",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "dimension",
+            "required": true,
+            "schema": {
+              "enum": [
+                "model",
+                "agentKind",
+                "service",
+                "repo",
+                "taskType",
+                "ticket",
+                "run"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "enum": [
+                "24h",
+                "7d",
+                "30d",
+                "90d"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicSpend"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Break the workspace's spend down by repository, ticket, run or step kind",
+        "tags": [
+          "Usage"
+        ],
+        "x-min-scope": "read"
+      }
     }
   },
   "security": [
@@ -14641,6 +17114,9 @@
       "name": "Keys"
     },
     {
+      "name": "Merge records"
+    },
+    {
       "description": "The workspace’s human-actionable notifications (list, act on, or dismiss the run tails).",
       "name": "Notifications"
     },
@@ -14654,6 +17130,9 @@
     {
       "description": "The workspace’s board services.",
       "name": "Services"
+    },
+    {
+      "name": "Spec"
     },
     {
       "name": "Task types"

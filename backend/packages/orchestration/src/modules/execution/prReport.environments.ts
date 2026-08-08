@@ -319,24 +319,46 @@ function teardownState(
   logged: LoggedEnvironments | null,
 ): PrVerificationReport['environments']['teardown'] {
   if (!entries.some((e) => e.status === 'ready')) return 'not_applicable'
+  // "Still standing", split by whether this run ever intended to reclaim it. Every branch below
+  // that would answer `pending` answers `retained` instead when the deployer said so, and only
+  // those: a DECLARED retention says nothing about a teardown that was attempted and failed, or
+  // one that ran and could not be verified. Those are still the facts they always were.
+  const standing = declaresRetainedEnvironment(instance) ? 'retained' : 'pending'
   // No log to read: fall back to the run's own step projections, the weaker signal. This one
   // still yields `confirmed`, because with no log there is no verify row to be missing — the
   // projection is the only evidence there is, and it is the evidence this branch is for.
-  if (!logged) return projectionsAllGone(instance) ? 'confirmed' : 'pending'
+  if (!logged) return projectionsAllGone(instance) ? 'confirmed' : standing
   if (logged.stuck.size > 0) return 'failed'
   // A log that records no bring-up at all cannot speak to the teardown either way, so the
   // projection is consulted rather than concluding from the log's silence.
-  if (logged.provisioned.size === 0) return projectionsAllGone(instance) ? 'confirmed' : 'pending'
+  if (logged.provisioned.size === 0) return projectionsAllGone(instance) ? 'confirmed' : standing
   const outstanding = [...logged.provisioned].filter(
     (id) => !logged.reclaimed.has(id) && !logged.unconfirmed.has(id),
   )
   // Something the run stood up has no teardown on record at all: it is still live as far as
   // anyone knows. That outranks an unconfirmed one, because "nobody has asked yet" is a
   // different (and more likely still-running) state than "we asked and could not check".
-  if (outstanding.length > 0) return 'pending'
+  if (outstanding.length > 0) return standing
   return [...logged.provisioned].every((id) => logged.reclaimed.has(id))
     ? 'confirmed'
     : 'unconfirmed'
+}
+
+/**
+ * Whether the run's deployer step DECLARED that the environments it provisions outlive the run
+ * ({@link StepOptions.retainEnvironment}). Read off the step the run actually dispatched, not off
+ * the pipeline definition, because the definition can be edited after the run started and the
+ * report is about what THIS run did.
+ *
+ * It is deliberately the same fact the save boundary reads: an environment left standing with no
+ * declaration is refused at authoring time, so on a pipeline saved since that rule the two states
+ * this splits are "declared retained" and "the reclaim did not happen", which is exactly the
+ * distinction a reviewer needs and the one `pending` alone could not make.
+ */
+function declaresRetainedEnvironment(instance: ExecutionInstance): boolean {
+  return instance.steps.some(
+    (s) => s.agentKind === DEPLOYER_AGENT_KIND && s.stepOptions?.retainEnvironment === true,
+  )
 }
 
 /** The tester step whose report the evidence leg reads. */
@@ -470,6 +492,11 @@ function composeProof(
   if (teardown === 'pending') {
     gaps.push('The environment has not been confirmed torn down; it may still be running.')
   }
+  // `retained` is deliberately absent from this list. Nothing is missing from the proof: the run
+  // did everything it undertook to do, and the reclaim it never undertook cannot be a gap in it.
+  // The environment IS still running, which is why the teardown line states so in as many words
+  // (`TEARDOWN_RENDERINGS`) rather than the section going quiet about it — a `complete` proof here
+  // means "as designed", never "nothing left standing".
   if (teardown === 'unconfirmed') {
     // The probe's own words, not a generic line: "the manifest declares no `teardown:` request"
     // and "the apiserver refused the read" are the same verdict and completely different jobs.
@@ -667,18 +694,24 @@ export function renderEnvironments(envs: PrVerificationReport['environments']): 
     )
   }
   out.push('', ...renderTimeline(envs.timeline))
-  const teardown =
-    envs.teardown === 'confirmed'
-      ? '✅ torn down (confirmed gone)'
-      : envs.teardown === 'unconfirmed'
-        ? // Deliberately not a tick and not a cross: the platform did its part and the result
-          // could not be established. Rendering it either way is the misreport.
-          '⚠️ torn down, but not confirmed gone'
-        : envs.teardown === 'pending'
-          ? '⏳ still live'
-          : envs.teardown === 'failed'
-            ? '❌ teardown failed'
-            : 'nothing to tear down'
-  out.push(`**Teardown:** ${teardown}`, '')
+  out.push(`**Teardown:** ${TEARDOWN_RENDERINGS[envs.teardown]}`, '')
   return [...out, ...renderEvidence(envs.evidence)]
+}
+
+/**
+ * How each teardown verdict reads to a reviewer. An exhaustive `Record` rather than a ternary
+ * chain, so a verdict added to the closed vocabulary fails the build here instead of falling
+ * through to whatever the last arm happened to be.
+ */
+const TEARDOWN_RENDERINGS: Record<PrVerificationReport['environments']['teardown'], string> = {
+  confirmed: '✅ torn down (confirmed gone)',
+  // Deliberately not a tick and not a cross: the platform did its part and the result could not
+  // be established. Rendering it either way is the misreport.
+  unconfirmed: '⚠️ torn down, but not confirmed gone',
+  pending: '⏳ still live',
+  // Also still live, and the distinction is the whole point: this run was never going to reclaim
+  // it, so a reviewer has nothing to wait for and an operator has no failure to chase.
+  retained: '🔒 still live, retained past the run by design',
+  failed: '❌ teardown failed',
+  not_applicable: 'nothing to tear down',
 }

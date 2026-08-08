@@ -24,17 +24,27 @@ public final class NotificationsClient {
     }
 
     /**
+     * Act on a notification (no body).
+     */
+    public Notification act(String id) {
+        return act(id, ActPublicNotificationRequest.builder().build());
+    }
+
+    /**
      * Act on a notification
      * Run a notification’s typed side-effect and resolve it: merge the PR (merge_review /
      * pipeline_complete) or retry the run (ci_failed / test_failed). Performs a real GitHub merge,
      * so it requires an admin-scoped key. Only these automated-action types are actionable through
      * the API — a notification that parks a run on an interactive human decision cannot be acted
      * on headlessly (dismiss it instead). A card that would retry a run on an individual-usage
-     * model likewise cannot be acted on through the API.
+     * model likewise cannot be acted on through the API. To record how much review a merged pull
+     * request needed, call `POST /api/v1/merge-records/{recordId}/effort` (a `write` key) before
+     * or after this; a `merge_tag_request` card carries its record id on the payload and is
+     * resolved by tagging that record and dismissing the card.
      * {@code POST /api/v1/notifications/{id}/act} (operation {@code actPublicNotification}).
      */
-    public Notification act(String id) {
-        return transport.request("POST", "/api/v1/notifications/" + Transport.pathSegment(id) + "/act", null, Map.of(), new TypeReference<Notification>() {});
+    public Notification act(String id, ActPublicNotificationRequest body) {
+        return transport.request("POST", "/api/v1/notifications/" + Transport.pathSegment(id) + "/act", body, Map.of(), new TypeReference<Notification>() {});
     }
 
     /**

@@ -1,5 +1,154 @@
 # @cat-factory/app
 
+## 0.256.0
+
+### Minor Changes
+
+- 6ad1d8b: Let the pipeline builder's purpose dial narrow the palette per agent KIND, not per section
+
+  The dial filtered on the palette's display CATEGORY, so it could only ever remove whole sections
+  and a kind whose section survived stayed offered however plainly it contradicted the purpose. A
+  `review` pipeline reviews an existing pull request and opens none, yet it was offered the two
+  agents that WRITE documentation into the repo, because `docs` had to stay for the Domain Rules
+  Reviewer; a `planning` pipeline was offered the bug triage and PR-review kinds; and `document` and
+  `research` had identical rows, so moving the dial between those two settings narrowed nothing at
+  all.
+
+  `AgentPresentation` gains an optional `purposes`, and `purposeSuggestsAgentKind` is what the
+  palette now filters on. The two narrowings INTERSECT: a declaration may only hide more, never buy
+  a kind back into a purpose its section is not offered to, which is what keeps palette relevance
+  inside what the save gate will accept whatever a deployment declares. Declaring nothing is the
+  normal case and behaves exactly as before, so a registered kind that says nothing is as visible as
+  it was; a declared list naming only purposes the reader cannot name is read as no declaration
+  rather than as excluding everything.
+
+  The built-ins that belong to one use-case now say so (the document-authoring family, the bug
+  triage and PR-review kinds, the spec/blueprint/architecture kinds, the initiative breakdown), which
+  is a visible narrowing of what the palette offers at every purpose, `build` included: the six
+  document-authoring kinds belong to `document` alone and the initiative breakdown to `planning`
+  alone, so a build pipeline stops being offered them as well. Nothing changes
+  about what an existing pipeline may CONTAIN or save: `purposeAllowsAgentCategory` is untouched, so
+  a stored pipeline stays editable in the builder it was built in.
+
+### Patch Changes
+
+- Updated dependencies [6ad1d8b]
+  - @cat-factory/contracts@0.283.0
+
+## 0.255.1
+
+### Patch Changes
+
+- Updated dependencies [a596b9c]
+  - @cat-factory/contracts@0.282.0
+
+## 0.255.0
+
+### Minor Changes
+
+- 2585b2f: Narrow the pipeline builder's saved-pipeline library on the purpose being edited, and make a
+  pipeline's purpose mandatory
+
+  The purpose dial narrowed the agent palette beside it and gated the save, but the library in the
+  third column listed the whole workspace catalog whatever the draft was for. `pipelineMatchesPurpose`
+  is the membership predicate, applied through `narrowPipelineLibrary` alongside the label and archive
+  filters. Each of those dials now counts what relaxing IT alone would reveal, so the "Archived (n)"
+  toggle no longer promises rows the current purpose is hiding either way, and the purpose hint is
+  itself the control that lists every purpose again: the draft's purpose is an authoring field that is
+  saved, so browsing past it may not require editing it.
+
+  Breaking change (internal surfaces, pre-1.0). `Pipeline.purpose` is now REQUIRED, which is what lets
+  those four narrowings drop their private policies for the pipelines that skipped it:
+
+  - `POST /workspaces/:ws/pipelines` requires `purpose`; `PATCH` still treats it as an optional patch
+    field. Not part of `/api/v1`, so no published SDK or external integration is affected.
+  - `PipelineRegistry.register` requires it at compile time, so a deployment's own pipeline can no
+    longer land unclassified and fall silently out of a narrowed picker. Same for the built-in seed
+    catalog, where it was previously only asserted in a test.
+  - A row persisted before the field was mandatory still reads: the shared `rowToPipeline` resolves an
+    empty column to `build`, which is byte-for-byte the behaviour such a row already had. A stored
+    classifier this build cannot NAME passes through untouched instead, and every narrowing predicate
+    reads it default-open, because "never set" and "a member this build has no name for" are different
+    facts that must not render the same.
+
+### Patch Changes
+
+- Updated dependencies [2585b2f]
+  - @cat-factory/contracts@0.281.0
+
+## 0.254.3
+
+### Patch Changes
+
+- Updated dependencies [faddbf5]
+  - @cat-factory/contracts@0.280.0
+
+## 0.254.2
+
+### Patch Changes
+
+- Updated dependencies [8a06abc]
+- Updated dependencies [8a06abc]
+  - @cat-factory/contracts@0.279.0
+
+## 0.254.1
+
+### Patch Changes
+
+- Updated dependencies [11f9efa]
+  - @cat-factory/contracts@0.278.0
+
+## 0.254.0
+
+### Minor Changes
+
+- c44e9d7: Pipeline builder: the purpose selector moves onto the palette's control row, beside the agent tier,
+  and narrows the catalog per purpose.
+
+  The two dials that decide what the palette offers now sit together above it, each stating what it is
+  holding back ("n hidden for this purpose" / "n hidden at this tier"). The purpose is still saved on
+  the pipeline, so nothing about the stored shape changes.
+
+  The filtering behind it splits into two predicates in `@cat-factory/contracts`.
+  `purposeSuggestsAgentCategory` is new and is what the palette OFFERS: a review pipeline reviews an
+  existing pull request, so the design kinds go; a planning pipeline writes no repo documentation and
+  opens no pull request, so the documentation and gate kinds go. `purposeAllowsAgentCategory` keeps its
+  current meaning and is what the builder will SAVE, so a stored pipeline never becomes unsaveable in
+  the editor it was built in because the relevance table gained an opinion it did not have when that
+  pipeline was built. Relevance is a subset of compatibility, asserted over the whole grid.
+
+  Both vocabularies are closed but persisted, so `@cat-factory/contracts` also gains the
+  schema-derived `isPipelinePurpose` and `isAgentCategory` guards. A `Pipeline.purpose` or a
+  registered kind's `presentation.category` outlives the build that wrote it, and both predicates now
+  narrow through them before indexing their table: an unrecognised value means this build has nothing
+  to narrow by, which is what an absent one already meant. The purpose control names such a value
+  instead of rendering a blank label.
+
+### Patch Changes
+
+- Updated dependencies [c44e9d7]
+  - @cat-factory/contracts@0.277.0
+
+## 0.253.2
+
+### Patch Changes
+
+- 79a873c: Stop the toaster's safe-area rule from slicing the first option off every dropdown.
+
+  The inspector's pickers (service connections, and every other menu in the SPA) drew their first
+  option half outside the popover's top edge. The cause is not in any of those components: `main.css`
+  carried `[data-slot='viewport'] { bottom: calc(1rem + env(safe-area-inset-bottom)) }`, written to
+  keep the toaster clear of a phone's home indicator. Nuxt UI names the scroll region of eleven
+  components `viewport`, and the item list of every menu one (Select, SelectMenu, InputMenu,
+  CommandPalette, DropdownMenu, ContextMenu, NavigationMenu) is `position: relative`, so that rule
+  offset all of them a rem upward while the popover box stayed put.
+
+  The toaster's viewport now carries an `app-toaster` marker class from `app.config.ts` and both
+  app-level toaster rules hang on that instead, so nothing app-side names a `data-slot` value the
+  component library shares. A new e2e spec opens a picker and asserts no option is drawn above its
+  own popover: this class of defect needs the assembled product to be visible at all, since a
+  component unit test renders without the app stylesheet and with no layout engine.
+
 ## 0.253.1
 
 ### Patch Changes

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   BUILTIN_TASK_TYPES,
+  isPipelinePurpose,
   pipelineAllowedForBlockLevel,
   pipelineAllowedForTaskType,
+  pipelineEnvironmentProblems,
 } from '@cat-factory/contracts'
 import { hasInitiativeKinds } from './initiative-logic.js'
 import { PipelineRegistry } from './pipeline-registry.js'
@@ -90,6 +92,7 @@ describe('seedPipelines — named-gate lowering', () => {
       'conflicts',
       'ci',
       'merger',
+      'disposer',
     ])
   })
 
@@ -118,6 +121,7 @@ describe('seedPipelines — named-gate lowering', () => {
       'ci',
       'human-review',
       'merger',
+      'disposer',
     ])
     // The gating array is index-aligned with agentKinds, so a step inserted above can never shift a
     // threshold onto its neighbour — the whole point of the named-step seed form.
@@ -303,7 +307,13 @@ describe('seedPipelines: built-in tagging and versioning', () => {
 
   it('defaults only an UNVERSIONED built-in to 1, leaving an explicit version alone', () => {
     const registry = new PipelineRegistry()
-    registry.register({ id: 'pl_org_v7', name: 'Org v7', agentKinds: ['coder'], version: 7 })
+    registry.register({
+      id: 'pl_org_v7',
+      name: 'Org v7',
+      agentKinds: ['coder'],
+      purpose: 'build',
+      version: 7,
+    })
     const merged = new Map(seedPipelines(registry).map((p) => [p.id, p]))
     // A registered pipeline is not a built-in, so it keeps whatever version it declared...
     expect(merged.get('pl_org_v7')).toMatchObject({ version: 7 })
@@ -314,7 +324,13 @@ describe('seedPipelines: built-in tagging and versioning', () => {
 
   it('version-tracks a registered pipeline that REPLACES a built-in, since it is one', () => {
     const registry = new PipelineRegistry()
-    registry.register({ id: 'pl_simple', name: 'Org simple', agentKinds: ['coder'], builtin: true })
+    registry.register({
+      id: 'pl_simple',
+      name: 'Org simple',
+      agentKinds: ['coder'],
+      purpose: 'build',
+      builtin: true,
+    })
     const replaced = seedPipelines(registry).find((p) => p.id === 'pl_simple')
     expect(replaced).toMatchObject({ name: 'Org simple', builtin: true, version: 1 })
   })
@@ -361,7 +377,12 @@ describe('retiredPipelines — withdrawn built-ins', () => {
 
   it('retires a deployment-registered pipeline, dropping it from the live catalog', () => {
     const registry = new PipelineRegistry()
-    registry.register({ id: 'pl_org_legacy', name: 'Legacy org flow', agentKinds: ['coder'] })
+    registry.register({
+      id: 'pl_org_legacy',
+      name: 'Legacy org flow',
+      agentKinds: ['coder'],
+      purpose: 'build',
+    })
     expect(seedPipelines(registry).map((p) => p.id)).toContain('pl_org_legacy')
 
     registry.retire('pl_org_legacy', { replacedBy: 'pl_simple' })
@@ -375,7 +396,12 @@ describe('retiredPipelines — withdrawn built-ins', () => {
   it('lets a re-registration un-retire an id (the later assertion wins, never both)', () => {
     const registry = new PipelineRegistry()
     registry.retire('pl_org_legacy')
-    registry.register({ id: 'pl_org_legacy', name: 'Revived', agentKinds: ['coder'] })
+    registry.register({
+      id: 'pl_org_legacy',
+      name: 'Revived',
+      agentKinds: ['coder'],
+      purpose: 'build',
+    })
     expect(seedPipelines(registry).map((p) => p.id)).toContain('pl_org_legacy')
     expect(retiredPipelines(registry).map((p) => p.id)).not.toContain('pl_org_legacy')
   })
@@ -391,14 +417,16 @@ describe('retiredPipelines — withdrawn built-ins', () => {
 })
 
 describe('seedPipelines — purpose classification is total and matches the engine guards', () => {
-  it('classifies every built-in, so no preset falls through a narrowed picker', () => {
-    // A `document` / `review` task offers ONLY explicitly-classified pipelines, so an unclassified
-    // built-in would be invisible there — silently, with nothing failing. (A `feature` / `bug` task
-    // narrows the other way round, excluding what cannot ship code, so unclassified survives that
-    // picker; this assertion is what the document/review half relies on.) The catalog is ours, so
-    // every entry can and must say what it is for.
+  it('classifies every built-in with a purpose the contract recognises', () => {
+    // `Pipeline.purpose` is mandatory and `definePipeline` requires it, so a MISSING one no longer
+    // compiles. What the types cannot reach is the `as Pipeline` cast `definePipeline` ends on:
+    // it re-asserts the shape after the conditional spreads, so a mis-spelled classifier would
+    // reach the catalog typed as a member and be narrowed by nothing (the predicates read an
+    // unnameable value default-OPEN, which is right for a deployment's own value and silent for
+    // a typo in ours). Asserted against the picklist the contract itself compiled, so adding a
+    // purpose needs no edit here.
     for (const p of seedPipelines()) {
-      expect(p.purpose, `${p.id} must declare a purpose`).toBeDefined()
+      expect(isPipelinePurpose(p.purpose), `${p.id} purpose ${p.purpose}`).toBe(true)
     }
   })
 
@@ -560,5 +588,27 @@ describe('defaultPipelineIdForTaskType', () => {
       })
       expect(defaultPipelineIdForTaskType('document', r)).toBe(DOCUMENT_PIPELINE_ID)
     })
+  })
+})
+
+describe('seedPipelines — environment lifecycle', () => {
+  it('RECLAIMS in every preset that provisions, rather than declaring the environment retained', () => {
+    // That the catalog satisfies the lifecycle rule at all is pinned where the rule is enforced
+    // (`pipelineShape.test.ts`). This states the stronger thing the rule cannot: WHICH legal end
+    // each preset takes. `retainEnvironment` also satisfies it, and a built-in quietly leaving its
+    // environments up would bill every workspace that runs it until the TTL sweep, which is a
+    // choice no shipped default gets to make on an operator's behalf.
+    const deploying = seedPipelines().filter((p) => p.agentKinds.includes('deployer'))
+    expect(deploying.length).toBeGreaterThan(0)
+    for (const p of deploying) {
+      expect(pipelineEnvironmentProblems(p.agentKinds, p.enabled, p.stepOptions), p.id).toEqual([])
+      expect(
+        p.stepOptions?.some((o) => o?.retainEnvironment),
+        p.id,
+      ).toBeFalsy()
+      expect(p.agentKinds.lastIndexOf('disposer'), p.id).toBeGreaterThan(
+        p.agentKinds.lastIndexOf('deployer'),
+      )
+    }
   })
 })

@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { pipelinePurposeSchema } from './pipeline-purpose-vocabulary.js'
 import { agentKindSchema, namespacedIdSchema } from './primitives.js'
 import { RESULT_VIEW_IDS } from './result-views.js'
 
@@ -20,6 +21,23 @@ export const agentCategorySchema = v.picklist([
   'gates',
 ])
 export type AgentCategory = v.InferOutput<typeof agentCategorySchema>
+
+const AGENT_CATEGORY_SET: ReadonlySet<string> = new Set(agentCategorySchema.options)
+
+/**
+ * Whether a value is a category THIS BUILD knows, DERIVED from the picklist so it cannot drift
+ * from it the way a hand-written second list would.
+ *
+ * The vocabulary is closed, but the values reaching a reader are not this build's alone: a
+ * `presentation.category` arrives in the workspace snapshot from a kind a DEPLOYMENT registered,
+ * and a category retired from the union goes on living in stored pipelines. A reader that maps one
+ * through an exhaustive `Record` is therefore total against the TYPE and partial against the DATA,
+ * which is the gap where the lookup returns `undefined` and whatever reads it renders a blank or
+ * throws. Narrow with this first and state the negative case as the unknown it is.
+ */
+export function isAgentCategory(value: string): value is AgentCategory {
+  return AGENT_CATEGORY_SET.has(value)
+}
 
 // ---------------------------------------------------------------------------
 // Agent TIER — how specialist a kind is, in three cumulative levels. Orthogonal to
@@ -80,6 +98,26 @@ export const agentPresentationSchema = v.object({
   description: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
   /** Palette section; omitted ⇒ the kind is not a standalone palette block (e.g. a companion). */
   category: v.optional(agentCategorySchema),
+  /**
+   * The pipeline PURPOSES the palette should offer this kind to, WITHIN the ones its
+   * {@link category} already admits (`purposeSuggestsAgentKind`). Omitted ⇒ the category alone
+   * decides, which is the normal case. Declare it to opt OUT of a purpose the category would
+   * admit: a documentation AUTHOR has no business in a pipeline whose whole job is reviewing
+   * someone else's pull request, and its category cannot say so without also taking the Domain
+   * Rules Reviewer down with it. It never widens anything, in the palette or in what the
+   * builder will SAVE (`purposeAllowsAgentCategory`), so a kind that opts out of a purpose
+   * stays editable in a stored pipeline that already uses it.
+   *
+   * An EMPTY list is refused rather than accepted, because the reader treats "declared nothing"
+   * and "declared an empty list" as the same thing (the category alone decides, so the kind is
+   * offered at every purpose that section admits) and that is the exact inverse of what an author
+   * writing `purposes: []` means by it. Refusing at registration is the only place the two can
+   * still be told apart: by the time the palette reads the list the intent is gone. Note this is
+   * NOT the same case as a list whose every member THIS BUILD cannot name, which the palette
+   * deliberately reads as no declaration: that one is a retired vocabulary member outliving the
+   * bundle reading it, not a statement someone typed.
+   */
+  purposes: v.optional(v.pipe(v.array(pipelinePurposeSchema), v.minLength(1))),
   /**
    * How specialist this kind is ({@link AGENT_TIERS}). The palette and the model-preset
    * override list show the selected tier and everything below it, so a kind declared

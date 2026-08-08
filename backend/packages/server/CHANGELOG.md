@@ -1,5 +1,348 @@
 # @cat-factory/server
 
+## 0.259.2
+
+### Patch Changes
+
+- Updated dependencies [6ad1d8b]
+  - @cat-factory/contracts@0.283.0
+  - @cat-factory/kernel@0.278.0
+  - @cat-factory/agents@0.121.0
+  - @cat-factory/integrations@0.152.8
+  - @cat-factory/orchestration@0.248.1
+  - @cat-factory/spend@0.15.50
+
+## 0.259.1
+
+### Patch Changes
+
+- Updated dependencies [a596b9c]
+  - @cat-factory/contracts@0.282.0
+  - @cat-factory/orchestration@0.248.0
+  - @cat-factory/kernel@0.277.0
+  - @cat-factory/integrations@0.152.7
+  - @cat-factory/agents@0.120.2
+  - @cat-factory/spend@0.15.49
+
+## 0.259.0
+
+### Minor Changes
+
+- 2585b2f: Narrow the pipeline builder's saved-pipeline library on the purpose being edited, and make a
+  pipeline's purpose mandatory
+
+  The purpose dial narrowed the agent palette beside it and gated the save, but the library in the
+  third column listed the whole workspace catalog whatever the draft was for. `pipelineMatchesPurpose`
+  is the membership predicate, applied through `narrowPipelineLibrary` alongside the label and archive
+  filters. Each of those dials now counts what relaxing IT alone would reveal, so the "Archived (n)"
+  toggle no longer promises rows the current purpose is hiding either way, and the purpose hint is
+  itself the control that lists every purpose again: the draft's purpose is an authoring field that is
+  saved, so browsing past it may not require editing it.
+
+  Breaking change (internal surfaces, pre-1.0). `Pipeline.purpose` is now REQUIRED, which is what lets
+  those four narrowings drop their private policies for the pipelines that skipped it:
+
+  - `POST /workspaces/:ws/pipelines` requires `purpose`; `PATCH` still treats it as an optional patch
+    field. Not part of `/api/v1`, so no published SDK or external integration is affected.
+  - `PipelineRegistry.register` requires it at compile time, so a deployment's own pipeline can no
+    longer land unclassified and fall silently out of a narrowed picker. Same for the built-in seed
+    catalog, where it was previously only asserted in a test.
+  - A row persisted before the field was mandatory still reads: the shared `rowToPipeline` resolves an
+    empty column to `build`, which is byte-for-byte the behaviour such a row already had. A stored
+    classifier this build cannot NAME passes through untouched instead, and every narrowing predicate
+    reads it default-open, because "never set" and "a member this build has no name for" are different
+    facts that must not render the same.
+
+### Patch Changes
+
+- Updated dependencies [2585b2f]
+  - @cat-factory/contracts@0.281.0
+  - @cat-factory/kernel@0.276.0
+  - @cat-factory/orchestration@0.247.0
+  - @cat-factory/agents@0.120.1
+  - @cat-factory/integrations@0.152.6
+  - @cat-factory/spend@0.15.48
+
+## 0.258.0
+
+### Minor Changes
+
+- faddbf5: Public API (`/api/v1`, spec 1.34.0): serve a service's in-repo specification. Additive.
+
+  One new operation, `GET /api/v1/services/:serviceId/spec` at `read` scope: the prescriptive
+  requirement tree stored under `spec/` in the service's repository (modules → feature groups →
+  requirement items, each with its MoSCoW priority, its `aspirational`/`established` state and its
+  Given/When/Then acceptance criteria, plus the domain rules scoped to each group), the Gherkin
+  rendered from the same tree, and the branch and commit both were read at.
+
+  It closes a join, not just a gap. The requirement ids on `GET /api/v1/runs/:runId/report` and
+  `.../outcome` were already a key onto a document no headless caller could fetch, so an
+  outcome-reviewing integration could read what a run scored and not what it scored against. Fetch the
+  spec once per service and a run's outcome per run, and criterion → evidence is a map lookup outside
+  the platform.
+
+  **The read has several outcomes and the endpoint keeps them apart.** The reader behind it is total (a
+  flaky repository read degrades rather than throwing), and the app's own requirements window folds an
+  unreadable repository into the same empty state as a repository with no spec, which is right for a
+  window and wrong for an integrator: folded here it would report every service as requirement-free
+  for the duration of a VCS incident. So the response carries a three-valued `anchor` rather than a
+  boolean: `absent` (no spec on the default branch) is the only value that means the service declares
+  nothing, and `unparsed` says the anchor file is there and corrupt, which is a repository somebody
+  has to fix rather than a service with nothing to say. An unreadable repository is a `503` with
+  `reason: "spec_read_failed"`; a branch that would not resolve is a `503` with
+  `reason: "spec_ref_unresolved"` (a renamed, transferred or deleted repository, a stale default
+  branch and a lost installation all answer 404 exactly as an absent file does, so an empty read with
+  an unresolved ref is refused rather than served as a confident "no requirements"); an unwired or
+  unconnected VCS integration is a `503` with `reason: "vcs_not_configured"`; a service frame with no
+  linked repository is the same `422` that starting a run on it gets; and a spec that read PARTIALLY
+  is served, with `issues` naming every file that did not survive and how many items a salvaged group
+  lost.
+
+  **Every axis of the response is bounded and every bound is reported**, including the two that grow
+  outside the spec's control: the Gherkin is capped across all files as well as within each one, and
+  `issues` (which grows with FAILURE rather than with the spec) is capped too, so a rate-limit window
+  part-way through a large walk cannot make the report of a degraded read the largest thing in the
+  response. A `dropped` of `null` on an issue row means content was lost there and no count describes
+  it, which is the honest answer for a shard whose `requirements` is not a list at all: those
+  requirements are unreadable, so the rebuilt group is served as damaged rather than as one that
+  legitimately declares nothing.
+
+  **Two commitments a consumer should read.** `SpecDoc` and everything under it (`SpecModule`,
+  `RequirementGroup`, `RequirementItem`, `AcceptanceCriterion`, `DomainRule`) are served as the SAME
+  shapes the app consumes rather than a re-projection, deliberately, so one artifact cannot be
+  described two ways. From this version they are part of the stable `/api/v1` surface rather than
+  internals. And the `spec/` tree is anchored at the repository ROOT, so two services carved out of
+  one monorepo share one spec and this endpoint answers both alike; `provenance` names the repository
+  and commit rather than a subdirectory, because a subdirectory would imply a scoping the read does
+  not apply.
+
+  There is deliberately no write side: the spec's write path is a reviewed commit, and `state` is
+  promoted only by an observed test pass.
+
+  Internal, not `/api/v1`: `readServiceSpec` now returns a `diagnostics` field on `ServiceSpecView`
+  (`anchor` plus per-file `issues`), so every caller can separate an absent spec from an unread one.
+  The field is optional, so a view assembled by hand keeps type-checking, and `EMPTY_SERVICE_SPEC_VIEW`
+  carries none. The reader also gained a total READ BUDGET: the tree's size is set by somebody else's
+  repository, so one call could previously become an unbounded number of provider round trips, past
+  the Cloudflare subrequest ceiling and into the installation's shared rate limit. A walk that stops
+  early says so (`unread`), and the run-evidence loader no longer memoises a failed read as the run's
+  answer, which had pinned one flaky read onto every later settlement.
+
+### Patch Changes
+
+- Updated dependencies [faddbf5]
+  - @cat-factory/contracts@0.280.0
+  - @cat-factory/agents@0.120.0
+  - @cat-factory/orchestration@0.246.0
+  - @cat-factory/mcp-server@0.26.0
+  - @cat-factory/integrations@0.152.5
+  - @cat-factory/kernel@0.275.4
+  - @cat-factory/spend@0.15.47
+
+## 0.257.0
+
+### Minor Changes
+
+- 8a06abc: SDK clients: a request body with no required field is now a parameter you may OMIT, and
+  `POST /api/v1/notifications/:id/act` carries the reviewer-effort tag.
+
+  Fourteen operations have a body whose every field is optional, and until now all four clients
+  rendered it as a required positional parameter, so a caller with nothing to say still had to type
+  an empty object. That was also what kept `act` body-less: giving it the app's `reviewEffort` field
+  would have rewritten `act(id)` as `act(id, body)` in four published clients. Teaching the emitters
+  an omittable body fixes both at once, and the emitters read "omittable" off the spec (`required: []`
+  on the body schema) rather than a per-operation list.
+
+  `act` now takes `{ "reviewEffort": "none" | "minor" | "major" | null }`, so confirming a merge and
+  recording what reviewing it cost is ONE headless request rather than two, matching the app's one-tap
+  confirm-and-tag. A `merge_tag_request` card becomes actionable too, but only when a tag is supplied:
+  recording one is its entire side-effect, so a bare `act` answers 409 with
+  `details.reason: "review_effort_required"` instead of resolving the nudge and writing nothing. The
+  route's other 409 now says `no_automated_action`, so the two causes are told apart by a machine.
+
+  **Wire compatibility is unaffected.** `act` mounts `optionalJsonBody`, so an integration that has
+  been calling it with no body at all keeps working; every client sends `{}` when the argument is
+  omitted, because the route's validator still requires a body to parse.
+
+  **Source compatibility, per language.** TypeScript and Java are unchanged for every existing caller:
+  the body gets a default, and Java gets a real overload. Two need a mechanical edit:
+
+  - **Go** takes an all-optional body by pointer, so `Start(ctx, id, body)` becomes
+    `Start(ctx, id, &body)` and `Act(ctx, id)` becomes `Act(ctx, id, nil)`. Both are compile errors,
+    not silent changes.
+  - **Python** makes `timeout` keyword-only on every operation. `act(id, timeout=5)` is unchanged;
+    a positional `act(id, 5.0)` is now a `TypeError`. That is the point of the change: leaving it
+    positional would have bound `5.0` to the new body and sent the timeout as the payload.
+
+- 8a06abc: Public API (`/api/v1`, spec 1.33.0): the merge-EVIDENCE loop. Additive.
+
+  Four new operations: `GET /api/v1/runs/:runId/merge-record` (the merge decision a run left behind,
+  carrying the backend-derived change class, the merger's scores and the preset they were compared
+  against), `GET /api/v1/merge-records/rollups` (every change class's accumulated track record as one
+  aggregate), `GET /api/v1/merge-records/:recordId`, and
+  `POST /api/v1/merge-records/:recordId/effort` (tag or clear the reviewer effort a landed pull
+  request needed).
+
+  Until now the merge track record (ADR 0046) was reachable only from a browser session, which split
+  the headless story in half: an integration could start a run through `/api/v1` and merge its pull
+  request through `POST /notifications/:id/act`, and then had nowhere to record how much review that
+  merge took nor any way to read back what the workspace had accumulated. The one signal the
+  auto-merge policy is meant to eventually stand on was collectable only by the people who were not
+  driving the runs.
+
+  **Tagging is `write`, not `admin`.** `act` is at the top of the ladder because it merges a pull
+  request for real; recording how much review an already-landed one took performs no external
+  side-effect and merges nothing, so an integration whose job is collecting evidence no longer needs a
+  key that can also delete tasks and merge.
+
+  Refusals across the surface carry `error.details.reason`: `run_not_found`, `no_merge_record` (a
+  readable run whose pipeline reached no merge decision) and `merge_record_not_found`, which the
+  record-addressed READ and the TAG now answer identically, so a client branches on one value
+  whichever of the two it called.
+
+  `POST /api/v1/notifications/:id/act` deliberately stays body-less, so the app's one-tap
+  confirm-and-tag has no single-request headless equivalent: every SDK emitter renders a request body
+  as a required positional parameter, so adding `reviewEffort` there would rewrite `act(id)` as
+  `act(id, body)` in four published clients. The headless form is two calls in either order, since the
+  tag is idempotent and orthogonal to the decision.
+
+### Patch Changes
+
+- Updated dependencies [8a06abc]
+- Updated dependencies [8a06abc]
+  - @cat-factory/contracts@0.279.0
+  - @cat-factory/mcp-server@0.25.0
+  - @cat-factory/orchestration@0.245.0
+  - @cat-factory/agents@0.119.3
+  - @cat-factory/integrations@0.152.4
+  - @cat-factory/kernel@0.275.3
+  - @cat-factory/spend@0.15.46
+
+## 0.256.0
+
+### Minor Changes
+
+- 11f9efa: Public API (`/api/v1`, spec 1.32.0): the two cost and telemetry reads that were reachable only
+  from a browser session. Both additive.
+
+  `GET /api/v1/usage/spend` groups a board's spend over a window (`24h` / `7d` / `30d` / `90d`) by
+  one dimension: `repo`, `ticket` and `run` are the cost-attribution axes an organisation budgets
+  against, and `model` / `agentKind` / `service` / `taskType` slice the same money the other ways.
+  `GET /api/v1/usage` answers the budget question and structurally cannot answer this one, since the
+  ledger row it aggregates carries no board shape and its window is the current calendar month. The
+  long windows are served from the durable `spend_days` rollup, which froze each run's attribution
+  while the money was being spent, so a quarterly figure does not move when a service is re-pointed
+  at a new repository. `source` and `rolledUpThrough` say which store answered and how far its sweep
+  has covered, because a rollup that has never run and a board that spent nothing produce the same
+  empty breakdown. There is no `workspace` dimension and no account-wide scope: a workspace-scoped
+  key must never learn a sibling board's spend. `rows` is the heaviest `limit` slices (default 100,
+  ceiling 500) with `truncated` beside it, because `run` and `ticket` grow with activity rather than
+  with a catalog; `totals` aggregates the whole window either way, so a capped answer still reports
+  what the board spent and loses only the identity of the tail.
+
+  `GET /api/v1/debug/runs/:runId/llm-export` serves a run's model activity as one self-describing
+  bundle, the external counterpart of the app's own export button, for a caller assembling the same
+  picture from the overview plus a walk of the call list. It differs from the app's export in the
+  half that matters: the rollups are SQL aggregates over every recorded call and do not move with
+  `limit`, so a bundle budgeted down to a handful of rows still states what the run actually cost,
+  where the internal export folds its numbers from the rows it holds and stops pricing them once
+  they are a slice. `truncated` and `order` say that the call rows are a window and which end was
+  kept, and `available` says whether the deployment retains LLM telemetry at all, since an unwired
+  sink and a run that made no model calls otherwise produce the same document and this one is
+  composed to be handed straight to a model.
+
+  The SDK emitters gained the notion of a REQUIRED query parameter, which nothing on the surface had
+  until now: the TypeScript client no longer defaults such a query bag to `{}` (a signature promising
+  a call the deployment refuses), Python emits it with no default, Go and Java say so on the field
+  rather than documenting it as optional, and Java withholds both the no-query call overload and the
+  record's empty `none()` factory for such an operation, offering `Query.of(<required>)` instead.
+  The MCP and gatekeeper facades refuse a missing required query parameter locally, naming it, the
+  way a missing path parameter already was: the reference MCP server forwards a host's arguments
+  without validating them against the tool's own input schema, so nothing else was catching it.
+
+  `@cat-factory/gatekeeper-bindings` (breaking, pre-1.0): a binding's `queryParams` is now
+  `{ name, required }` records rather than bare names, so a credential-holding front-end can refuse
+  what the deployment would refuse instead of forwarding it to collect a 400. Bindings that read
+  captured run telemetry carry `telemetrySink`, and the new `TELEMETRY_BINDINGS` export is that list,
+  derived from the table. It is what a policy should withhold captured model prompts, tool arguments
+  and command output with: all of it sits inside a `read` key's floor, and the hand-typed deny list
+  it replaces had already fallen behind the surface, leaving the run LLM export readable by an
+  oversight tier that denied every sibling read of the same sink. Generation now fails on a `/debug`
+  operation that is not classified either way.
+
+### Patch Changes
+
+- Updated dependencies [11f9efa]
+  - @cat-factory/contracts@0.278.0
+  - @cat-factory/orchestration@0.244.0
+  - @cat-factory/mcp-server@0.24.0
+  - @cat-factory/agents@0.119.2
+  - @cat-factory/integrations@0.152.3
+  - @cat-factory/kernel@0.275.2
+  - @cat-factory/spend@0.15.45
+
+## 0.255.1
+
+### Patch Changes
+
+- Updated dependencies [c44e9d7]
+  - @cat-factory/contracts@0.277.0
+  - @cat-factory/agents@0.119.1
+  - @cat-factory/integrations@0.152.2
+  - @cat-factory/kernel@0.275.1
+  - @cat-factory/orchestration@0.243.1
+  - @cat-factory/spend@0.15.44
+
+## 0.255.0
+
+### Minor Changes
+
+- dfa4a8e: Hand a run's reference designs to the container that captures against them.
+
+  `.cat-context/reference-screenshots/` has been in the UI-tester prompt since the visual-confirmation
+  gate landed, and nothing wrote it. So a designer whose task links a Figma frame got a gate gallery
+  built from that frame while the tester itself worked blind, naming views of its own that then had to
+  be matched to design frames named by somebody else.
+
+  A dispatch of a kind declaring the `ui` image now resolves the task's reference set (its designs'
+  retained frames plus the images a person uploaded against it) and the harness downloads them into the
+  checkout before the agent's first turn, with each file's view name stated in the prompt.
+
+  The bytes do not ride the job body. A design frame is a full-page PNG and a job body is JSON that
+  crosses every transport and is persisted with the dispatch, so only a manifest of ids and file names
+  travels; the harness fetches the images from a new `GET ${proxyBaseUrl}/artifacts/reference/:id` on
+  the same container session token the run already holds for the LLM proxy. That route is the mirror of
+  the screenshot ingest route beside it and is bounded the same way, plus one more: it serves
+  `kind:'reference'` only, so it cannot become a way for one container to read another run's captures.
+
+  Two things a reviewer should look at. The reference SET now has two readers (the gate and a dispatch)
+  and therefore one module: derived twice, the two would eventually disagree about a view name, which
+  is exactly the join the gate performs. And the FILE NAMES are chosen by the engine, not the harness,
+  because the name is how the agent learns the view name: a sanitiser change in an image a deployment
+  has not rolled out yet would otherwise rename every view a run reports.
+
+  The set is CAPPED by the engine, which is also what carries the dropped view names to the agent. A
+  task's references are unbounded (a block may hold a hundred uploads beside a design's frames) while
+  the download pass is budgeted well under the inactivity watchdog, so the ceiling is a decision the
+  platform states rather than an accident of transfer speed. It drops design frames before uploads,
+  mirroring the precedence that already lets an upload override a frame, and every dropped view is
+  named in the prompt: capped and simply absent look identical on disk otherwise. The delivery is
+  idempotent over the checkout, so the repair rounds of a coding flow re-cost a stat rather than a
+  transfer and cannot report a view an earlier round delivered as missing, and the per-image ceiling
+  now bounds the transfer (declared length, then a counted stream) instead of only the write.
+
+  Runner image bump: harness `src/**` changed, so deployments must move to the newly pinned tag. A
+  deployment on an older image simply receives no references, exactly as before this change.
+
+### Patch Changes
+
+- Updated dependencies [dfa4a8e]
+  - @cat-factory/orchestration@0.243.0
+  - @cat-factory/kernel@0.275.0
+  - @cat-factory/agents@0.119.0
+  - @cat-factory/integrations@0.152.1
+  - @cat-factory/spend@0.15.43
+
 ## 0.254.0
 
 ### Minor Changes

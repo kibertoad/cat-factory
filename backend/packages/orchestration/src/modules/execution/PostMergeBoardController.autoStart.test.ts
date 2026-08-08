@@ -70,6 +70,7 @@ describe('PostMergeBoardController.autoStartDependents', () => {
     registry.register({
       id: 'pl_org_op',
       name: 'Introduce API',
+      purpose: 'build',
       builtin: true,
       version: 1,
       agentKinds: ['coder'],
@@ -96,7 +97,14 @@ describe('PostMergeBoardController.autoStartDependents', () => {
         { id: 'blk_merged', level: 'task', status: 'done', dependsOn: [] } as unknown as Block,
       ],
       stored: [
-        { id: REVIEW_PIPELINE_ID, name: 'Mine', agentKinds: ['coder'], builtin: true, version: 1 },
+        {
+          id: REVIEW_PIPELINE_ID,
+          name: 'Mine',
+          purpose: 'build',
+          agentKinds: ['coder'],
+          builtin: true,
+          version: 1,
+        },
       ],
     })
     await controller.autoStartDependents(WS, 'blk_merged')

@@ -828,6 +828,24 @@ export const stepOptionsSchema = v.object({
    */
   binaryOutput: v.optional(binaryOutputConfigSchema),
   /**
+   * `deployer` steps only. Declares that the environments THIS step provisions are meant to
+   * OUTLIVE the run: nothing in the chain reclaims them, and the TTL sweep (or an operator) takes
+   * them down later. The shape a preview environment has, where the point is that a reviewer can
+   * poke at the live URL after the PR is open.
+   *
+   * It exists because the reclaim leg has two legitimate ends and only one of them is a step. A
+   * `deployer` with no `disposer` after it is refused at pipeline save
+   * ({@link pipelineEnvironmentProblems}) precisely because an environment nobody reclaims is
+   * usually an oversight; this is how an author says it is not one. Setting it AND keeping a
+   * `disposer` is refused in turn: the disposer reclaims by the ids this step recorded, so the
+   * two say opposite things and the chain is the half that runs.
+   *
+   * Read by the PR verification report as well as by the save boundary, which is what makes it a
+   * declaration rather than a validation bypass: the teardown leg renders `retained` instead of a
+   * `pending` reclaim nothing will ever close. Ignored on every other kind.
+   */
+  retainEnvironment: v.optional(v.boolean()),
+  /**
    * This step's GATE configuration: who may resolve its human approval gate and how many of
    * them must, plus the parameters of the registered gate its kind runs (see
    * {@link stepGateConfigSchema}). The `gates[i]` flag stays the "is there a human checkpoint
@@ -965,9 +983,19 @@ export const pipelineSchema = v.object({
   availability: v.optional(
     v.union([v.literal('one-off'), v.literal('recurring'), v.literal('both')]),
   ),
-  // The use-case classifier ({@link PIPELINE_PURPOSES}) the task pickers + builder palette filter
-  // on. Absent ⇒ unclassified (pre-1.0, no back-fill): unrestricted, but hidden from a document task.
-  purpose: v.optional(pipelinePurposeSchema),
+  /**
+   * The use-case classifier ({@link PIPELINE_PURPOSES}) the task pickers, the builder palette and
+   * the builder's saved-pipeline library filter on. MANDATORY: every pipeline says what it exists
+   * to do, whether it comes from the built-in catalog, a `PipelineRegistry` registration or the
+   * builder. A field four surfaces narrow by cannot be optional without each of them owning a
+   * private policy for the rows that skipped it.
+   *
+   * DECLARED to be a member, not verified to be one: the value is persisted, so a stored row can
+   * name a member retired since it was written, and a browser can hold a bundle older than the
+   * member it reads. Narrow with `isPipelinePurpose` (or `classifierFor`, which states what an
+   * unnameable classifier means) before indexing anything by it.
+   */
+  purpose: pipelinePurposeSchema,
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
 export type PipelineAvailability = NonNullable<Pipeline['availability']>

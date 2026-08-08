@@ -386,8 +386,19 @@ function emitQueryTypes(placed) {
       const fields = operation.queryParams
         .map(
           (param) =>
-            doc(goName(param.wireName), [param.doc, 'Zero value means "not sent".'], '\t') +
-            `\t${goName(param.wireName)} ${goType(param.type, true)}`,
+            doc(
+              goName(param.wireName),
+              [
+                param.doc,
+                // Required parameters are still POINTERS: the struct is one shape for every
+                // operation and a value field would send a zero rather than nothing. What the
+                // doc must not do is imply that leaving it nil is a call the deployment serves.
+                param.required
+                  ? 'Is REQUIRED: the deployment refuses a nil here with a 400 naming it.'
+                  : 'Zero value means "not sent".',
+              ],
+              '\t',
+            ) + `\t${goName(param.wireName)} ${goType(param.type, true)}`,
         )
         .join('\n')
       const encode = operation.queryParams
@@ -426,10 +437,14 @@ function emitMethod(operation) {
   const name = pascal(operation.method)
   const service = `${pascal(operation.group)}Service`
   const query = queryTypeName(operation)
+  // A body with no required field is taken by POINTER, so `nil` says "nothing to send" the way
+  // an absent argument does in the other three clients. Go has no default arguments and no
+  // overloads, and a value parameter would make every such call carry an explicit empty struct.
+  const optionalBody = operation.body && operation.bodyOptional
   const params = [
     'ctx context.Context',
     ...operation.pathParams.map((p) => `${goParam(p.wireName)} string`),
-    operation.body ? `body ${goType(operation.body)}` : null,
+    operation.body ? `body ${optionalBody ? '*' : ''}${goType(operation.body)}` : null,
     query ? `query *${query}` : null,
   ].filter(Boolean)
 
@@ -440,6 +455,12 @@ function emitMethod(operation) {
       : operation.result
         ? `(*${goType(operation.result)}, error)`
         : 'error'
+
+  // A nil optional body is sent as `{}`, never as JSON `null`: the route's validator parses the
+  // body against a schema whose every field is optional, and `null` is not an object.
+  const nilBodyGuard = optionalBody
+    ? `\tif body == nil {\n\t\tbody = &${goType(operation.body)}{}\n\t}\n`
+    : ''
 
   const requestLiteral =
     '\treq := requestSpec{\n' +
@@ -468,6 +489,7 @@ function emitMethod(operation) {
       `${operation.httpMethod} ${operation.path} (operation ${operation.id}).`,
     ]) +
     `func (s *${service}) ${name}(${params.join(', ')}) ${returns} {\n` +
+    nilBodyGuard +
     requestLiteral +
     call +
     '}\n'

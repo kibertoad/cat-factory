@@ -47,4 +47,22 @@ describe('agentPresentationSchema', () => {
   it('rejects a tier outside the vocabulary', () => {
     expect(() => v.parse(agentPresentationSchema, { ...base, tier: 'expert' })).toThrow()
   })
+
+  it('accepts a declared purpose list and leaves it absent when omitted', () => {
+    expect(v.parse(agentPresentationSchema, { ...base, purposes: ['document'] }).purposes).toEqual([
+      'document',
+    ])
+    expect(v.parse(agentPresentationSchema, base).purposes).toBeUndefined()
+  })
+
+  it('rejects an EMPTY purpose list, which the palette could not tell from declaring none', () => {
+    // `purposeSuggestsAgentKind` reads both as "the category alone decides", so an empty list
+    // offers the kind at every purpose its section admits. That is the opposite of what an author
+    // typing it means, and registration is the last place the two are still distinguishable.
+    expect(() => v.parse(agentPresentationSchema, { ...base, purposes: [] })).toThrow()
+  })
+
+  it('rejects a purpose outside the vocabulary', () => {
+    expect(() => v.parse(agentPresentationSchema, { ...base, purposes: ['deploy'] })).toThrow()
+  })
 })

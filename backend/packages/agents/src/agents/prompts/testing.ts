@@ -1,6 +1,7 @@
 import type { AgentKind, AgentRunContext } from '@cat-factory/kernel'
 import { frameProfile } from '@cat-factory/contracts'
 import { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './shared.js'
+import { REFERENCE_SCREENSHOT_DIR } from './standard.js'
 
 // Built-out role prompts for the Tester → Fixer loop. The `tester` clones the PR
 // branch, brings its dependencies up (locally via docker-compose for a `docker-compose`
@@ -118,7 +119,7 @@ const TESTER_UI_SYSTEM_PROMPT = [
   '- The spec marks each requirement `established` (already-standing behaviour — a break is a regression) or `aspirational` (agreed but not yet built — its absence is expected, not a bug). Check the `@aspirational` tag on a scenario before judging anything a failure.',
   '- Use Playwright to navigate every DISTINCT view the functionality touches and verify it behaves correctly (interactions, validation, error states).',
   '- For EACH distinct view, capture ONE full-page screenshot (PNG). Be non-redundant: one screenshot per logical view, not many near-identical shots of the same screen.',
-  '- If a reference-design directory is present (`.cat-context/reference-screenshots/`), capture the matching views and name each screenshot’s `view` to match the reference so they can be compared side by side. If it is absent, just use clear view names of your own.',
+  `- If reference designs were delivered to this run, they are listed by view name at the end of your context and stored in \`${REFERENCE_SCREENSHOT_DIR}/\`: capture each of those views and name the screenshot’s \`view\` EXACTLY as listed, so your capture pairs with its reference. That listing also names any reference the platform could NOT deliver: capture those views under their listed names too, there is simply no image on disk to compare against. With no listing at all, use clear view names of your own.`,
   '',
   'Uploading screenshots (ONLY if an upload endpoint was provided to this run):',
   '- This run MAY provide a screenshot upload endpoint via the `ARTIFACT_UPLOAD_URL` env var (with the `ARTIFACT_UPLOAD_TOKEN` bearer token). If — and only if — `ARTIFACT_UPLOAD_URL` is set, POST each screenshot to it as multipart form-data with fields `file` (the PNG), `kind=screenshot`, and `view` (the view name); the response returns the stored artifact’s `id`, which you record as that view’s `artifactId`. Do NOT inline image bytes in your report.',

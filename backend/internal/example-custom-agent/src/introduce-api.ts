@@ -255,11 +255,34 @@ export function registerIntroduceApiOperation(
     // editable starting point each workspace owns), but it is ONE-SHOT: reseed refuses a stored
     // non-builtin, so the org could never roll a fix out to the boards already holding it.
     builtin: true,
-    version: 1,
-    agentKinds: ['architect', 'coder', 'tester-api', 'conflicts', 'ci', 'merger'],
+    // Version 2 adds the Deployer / Disposer pair below. The bump is not cosmetic: a board seeded
+    // at version 1 holds the old chain, which the save boundary now REFUSES, so without it a
+    // workspace cloning its stored copy to edit hits a refusal for a fault it did not introduce
+    // and has no reseed to escape with.
+    version: 2,
+    // Designs, implements and tests an API: the classifier that keeps the operation's own task
+    // type offering it, and the palette showing the implementation kinds it is built from.
+    purpose: 'build',
+    // The Deployer / Disposer pair rides along because the Tester runs against a provisioned
+    // environment: a chain that tests without deploying, or deploys without reclaiming, is
+    // refused when a workspace CLONES this template and saves its copy. The Deployer is a no-op
+    // on a service that provisions nothing, so one pipeline still covers every kind of service.
+    agentKinds: [
+      'architect',
+      'coder',
+      'deployer',
+      'tester-api',
+      'conflicts',
+      'ci',
+      'merger',
+      'disposer',
+    ],
+    // Index-aligned with the list above.
     stepOptions: [
       { agentVariantId: ORG_ARCHITECT_API_VARIANT_ID },
       { agentVariantId: ORG_CODER_API_VARIANT_ID },
+      null,
+      null,
       null,
       null,
       null,

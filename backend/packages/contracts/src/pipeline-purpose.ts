@@ -1,60 +1,227 @@
-import * as v from 'valibot'
-import type { AgentCategory } from './agent-presentation.js'
+import { type AgentCategory, isAgentCategory } from './agent-presentation.js'
 import type { Pipeline } from './entities.js'
+import { isPipelinePurpose, type PipelinePurpose } from './pipeline-purpose-vocabulary.js'
 import type { BlockLevel, TaskType } from './primitives.js'
 
 /**
- * The USE-CASE of a pipeline — what kind of work it exists to do. Chosen in the pipeline
- * builder and stamped on every built-in preset, it is the classifier the SPA filters on:
- *
- *   - `build`      — produces or changes application code (the default for engineering
- *                    pipelines: full builds, bug fixes, refactors, dependency updates, …).
- *   - `document`   — authors or updates documentation (a PRD/RFC/runbook, business rules, …);
- *                    a `document` task offers ONLY these.
- *   - `review`     — reviews existing code / a pull request and reports findings; writes no code.
- *   - `research`   — timeboxed investigation / analysis that delivers findings (a spike, an
- *                    environment analysis).
- *   - `planning`   — decomposes and plans an initiative (no code, no repo write of its own).
+ * The pipeline-purpose vocabulary itself ({@link PipelinePurpose} and what each member means)
+ * lives in `pipeline-purpose-vocabulary.ts` and is re-exported here, so every consumer keeps
+ * importing the classifier and the predicates that read it from one place.
  *
  * A non-`build` purpose hides the Implementation/Testing agent kinds in the builder
- * ({@link purposeAllowsAgentCategory}) and scopes the pipeline in the task pickers
+ * ({@link purposeAllowsAgentCategory}), narrows what its palette offers
+ * ({@link purposeSuggestsAgentKind}) and its saved-pipeline library lists
+ * ({@link pipelineMatchesPurpose}), and scopes the pipeline in the task pickers
  * ({@link pipelineAllowedForTaskType}). The `Pipeline.purpose` field references this schema.
  */
-export const PIPELINE_PURPOSES = ['build', 'document', 'review', 'research', 'planning'] as const
-export const pipelinePurposeSchema = v.picklist(PIPELINE_PURPOSES)
-export type PipelinePurpose = v.InferOutput<typeof pipelinePurposeSchema>
+export * from './pipeline-purpose-vocabulary.js'
 
 // ---------------------------------------------------------------------------
 // Pipeline-purpose gating (shared by the SPA pickers + the builder palette).
 //
 // A pipeline's `purpose` (see `PIPELINE_PURPOSES` in entities) is its use-case
-// classifier — set in the builder, stamped on every built-in preset. Two surfaces
-// key off it, and both share these pure predicates so they can't drift:
+// classifier, set in the builder and stamped on every built-in preset. Four surfaces
+// key off it, and all share these pure predicates so they can't drift:
 //   - the task pickers: a `document` task authors a document, so it is offered ONLY
 //     `purpose: 'document'` pipelines (a build/test pipeline makes no sense for it);
-//   - the builder palette: a non-`build` pipeline writes no product code and runs no
-//     tests, so the Implementation (`build`) and Testing (`test`) agent kinds are hidden.
+//   - the builder palette, which offers only the categories the purpose makes sense of
+//     ({@link purposeSuggestsAgentCategory});
+//   - the builder's saved-pipeline library, which lists the pipelines built for the
+//     purpose being edited ({@link pipelineMatchesPurpose});
+//   - the builder's save gate, which refuses a draft holding a step the purpose is
+//     INCOMPATIBLE with ({@link purposeAllowsAgentCategory}).
 //
-// An absent `purpose` means UNCLASSIFIED (a legacy/custom pipeline never given one):
-// treated as `build` for the palette (unrestricted) and hidden from a `document` task
-// (which requires the explicit classifier), rather than silently narrowing everything.
+// The palette and the save gate are deliberately different questions. RELEVANCE narrows
+// a catalog of ~30 kinds to the ones worth offering, and is free to be opinionated
+// because a wrong guess costs one purpose switch. COMPATIBILITY blocks a save, so it
+// states only what is actually contradictory (a pipeline that writes no code carrying
+// an implementation step), or tightening the relevance table would make somebody's
+// stored pipeline unsaveable in the editor it was built in. Relevance is a SUBSET of
+// compatibility (asserted in the tests): the palette may hide what the save gate
+// tolerates, never the reverse, which would offer a kind that cannot then be saved.
+//
+// Every pipeline carries one: `purpose` is mandatory at every write boundary (the entity, the
+// create request, the seed spec and therefore every `PipelineRegistry` registration), and the row
+// mapper resolves the pre-mandatory NULLs the back-fill missed. So none of these predicates has an
+// "unclassified pipeline" case to invent a policy for.
+//
+// What they DO all take is a value TYPED as a member and only DECLARED to be one. See
+// {@link classifierFor} for what an unrecognised value means and why they read it default-OPEN.
 // ---------------------------------------------------------------------------
 
 /** The agent-palette categories hidden from a non-`build` pipeline (writes no code, runs no tests). */
 const NON_BUILD_HIDDEN_CATEGORIES: readonly AgentCategory[] = ['build', 'test']
 
 /**
- * Whether a pipeline of `purpose` may use an agent kind in `category` — the builder palette
- * gate. A `build` (or unclassified) pipeline may use anything; every other purpose hides the
- * Implementation (`build`) and Testing (`test`) categories. Uncategorized kinds (no
- * `category`) are always allowed — the caller shows them regardless.
+ * The purpose to narrow BY, or `null` for "this build has nothing to narrow by".
+ *
+ * `Pipeline.purpose` is MANDATORY, so a pipeline never reaches here unclassified; what does reach
+ * here is a value UNRECOGNISED by the reader, and a browsing context that is deliberately at no
+ * purpose at all (the library's "all purposes" option). Both collapse to the same answer, and
+ * stating that once is the point of the helper. The predicates are typed against `PipelinePurpose`,
+ * but the value reaching them is a stored classifier no boundary re-checks against the union THIS
+ * build compiled: a browser holding a cached bundle sees a member shipped after it, and a member
+ * retired from the union goes on living in saved rows. Neither is a value to guess a current
+ * member from.
+ *
+ * The two predicates must agree about that, not merely each handle it: relevance is a SUBSET of
+ * compatibility, so a purpose the palette stops narrowing by while the save gate keeps narrowing
+ * by it would offer exactly the kind whose step then blocks the save. Reading through one helper
+ * is what keeps them from drifting into opposite readings of the same unknown value.
+ */
+function classifierFor(purpose: Pipeline['purpose'] | null | undefined): PipelinePurpose | null {
+  return purpose && isPipelinePurpose(purpose) ? purpose : null
+}
+
+/**
+ * Whether a pipeline of `purpose` may use an agent kind in `category`: the builder's SAVE
+ * gate. A `build` pipeline may use anything; every other purpose refuses the Implementation
+ * (`build`) and Testing (`test`) categories, the two that contradict the classifier outright.
+ * Uncategorized kinds (no `category`) are always allowed, the caller showing them regardless.
+ *
+ * For what the palette OFFERS, see {@link purposeSuggestsAgentCategory}: it narrows further,
+ * and the difference is what keeps a stored pipeline editable after this file gets an opinion
+ * it did not have when that pipeline was built. A purpose this build does not RECOGNISE is the
+ * limit case of the same rule ({@link classifierFor}), and refusing there would be the worst
+ * version of it: a save blocked over a classifier the editor cannot even name.
  */
 export function purposeAllowsAgentCategory(
-  purpose: Pipeline['purpose'] | null | undefined,
+  purpose: Pipeline['purpose'],
   category: AgentCategory,
 ): boolean {
-  if (!purpose || purpose === 'build') return true
+  const classifier = classifierFor(purpose)
+  if (classifier === null || classifier === 'build') return true
   return !NON_BUILD_HIDDEN_CATEGORIES.includes(category)
+}
+
+/**
+ * Which palette categories each purpose is worth offering. A doubly-exhaustive `Record`
+ * rather than a per-purpose deny list: adding a purpose OR an {@link AgentCategory} fails to
+ * compile until every cell has been decided, which is the whole value of the table: the
+ * silent outcome is a new category quietly offered to every purpose, or a new purpose
+ * quietly offered the whole catalog, and neither reads as a missing decision at the call site.
+ */
+const PURPOSE_SUGGESTED_CATEGORIES: Record<
+  PipelinePurpose,
+  Readonly<Record<AgentCategory, boolean>>
+> = {
+  // Ships product code: every category is in play.
+  build: { review: true, design: true, build: true, test: true, docs: true, gates: true },
+  // Authors a document: researched, drafted, reviewed and merged like any change, but
+  // nothing is implemented or tested.
+  document: { review: true, design: true, build: false, test: false, docs: true, gates: true },
+  // Reviews an EXISTING pull request and opens none: it designs nothing and builds nothing,
+  // so only the judging kinds apply. `docs` stays because the Domain Rules Reviewer is a
+  // review activity that groups under Documentation.
+  review: { review: true, design: false, build: false, test: false, docs: true, gates: true },
+  // Timeboxed investigation: the design kinds (spike, researcher, brainstorms) do the work
+  // and it lands as a findings document.
+  research: { review: true, design: true, build: false, test: false, docs: true, gates: true },
+  // Decomposes an initiative: no code, no repo documentation of its own (the plan is the
+  // in-repo tracker its own steps commit) and no pull request, so nothing to gate either.
+  planning: { review: true, design: true, build: false, test: false, docs: false, gates: false },
+}
+
+/**
+ * Whether an agent kind in `category` is worth OFFERING to a pipeline of `purpose`: the
+ * builder palette's filter, sitting beside the agent-tier dial on the same control row.
+ *
+ * A `purpose` this build cannot NAME (see {@link classifierFor}) offers everything, for the same
+ * reason it saves everything: a classifier the reader has no table row for has told it nothing to
+ * narrow by. A category this build does not recognise is offered for the mirror reason: the
+ * table has no cell to read for it, and the honest reading of a missing cell is that a kind a
+ * deployment registered stays visible in the palette, rather than vanishing from a catalog whose
+ * save gate would have accepted it.
+ *
+ * Both narrowings are DEFAULT-OPEN on an unknown value, and deliberately: the compile-time guard
+ * (the doubly-exhaustive table below) is what forces a decision for every member this build has,
+ * and the runtime one exists only for the values it structurally cannot have.
+ */
+export function purposeSuggestsAgentCategory(
+  purpose: Pipeline['purpose'],
+  category: AgentCategory,
+): boolean {
+  const classifier = classifierFor(purpose)
+  if (classifier === null || !isAgentCategory(category)) return true
+  return PURPOSE_SUGGESTED_CATEGORIES[classifier][category]
+}
+
+/**
+ * What a palette entry declares for the purpose dial to judge it by: the section it groups under
+ * and, when it knows better than its section does, the purposes it is worth offering to.
+ */
+export interface AgentPurposeRelevance {
+  /** The palette section, i.e. what {@link purposeSuggestsAgentCategory} reads. */
+  category?: AgentCategory
+  /** The kind's OWN answer, from `AgentPresentation.purposes`. */
+  purposes?: readonly PipelinePurpose[]
+}
+
+/**
+ * Whether an agent KIND is worth OFFERING to a pipeline of `purpose`: what the builder palette
+ * actually filters on.
+ *
+ * A category is a SHELF LABEL, not a statement of what a kind does, so
+ * {@link purposeSuggestsAgentCategory} can only ever remove whole sections: keeping `docs` for a
+ * `review` pipeline so the Domain Rules Reviewer survives also offered it the two agents that
+ * WRITE documentation into the repo, and `document` and `research` had identical rows, so moving
+ * the dial between them narrowed nothing at all. A kind that knows it belongs to one use-case says
+ * so itself, and the section keeps deciding for every kind that does not.
+ *
+ * The two narrowings INTERSECT: a declaration may only ever hide MORE than the section already
+ * does, never buy a kind back into a purpose its section is not offered to. That is not a
+ * convenience, it is what keeps relevance a SUBSET of compatibility
+ * ({@link purposeAllowsAgentCategory}) no matter what a deployment declares: a kind offered
+ * outside its category's row would be a palette entry whose step then blocks the save, the one
+ * dead end this pair of tables exists to prevent.
+ *
+ * Declaring nothing is the normal case and stays exactly as permissive as before. A declared list
+ * naming only purposes this build cannot NAME is read as declaring nothing rather than as
+ * excluding everything, the same default-open reading its siblings give an unrecognised value: a
+ * kind whose entire list was retired would otherwise vanish from every palette in the build that
+ * has to fix it. An AUTHORED empty list never reaches here at all: `agentPresentationSchema`
+ * refuses one at registration, so this reading cannot double as a way of saying "offer me
+ * nowhere", which is what someone typing `purposes: []` means and the opposite of what it does.
+ */
+export function purposeSuggestsAgentKind(
+  purpose: Pipeline['purpose'],
+  kind: AgentPurposeRelevance,
+): boolean {
+  const classifier = classifierFor(purpose)
+  if (classifier === null) return true
+  if (kind.category && !purposeSuggestsAgentCategory(purpose, kind.category)) return false
+  const declared = kind.purposes?.filter((p) => isPipelinePurpose(p)) ?? []
+  return declared.length === 0 || declared.includes(classifier)
+}
+
+/**
+ * Whether `pipeline` belongs in a library being browsed AT `purpose`: the builder's saved-pipeline
+ * list, the third surface the purpose dial narrows (the palette's catalog and the save gate being
+ * the other two).
+ *
+ * A BROWSE filter, so it reads the two unknowns the way its siblings do rather than inventing a
+ * third policy:
+ *
+ *  - `purpose` null (the library's explicit "all purposes") or a value this build cannot name has
+ *    nothing to narrow by ({@link classifierFor}), so the whole library shows;
+ *  - a pipeline whose OWN `purpose` this build cannot name is shown at every purpose. It is not
+ *    known-wrong for any of them, and the alternative is a row that vanishes from every library in
+ *    the editor it was built in, with nothing on screen to explain the absence. The same asymmetry
+ *    {@link pipelineAllowedForTaskType} draws, and for the same reason.
+ *
+ * Unlike the pickers' gate this narrows a list somebody is BROWSING rather than one they are about
+ * to run from, so it may be exact where that one is permissive: two known purposes never mix, and
+ * the caller states how many rows the dial is holding back and offers the way out of it.
+ */
+export function pipelineMatchesPurpose(
+  pipeline: Pick<Pipeline, 'purpose'>,
+  purpose: Pipeline['purpose'] | null | undefined,
+): boolean {
+  const classifier = classifierFor(purpose)
+  if (classifier === null) return true
+  const own = classifierFor(pipeline.purpose)
+  if (own === null) return true
+  return own === classifier
 }
 
 /**
@@ -66,7 +233,8 @@ export function purposeAllowsAgentCategory(
  *
  * Applied as a DENY list (everything not named here is hidden) rather than an allow list, which is
  * the one place this narrowing differs in direction from `document` / `review` — see
- * {@link pipelineAllowedForTaskType} for why an UNCLASSIFIED pipeline has to stay visible here.
+ * {@link pipelineAllowedForTaskType} for why a classifier this build cannot NAME has to stay
+ * visible here.
  */
 const PROGRAMMATIC_PURPOSES: readonly PipelinePurpose[] = ['build', 'research']
 
@@ -83,16 +251,18 @@ const PROGRAMMATIC_PURPOSES: readonly PipelinePurpose[] = ['build', 'research']
  *  - anything else, including a CUSTOM (namespaced) type and an undefined `taskType`, is
  *    unrestricted — a deployment's own task type has no purpose mapping we could infer.
  *
- * The two narrowings run in OPPOSITE directions, and the asymmetry is deliberate:
+ * The two narrowings run in OPPOSITE directions, and the asymmetry is deliberate. It is drawn on
+ * the classifier this build can NAME ({@link classifierFor}), which is the only thing left for the
+ * two to disagree about now that every pipeline carries one:
  *
- *  - `document` / `review` require the EXPLICIT classifier, because a build pipeline on a document
+ *  - `document` / `review` require the explicit member, because a build pipeline on a document
  *    task is actively wrong — running it would author no document and open a code PR nobody asked
- *    for. Guessing there costs more than hiding an unclassified preset.
- *  - `feature` / `bug` merely EXCLUDE the purposes that cannot ship code. An unclassified pipeline
- *    is not known-wrong for a feature, and `purpose` is optional at every write boundary — the
- *    builder leaves it unset by default and a `PipelineRegistry` entry need not declare one — so
- *    requiring it here would silently hide a workspace's own hand-built pipelines from the picker
- *    they were built for, with nothing on screen to explain the absence.
+ *    for. A purpose this build cannot name is hidden there: guessing costs more than an absence
+ *    the user resolves by picking a preset the build does know.
+ *  - `feature` / `bug` merely EXCLUDE the known purposes that cannot ship code, so an unnameable
+ *    one stays visible. It is not known-wrong for a feature, and hiding it would take a
+ *    deployment's own pipeline out of the picker people use most the moment its classifier
+ *    outlives the bundle reading it, with nothing on screen to explain the absence.
  *
  * Composed with the launch-availability / block-level / visual-frame filters at each picker.
  */
@@ -103,7 +273,8 @@ export function pipelineAllowedForTaskType(
   if (taskType === 'document') return pipeline.purpose === 'document'
   if (taskType === 'review') return pipeline.purpose === 'review'
   if (taskType === 'feature' || taskType === 'bug') {
-    return pipeline.purpose === undefined || PROGRAMMATIC_PURPOSES.includes(pipeline.purpose)
+    const own = classifierFor(pipeline.purpose)
+    return own === null || PROGRAMMATIC_PURPOSES.includes(own)
   }
   return true
 }

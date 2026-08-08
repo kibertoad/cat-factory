@@ -877,3 +877,106 @@ export const debugLogListSchema = v.object({
   nextCursor: v.nullable(v.string()),
 })
 export type DebugLogList = v.InferOutput<typeof debugLogListSchema>
+
+// ---------------------------------------------------------------------------
+// 9. LLM export: `GET /api/v1/debug/runs/:runId/llm-export`
+// ---------------------------------------------------------------------------
+
+/** Which end of a long run the export's call rows are taken from. */
+export const debugLlmExportOrderSchema = v.picklist(['oldest', 'newest'])
+export type DebugLlmExportOrder = v.InferOutput<typeof debugLlmExportOrderSchema>
+
+/** Query params for the run's LLM export bundle. */
+export const getDebugLlmExportQuerySchema = v.object({
+  /**
+   * How many CALL ROWS to include, 1..{@link DEBUG_MAX_PAGE_LIMIT} (default 25, the call
+   * list's own page default). The rollups below are unaffected: they are SQL aggregates over
+   * the whole run whatever this says.
+   */
+  limit: v.optional(pageLimitSchema),
+  /**
+   * `oldest` (default) reads the run forwards, which is what an analysis of how it went wrong
+   * wants; `newest` keeps the tail, which is where a run that died late says why. Reported back
+   * on the bundle, because with `truncated` set it is what says WHICH end was kept.
+   */
+  order: v.optional(debugLlmExportOrderSchema),
+  /**
+   * Per-field body budget on each call row, 0..{@link DEBUG_MAX_PREVIEW_CHARS}. Default 0:
+   * the bundle is numbers only. Bodies are sliced in SQL, so a bundle that asks for none never
+   * reads the text columns out of the store, and the response's worst case stays
+   * `limit x 3 x bodyChars`, the same arithmetic the call list publishes.
+   */
+  bodyChars: v.optional(previewCharsSchema),
+})
+export type GetDebugLlmExportQuery = v.InferOutput<typeof getDebugLlmExportQuerySchema>
+
+/**
+ * A run's model activity as ONE self-describing document: the rollups, then the individual
+ * calls behind them. Meant to be handed straight to a model ("why did this run truncate /
+ * spend / stall?"), which is what the app's own export button produces for a human doing the
+ * same thing, and what an external caller previously had to assemble from the overview plus a
+ * walk of the call list.
+ *
+ * Two properties are worth reading before quoting a number off it:
+ *
+ * - **The rollups are COMPLETE, the call rows are a window.** `totals`, `byAgentKind` and
+ *   `byPhase` are SQL aggregates over every recorded call in the run and do not move with
+ *   `limit`; `calls` is the bounded slice `limit`/`order` asked for. So a truncated bundle
+ *   still reports what the run actually cost, which the internal export cannot (it folds its
+ *   numbers from the rows it holds, and declines to price them at all once they are a slice).
+ * - **`truncated` is stated, never inferred.** A reader who does not know the cap cannot tell
+ *   a complete bundle from a windowed one, and this is exactly the document where a partial
+ *   sum gets quoted as a whole.
+ * - **`available` separates "nothing recorded" from "nothing happened".** Same fact the run
+ *   overview publishes as `sinks.llmCalls.available`, and needed here for a stronger reason:
+ *   this bundle is composed to be handed straight to a model, and a deployment that retains no
+ *   LLM telemetry would otherwise produce a document byte-identical to a run that made no
+ *   model calls at all, which reads as a diagnosis.
+ */
+export const debugLlmExportSchema = v.object({
+  /** Schema marker so a consuming model knows the shape without external docs. */
+  kind: v.literal('cat-factory.run-llm-export'),
+  version: v.literal(1),
+  runId: v.string(),
+  /** When this bundle was composed (epoch ms). */
+  generatedAt: v.number(),
+  /**
+   * Whether this deployment retains LLM telemetry at all: REPOSITORY presence, the same
+   * reading as {@link debugSinkStatusSchema}'s own field, so `false` means every number below
+   * is an absence of RECORDS rather than an absence of activity.
+   *
+   * Carried as a bare boolean rather than a second `debugSinkStatus`, because the count this
+   * sink's status would pair it with is already `llm.totals.calls`, aggregated in the same
+   * pass. A second copy of one number could only ever be a second read of the same rows.
+   *
+   * The capture-time gates (`LLM_RECORD_PROMPTS`, the per-workspace `storeAgentContext`) are
+   * invisible here exactly as they are on the overview: a workspace that opted out of body
+   * capture still reads `true`, with its call rows carrying no bodies.
+   */
+  available: v.boolean(),
+  /**
+   * The run's model activity, aggregated in SQL over EVERY recorded call: the same fold the
+   * run overview publishes, from the same rollup, so the two documents cannot disagree.
+   */
+  llm: v.object({
+    totals: llmExportTotalsSchema,
+    byAgentKind: v.array(llmExportInsightSchema),
+    byPhase: v.array(llmPhaseInsightSchema),
+    /**
+     * ISO 4217 currency every `costEstimate` above is denominated in, or null when this
+     * deployment prices nothing (in which case those costs are null too).
+     */
+    costCurrency: v.nullable(v.string()),
+  }),
+  /** Which end of the run {@link debugLlmExportSchema.entries.calls} was taken from. */
+  order: debugLlmExportOrderSchema,
+  /**
+   * True when the run holds more calls than `limit`, so `calls` covers only the `order` end of
+   * it. The rollups above are unaffected; page the full sequence through
+   * `GET /api/v1/debug/runs/:runId/llm-calls`, which is resumable.
+   */
+  truncated: v.boolean(),
+  /** The individual calls, in `order`, with bodies only where `bodyChars` asked for them. */
+  calls: v.array(debugLlmCallSchema),
+})
+export type DebugLlmExport = v.InferOutput<typeof debugLlmExportSchema>
