@@ -59,7 +59,7 @@ Considered against the more resource-oriented alternatives and kept deliberately
   narrower `loadScopedRun`. Mounting reads with a _different_ (workspace-wide) authorization rule
   under the same resource path would put two access semantics behind one name, which is a trap for
   both callers and reviewers. That rule is why
-  [`GET /api/v1/runs/:runId/report`](./public-api.md#run-evidence-report--artifacts) took the
+  [`GET /api/v1/runs/:runId/report`](./public-api.md#run-evidence-report--outcome--artifacts) took the
   NARROWER scope rather than this surface's, despite serving a similar audience: what decides a
   path's authorization model is the path, not the feature.
 - **Not `/observability` or `/telemetry`**: those name the _capture_ subsystems, and this surface

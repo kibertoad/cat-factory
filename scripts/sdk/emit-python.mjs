@@ -426,21 +426,30 @@ ${blocks.join('\n\n')}`
 /** The Python method signature parameters for an operation. */
 function methodParams(operation) {
   const params = ['self', ...operation.pathParams.map((p) => `${attr(p.wireName)}: str`)]
-  if (operation.body) params.push(`body: ${pyType(operation.body)}`)
-  if (operation.queryParams.length > 0) {
-    // Query parameters are keyword-only: they are unordered, and a positional call site would
-    // silently re-bind if the spec ever reorders them. Keyword-only is also what lets a REQUIRED
-    // one keep its required-ness without dictating where it sits in the signature: it is emitted
-    // with no default, so omitting it is a TypeError at the call site rather than a 400 from the
-    // deployment several layers away.
-    params.push('*')
-    for (const param of operation.queryParams) {
-      params.push(
-        param.required
-          ? `${attr(param.wireName)}: ${pyType(param.type)}`
-          : `${attr(param.wireName)}: ${pyType(param.type)} | None = None`,
-      )
-    }
+  if (operation.body) {
+    // A body with no required field defaults to `None` and is sent as `{}`, so a caller with
+    // nothing to say writes `start(task_id)`.
+    params.push(
+      operation.bodyOptional
+        ? `body: ${pyType(operation.body)} | None = None`
+        : `body: ${pyType(operation.body)}`,
+    )
+  }
+  // EVERYTHING after the path params and the body is keyword-only, for two reasons that stack.
+  // Query parameters are unordered, so a positional call site would silently re-bind if the spec
+  // reordered them, and keyword-only is what lets a REQUIRED one keep its required-ness without
+  // dictating where it sits: emitted with no default, omitting it is a TypeError at the call site
+  // rather than a 400 from the deployment several layers away. `timeout` joins them for a sharper
+  // reason. It used to be positional on any operation with no query parameters, which meant an
+  // operation that LATER gained an optional body would rebind an existing `act(id, 30.0)` onto
+  // the body and send the timeout as the payload.
+  params.push('*')
+  for (const param of operation.queryParams) {
+    params.push(
+      param.required
+        ? `${attr(param.wireName)}: ${pyType(param.type)}`
+        : `${attr(param.wireName)}: ${pyType(param.type)} | None = None`,
+    )
   }
   params.push('timeout: float | None = None')
   return params
@@ -481,7 +490,9 @@ function emitMethod(operation) {
     `        ${prefix}self._transport.${transportCall}(\n` +
     `            ${lit(operation.httpMethod)},\n` +
     `            f"${pathExpr}",\n` +
-    (operation.body ? '            body=_encode(body),\n' : '') +
+    (operation.body
+      ? `            body=${operation.bodyOptional ? '{} if body is None else _encode(body)' : '_encode(body)'},\n`
+      : '') +
     `            query=${queryDict},\n` +
     '            timeout=timeout,\n' +
     '        )\n' +

@@ -113,6 +113,7 @@ import { publicApiKeyController } from './modules/publicApi/PublicApiKeyControll
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
 import { publicDebugController } from './modules/publicApi/PublicDebugController.js'
 import { publicEvidenceController } from './modules/publicApi/PublicEvidenceController.js'
+import { publicMergeEvidenceController } from './modules/publicApi/PublicMergeEvidenceController.js'
 import { publicDiscoveryController } from './modules/publicApi/PublicDiscoveryController.js'
 import { publicSpendController } from './modules/publicApi/PublicSpendController.js'
 import { publicKeyController } from './modules/publicApi/PublicKeyController.js'
@@ -249,6 +250,12 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // and the artifacts a run captured, for a consumer whose job is to JUDGE the run rather than
   // debug it. See backend/docs/public-api.md.
   app.route('/', publicEvidenceController())
+  // The public MERGE-EVIDENCE surface (`/api/v1/runs/:runId/merge-record`,
+  // `/api/v1/merge-records/*`): the change class and merger scores behind a merge decision, the
+  // workspace's per-class rollups, and the reviewer-effort tag. Reads are `read`; the tag is
+  // `write`, since recording how much review a landed PR took merges nothing. See
+  // backend/docs/adr/0046-merge-track-record.md.
+  app.route('/', publicMergeEvidenceController())
   // The public SPEND-ANALYTICS read (`/api/v1/usage/spend`): the workspace's money over a window
   // sliced by repository, ticket, run or step kind: the TCO question the period breakdown on
   // `/api/v1/usage` carries no axis for. `read` scope. See backend/docs/public-api.md.

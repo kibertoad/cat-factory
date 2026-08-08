@@ -359,6 +359,24 @@ class TypeRegistry {
     return name
   }
 
+  /**
+   * Whether a resolved REQUEST-BODY ref names an object every one of whose fields may be omitted,
+   * so `{}` is already a complete request and a caller has nothing it MUST say.
+   *
+   * Read off the resolved type rather than declared per operation: "the spec marks no property
+   * required" is a fact the document already states, and a hand-kept list of which operations
+   * have all-optional bodies would be one contract edit away from disagreeing with it.
+   *
+   * The reading is only sound for a REQUEST body, which is why nothing else calls this: a field
+   * carrying a `default` is recorded `required` (the server always sends it back), and
+   * {@link assertNoDefaultedRequestField} is what guarantees no request body contains one.
+   */
+  allOptionalObject(ref) {
+    if (ref?.kind !== 'ref') return false
+    const type = this.types.get(ref.name)
+    return type?.kind === 'object' && type.fields.every((field) => !field.required)
+  }
+
   defineEnum(values, hint) {
     const signature = enumSignature(values)
     const chosen = INLINE_ENUM_NAMES[signature]
@@ -460,6 +478,7 @@ export async function buildIr(doc) {
       // contract's `minScope`. Required rather than defaulted: an operation with no floor would
       // ship in the gatekeeper bindings as policy metadata that silently says nothing, and the
       // generator upstream already refuses to produce such a spec.
+      const body = bodySchema ? registry.resolve(bodySchema, `${pascal(id)}Request`) : null
       const minScope = operation['x-min-scope']
       if (typeof minScope !== 'string') {
         throw new Error(
@@ -488,7 +507,14 @@ export async function buildIr(doc) {
             type: registry.resolve(p.schema, `${pascal(id)}${pascal(p.name)}`),
             doc: p.description,
           })),
-        body: bodySchema ? registry.resolve(bodySchema, `${pascal(id)}Request`) : null,
+        body,
+        /**
+         * The body carries no required field, so a caller with nothing to say may omit it and
+         * every client fills in `{}`. It is a CLIENT-side fact, never a wire one: the request
+         * body itself stays required (the route's validator rejects an absent one), and what
+         * changes is only whether the caller has to type an empty object to satisfy it.
+         */
+        bodyOptional: registry.allOptionalObject(body),
         // A stream is not a value: the SSE operations hand back a reader, so an emitter must
         // branch on this rather than trying to decode `text/event-stream` as the result type.
         stream: kind === 'stream',

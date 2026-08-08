@@ -223,7 +223,23 @@ const API_PREFIX = '/api/v1'
 // calendar month against the budget; `/usage/spend` is a rolling window snapped to a bucket edge,
 // and on `30d`/`90d` it is served from the durable rollup, whose attribution was frozen while the
 // money was spent. `source` and `since` on the response are what say which is talking.
-const API_VERSION = '1.32.0'
+//
+// 1.33.0: the MERGE-EVIDENCE loop (ADR 0046) reaches `/api/v1`. Four new operations
+// (`GET /api/v1/runs/:runId/merge-record`, `GET /api/v1/merge-records/rollups`,
+// `GET /api/v1/merge-records/:recordId`, `POST /api/v1/merge-records/:recordId/effort`) plus an
+// all-optional body on `POST /api/v1/notifications/:id/act`. Purely additive: no existing path,
+// shape, scope floor or error vocabulary moves.
+//
+// The scope split is the part worth stating. Recording how much review a merged pull request
+// needed is `write`, not the `admin` that `act` carries: `act` MERGES a pull request, where
+// tagging one that already landed merges nothing. An integration whose job is collecting evidence
+// therefore no longer needs a key that can also delete tasks and merge.
+//
+// `act`'s new body is what gives the app's one-tap confirm-and-tag a headless equivalent, and it
+// reaches four published clients without breaking a caller because the emitters now render an
+// all-optional body as a parameter that may be OMITTED. Sending no body at all still works
+// (the route mounts `optionalJsonBody`), so an integration calling it since 1.0 is untouched.
+const API_VERSION = '1.33.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -535,7 +551,7 @@ const OPERATION_DOCS = {
     tag: 'Notifications',
     summary: 'Act on a notification',
     description:
-      'Run a notification’s typed side-effect and resolve it: merge the PR (merge_review / pipeline_complete) or retry the run (ci_failed / test_failed). Performs a real GitHub merge, so it requires an admin-scoped key. Only these automated-action types are actionable through the API — a notification that parks a run on an interactive human decision cannot be acted on headlessly (dismiss it instead). A card that would retry a run on an individual-usage model likewise cannot be acted on through the API.',
+      'Run a notification’s typed side-effect and resolve it: merge the PR (merge_review / pipeline_complete) or retry the run (ci_failed / test_failed). Performs a real GitHub merge, so it requires an admin-scoped key. Only these automated-action types are actionable through the API — a notification that parks a run on an interactive human decision cannot be acted on headlessly (dismiss it instead). A card that would retry a run on an individual-usage model likewise cannot be acted on through the API. To record how much review a merged pull request needed, call `POST /api/v1/merge-records/{recordId}/effort` (a `write` key) before or after this; a `merge_tag_request` card carries its record id on the payload and is resolved by tagging that record and dismissing the card.',
   },
   dismissPublicNotification: {
     tag: 'Notifications',
@@ -918,6 +934,30 @@ const OPERATION_DOCS = {
     summary: "List a run's captured artifacts",
     description:
       'The binary artifacts the run captured (UI screenshots) plus the reference images they were reviewed against: id, kind, view, content type, exact byte size and content hash. Unpaged: the capture path caps how many one run may store, so the response size is bounded before the request. Fetch the bytes with the blob endpoint.',
+  },
+  getPublicRunMergeRecord: {
+    tag: 'Merge records',
+    summary: 'Get the merge decision a run left behind',
+    description:
+      'What kind of change the run’s pull request made (a change class derived on the backend from the changed-file list, never from an agent’s opinion), what the merger scored it, which merge-threshold preset the decision was compared against, what ultimately happened to the pull request, and how much review a human spent if anybody has tagged it. The entry point of the merge-evidence loop for a caller holding a run id: it also hands back the `recordId` the effort-tag route takes. A run whose pipeline had no `merger` step made no merge decision and answers `404` with `details.reason: "no_merge_record"`, distinct from the `"run_not_found"` a run this key cannot read gets.',
+  },
+  getPublicMergeRecord: {
+    tag: 'Merge records',
+    summary: 'Get one merge record',
+    description:
+      'The same record addressed by its own id, for a caller that holds one without the run: the id a `merge_tag_request` notification carries on its payload, for instance. Scoped to the calling key’s workspace.',
+  },
+  listPublicMergeClassRollups: {
+    tag: 'Merge records',
+    summary: 'List the per-change-class merge rollups',
+    description:
+      'Every change class’s accumulated track record for the workspace, as one aggregate: how many records it holds, how many landed and by which route (auto-merged, merged through the app, merged directly on the provider), how many were rejected or are still awaiting review, and the distribution of reviewer-effort tags. This is the evidence that justifies widening a per-class auto-merge rule; nothing widens one automatically. A class with no records is present as zeros rather than absent, so "nothing has landed here yet" never reads as a class the response left out. `unknown` is a real class (no changed-file list was available) and never matches a per-class rule.',
+  },
+  tagPublicMergeReviewEffort: {
+    tag: 'Merge records',
+    summary: 'Tag the reviewer effort a merge took',
+    description:
+      'Record how much review a landed pull request actually needed (`none` for zero blocking comments, `minor` for a nit pass, `major` for real rework), or `null` to clear the tag. This is the ground truth the auto-merge score thresholds are trying to approximate, and it is never mandatory: an untagged merge records a null tag and nothing downstream breaks. A `write` key, not an `admin` one: the pull request already landed, so tagging it merges nothing. Idempotent, and orthogonal to the decision, so a record can be tagged whenever the effort becomes known, before or after the `act` that merged it.',
   },
   listPublicKeys: {
     tag: 'Keys',

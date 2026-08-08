@@ -6,7 +6,7 @@ import {
   HEADLESS_KEY_MINT_SCOPE,
   publicApiKeyListResultSchema,
 } from '../public-api-keys.js'
-import { notificationSchema } from '../notifications.js'
+import { actNotificationSchema, notificationSchema } from '../notifications.js'
 import {
   createPublicJobSchema,
   createPublicTaskSchema,
@@ -284,6 +284,11 @@ export const listPublicPipelinesContract = withMinScope(
 // (merge a `merge_review` / `pipeline_complete` PR, retry a `ci_failed` / `test_failed`
 // run), `dismiss` waves a card off. `act` performs a real GitHub merge, so it is the
 // top of the scope ladder (`admin`); `dismiss` is `write`; the list is `read`.
+//
+// Recording the reviewer EFFORT a merge took does not sit at that top rung, and is not on this
+// route at all: `POST /api/v1/merge-records/:recordId/effort` (`write`, see
+// `./public-merge-evidence.ts`) is where a headless caller tags a landed pull request, before or
+// after the `act` that merged it.
 
 /** List the workspace's OPEN notifications (the inbox). */
 export const listPublicNotificationsContract = withMinScope(
@@ -295,14 +300,29 @@ export const listPublicNotificationsContract = withMinScope(
   }),
 )
 
-/** Act on a notification (run its typed side-effect, then resolve it). Requires an `admin` key. */
+/**
+ * Act on a notification (run its typed side-effect, then resolve it). Requires an `admin` key.
+ *
+ * All-optional body, matching the session-authed twin (`routes/notifications.ts`): on a
+ * `merge_review` / `pipeline_complete` card, `reviewEffort` records how much review the pull
+ * request needed in the SAME request that confirms the merge, so the app's one-tap
+ * confirm-and-tag has a headless equivalent rather than a two-call approximation of one.
+ *
+ * Additive on every axis. The route mounts `optionalJsonBody`, so a caller that has always sent
+ * no body at all still gets the historical behaviour; the four SDK clients render an all-optional
+ * body as an OMITTABLE parameter, so `act(id)` keeps compiling and `act(id, { reviewEffort })` is
+ * the new form. Tagging LATER through `POST /api/v1/merge-records/:recordId/effort`
+ * (`./public-merge-evidence.ts`) stays the right call for a caller that learns the effort after
+ * the fact, and remains a rung LOWER than this route: tagging a landed pull request merges
+ * nothing, where this merges one for real.
+ */
 export const actPublicNotificationContract = withMinScope(
   'admin',
   defineApiContract({
     method: 'post',
     requestPathParamsSchema: idParams,
     pathResolver: ({ id }) => `/api/v1/notifications/${id}/act`,
-    requestBodySchema: ContractNoBody,
+    requestBodySchema: actNotificationSchema,
     responsesByStatusCode: { 200: notificationSchema, ...errorResponses },
   }),
 )

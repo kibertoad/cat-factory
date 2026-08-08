@@ -19,6 +19,7 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
   describe('public API (break down an initiative)', () => {
     registerPublicApiTests(harness)
     registerPublicApiScopeTests(harness)
+    registerPublicNotificationTests(harness)
   })
   registerPipelineCatalogTests(harness)
 
@@ -397,153 +398,6 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
     expect((await call('DELETE', `/api/v1/tasks/${taskId}`, undefined, adminAuth)).status).toBe(404)
   })
 
-  it('serves the notification inbox (list / dismiss / act), scope-gated + workspace-scoped', async () => {
-    const app = harness.makeApp()
-    const { call, createOrgWorkspace } = app
-    const { workspace } = await createOrgWorkspace({ seed: true })
-    const wsId = workspace.id
-
-    const mint = async (scope: 'read' | 'write' | 'admin') => {
-      const res = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
-        label: scope,
-        scope,
-      })
-      expect(res.status).toBe(201)
-      return { authorization: `Bearer ${res.body.secret}` }
-    }
-    const readAuth = await mint('read')
-    const writeAuth = await mint('write')
-    const adminAuth = await mint('admin')
-
-    // Seed OPEN notifications directly (the engine raises these mid-run; seeding the
-    // persisted rows keeps the test targeted at the public routes, not the run machinery).
-    // The actionable cards are `merge_review` with a null `blockId`: `act` admits the type
-    // (it has an automated merge side-effect) but the null block short-circuits the merge, so
-    // the card settles `acted` without needing a real block/run/PR.
-    const seed = (id: string, type: 'merge_review' | 'requirement_review' = 'merge_review') =>
-      app.notificationRepository().upsert(wsId, {
-        id,
-        type,
-        status: 'open',
-        severity: 'normal',
-        blockId: null,
-        executionId: null,
-        title: id,
-        body: 'body',
-        payload: null,
-        createdAt: 1,
-        resolvedAt: null,
-      })
-    await seed('ntf_dismiss')
-    await seed('ntf_act')
-
-    // An informational card (`requirement_review`) — it parks a run on an interactive human
-    // decision, so it has NO automated action and `act` must refuse it (→ dismiss instead).
-    await seed('ntf_info', 'requirement_review')
-
-    // list: a `read` key sees all three open cards.
-    const listed = await call<{ notifications: { id: string; status: string }[] }>(
-      'GET',
-      '/api/v1/notifications',
-      undefined,
-      readAuth,
-    )
-    expect(listed.status).toBe(200)
-    expect(new Set(listed.body.notifications.map((n) => n.id))).toEqual(
-      new Set(['ntf_dismiss', 'ntf_act', 'ntf_info']),
-    )
-
-    // Scope ladder: a `read` key can't dismiss/act; a `write` key can dismiss but not act
-    // (act performs a real merge → admin only).
-    const readDismiss = await call<{ error: { code: string } }>(
-      'POST',
-      '/api/v1/notifications/ntf_dismiss/dismiss',
-      undefined,
-      readAuth,
-    )
-    expect(readDismiss.status).toBe(403)
-    expect(readDismiss.body.error.code).toBe('insufficient_scope')
-    const writeAct = await call<{ error: { code: string } }>(
-      'POST',
-      '/api/v1/notifications/ntf_act/act',
-      undefined,
-      writeAuth,
-    )
-    expect(writeAct.status).toBe(403)
-    expect(writeAct.body.error.code).toBe('insufficient_scope')
-
-    // dismiss (write) resolves the card as `dismissed`; act (admin) resolves it as `acted`.
-    const dismissed = await call<{ status: string }>(
-      'POST',
-      '/api/v1/notifications/ntf_dismiss/dismiss',
-      undefined,
-      writeAuth,
-    )
-    expect(dismissed.status).toBe(200)
-    expect(dismissed.body.status).toBe('dismissed')
-    const acted = await call<{ status: string }>(
-      'POST',
-      '/api/v1/notifications/ntf_act/act',
-      undefined,
-      adminAuth,
-    )
-    expect(acted.status).toBe(200)
-    expect(acted.body.status).toBe('acted')
-
-    // `act` refuses an informational card (no automated action) with 409, even for an admin
-    // key — it must be dismissed, not acted — while `dismiss` resolves it normally.
-    const actInfo = await call<{ error: { code: string } }>(
-      'POST',
-      '/api/v1/notifications/ntf_info/act',
-      undefined,
-      adminAuth,
-    )
-    expect(actInfo.status).toBe(409)
-    expect(actInfo.body.error.code).toBe('notification_not_actionable')
-    const dismissInfo = await call<{ status: string }>(
-      'POST',
-      '/api/v1/notifications/ntf_info/dismiss',
-      undefined,
-      writeAuth,
-    )
-    expect(dismissInfo.status).toBe(200)
-    expect(dismissInfo.body.status).toBe('dismissed')
-
-    // All resolved, so the inbox is now empty (list is open-only).
-    const after = await call<{ notifications: unknown[] }>(
-      'GET',
-      '/api/v1/notifications',
-      undefined,
-      readAuth,
-    )
-    expect(after.body.notifications).toEqual([])
-
-    // Workspace-scoped: a key from ANOTHER workspace never sees or resolves this
-    // workspace's notifications (an unknown/foreign id is a 404 on both act and dismiss).
-    await seed('ntf_foreign')
-    const other = await createOrgWorkspace({ seed: true })
-    const otherKey = await call<{ secret: string }>(
-      'POST',
-      `/workspaces/${other.workspace.id}/public-api-keys`,
-      { label: 'admin', scope: 'admin' },
-    )
-    const otherAuth = { authorization: `Bearer ${otherKey.body.secret}` }
-    const otherList = await call<{ notifications: unknown[] }>(
-      'GET',
-      '/api/v1/notifications',
-      undefined,
-      otherAuth,
-    )
-    expect(otherList.body.notifications).toEqual([])
-    expect(
-      (await call('POST', '/api/v1/notifications/ntf_foreign/act', undefined, otherAuth)).status,
-    ).toBe(404)
-    expect(
-      (await call('POST', '/api/v1/notifications/ntf_foreign/dismiss', undefined, otherAuth))
-        .status,
-    ).toBe(404)
-  })
-
   it('serves the workspace usage + budget read to a read-scoped key', async () => {
     const { call, createOrgWorkspace } = harness.makeApp()
     const { workspace } = await createOrgWorkspace({ seed: true })
@@ -694,6 +548,230 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
  * Registered from the suite above; split out purely to keep each function within the
  * per-function line budget. Every test is unchanged.
  */
+/**
+ * The notification INBOX the public API serves: list, dismiss, act, and the one card whose
+ * actionability is decided by the request rather than by its type.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerPublicNotificationTests(harness: ConformanceHarness): void {
+  /**
+   * The arrangement both notification cases share: an org board (the only kind a public-API key
+   * can be minted for), a key at each rung, and a seeder for OPEN cards.
+   *
+   * Seeded directly rather than raised by a run: the engine raises these mid-run, and driving one
+   * would point the test at the run machinery instead of the public routes. A seeded card is a
+   * `merge_review` with a null `blockId`, so `act` admits the type (it has an automated merge
+   * side-effect) while the null block short-circuits the merge itself, and the card settles
+   * `acted` with no real block/run/PR behind it.
+   */
+  async function notificationFixture() {
+    const app = harness.makeApp()
+    const { call, createOrgWorkspace } = app
+    const { workspace } = await createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const mint = async (scope: 'read' | 'write' | 'admin') => {
+      const res = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
+        label: scope,
+        scope,
+      })
+      expect(res.status).toBe(201)
+      return { authorization: `Bearer ${res.body.secret}` }
+    }
+    const seed = (
+      id: string,
+      type: 'merge_review' | 'requirement_review' | 'merge_tag_request' = 'merge_review',
+    ) =>
+      app.notificationRepository().upsert(wsId, {
+        id,
+        type,
+        status: 'open',
+        severity: 'normal',
+        blockId: null,
+        executionId: null,
+        title: id,
+        body: 'body',
+        payload: null,
+        createdAt: 1,
+        resolvedAt: null,
+      })
+
+    return {
+      app,
+      call,
+      createOrgWorkspace,
+      wsId,
+      seed,
+      readAuth: await mint('read'),
+      writeAuth: await mint('write'),
+      adminAuth: await mint('admin'),
+    }
+  }
+
+  it('serves the notification inbox (list / dismiss / act), scope-gated + workspace-scoped', async () => {
+    const { call, createOrgWorkspace, seed, readAuth, writeAuth, adminAuth } =
+      await notificationFixture()
+    await seed('ntf_dismiss')
+    await seed('ntf_act')
+
+    // An informational card (`requirement_review`) — it parks a run on an interactive human
+    // decision, so it has NO automated action and `act` must refuse it (→ dismiss instead).
+    await seed('ntf_info', 'requirement_review')
+
+    // list: a `read` key sees all three open cards.
+    const listed = await call<{ notifications: { id: string; status: string }[] }>(
+      'GET',
+      '/api/v1/notifications',
+      undefined,
+      readAuth,
+    )
+    expect(listed.status).toBe(200)
+    expect(new Set(listed.body.notifications.map((n) => n.id))).toEqual(
+      new Set(['ntf_dismiss', 'ntf_act', 'ntf_info']),
+    )
+
+    // Scope ladder: a `read` key can't dismiss/act; a `write` key can dismiss but not act
+    // (act performs a real merge → admin only).
+    const readDismiss = await call<{ error: { code: string } }>(
+      'POST',
+      '/api/v1/notifications/ntf_dismiss/dismiss',
+      undefined,
+      readAuth,
+    )
+    expect(readDismiss.status).toBe(403)
+    expect(readDismiss.body.error.code).toBe('insufficient_scope')
+    const writeAct = await call<{ error: { code: string } }>(
+      'POST',
+      '/api/v1/notifications/ntf_act/act',
+      undefined,
+      writeAuth,
+    )
+    expect(writeAct.status).toBe(403)
+    expect(writeAct.body.error.code).toBe('insufficient_scope')
+
+    // dismiss (write) resolves the card as `dismissed`; act (admin) resolves it as `acted`.
+    const dismissed = await call<{ status: string }>(
+      'POST',
+      '/api/v1/notifications/ntf_dismiss/dismiss',
+      undefined,
+      writeAuth,
+    )
+    expect(dismissed.status).toBe(200)
+    expect(dismissed.body.status).toBe('dismissed')
+    const acted = await call<{ status: string }>(
+      'POST',
+      '/api/v1/notifications/ntf_act/act',
+      undefined,
+      adminAuth,
+    )
+    expect(acted.status).toBe(200)
+    expect(acted.body.status).toBe('acted')
+
+    // `act` refuses an informational card (no automated action) with 409, even for an admin
+    // key — it must be dismissed, not acted — while `dismiss` resolves it normally.
+    const actInfo = await call<{ error: { code: string; details?: { reason?: string } } }>(
+      'POST',
+      '/api/v1/notifications/ntf_info/act',
+      undefined,
+      adminAuth,
+    )
+    expect(actInfo.status).toBe(409)
+    expect(actInfo.body.error.code).toBe('notification_not_actionable')
+    // The REASON, not just the status: "this card can never be acted on headlessly" and "this
+    // one is a field away from working" need different fixes, and the shared 409 code cannot
+    // tell a caller which it hit.
+    expect(actInfo.body.error.details?.reason).toBe('no_automated_action')
+    const dismissInfo = await call<{ status: string }>(
+      'POST',
+      '/api/v1/notifications/ntf_info/dismiss',
+      undefined,
+      writeAuth,
+    )
+    expect(dismissInfo.status).toBe(200)
+    expect(dismissInfo.body.status).toBe('dismissed')
+
+    // All resolved, so the inbox is now empty (list is open-only).
+    const after = await call<{ notifications: unknown[] }>(
+      'GET',
+      '/api/v1/notifications',
+      undefined,
+      readAuth,
+    )
+    expect(after.body.notifications).toEqual([])
+
+    // Workspace-scoped: a key from ANOTHER workspace never sees or resolves this
+    // workspace's notifications (an unknown/foreign id is a 404 on both act and dismiss).
+    await seed('ntf_foreign')
+    const other = await createOrgWorkspace({ seed: true })
+    const otherKey = await call<{ secret: string }>(
+      'POST',
+      `/workspaces/${other.workspace.id}/public-api-keys`,
+      { label: 'admin', scope: 'admin' },
+    )
+    const otherAuth = { authorization: `Bearer ${otherKey.body.secret}` }
+    const otherList = await call<{ notifications: unknown[] }>(
+      'GET',
+      '/api/v1/notifications',
+      undefined,
+      otherAuth,
+    )
+    expect(otherList.body.notifications).toEqual([])
+    expect(
+      (await call('POST', '/api/v1/notifications/ntf_foreign/act', undefined, otherAuth)).status,
+    ).toBe(404)
+    expect(
+      (await call('POST', '/api/v1/notifications/ntf_foreign/dismiss', undefined, otherAuth))
+        .status,
+    ).toBe(404)
+  })
+
+  it('acts on a merge_tag_request only when the request carries a tag', async () => {
+    // The one card whose actionability is decided by the REQUEST rather than by its type.
+    // Recording the effort a human spent IS its entire side-effect, so acting on one with
+    // nothing to record would flip the nudge to `acted` and write nothing: the reminder gone
+    // and the evidence it asked for never collected.
+    const { call, seed, adminAuth, writeAuth } = await notificationFixture()
+    await seed('ntf_tag', 'merge_tag_request')
+
+    const bare = await call<{ error: { code: string; details?: { reason?: string } } }>(
+      'POST',
+      '/api/v1/notifications/ntf_tag/act',
+      undefined,
+      adminAuth,
+    )
+    expect(bare.status).toBe(409)
+    expect(bare.body.error.code).toBe('notification_not_actionable')
+    // Its OWN reason: this card is one field away from working, where an informational card can
+    // never be acted on headlessly at all. The shared 409 code cannot tell a caller which it hit.
+    expect(bare.body.error.details?.reason).toBe('review_effort_required')
+
+    // Dismissing is always available as the way to wave it off without recording anything.
+    await seed('ntf_tag_waved', 'merge_tag_request')
+    const waved = await call<{ status: string }>(
+      'POST',
+      '/api/v1/notifications/ntf_tag_waved/dismiss',
+      undefined,
+      writeAuth,
+    )
+    expect(waved.status).toBe(200)
+    expect(waved.body.status).toBe('dismissed')
+
+    // Supply a tag and the same card resolves. This row carries no record id, so nothing is
+    // written; what this asserts is ADMISSION, which is what the request decides. The tag
+    // actually landing on a record is the merge-track-record suite's own case.
+    const tagged = await call<{ status: string }>(
+      'POST',
+      '/api/v1/notifications/ntf_tag/act',
+      { reviewEffort: 'minor' },
+      adminAuth,
+    )
+    expect(tagged.status).toBe(200)
+    expect(tagged.body.status).toBe('acted')
+  })
+}
+
 function registerPipelineCatalogTests(harness: ConformanceHarness): void {
   describe('pipeline versioning + reseed', () => {
     it('ships catalog versions on the snapshot and reseeds a built-in, preserving organization', async () => {

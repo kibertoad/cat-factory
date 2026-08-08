@@ -156,3 +156,11 @@ round-trip.
   policy change stays an explicit operator act.
 - **The reviewer-effort tag is recorded evidence, not a control input.** Feeding it back into the
   score thresholds (suggesting a ceiling from tagged history) is a separate design question.
+- **The loop reaches `/api/v1` in spec 1.32.0** (`GET /runs/:runId/merge-record`,
+  `GET|POST /merge-records/:recordId[/effort]`, `GET /merge-records/rollups`), so an integration
+  that starts runs headlessly can also record and read the evidence they produce. Tagging is a
+  `write` key, one rung below the `admin` a merge needs: the pull request has already landed, so a
+  tag merges nothing. The public `act` route stays body-LESS, which is why the app's one-tap
+  confirm-and-tag has no headless equivalent: every SDK emitter renders a request body as a
+  required positional parameter, so the field would break `act(id)` in four published clients.
+  Reference: [`public-api.md`](../public-api.md#merge-evidence-apiv1merge-records).

@@ -1,5 +1,78 @@
 # @cat-factory/gatekeeper-bindings
 
+## 0.8.0
+
+### Minor Changes
+
+- 8a06abc: SDK clients: a request body with no required field is now a parameter you may OMIT, and
+  `POST /api/v1/notifications/:id/act` carries the reviewer-effort tag.
+
+  Fourteen operations have a body whose every field is optional, and until now all four clients
+  rendered it as a required positional parameter, so a caller with nothing to say still had to type
+  an empty object. That was also what kept `act` body-less: giving it the app's `reviewEffort` field
+  would have rewritten `act(id)` as `act(id, body)` in four published clients. Teaching the emitters
+  an omittable body fixes both at once, and the emitters read "omittable" off the spec (`required: []`
+  on the body schema) rather than a per-operation list.
+
+  `act` now takes `{ "reviewEffort": "none" | "minor" | "major" | null }`, so confirming a merge and
+  recording what reviewing it cost is ONE headless request rather than two, matching the app's one-tap
+  confirm-and-tag. A `merge_tag_request` card becomes actionable too, but only when a tag is supplied:
+  recording one is its entire side-effect, so a bare `act` answers 409 with
+  `details.reason: "review_effort_required"` instead of resolving the nudge and writing nothing. The
+  route's other 409 now says `no_automated_action`, so the two causes are told apart by a machine.
+
+  **Wire compatibility is unaffected.** `act` mounts `optionalJsonBody`, so an integration that has
+  been calling it with no body at all keeps working; every client sends `{}` when the argument is
+  omitted, because the route's validator still requires a body to parse.
+
+  **Source compatibility, per language.** TypeScript and Java are unchanged for every existing caller:
+  the body gets a default, and Java gets a real overload. Two need a mechanical edit:
+
+  - **Go** takes an all-optional body by pointer, so `Start(ctx, id, body)` becomes
+    `Start(ctx, id, &body)` and `Act(ctx, id)` becomes `Act(ctx, id, nil)`. Both are compile errors,
+    not silent changes.
+  - **Python** makes `timeout` keyword-only on every operation. `act(id, timeout=5)` is unchanged;
+    a positional `act(id, 5.0)` is now a `TypeError`. That is the point of the change: leaving it
+    positional would have bound `5.0` to the new body and sent the timeout as the payload.
+
+- 8a06abc: Public API (`/api/v1`, spec 1.33.0): the merge-EVIDENCE loop. Additive.
+
+  Four new operations: `GET /api/v1/runs/:runId/merge-record` (the merge decision a run left behind,
+  carrying the backend-derived change class, the merger's scores and the preset they were compared
+  against), `GET /api/v1/merge-records/rollups` (every change class's accumulated track record as one
+  aggregate), `GET /api/v1/merge-records/:recordId`, and
+  `POST /api/v1/merge-records/:recordId/effort` (tag or clear the reviewer effort a landed pull
+  request needed).
+
+  Until now the merge track record (ADR 0046) was reachable only from a browser session, which split
+  the headless story in half: an integration could start a run through `/api/v1` and merge its pull
+  request through `POST /notifications/:id/act`, and then had nowhere to record how much review that
+  merge took nor any way to read back what the workspace had accumulated. The one signal the
+  auto-merge policy is meant to eventually stand on was collectable only by the people who were not
+  driving the runs.
+
+  **Tagging is `write`, not `admin`.** `act` is at the top of the ladder because it merges a pull
+  request for real; recording how much review an already-landed one took performs no external
+  side-effect and merges nothing, so an integration whose job is collecting evidence no longer needs a
+  key that can also delete tasks and merge.
+
+  Refusals across the surface carry `error.details.reason`: `run_not_found`, `no_merge_record` (a
+  readable run whose pipeline reached no merge decision) and `merge_record_not_found`, which the
+  record-addressed READ and the TAG now answer identically, so a client branches on one value
+  whichever of the two it called.
+
+  `POST /api/v1/notifications/:id/act` deliberately stays body-less, so the app's one-tap
+  confirm-and-tag has no single-request headless equivalent: every SDK emitter renders a request body
+  as a required positional parameter, so adding `reviewEffort` there would rewrite `act(id)` as
+  `act(id, body)` in four published clients. The headless form is two calls in either order, since the
+  tag is idempotent and orthogonal to the decision.
+
+### Patch Changes
+
+- Updated dependencies [8a06abc]
+- Updated dependencies [8a06abc]
+  - @cat-factory/sdk@0.27.0
+
 ## 0.7.0
 
 ### Minor Changes
