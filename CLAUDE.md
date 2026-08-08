@@ -156,9 +156,8 @@ messages, code comments, UI copy.
   `git commit -F - <<'EOF'`; `git commit --amend -F -` fixes a mangled message before pushing.
 - **Worker tests fail on Windows** (`config wrangler validation failed`), a pre-existing wrangler issue.
   Verify pure-logic changes with `--filter=@cat-factory/orchestration`.
-- **The Postgres-backed suites need a reachable server AND `--env-mode=loose`** (Turbo declares no env
-  for `test:run`, so strict mode DROPS `DATABASE_URL`); a bare `[ELIFECYCLE] Command failed` with no
-  vitest summary is a task a sibling CANCELLED. Recipe: [`running-tests.md`](./docs/internal/running-tests.md).
+- **The Postgres-backed suites need a reachable server AND `--env-mode=loose`**; a bare `[ELIFECYCLE]
+Command failed` with no vitest summary is a CANCELLED sibling. Recipe, including how to start a cluster where no Docker daemon runs: [`running-tests.md`](./docs/internal/running-tests.md).
 - **ALWAYS format/lint-fix the ENTIRE tree, never a subset.** `pnpm lint:fix` from the root (or
   `pnpm exec oxfmt .`); the only correct argument to `oxfmt`/`oxlint` is `.`, for any reason. On
   Windows the whole-tree run rewrites line endings across hundreds of files: expected, and git's
@@ -573,9 +572,9 @@ recipe, release-PR re-sync, new-published-package checklist: [`docs/internal/rel
 
 ### Run the CI guard scripts locally before committing
 
-> **Do NOT run locally: the whole-tree `pnpm test:run` (CI's test lanes own it), `pnpm lint:knip`,
-> `node scripts/check-package-catalog.mjs`** (slow; CI's `Build & typecheck` is authoritative) **or
-> `turbo run test:mutation`** (nightly only: [`mutation-testing.md`](./docs/internal/mutation-testing.md)).
+> **Do NOT run locally: the whole-tree `pnpm test:run` NOR a `--filter`ed package lane** (CI's test
+> lanes own both; see Conventions), **`pnpm lint:knip`, `node scripts/check-package-catalog.mjs`**
+> (slow; CI's `Build & typecheck` is authoritative) **or `turbo run test:mutation`** (nightly: [`mutation-testing.md`](./docs/internal/mutation-testing.md)).
 
 - `node scripts/check-file-size.mjs`: the file-size ratchet (split, don't raise).
 - `node scripts/check-silent-catch.mjs`: bans `.catch(() => {})` in backend non-test source.
@@ -1076,8 +1075,9 @@ AND that a gated controller leaves no route of its own uncovered.
   [ADR 0049](./backend/docs/adr/0049-modular-vue-adoption.md).
 - **Tests**: Worker integration tests use real `workerd` + real local D1; Node tests use real Postgres
   (`DATABASE_URL`); only the LLM is faked. **Run the FILES your change touched, NAMED on the command line**
-  (`pnpm exec vitest run <file>`). A `--filter`ed package, `test:changed`, `test:quick` and the whole tree are
-  LANES: CI's to run, and reaching for one to check nothing else broke is the banned habit, not thoroughness.
+  (`pnpm exec vitest run <file>`). A `--filter`ed package, `test:changed`, `test:quick` and the tree are LANES:
+  CI's to run, and reaching for one is the banned habit, not thoroughness. An edit with no runnable file of
+  its OWN (a conformance suite, a catalog change) is NOT the exception: [`conformance/README`](./backend/internal/conformance/README.md) names the spec.
   A green run printing the app's OWN log lines is a SUITE bug: silence the gate, or inject a silent logger.
 - **Count what the test OWNS; assert a RELATION over what it does not.** Seed two rows and assert two:
   the test made that population, so the count is a local fact. A total over a population it does NOT
