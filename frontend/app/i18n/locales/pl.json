@@ -2020,8 +2020,11 @@
           "fs": "Lokalny system plików",
           "s3": "Amazon S3 / zgodny z S3",
           "r2": "Cloudflare R2",
-          "db": "Baza danych Postgres"
+          "db": "Baza danych Postgres",
+          "custom": "Własny magazyn (to wdrożenie)"
         },
+        "unregisteredStore": "{store} (niezarejestrowany w tym wdrożeniu)",
+        "unregisteredStoreWarning": "To konto zapisuje artefakty w „{store}”, którego to wdrożenie nie rejestruje. Nic nie jest zapisywane, dopóki nie wybierzesz zarejestrowanego magazynu lub magazyn nie zostanie ponownie zarejestrowany w kodzie.",
         "basePath": "Ścieżka bazowa (domyślnie: .file-storage)",
         "region": "Region (np. us-east-1)",
         "bucket": "Bucket",

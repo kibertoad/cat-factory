@@ -1,4 +1,5 @@
 import {
+  defaultBinaryStoreRegistry,
   defaultJudgeRegistry,
   defaultProviderRegistry,
   defaultStepResolverRegistry,
@@ -27,6 +28,7 @@ export type WorkerRegistries = Required<
     | 'vcsRegistry'
     | 'providerRegistry'
     | 'promptFragmentRegistry'
+    | 'binaryStoreRegistry'
   >
 >
 
@@ -78,6 +80,12 @@ export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): W
   // standards into exactly the runs nobody is watching.
   const promptFragmentRegistry =
     overrides.promptFragmentRegistry ?? promptFragmentRegistryWithBuiltins()
+  // The app-owned registry of the deployment's OWN binary artifact stores: the injected instance,
+  // else an empty default (the platform's R2 backend is this facade's own wiring, not an entry).
+  // Resolved here rather than only at `createWorker` for the same reason the gate registry is: a
+  // container built directly for a cron sweep takes no overrides, and a sweep that cannot build an
+  // account's store reclaims nothing for it.
+  const binaryStoreRegistry = overrides.binaryStoreRegistry ?? defaultBinaryStoreRegistry()
 
   // Register the opt-in AWS EKS backends by reference (symmetric with the Node facade; a
   // pass-through until a workspace connects an `eks` backend). `register` is idempotent (keyed
@@ -98,5 +106,6 @@ export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): W
     vcsRegistry,
     providerRegistry,
     promptFragmentRegistry,
+    binaryStoreRegistry,
   }
 }

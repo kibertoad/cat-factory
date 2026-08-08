@@ -290,6 +290,18 @@ export interface StartOptions {
    */
   binaryGeneratorRegistry?: NodeContainerOptions['binaryGeneratorRegistry']
   /**
+   * App-owned DI seam for the deployment's OWN BINARY ARTIFACT STORES: a deployment news a
+   * `defaultBinaryStoreRegistry()`, registers stores implementing the `BinaryBlobBackend` port on
+   * it by reference, and passes it here. Each becomes a `custom` choice in the account-settings
+   * storage picker, and the per-account resolver builds one when an account selects it. Absent →
+   * this runtime's built-in `fs` / `db` / `s3` backends alone.
+   *
+   * Unlike {@link binaryGeneratorRegistry} this one is per-process even in MOTHERSHIP mode, and
+   * that is not an oversight: a store is a live client only the process about to write the bytes
+   * can build, so the node that serves the settings picker is the node that stores.
+   */
+  binaryStoreRegistry?: NodeContainerOptions['binaryStoreRegistry']
+  /**
    * App-owned DI seam for the deployment's PREDEFINED PIPELINES: a deployment news a
    * `defaultPipelineRegistry()`, registers (and retires) pipelines on it by reference, and passes
    * it here. Registered entries seed into every new workspace, are reconciled against the CATALOG
@@ -789,6 +801,7 @@ async function bootServer(
     taskTypeRegistry: options.taskTypeRegistry,
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
+    binaryStoreRegistry: options.binaryStoreRegistry,
     pipelineRegistry: options.pipelineRegistry,
     gateRegistry: options.gateRegistry,
     judgeRegistry: options.judgeRegistry,

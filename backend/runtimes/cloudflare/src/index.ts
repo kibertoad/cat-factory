@@ -90,9 +90,11 @@ import {
 import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
 import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-factory/agents'
 import { gateRegistryWithBuiltins } from '@cat-factory/gates'
+import type { BinaryStoreRegistry } from '@cat-factory/kernel'
 import {
   DEFAULT_WORKSPACE_SETTINGS,
   defaultBinaryGeneratorRegistry,
+  defaultBinaryStoreRegistry,
   defaultFoundationalServiceRegistry,
   defaultPipelineRegistry,
   defaultTaskTypeRegistry,
@@ -207,6 +209,21 @@ export {
 // the platform's. Both are legitimate, which is why both are exported and neither is inferred.
 export { PromptFragmentRegistry, defaultPromptFragmentRegistry } from '@cat-factory/kernel'
 export { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
+// Installation-level extension point for the deployment's OWN BINARY ARTIFACT STORES: a
+// deployment news a `defaultBinaryStoreRegistry()`, registers stores implementing the
+// `BinaryBlobBackend` port (GCS, Azure Blob, an internal object service) on it, and passes it via
+// the `binaryStoreRegistry` override. Each becomes a `custom` choice in the account-settings storage
+// picker, beside the platform's own backends; the per-account resolver builds one when an account
+// selects it, and stamps the store's id onto every artifact row it writes.
+export {
+  BinaryStoreRegistry,
+  BinaryStoreRegistrationError,
+  type BinaryStoreContext,
+  type BinaryStoreDefinition,
+  type BinaryStoreView,
+  type BinaryBlobBackend,
+  defaultBinaryStoreRegistry,
+} from '@cat-factory/kernel'
 // Installation-level extension point for polling GATES and STEP RESOLVERS. `gateRegistryWithBuiltins()`
 // is the one a deployment almost always wants: a bare `defaultGateRegistry()` is EMPTY, so injecting
 // one silently drops `ci` / `conflicts` / `post-release-health` from every pipeline that names them.
@@ -353,6 +370,10 @@ function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
     // ones are what a binary-generating step may produce with, and a malformed definition or a
     // cleartext endpoint fails boot rather than a dispatch.
     binaryGeneratorRegistry: overrides.binaryGeneratorRegistry ?? defaultBinaryGeneratorRegistry(),
+    // The deployment's own binary artifact stores. Resolved here (and again per container build)
+    // so ONE instance serves the request path and the cron: the retention sweep builds its stores
+    // outside the container entirely.
+    binaryStoreRegistry: overrides.binaryStoreRegistry ?? defaultBinaryStoreRegistry(),
     // The best-practice standards pool: the SHIPPED catalog plus whatever a deployment registered
     // onto the same instance. Defaulted to the built-ins by the FACADE (here and, for a container
     // built with no overrides, in `resolveWorkerRegistries`) rather than by `createCore`, because
@@ -437,7 +458,19 @@ const FREQUENT_CRON_PERIOD_MS = 2 * 60_000
  * windows. The tables exist regardless of whether GitHub/agents are
  * configured, so this runs unconditionally; an unused table reclaims nothing.
  */
-function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock): void {
+function runDailyRetentionSweeps(
+  env: Env,
+  tick: SweepTick,
+  clock: SystemClock,
+  /**
+   * The deployment's own binary artifact stores, from the entry point that owns them. The
+   * artifact sweep below RESOLVES each workspace's store to delete its bytes, so without them a
+   * deployment's custom-store accounts are swept for nothing: their blobs stay forever and their
+   * metadata rows with them. The bare default export passes none, which is correct (it registers
+   * none).
+   */
+  binaryStoreRegistry?: BinaryStoreRegistry,
+): void {
   // ADR 0026 D6.1: the Worker has no boot moment, so the O(1) ENCRYPTION_KEY drift check
   // rides the daily cron. It seeds the fingerprint on first run and logs a definitive
   // drift signal on a key change. Independent of (and cheaper than) the retention work.
@@ -540,6 +573,7 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
           env.DB,
           clock,
           new CryptoIdGenerator(),
+          binaryStoreRegistry,
         ),
         listWorkspaceIds: () =>
           new D1WorkspaceRepository({ db: env.DB })
@@ -953,16 +987,18 @@ async function handleScheduled(
   controller: ScheduledController,
   env: Env,
   ctx: ExecutionContext,
+  binaryStoreRegistry?: BinaryStoreRegistry,
 ): Promise<void> {
   // The ambient ExecutionContext (requestContext.ts): the module-scope cache bag's background
   // work adopts the CURRENT invocation's `waitUntil` through it.
-  return runWithExecutionContext(ctx, () => runScheduled(controller, env, ctx))
+  return runWithExecutionContext(ctx, () => runScheduled(controller, env, ctx, binaryStoreRegistry))
 }
 
 async function runScheduled(
   controller: ScheduledController,
   env: Env,
   ctx: ExecutionContext,
+  binaryStoreRegistry?: BinaryStoreRegistry,
 ): Promise<void> {
   applyLogSettings(env)
   const clock = new SystemClock()
@@ -970,7 +1006,7 @@ async function runScheduled(
 
   // Daily pass: prune the unbounded ledgers/projections to their retention windows.
   if (controller.cron === RETENTION_CRON) {
-    runDailyRetentionSweeps(env, tick, clock)
+    runDailyRetentionSweeps(env, tick, clock, binaryStoreRegistry)
   } else {
     // Frequent pass (every 2 min): time-sensitive backstops.
     redriveStuckAgentRuns(env, tick, clock)
@@ -1152,7 +1188,11 @@ export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
       flushTelemetryAfter(response, env, ctx, new SystemClock())
       return response
     },
-    scheduled: handleScheduled,
+    // The registries this entry point resolved ride into the cron, because one of its sweeps
+    // (binary-artifact retention) builds a per-account store OUTSIDE the container and therefore
+    // outside every other route a registration takes.
+    scheduled: (controller, env, ctx) =>
+      handleScheduled(controller, env, ctx, registries.binaryStoreRegistry),
     queue: handleQueue,
   }
 }

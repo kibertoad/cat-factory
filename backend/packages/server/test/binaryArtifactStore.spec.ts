@@ -5,10 +5,13 @@ import type {
   Clock,
   IdGenerator,
 } from '@cat-factory/kernel'
+import { BinaryStoreRegistry, createRecordingLogger } from '@cat-factory/kernel'
+import type { ContentStorageCapability } from '@cat-factory/contracts'
 import { describe, expect, it, vi } from 'vitest'
 import {
   type BuildBlobBackend,
   makeResolveBinaryArtifactStore,
+  withRegisteredBinaryStores,
 } from '../src/persistence/binaryArtifactStore.js'
 
 // A metadata store stub — the resolver only composes it into the store; these tests assert
@@ -191,5 +194,166 @@ describe('makeResolveBinaryArtifactStore', () => {
     })
     expect(await resolve('ws-1')).not.toBeNull()
     expect(accountSettings.resolve).not.toHaveBeenCalled()
+  })
+
+  // ---- Deployment-registered stores ---------------------------------------
+
+  /** A metadata store that records what the composed store inserts (the `storage` tag matters). */
+  function recordingMetadata(): {
+    store: BinaryArtifactMetadataStore
+    inserted: BinaryArtifactRecord[]
+  } {
+    const inserted: BinaryArtifactRecord[] = []
+    return {
+      inserted,
+      store: {
+        insert: (record: BinaryArtifactRecord) => {
+          inserted.push(record)
+          return Promise.resolve()
+        },
+      } as unknown as BinaryArtifactMetadataStore,
+    }
+  }
+
+  const customConfig = (storeId: string) => ({
+    config: { contentStorage: { backend: 'custom' as const, custom: { storeId } } },
+  })
+
+  it('builds a deployment-registered store and stamps ITS id onto the artifact', async () => {
+    const registry = new BinaryStoreRegistry()
+    const seenAccounts: (string | null)[] = []
+    registry.register({
+      id: 'gcs',
+      name: 'Cloud Storage',
+      create: (context) => {
+        seenAccounts.push(context.accountId)
+        // Declares a DIFFERENT kind on purpose: the row must name the registration, not this.
+        return fakeBackend('blob')
+      },
+    })
+    const metadataStore = recordingMetadata()
+    const resolve = makeResolveBinaryArtifactStore({
+      accountSettings: { resolve: () => Promise.resolve(customConfig('gcs')) },
+      accountOf: () => Promise.resolve('acc-1'),
+      metadata: metadataStore.store,
+      idGenerator,
+      clock,
+      buildBlobBackend: () => {
+        throw new Error('a custom store must not reach the runtime backend factory')
+      },
+      defaultBackend: 'off',
+      binaryStoreRegistry: registry,
+    })
+    const store = await resolve('ws-1')
+    if (!store) throw new Error('expected the registered store to resolve')
+    await store.store({
+      meta: {
+        workspaceId: 'ws-1',
+        executionId: null,
+        blockId: null,
+        kind: 'screenshot',
+        view: null,
+        contentType: 'image/png',
+      },
+      blob: new Uint8Array([1, 2, 3]),
+    })
+    expect(seenAccounts).toEqual(['acc-1'])
+    expect(metadataStore.inserted.map((r) => r.storage)).toEqual(['gcs'])
+  })
+
+  it('rebuilds when the account switches between two registered stores', async () => {
+    const registry = new BinaryStoreRegistry()
+    let builds = 0
+    for (const id of ['gcs', 'azure-blob']) {
+      registry.register({
+        id,
+        name: id,
+        create: () => {
+          builds += 1
+          return fakeBackend(id)
+        },
+      })
+    }
+    let selected = 'gcs'
+    const resolve = makeResolveBinaryArtifactStore({
+      accountSettings: { resolve: () => Promise.resolve(customConfig(selected)) },
+      accountOf: () => Promise.resolve('acc-1'),
+      metadata,
+      idGenerator,
+      clock,
+      buildBlobBackend,
+      defaultBackend: 'off',
+      binaryStoreRegistry: registry,
+    })
+    const first = await resolve('ws-1')
+    expect(await resolve('ws-1')).toBe(first)
+    expect(builds).toBe(1)
+    // Only the store id differs, so a signature that ignored it would keep writing to `gcs`.
+    selected = 'azure-blob'
+    expect(await resolve('ws-1')).not.toBe(first)
+    expect(builds).toBe(2)
+  })
+
+  it('resolves to null and NAMES the id when this build registers no such store', async () => {
+    const logger = createRecordingLogger()
+    const resolve = makeResolveBinaryArtifactStore({
+      accountSettings: { resolve: () => Promise.resolve(customConfig('gcs')) },
+      accountOf: () => Promise.resolve('acc-1'),
+      metadata,
+      idGenerator,
+      clock,
+      buildBlobBackend,
+      defaultBackend: 'off',
+      binaryStoreRegistry: new BinaryStoreRegistry(),
+      logger,
+    })
+    expect(await resolve('ws-1')).toBeNull()
+    // The account looks configured and retains nothing, so the log line is the only thing that
+    // can say why: it has to carry the id nobody registered.
+    const warning = logger.lines.find((line) => line.level === 'warn')
+    expect(warning?.fields).toMatchObject({ accountId: 'acc-1', storeId: 'gcs' })
+  })
+
+  it('resolves to null when a registered store declines to build', async () => {
+    const registry = new BinaryStoreRegistry()
+    registry.register({ id: 'gcs', name: 'Cloud Storage', create: () => null })
+    const resolve = makeResolveBinaryArtifactStore({
+      accountSettings: { resolve: () => Promise.resolve(customConfig('gcs')) },
+      accountOf: () => Promise.resolve('acc-1'),
+      metadata,
+      idGenerator,
+      clock,
+      buildBlobBackend,
+      defaultBackend: 'off',
+      binaryStoreRegistry: registry,
+    })
+    expect(await resolve('ws-1')).toBeNull()
+  })
+})
+
+describe('withRegisteredBinaryStores', () => {
+  const runtime = (): ContentStorageCapability => ({
+    supportedBackends: ['off', 'fs'],
+    defaultBackend: 'fs',
+    customStores: [],
+  })
+
+  it('offers `custom` only when the deployment registered something to select', () => {
+    const bare = withRegisteredBinaryStores(runtime())
+    expect(bare.supportedBackends).toEqual(['off', 'fs'])
+    expect(bare.customStores).toEqual([])
+
+    const registry = new BinaryStoreRegistry()
+    registry.register({
+      id: 'gcs',
+      name: 'Cloud Storage',
+      summary: 'The org bucket.',
+      create: () => fakeBackend('gcs'),
+    })
+    const extended = withRegisteredBinaryStores(runtime(), registry)
+    expect(extended.supportedBackends).toEqual(['off', 'fs', 'custom'])
+    expect(extended.customStores).toEqual([
+      { id: 'gcs', name: 'Cloud Storage', summary: 'The org bucket.' },
+    ])
   })
 })

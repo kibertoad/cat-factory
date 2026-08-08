@@ -2181,8 +2181,11 @@
           "fs": "Filesystem locale",
           "s3": "Amazon S3 / compatibile S3",
           "r2": "Cloudflare R2",
-          "db": "Database Postgres"
+          "db": "Database Postgres",
+          "custom": "Archivio personalizzato (questo deployment)"
         },
+        "unregisteredStore": "{store} (non registrato in questo deployment)",
+        "unregisteredStoreWarning": "Questo account archivia gli artefatti in «{store}», che questo deployment non registra. Non viene salvato nulla finché non scegli un archivio registrato o non lo registri di nuovo nel codice.",
         "basePath": "Percorso base (predefinito: .file-storage)",
         "region": "Regione (es. us-east-1)",
         "bucket": "Bucket",

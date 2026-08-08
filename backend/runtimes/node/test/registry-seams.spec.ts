@@ -70,6 +70,7 @@ const SEAM_ROUTES = {
   vcsRegistry: 'option',
   foundationalServiceRegistry: 'option',
   binaryGeneratorRegistry: 'option',
+  binaryStoreRegistry: 'option',
   promptFragmentRegistry: 'option',
   // The three SOURCES. Each is `option` for the same reason its registry is, and each is set by
   // exactly one caller, the local facade booting in mothership mode, which reads what the
@@ -142,6 +143,7 @@ const BOOT_ROUTES = {
   vcsRegistry: 'entry-point',
   foundationalServiceRegistry: 'entry-point',
   binaryGeneratorRegistry: 'entry-point',
+  binaryStoreRegistry: 'entry-point',
   promptFragmentRegistry: 'entry-point',
   // The mothership SOURCES. Deliberately NOT entry-point options: each is the answer to "where is
   // this code-registered org state READ from", which is a property of the deployment TOPOLOGY, and
@@ -220,6 +222,7 @@ const SEAM_CONSTRUCTORS = {
     'defaultFoundationalServiceRegistry',
   ],
   binaryGeneratorRegistry: ['BinaryGeneratorRegistry', 'defaultBinaryGeneratorRegistry'],
+  binaryStoreRegistry: ['BinaryStoreRegistry', 'defaultBinaryStoreRegistry'],
   promptFragmentRegistry: [
     'PromptFragmentRegistry',
     'defaultPromptFragmentRegistry',
@@ -276,6 +279,16 @@ describe('app-owned registry seams', () => {
     expect(SEAM_ROUTES.foundationalBuiltinSource).toBe('option')
     expect(SEAM_ROUTES.binaryGeneratorSource).toBe('option')
     expect(SEAM_ROUTES.promptFragmentSource).toBe('option')
+  })
+
+  it('keeps the deployment-registered artifact STORE per-process, with no source beside it', () => {
+    // The store registry looks like the generative one and is deliberately routed differently:
+    // there is no `binaryStoreSource`, because a store is a live client holding credentials and
+    // only the process about to write the bytes can construct one. A source would let a node be
+    // pointed at another process's answer to a question that process cannot act on.
+    expect(SEAM_ROUTES.binaryStoreRegistry).toBe('option')
+    expect(BOOT_ROUTES.binaryStoreRegistry).toBe('entry-point')
+    expect(Object.keys(SEAM_ROUTES)).not.toContain('binaryStoreSource')
   })
 
   it('reaches every deployment-registered seam from the BOOT entry point, not only the builder', () => {

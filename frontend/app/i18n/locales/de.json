@@ -2181,8 +2181,11 @@
           "fs": "Lokales Dateisystem",
           "s3": "Amazon S3 / S3-kompatibel",
           "r2": "Cloudflare R2",
-          "db": "Postgres-Datenbank"
+          "db": "Postgres-Datenbank",
+          "custom": "Eigener Speicher (dieses Deployment)"
         },
+        "unregisteredStore": "{store} (in diesem Deployment nicht registriert)",
+        "unregisteredStoreWarning": "Dieses Konto speichert Artefakte in „{store}“, was dieses Deployment nicht registriert. Es wird nichts gespeichert, bis Sie einen registrierten Speicher wählen oder der Speicher wieder im Code registriert wird.",
         "basePath": "Basispfad (Standard: .file-storage)",
         "region": "Region (z. B. us-east-1)",
         "bucket": "Bucket",

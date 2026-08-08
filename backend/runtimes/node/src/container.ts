@@ -865,6 +865,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     packageRegistrySecretCipher,
     ...(options.secretDelegate ? { secretDelegate: options.secretDelegate } : {}),
     contentStorageDefaultBackend: options.contentStorageDefaultBackend,
+    binaryStoreRegistry: options.binaryStoreRegistry,
     caches: options.caches,
   })
 

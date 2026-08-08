@@ -95,6 +95,21 @@ export {
   type BinaryGeneratorDefinition,
   defaultBinaryGeneratorRegistry,
 } from '@cat-factory/kernel'
+// Installation-level extension point for the deployment's OWN BINARY ARTIFACT STORES (parity with
+// the Node facade): a deployment news a `defaultBinaryStoreRegistry()`, registers stores
+// implementing the `BinaryBlobBackend` port on it, and passes it via the `binaryStoreRegistry`
+// option. Each becomes a `custom` choice in the account-settings storage picker. Register these
+// HERE even in mothership mode, unlike the integrations above: this node writes the bytes, so this
+// node is the only process that can hold the client that writes them.
+export {
+  BinaryStoreRegistry,
+  BinaryStoreRegistrationError,
+  type BinaryStoreContext,
+  type BinaryStoreDefinition,
+  type BinaryStoreView,
+  type BinaryBlobBackend,
+  defaultBinaryStoreRegistry,
+} from '@cat-factory/kernel'
 // Installation-level extension point for polling GATES and STEP RESOLVERS (parity with the Node
 // facade). `gateRegistryWithBuiltins()` is the one a deployment almost always wants: a bare
 // `defaultGateRegistry()` is EMPTY, so injecting one silently drops `ci` / `conflicts` /

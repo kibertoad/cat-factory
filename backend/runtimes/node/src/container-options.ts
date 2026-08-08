@@ -47,6 +47,7 @@ import {
   type ProviderRegistry,
   type BinaryGeneratorRegistry,
   type BinaryGeneratorSource,
+  type BinaryStoreRegistry,
   type FoundationalBuiltinSource,
   type FoundationalServiceRegistry,
   type PromptFragmentRegistry,
@@ -432,6 +433,18 @@ export interface NodeContainerOptions {
    * See docs/initiatives/binary-output-foundational-storage.md.
    */
   binaryGeneratorRegistry?: BinaryGeneratorRegistry
+  /**
+   * The app-owned registry of BINARY ARTIFACT STORES a deployment defines in CODE: its own
+   * implementations of the `BinaryBlobBackend` port (GCS, Azure Blob, an internal object
+   * service), offered in the account-settings storage picker beside this runtime's `fs` / `db` /
+   * `s3` backends and selected as `backend: 'custom'` with the store's id. Empty by default, so a
+   * deployment that registers none sees exactly the picker it sees today.
+   *
+   * Per-process by design, with no mothership `Source` sibling: a store is a live client only the
+   * process about to write the bytes can build, so the process serving the picker is the one that
+   * stores. See `kernel/src/domain/binary-store-registry.ts`.
+   */
+  binaryStoreRegistry?: BinaryStoreRegistry
   /**
    * The app-owned prompt-fragment registry: the deployment's best-practice standards and the
    * per-task-type default sets that select them, registered BY REFERENCE. Optional; the facade

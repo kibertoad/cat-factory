@@ -28,6 +28,7 @@ import {
 } from '@cat-factory/server'
 import {
   runBestEffort,
+  type BinaryStoreRegistry,
   type CreateSharedStackInput,
   type GateRegistry,
   type JudgeRegistry,
@@ -112,6 +113,20 @@ export interface StartLocalOptions {
    * a laptop is the cheapest place to learn a definition is malformed.)
    */
   binaryGeneratorRegistry?: BinaryGeneratorRegistry
+  /**
+   * App-owned DI seam for the deployment's OWN BINARY ARTIFACT STORES: a deployment news a
+   * `defaultBinaryStoreRegistry()`, registers stores implementing the `BinaryBlobBackend` port on
+   * it, and passes it here. Each becomes a `custom` choice in the account-settings storage picker,
+   * and the per-account resolver builds one when an account selects it. Absent → this runtime's
+   * `fs` / `db` / `s3` backends alone.
+   *
+   * **Unlike {@link binaryGeneratorRegistry} this one DOES decide runs in MOTHERSHIP mode**, and
+   * for the reason that makes the two different in kind: a generator definition is data a run
+   * resolves, so a local copy can disagree with the picker the mothership fed; a store is a live
+   * client, and the process about to write the bytes is the only one that can build it. This node
+   * stores its own artifacts, so this node's registry is the right one.
+   */
+  binaryStoreRegistry?: BinaryStoreRegistry
   /**
    * App-owned DI seam for the deployment's PREDEFINED PIPELINES: a deployment news a
    * `defaultPipelineRegistry()`, registers (and retires) pipelines on it, and passes it here.
@@ -377,6 +392,7 @@ async function bootLocal(
     taskTypeRegistry: options.taskTypeRegistry,
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
+    binaryStoreRegistry: options.binaryStoreRegistry,
     pipelineRegistry: options.pipelineRegistry,
     gateRegistry: options.gateRegistry,
     judgeRegistry: options.judgeRegistry,
@@ -456,6 +472,7 @@ async function startLocalMothership(
     taskTypeRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
+    binaryStoreRegistry,
     pipelineRegistry,
     gateRegistry,
     judgeRegistry,
@@ -489,6 +506,7 @@ async function startLocalMothership(
     taskTypeRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
+    binaryStoreRegistry,
     pipelineRegistry,
     gateRegistry,
     judgeRegistry,

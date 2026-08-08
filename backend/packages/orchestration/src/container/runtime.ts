@@ -3,6 +3,7 @@ import {
   NoopEventPublisher,
   NoopWorkRunner,
   defaultBinaryGeneratorRegistry,
+  defaultBinaryStoreRegistry,
   defaultGateRegistry,
   defaultJudgeRegistry,
   defaultPipelineRegistry,
@@ -59,6 +60,12 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
     // facade injects the one instance it registered on, so the engine, the boot validation and
     // the dispatch brief can never be looking at different sets.
     binaryGeneratorRegistry,
+    // The deployment's OWN binary artifact stores (where a screenshot's or a design render's
+    // bytes go). Empty by default: the platform's `fs` / `db` / `s3` / `r2` backends are the
+    // facades' own wiring, not registry entries, so an empty registry is exactly today's
+    // behaviour. No `Source` sibling: see `CoreDependencies.binaryStoreRegistry` for why a
+    // store cannot cross a machine API the way a generator definition does.
+    binaryStoreRegistry: dependencies.binaryStoreRegistry ?? defaultBinaryStoreRegistry(),
     // Where those integrations are READ from — the exact sibling of `foundationalBuiltins`
     // below, defaulting to this process's own registry and overridden by a mothership-mode node
     // with the REMOTE source. It is a separate entry from the registry above because the two

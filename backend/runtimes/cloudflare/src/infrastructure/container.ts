@@ -942,7 +942,7 @@ export function buildContainer(
   // changes. The store is resolved per request/run from the account settings
   // (`resolveBinaryArtifactStore`, built below once `accountSettings` exists).
   const { capability: contentStorageCapability, buildBlobBackend: buildCfBlobBackend } =
-    cloudflareContentStorage(env)
+    cloudflareContentStorage(env, registries.binaryStoreRegistry)
 
   // The built-in gates' providers are wired onto the app-owned `providerRegistry` (news'd above,
   // fresh per build unless injected via `overrides`). `selectMergeLifecycleDeps` /
@@ -1012,6 +1012,7 @@ export function buildContainer(
     userSecretKindRegistry,
     contentStorageCapability,
     buildCfBlobBackend,
+    binaryStoreRegistry: registries.binaryStoreRegistry,
     cloudflareModelsEnabledOverride: opts.cloudflareModelsEnabled,
   })
 

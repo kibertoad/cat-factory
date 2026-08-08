@@ -2020,8 +2020,11 @@
           "fs": "Yerel dosya sistemi",
           "s3": "Amazon S3 / S3 uyumlu",
           "r2": "Cloudflare R2",
-          "db": "Postgres veritabanı"
+          "db": "Postgres veritabanı",
+          "custom": "Özel depo (bu dağıtım)"
         },
+        "unregisteredStore": "{store} (bu dağıtımda kayıtlı değil)",
+        "unregisteredStoreWarning": "Bu hesap yapıtları “{store}” deposunda saklıyor, ancak bu dağıtım onu kaydetmiyor. Kayıtlı bir depo seçene ya da depo kodda yeniden kaydedilene kadar hiçbir şey saklanmaz.",
         "basePath": "Temel yol (varsayılan: .file-storage)",
         "region": "Bölge (örn. us-east-1)",
         "bucket": "Kova",

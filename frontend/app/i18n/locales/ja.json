@@ -2020,8 +2020,11 @@
           "fs": "ローカルファイルシステム",
           "s3": "Amazon S3 / S3 互換",
           "r2": "Cloudflare R2",
-          "db": "Postgres データベース"
+          "db": "Postgres データベース",
+          "custom": "カスタムストア（このデプロイ）"
         },
+        "unregisteredStore": "{store}（このデプロイには登録されていません）",
+        "unregisteredStoreWarning": "このアカウントは成果物を「{store}」に保存する設定ですが、このデプロイには登録されていません。登録済みのストアを選ぶか、コードで再度登録するまで何も保存されません。",
         "basePath": "ベースパス（デフォルト: .file-storage）",
         "region": "リージョン（例: us-east-1）",
         "bucket": "バケット",

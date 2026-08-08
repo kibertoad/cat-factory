@@ -608,6 +608,7 @@ export {
 // in the UI; each facade supplies its own backend factory + default).
 export {
   makeResolveBinaryArtifactStore,
+  withRegisteredBinaryStores,
   type MakeResolveBinaryArtifactStoreDeps,
   type BuildBlobBackend,
   type BuildBlobBackendOptions,
