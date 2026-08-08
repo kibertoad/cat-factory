@@ -200,8 +200,7 @@ export class OneShotStepController {
         progress: 1,
       })
     }
-    await this.deps.runStateMachine.casPersist(workspaceId, instance)
-    await this.deps.runStateMachine.emitInstance(workspaceId, instance)
+    await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
     await this.deps.runStateMachine.stopRunContainer(workspaceId, instance)
     return { kind: 'done' }
   }

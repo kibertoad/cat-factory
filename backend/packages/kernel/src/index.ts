@@ -474,6 +474,7 @@ export {
   describeVcsApiError,
   VCS_DOC_URLS,
   GITHUB_SETTINGS_URLS,
+  VcsCapabilityUnsupportedError,
 } from './domain/vcs-errors.js'
 export {
   DispatchError,

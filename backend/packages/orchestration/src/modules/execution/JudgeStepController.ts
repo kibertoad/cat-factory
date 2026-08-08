@@ -279,8 +279,7 @@ export class JudgeStepController {
         })
       case 'fail':
         judgeState.status = 'failed'
-        await this.deps.stateMachine.casPersist(workspaceId, instance)
-        await this.deps.stateMachine.emitInstance(workspaceId, instance)
+        await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
         return {
           kind: 'job_failed',
           error:

@@ -96,6 +96,40 @@ export function recordDispatchAttribution(
     : [...dispatches, { agentKind: dispatchedKind, count: 1 }]
 }
 
+/**
+ * Record an ACCEPTED container dispatch on the step: the job handle to poll, the attribution
+ * only the dispatch site can resolve ({@link recordDispatchAttribution}), and the container
+ * projection the board reads.
+ *
+ * One helper rather than three lines at each of the six dispatch sites, because the middle line
+ * is the one that goes missing. `recordDispatchAttribution` persists the resolved model, the
+ * leased `subscriptionTokenId` and the run's `initiatedByUserId`, and the job settles on the
+ * durable poll path, which rebuilds its handle from the STEP alone: an omission is invisible in
+ * testing and surfaces in production as attribution landing on "unknown"/nobody, never as an
+ * error. Two sites carried duplicated comments warning about exactly that. Going through one
+ * function makes the warning structural.
+ *
+ * `dispatchedKind` stays a required parameter for the reason its callee documents: `step.agentKind`
+ * is routinely not what ran (a gate escalates to its helper, a Tester hands off to its fixer).
+ *
+ * The container is marked `up` because the dispatch RETURNED, which is the only thing known here;
+ * the live phase and the container id/url arrive on the first poll. A finished cold boot must not
+ * linger as a stale "spinning up".
+ *
+ * Returns the stamped job id, so a caller that must report `awaiting_job` from OUTSIDE the branch
+ * that dispatched holds a `string` rather than re-reading the now-optional `step.jobId`.
+ */
+export function recordDispatchedJob(
+  step: PipelineStep,
+  handle: AgentJobHandle,
+  dispatchedKind: string,
+): string {
+  step.jobId = handle.jobId
+  recordDispatchAttribution(step, handle, dispatchedKind)
+  step.container = { status: 'up' }
+  return handle.jobId
+}
+
 export function applyContainerRunning(
   step: PipelineStep,
   update: { phase?: string; container?: { id?: string; url?: string } },

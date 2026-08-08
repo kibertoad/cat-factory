@@ -384,8 +384,7 @@ export class DeployerStepController {
     // mid-flight). Absent for the undeclared legacy path, which re-resolution handles harmlessly.
     step.deployProvisioning = next.provisioning
     await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, next.frameId)
-    await this.runStateMachine.casPersist(workspaceId, instance)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
+    await this.runStateMachine.persistAndEmit(workspaceId, instance)
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }
 
@@ -855,8 +854,7 @@ export class DeployerStepController {
     // single-frame deploy that is the own env; for a failed involved-service env it surfaces the
     // peer's error rather than a sibling's healthy env.
     await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, frameId)
-    await this.runStateMachine.casPersist(workspaceId, instance)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
+    await this.runStateMachine.persistAndEmit(workspaceId, instance)
     return {
       kind: 'job_failed',
       error: 'Environment provisioning failed.',

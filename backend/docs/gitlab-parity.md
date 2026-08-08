@@ -46,7 +46,7 @@ comparison (not a work log), see [`vcs-providers.md`](./vcs-providers.md).
   connects GitLab by pasting a PAT in the UI: `POST /workspaces/:ws/gitlab/connection` validates +
   seals it and writes the `github_installations`/`github_repos` projection (a
   `github_installations.access_token` column holds the sealed PAT), so **repo browse / link / sync**
-  run per-workspace through the shared GitHub-shaped surface. A `ProviderRoutingGitHubClient` lets a
+  run per-workspace through the shared GitHub-shaped surface. A `providerRoutingGitHubClient` lets a
   deployment serve GitHub-App and GitLab-PAT workspaces side by side. The SPA renders whichever
   connect surfaces the deployment can serve, read from `GET /workspaces/:ws/vcs/connect-options`
   (slice 2b of the [gitlab-ui-parity](../../docs/initiatives/gitlab-ui-parity.md) initiative). Still

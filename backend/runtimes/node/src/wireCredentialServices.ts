@@ -1,5 +1,10 @@
 import {
   ApiKeyService,
+  LOCAL_MODEL_ENDPOINTS_CIPHER_INFO,
+  PERSONAL_SUBSCRIPTIONS_CIPHER_INFO,
+  PROVIDER_API_KEYS_CIPHER_INFO,
+  PROVIDER_SUBSCRIPTIONS_CIPHER_INFO,
+  USER_SECRET_CIPHER_INFO,
   LocalModelEndpointService,
   OpenRouterCatalogService,
   PersonalSubscriptionService,
@@ -67,7 +72,7 @@ export function buildNodeSubscriptionService(
     workspaceRepository,
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
-      info: 'cat-factory:provider-subscriptions',
+      info: PROVIDER_SUBSCRIPTIONS_CIPHER_INFO,
     }),
     idGenerator,
     clock,
@@ -100,7 +105,7 @@ export function buildNodeApiKeyService(
     workspaceRepository,
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
-      info: 'cat-factory:provider-api-keys',
+      info: PROVIDER_API_KEYS_CIPHER_INFO,
     }),
     idGenerator,
     clock,
@@ -151,7 +156,7 @@ export function buildNodeLocalModelEndpointService(
     localModelEndpointRepository,
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
-      info: 'cat-factory:local-model-endpoints',
+      info: LOCAL_MODEL_ENDPOINTS_CIPHER_INFO,
     }),
     clock,
     // Loopback-only unless the operator opts into LAN reach: on a shared multi-tenant
@@ -182,7 +187,7 @@ export function buildNodeUserSecretService(
   if (!masterKeyBase64 || !db) return undefined
   return new UserSecretService({
     userSecretRepository: new DrizzleUserSecretRepository(db),
-    secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: 'cat-factory:user-secret' }),
+    secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: USER_SECRET_CIPHER_INFO }),
     clock,
     userSecretKindRegistry,
     ...(viewerReposCache
@@ -244,7 +249,7 @@ export function buildNodePersonalSubscriptionService(
     subscriptionActivationRepository,
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
-      info: 'cat-factory:personal-subscriptions',
+      info: PERSONAL_SUBSCRIPTIONS_CIPHER_INFO,
     }),
     personalCipher: new WebCryptoPersonalSecretCipher(),
     idGenerator,

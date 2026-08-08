@@ -1,6 +1,6 @@
 # Initiative: refactoring & simplification round, August 2026
 
-**Status:** proposed (analysis complete, no slices landed) · **Owner:** core ·
+**Status:** in progress (items 1-5 landed) · **Owner:** core ·
 **Started:** 2026-08-08
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
@@ -37,42 +37,42 @@ and add the PR link when a slice lands.
 
 ## Summary
 
-| #   | Item                                                            | Area          | Impact                          | Effort  |
-| --- | --------------------------------------------------------------- | ------------- | ------------------------------- | ------- |
-| 1   | `settleStepAndAdvance` + dispatch epilogue + `persistAndEmit`   | Engine        | High (terminal-path invariants) | Low     |
-| 2   | Provider-routing VCS client as a Proxy + drift test             | Server        | High (fixes a live gap)         | Low-Med |
-| 3   | Shared HKDF cipher-info constants                               | Runtimes      | High (seal/unseal drift)        | Trivial |
-| 4   | Harness ⇄ backend contract conformity test                      | Harness       | High (no image bump)            | Trivial |
-| 5   | Wire the five telemetry conformance suites to local-sqlite      | Runtimes      | High (enables #6)               | Low     |
-| 6   | One SQLite telemetry store behind a `SqliteRunner` port         | Runtimes      | High (~600-800 lines)           | Medium  |
-| 7   | Gate-action sub-facades; settle the null/404 divergence         | Engine        | High (~350 lines + API fix)     | Medium  |
-| 8   | Shared `notifyError` composable                                 | Frontend      | High (27 sites + better copy)   | Low     |
-| 9   | `refuse` adoption + envelope helpers in `PublicApiController`   | Server        | Medium (~130 lines)             | Trivial |
-| 10  | Safe-fetch consolidation + Jira redirect guard                  | Integrations  | Medium (closes a gap)           | Low-Med |
-| 11  | Repo-issue provider core (GitHub/GitLab/Jira/Linear)            | Integrations  | Medium (~230 lines)             | Medium  |
-| 12  | `selectInChunks` helper in the D1 facade                        | Runtimes      | Medium (~170 lines, 29 sites)   | Low     |
-| 13  | Shared periodic-backstop catalog (sweepers ⇄ crons)             | Runtimes      | Medium (~400 lines + parity)    | Medium  |
-| 14  | Harness dedup batch (one image bump)                            | Harness       | Medium (~350 lines + fixes)     | Medium  |
-| 15  | Kernel home for the cross-VCS pure helpers                      | Server        | Low-Med (4 copies → 1)          | Trivial |
-| 16  | `ContainerAgentExecutor` accounting extraction                  | Server        | Medium (~180 lines)             | Low     |
-| 17  | Human-gate parked-plumbing unification                          | Engine        | Medium (~180 lines)             | Medium  |
-| 18  | Workspace preset-library twins (backend + frontend)             | Engine + SPA  | Medium (fixes twin drift)       | Medium  |
-| 19  | `EnvironmentConnectionService` context + event-log helpers      | Integrations  | Medium (−8 reads, ~150 lines)   | Low     |
-| 20  | Contracts mechanical pass (`nullish`, `nonEmpty`, shared refs)  | Contracts     | Medium (~100 lines, 300 sites)  | Low     |
-| 21  | Decompose `PipelineBuilder` and `ObservabilityPanel`            | Frontend      | Medium (structure)              | Medium  |
-| 22  | Frontend ratchet allowances + knip entry fix + dead files       | Guards        | Medium (guards gain teeth)      | Low     |
-| 23  | Review-window draft machinery + repo-source link UI             | Frontend      | Medium (~350 lines)             | Medium  |
-| 24  | Delete the 8 dead Cloudflare re-export shims                    | Runtimes      | Low (hygiene)                   | Trivial |
-| 25  | Narrow `GitHubClient` consumers with `Pick`                     | Server        | Medium (kills ~20 `as` casts)   | Low     |
-| 26  | Small engine cleanups bundle                                    | Engine        | Low (~150 lines)                | Low     |
+| #   | Item                                                           | Area         | Impact                          | Effort  |
+| --- | -------------------------------------------------------------- | ------------ | ------------------------------- | ------- |
+| 1   | `settleStepAndAdvance` + dispatch epilogue + `persistAndEmit`  | Engine       | High (terminal-path invariants) | Low     |
+| 2   | Provider-routing VCS client as a Proxy + drift test            | Server       | High (fixes a live gap)         | Low-Med |
+| 3   | Shared HKDF cipher-info constants                              | Runtimes     | High (seal/unseal drift)        | Trivial |
+| 4   | Harness ⇄ backend contract conformity test                     | Harness      | High (no image bump)            | Trivial |
+| 5   | Wire the five telemetry conformance suites to local-sqlite     | Runtimes     | High (enables #6)               | Low     |
+| 6   | One SQLite telemetry store behind a `SqliteRunner` port        | Runtimes     | High (~600-800 lines)           | Medium  |
+| 7   | Gate-action sub-facades; settle the null/404 divergence        | Engine       | High (~350 lines + API fix)     | Medium  |
+| 8   | Shared `notifyError` composable                                | Frontend     | High (27 sites + better copy)   | Low     |
+| 9   | `refuse` adoption + envelope helpers in `PublicApiController`  | Server       | Medium (~130 lines)             | Trivial |
+| 10  | Safe-fetch consolidation + Jira redirect guard                 | Integrations | Medium (closes a gap)           | Low-Med |
+| 11  | Repo-issue provider core (GitHub/GitLab/Jira/Linear)           | Integrations | Medium (~230 lines)             | Medium  |
+| 12  | `selectInChunks` helper in the D1 facade                       | Runtimes     | Medium (~170 lines, 29 sites)   | Low     |
+| 13  | Shared periodic-backstop catalog (sweepers ⇄ crons)            | Runtimes     | Medium (~400 lines + parity)    | Medium  |
+| 14  | Harness dedup batch (one image bump)                           | Harness      | Medium (~350 lines + fixes)     | Medium  |
+| 15  | Kernel home for the cross-VCS pure helpers                     | Server       | Low-Med (4 copies → 1)          | Trivial |
+| 16  | `ContainerAgentExecutor` accounting extraction                 | Server       | Medium (~180 lines)             | Low     |
+| 17  | Human-gate parked-plumbing unification                         | Engine       | Medium (~180 lines)             | Medium  |
+| 18  | Workspace preset-library twins (backend + frontend)            | Engine + SPA | Medium (fixes twin drift)       | Medium  |
+| 19  | `EnvironmentConnectionService` context + event-log helpers     | Integrations | Medium (−8 reads, ~150 lines)   | Low     |
+| 20  | Contracts mechanical pass (`nullish`, `nonEmpty`, shared refs) | Contracts    | Medium (~100 lines, 300 sites)  | Low     |
+| 21  | Decompose `PipelineBuilder` and `ObservabilityPanel`           | Frontend     | Medium (structure)              | Medium  |
+| 22  | Frontend ratchet allowances + knip entry fix + dead files      | Guards       | Medium (guards gain teeth)      | Low     |
+| 23  | Review-window draft machinery + repo-source link UI            | Frontend     | Medium (~350 lines)             | Medium  |
+| 24  | Delete the 8 dead Cloudflare re-export shims                   | Runtimes     | Low (hygiene)                   | Trivial |
+| 25  | Narrow `GitHubClient` consumers with `Pick`                    | Server       | Medium (kills ~20 `as` casts)   | Low     |
+| 26  | Small engine cleanups bundle                                   | Engine       | Low (~150 lines)                | Low     |
 
 ## Candidates
 
 ### 1. Run-settlement helpers on `RunStateMachine`
 
-- [ ] `settleStepAndAdvance` extracted and adopted at all seven sites
-- [ ] `dispatchHelperJob` (or a generalised `GateHelperDispatcher`) adopted at all seven dispatch sites
-- [ ] `persistAndEmit` adopted for the remaining adjacent `casPersist` + `emitInstance` pairs
+- [x] `settleStepAndAdvance` extracted and adopted at all seven sites
+- [x] `recordDispatchedJob` adopted at the six dispatch sites that stamp a container
+- [x] `persistAndEmit` adopted for the remaining adjacent `casPersist` + `emitInstance` pairs (29)
 
 The "finish this step, then finish the run or advance the cursor" epilogue is a 23-line
 block copy-pasted seven times: byte-identical private `completeStep` methods in
@@ -103,29 +103,42 @@ of the 43 pairs. Roughly 250 lines total, all on the engine's hottest transition
 
 ### 2. `ProviderRoutingGitHubClient` becomes a Proxy, with a method-surface drift test
 
-- [ ] Proxy-based routing client, keeping the memoised `providerOf` resolution
-- [ ] Prototype-reflection drift test (the `fanOutEventPublisher.spec.ts:198` pattern)
+- [x] Proxy-based routing client, keeping the memoised `providerOf` resolution
+- [x] Prototype-reflection drift test (the `fanOutEventPublisher.spec.ts:198` pattern)
 
 `GitHubClient` declares 53 methods, 20 of them optional. The hand-written delegate
 (`backend/packages/server/src/github/ProviderRoutingGitHubClient.ts`, 339 lines) implements
 the 33 required ones plus two pass-throughs and none of the other 18 optional ones, which
-TypeScript accepts because they are optional. In the one deployment shape where the router
-is wired (GitHub App + GitLab PAT together), every optional-method caller feature-tests and
-silently degrades: PR reviews read as empty (`GitHubPullRequestReviewProvider.ts:162`), the
-rebase path is skipped (`GitHubBranchUpdater.ts:45`), and the PR-review agent's inline
-comment capability disappears (`repoFiles.ts:95-121` conditionally spreads `createReview`
-and friends). The repo already wrote the fix and named this class as the known-bad case:
-`runtimes/local/src/vcsClientRouter.ts` is a `Proxy` router whose header comment explains
-why a hand-written delegate fails silently, and whose `has` trap keeps `?.` feature-tests
-working per provider. Port that shape (including its `then`/symbol protocol-key guard),
-keep the memo and its documented immutability rationale, and pin the surface with a
-reflection test. 339 → ~110 lines, and 18 methods return to dual-provider deployments.
-This is the one entry that changes runtime behaviour on purpose, so the restored
-capabilities want integration coverage in the same PR.
+TypeScript accepts because they are optional. The repo already wrote the fix and named this
+class as the known-bad case: `runtimes/local/src/vcsClientRouter.ts` is a `Proxy` router
+whose header comment explains why a hand-written delegate fails silently. Port that shape
+(including its `then`/symbol protocol-key guard), keep the memo and its documented
+immutability rationale, and pin the surface with a reflection test.
+
+**Correction, made while landing this (the analysis pass got the blast radius wrong).** The
+proposal named `GitHubPullRequestReviewProvider.ts:162`, `GitHubBranchUpdater.ts:45` and
+`repoFiles.ts:95-121` as silently degrading. They do not: all three hold the RAW App client
+(`engineVcsClient` on Node, `githubClient` on the Worker), and both facades carry a comment
+saying so deliberately, per CLAUDE.md's rule that the RepoFiles and GitHub-issue consumers
+must not gain a GitLab fallback. The router fronts the `github` module alone
+(`CoreDependencies.githubClient`), and that module reaches exactly ONE of the 18 dropped
+methods: `getBranchProtection`, via `GitHubService.checkDefaultBranchProtection`. So the real
+harm was one workspace-wide security report answering `capability: 'unavailable'` on a
+dual-provider deployment whose App client could have answered it. The other seventeen were
+latent, which is still worth fixing structurally but is not the reported impact.
+
+The correction also changed the DESIGN. A reflective router advertises the union of what its
+backing clients implement, so a feature-test now passes for a capability only one provider
+has, and the call has to be answered per installation. It refuses by name
+(`VcsCapabilityUnsupportedError`, in kernel so a consumer below the server layer can catch it)
+rather than failing as `undefined is not a function`; `checkDefaultBranchProtection` catches it
+and reports the `capability: 'unavailable'` it already models. Advertising the INTERSECTION
+instead was considered and rejected: against today's GitLab adapter, which implements none of
+the 20, it is byte-for-byte the bug.
 
 ### 3. Shared HKDF cipher-info constants
 
-- [ ] Five constants exported next to the four that already are; both facades import them
+- [x] Five constants exported next to the four that already are; both facades import them
 
 Both `wireCredentialServices.ts` files hard-code the same five HKDF `info` literals
 (`cat-factory:provider-subscriptions`, `provider-api-keys`, `personal-subscriptions`,
@@ -139,8 +152,8 @@ pairs is possible but optional; the constants are the part that must not wait.
 
 ### 4. Harness ⇄ backend contract conformity test
 
-- [ ] `test/harness-contract.conformity.test.ts` pinning `safeDirSegment` and the sentinel paths
-- [ ] `.cat-follow-ups.jsonl` lifted onto a named constant on the prompt side
+- [x] `test/harness-contract.conformity.test.ts` pinning `safeDirSegment` and the sentinel paths
+- [x] `.cat-follow-ups.jsonl` lifted onto a named constant on the prompt side
 
 Distinct from the three intentionally pinned kernel copies, two cross-package contracts
 claim byte-identity in comments with nothing enforcing it. `safeDirSegment` plus the
@@ -156,8 +169,8 @@ with **no image bump**: the highest value per unit of shipping cost in the packa
 
 ### 5. Run the existing telemetry conformance suites against the local-sqlite store
 
-- [ ] Five ~12-line conformance test files (the `toolCalls.conformance.test.ts` pattern)
-- [ ] Bespoke describes in `telemetryStore.test.ts` that the suites subsume deleted
+- [x] Five ~12-line conformance test files (the `toolCalls.conformance.test.ts` pattern)
+- [x] Bespoke describes in `telemetryStore.test.ts` that the suites subsume deleted
 
 `defineLlmMetricsSuite`, `defineAgentContextSuite`, `defineAgentSearchQuerySuite`,
 `defineProvisioningLogSuite` and `defineSubscriptionQuotaSuite` each run against Node and

@@ -64,6 +64,12 @@ transport + the GitHub token/client seams differ.
   environments and probes release-health monitors for real without ever holding the org key. Read
   `docs/initiatives/mothership-mode.md` before touching any of it, and `CLAUDE.md` → "Every new
   feature ships MOTHERSHIP-READY" before adding a repository method anywhere in the backend.
+- `sqlite/*.conformance.test.ts`: this store runs the SAME conformance suites D1 and Postgres do,
+  for every one of its six telemetry repositories. It is the store a developer's own runs are
+  recorded in, so a property all three must agree about belongs in the shared suite rather than in
+  a hand-rolled local sibling; `sqlite/telemetryStore.test.ts` is what is left after that, and holds
+  only what no other store has to answer for (the synchronous BEGIN/COMMIT, the exact prune count,
+  the ingest reader).
 - `sqlite/telemetryStore.ts` (+ `sqlite/telemetryRows.ts`, `sqlite/telemetryIngestReader.ts`) +
   `telemetryRetention.ts` + `telemetryIngest.ts`: the LOCAL-FIRST telemetry bucket (per-call
   LLM metrics, agent-context snapshots, performed web searches, the provisioning log, modeled quota

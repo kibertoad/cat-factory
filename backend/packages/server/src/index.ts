@@ -120,6 +120,13 @@ export { ensureWorkBranchViaRest, type EnsureWorkBranchInput } from './github/en
 // so a facade whose OWN resolver handles only the non-GitHub case can delegate the GitHub half
 // here instead of restating the URL, which would drift the moment this default learns anything.
 export { githubRepoOrigin } from './agents/containerAgentBody.js'
+// The backend half of the harness filesystem contract, exported so the harness's conformity
+// suite can pin it against the harness's own independently-computed copy.
+export {
+  HARNESS_SENTINEL_PATHS,
+  safeDirSegment,
+  siblingCheckoutDir,
+} from './agents/harnessContract.js'
 export { RunnerJobClient, type ResolveRunnerTransport } from './agents/RunnerJobClient.js'
 // Tool servers (MCP) for a container dispatch: the resolution the executor runs, plus the
 // deployment-environment credential resolver every facade wires as the FALLBACK behind the
@@ -395,7 +402,7 @@ export {
   type FetchGitHubClientDependencies,
 } from './github/FetchGitHubClient.js'
 export {
-  ProviderRoutingGitHubClient,
+  providerRoutingGitHubClient,
   type ProviderRoutingGitHubClientDependencies,
 } from './github/ProviderRoutingGitHubClient.js'
 export {

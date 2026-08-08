@@ -17,6 +17,33 @@
 // ---------------------------------------------------------------------------
 
 import type { VcsProvider } from './vcs-types.js'
+import { UnavailableError } from './errors.js'
+
+/**
+ * A provider-routing VCS client was asked for a member the ROUTED provider's client does not
+ * implement, while the other configured provider's does. Thrown by
+ * `providerRoutingGitHubClient` (`@cat-factory/server`) and lives here so a consumer BELOW the
+ * server layer can catch it.
+ *
+ * A distinct class rather than a bare {@link UnavailableError} because the two facts need
+ * different handling and only the caller knows which it can absorb: the generic 503 says "this
+ * deployment has not configured the capability", a build problem an operator fixes by wiring
+ * something, while this is a permanent property of the provider the workspace CONNECTED, which
+ * no amount of wiring changes. A caller that already models "the client cannot answer this"
+ * (`GitHubService.checkDefaultBranchProtection`'s `capability: 'unavailable'`) reports that;
+ * one that does not lets it surface as the 503 it is.
+ */
+export class VcsCapabilityUnsupportedError extends UnavailableError {
+  constructor(
+    readonly provider: VcsProvider,
+    readonly operation: string,
+  ) {
+    super(`The ${provider} client does not support ${operation}`, 'vcs_capability_unsupported', {
+      provider,
+      operation,
+    })
+  }
+}
 
 // In-repo docs are linked as stable GitHub blob URLs on `main`. Kernel sits BELOW the server
 // layer, so it cannot import `@cat-factory/server`'s `config/docs.ts`; per the doc-URL convention

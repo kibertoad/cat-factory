@@ -23,7 +23,7 @@ import type { RunStateMachine } from './RunStateMachine.js'
 import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
 import { renderQualityFeedbackForTester } from './testerQuality.logic.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
-import { recordDispatchAttribution } from './step-fold.logic.js'
+import { recordDispatchedJob } from './step-fold.logic.js'
 
 /** Whether a Tester report raised any concern serious enough to block a release. */
 function hasBlockingConcerns(report: TestReport): boolean {
@@ -356,18 +356,12 @@ export class TesterController {
     step.container = { status: 'starting' }
     step.subtasks = undefined
     if (step.test) step.test.phase = 'testing'
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
+    await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
 
     const handle = await executor.startJob(context)
-    step.jobId = handle.jobId
-    recordDispatchAttribution(step, handle, context.agentKind)
-    // The dispatch returned, so the container is up; the live phase + id/url arrive on the
-    // first poll, surfaced via the same `container` projection identically to the Coder.
-    step.container = { status: 'up' }
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    recordDispatchedJob(step, handle, context.agentKind)
+    await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
+    return { kind: 'awaiting_job', jobId: handle.jobId, stepIndex: instance.currentStep }
   }
 
   /**
@@ -556,17 +550,11 @@ export class TesterController {
       // appended when the fixer finishes (see recordFixerOutcome).
       ...(step.test?.attemptLog ? { attemptLog: step.test.attemptLog } : {}),
     }
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
+    await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
 
     const handle = await executor.startJob(context)
-    step.jobId = handle.jobId
-    recordDispatchAttribution(step, handle, context.agentKind)
-    // The fixer's container is up once the dispatch returns; the live phase + id/url arrive
-    // on the first poll.
-    step.container = { status: 'up' }
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    recordDispatchedJob(step, handle, context.agentKind)
+    await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
+    return { kind: 'awaiting_job', jobId: handle.jobId, stepIndex: instance.currentStep }
   }
 }

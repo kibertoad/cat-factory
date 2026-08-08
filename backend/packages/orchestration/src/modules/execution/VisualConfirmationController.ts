@@ -19,7 +19,7 @@ import type { AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepGraph } from './StepGraph.js'
-import { recordDispatchAttribution } from './step-fold.logic.js'
+import { recordDispatchedJob } from './step-fold.logic.js'
 
 /** Render the human's findings as the resolved-context block handed to the fixer. */
 function renderFindingsForFixer(findings: string): string {
@@ -291,12 +291,7 @@ export class VisualConfirmationController {
       ],
     }
     const handle = await executor.startJob(context)
-    step.jobId = handle.jobId
-    recordDispatchAttribution(step, handle, context.agentKind)
-    // The dispatch returned, so the helper's per-run container is up; surface it via the
-    // same `container` projection the Coder/Tester use (the live phase + id/url arrive on
-    // the first poll). A finished cold-boot must NOT linger as a stale "spinning up".
-    step.container = { status: 'up' }
+    recordDispatchedJob(step, handle, context.agentKind)
     step.subtasks = undefined
     // Leave the parked decision state: while the helper runs the step is `working` with a
     // live job, NOT parked on a stale approval (a re-drive would otherwise abandon the job).
@@ -316,9 +311,8 @@ export class VisualConfirmationController {
         at: this.deps.clockNow(),
       },
     ]
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
+    return { kind: 'awaiting_job', jobId: handle.jobId, stepIndex: instance.currentStep }
   }
 
   /**
@@ -394,25 +388,8 @@ export class VisualConfirmationController {
     step: PipelineStep,
     isFinalStep: boolean,
   ): Promise<AdvanceResult> {
-    this.deps.stepGraph.finishStep(step)
-    step.progress = 1
-    step.subtasks = undefined
-    step.approval = null
-    if (isFinalStep) {
-      instance.status = 'done'
-      await this.deps.stateMachine.finalizeBlock(workspaceId, instance, undefined)
-      await this.deps.stateMachine.casPersist(workspaceId, instance)
-      await this.deps.stateMachine.emitInstance(workspaceId, instance)
-      await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
-      return { kind: 'done' }
-    }
-    instance.currentStep += 1
-    const next = instance.steps[instance.currentStep]
-    if (next) this.deps.stepGraph.startStep(next)
-    await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'continue' }
+    this.deps.stateMachine.finishHumanGateStep(step)
+    return this.deps.stateMachine.settleStepAndAdvance(workspaceId, instance, isFinalStep)
   }
 
   /**
