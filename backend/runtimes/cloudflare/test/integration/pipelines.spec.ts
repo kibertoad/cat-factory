@@ -113,8 +113,11 @@ describe('pipelines', () => {
     )
     const id = clone.body.id
     const steps = clone.body.agentKinds
-    // Disable the last step and rename; the id (and catalog position) is preserved.
-    const enabled = steps.map((_, i) => i !== steps.length - 1)
+    // Disable the REVIEWER and rename; the id (and catalog position) is preserved. Which step is
+    // switched off matters: disabling the trailing `disposer` would leave the preset's `deployer`
+    // with nothing to reclaim the environment it stands up, which the save boundary refuses
+    // (`validatePipelineAuthoring`) — a different rule from the round-trip under test here.
+    const enabled = steps.map((kind) => kind !== 'reviewer')
     const res = await app.call<Pipeline>('PATCH', `/workspaces/${wsId}/pipelines/${id}`, {
       name: 'Quick minus tail',
       enabled,

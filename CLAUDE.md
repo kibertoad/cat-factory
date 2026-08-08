@@ -706,11 +706,11 @@ harness rules).
 
 **Built-in catalog lifecycle**: built-ins are COPIED into each workspace at creation and reconciled
 against the CATALOG, never the stored row; a run ADOPTS an entry the board was never seeded with, so a
-PINNED pipeline is never stuck behind an advisory. Traps: retiring a built-in is TWO edits (delete the
-definition AND name it in `buildRetiredPipelines()`), doing only the first being a silent no-op; and a
-bare `pipelineRepository.get` on a run-adjacent path is the smell, since every gate in front of a start
-resolves the pipeline and then CONCLUDES from it. Doc:
-[`pipeline-catalog-lifecycle.md`](./backend/docs/pipeline-catalog-lifecycle.md).
+PINNED pipeline is never stuck behind an advisory. Traps: retiring one is TWO edits (definition AND
+`buildRetiredPipelines()`), the first alone a silent no-op; a bare `pipelineRepository.get` on a
+run-adjacent path is the smell, since every start gate resolves the pipeline and CONCLUDES from it; and
+an AUTHORING rule (`validatePipelineAuthoring`) binds create/update ONLY, never the run door, or every
+stored pipeline predating it stops running. Doc: [`pipeline-catalog-lifecycle.md`](./backend/docs/pipeline-catalog-lifecycle.md).
 
 **Repo bootstrap** mirrors the execution pattern: `BootstrapService` → `bootstrap_jobs` →
 `BootstrapWorkflow` polling the idempotent `pollBootstrapJob()`, then links the repo to the block and

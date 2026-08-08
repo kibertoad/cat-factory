@@ -511,11 +511,11 @@ describe('PipelineService — environment-lifecycle authoring rules', () => {
   })
 
   it('carries the fault on the error so a client reacts to it without matching the message', async () => {
-    const error = await service()
+    const error: unknown = await service()
       .create(WS, { name: 'Untested', agentKinds: ['coder', 'tester-api'] })
-      .catch((e: unknown) => e as ValidationError)
+      .catch((e: unknown) => e)
     expect(error).toBeInstanceOf(ValidationError)
-    expect(error.details).toMatchObject({
+    expect((error as ValidationError).details).toMatchObject({
       reason: 'consumer_without_deployer',
       problems: [{ reason: 'consumer_without_deployer', index: 1, agentKind: 'tester-api' }],
     })

@@ -309,6 +309,20 @@ export interface FakeAgentOptions {
 }
 
 /**
+ * Whether this step is one that states an OVERALL confidence for the run.
+ *
+ * The last step of a pipeline is the usual answer, but not the only one: a `merger` states the
+ * confidence it merged on, and the engine deliberately persists that position-independently so a
+ * step AFTER the merge (the terminal `disposer` every deploying preset now carries, a
+ * post-release-health gate) cannot silently switch it off. Keying the fake on `isFinalStep` alone
+ * made those pipelines report no confidence at all, which is a property of the fake and not of
+ * the engine it stands in for.
+ */
+function reportsConfidence(context: AgentRunContext): boolean {
+  return context.isFinalStep || context.agentKind === 'merger'
+}
+
+/**
  * Deterministic agent for integration + conformance tests. It performs no network
  * calls and behaves predictably, so the engine's orchestration (step advancement,
  * decisions, finalisation) can be asserted exactly — without the cost or
@@ -517,7 +531,7 @@ export class FakeAgentExecutor implements AgentExecutor {
     return {
       output: `[${context.agentKind}] processed "${context.block.title}"${revisionSuffix}${descSuffix}${fragSuffix}${briefSuffix}${presetSuffix}${paramsSuffix}`,
       model: 'fake',
-      confidence: context.isFinalStep ? confidence : undefined,
+      confidence: reportsConfidence(context) ? confidence : undefined,
       ...this.usageFields(),
       // Mimic the container "implementer" agent opening a PR for repo-operating work.
       ...(this.options.pullRequest ? { pullRequest: this.options.pullRequest } : {}),
@@ -632,7 +646,7 @@ export class FakeAgentExecutor implements AgentExecutor {
       return {
         output: `[merger] assessed "${context.block.title}"`,
         model: 'fake',
-        confidence: context.isFinalStep ? confidence : undefined,
+        confidence: reportsConfidence(context) ? confidence : undefined,
         ...this.usageFields(),
         mergeAssessment,
       }

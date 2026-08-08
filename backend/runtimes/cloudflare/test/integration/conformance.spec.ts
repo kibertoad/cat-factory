@@ -26,6 +26,7 @@ import { buildContainer } from '../../src/infrastructure/container'
 import { D1RequirementReviewRepository } from '../../src/infrastructure/repositories/D1RequirementReviewRepository'
 import { D1ClarityReviewRepository } from '../../src/infrastructure/repositories/D1ClarityReviewRepository'
 import { D1ServiceRepository } from '../../src/infrastructure/repositories/D1ServiceRepository'
+import { D1PipelineRepository } from '../../src/infrastructure/repositories/D1PipelineRepository'
 import { D1BlockRepository } from '../../src/infrastructure/repositories/D1BlockRepository'
 import { D1WorkspaceRepository } from '../../src/infrastructure/repositories/D1WorkspaceRepository'
 import { D1WorkspaceMemberRepository } from '../../src/infrastructure/repositories/D1WorkspaceMemberRepository'
@@ -183,6 +184,8 @@ const harness: ConformanceHarness = {
         blockId ? recorder.emits.filter((e) => e.blockId === blockId) : recorder.emits,
       boardEmits: (blockId) =>
         blockId ? recorder.boardEvents.filter((e) => e.blockId === blockId) : recorder.boardEvents,
+      seedPipeline: (workspaceId, pipeline) =>
+        new D1PipelineRepository({ db: env.DB }).insert(workspaceId, pipeline),
       seedIncorporatedReview: (workspaceId, blockId, requirements) =>
         new D1RequirementReviewRepository({ db: env.DB }).upsert(
           workspaceId,

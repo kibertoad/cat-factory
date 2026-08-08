@@ -38,7 +38,13 @@ import type { ServerContainer } from '@cat-factory/server'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries } from '@cat-factory/integrations'
-import type { Clock, ExecutionInstance, Service, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type {
+  Clock,
+  ExecutionInstance,
+  Pipeline,
+  Service,
+  WorkspaceSnapshot,
+} from '@cat-factory/kernel'
 import {
   MODEL_PRESET_SEED_IDS,
   NoopBootstrapRunner,
@@ -470,6 +476,13 @@ export function makeConformanceApp(
   // Postgres) store so the engine's reworked-requirements substitution can be driven
   // without running the reviewer LLM — the same Drizzle persistence the Node harness
   // writes through (the local facade reuses the Node repositories).
+  function seedPipeline(workspaceId: string, pipeline: Pipeline) {
+    return createDrizzleRepositories(db, SEED_CLOCK).pipelineRepository.insert(
+      workspaceId,
+      pipeline,
+    )
+  }
+
   function seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string) {
     return createDrizzleRepositories(db, SEED_CLOCK).requirementReviewRepository.upsert(
       workspaceId,
@@ -528,6 +541,7 @@ export function makeConformanceApp(
     driveEnvConfigRepair,
     executionEmits,
     boardEmits,
+    seedPipeline,
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,

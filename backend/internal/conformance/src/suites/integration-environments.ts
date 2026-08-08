@@ -17,6 +17,7 @@ import type {
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceApp, ConformanceHarness } from '../harness.js'
+import { seedLegacyPipeline } from '../legacyPipeline.js'
 
 export function defineEnvironmentsConformance(harness: ConformanceHarness): void {
   describe('ephemeral environments', () => {
@@ -505,14 +506,17 @@ function registerInfraHandlerTests(harness: ConformanceHarness): void {
       provisioning: { type: 'infraless' },
     })
 
-    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+    // Deploy-only: what this asserts on is the deployer step and the environment it did (or did
+    // not) leave behind, so there is no disposer. Refused at save, seeded as stored state.
+    const pipelineId = await seedLegacyPipeline(app, wsId, {
+      id: 'pl_deploy_only',
       name: 'Deploy only',
       agentKinds: ['deployer'],
     })
     const start = await app.call<ExecutionInstance>(
       'POST',
       `/workspaces/${wsId}/blocks/task_login/executions`,
-      { pipelineId: pipeline.body.id },
+      { pipelineId },
     )
     expect(start.status).toBe(201)
 
@@ -563,14 +567,17 @@ function registerInfraHandlerTests(harness: ConformanceHarness): void {
     expect(task.status).toBe(201)
     const taskId = task.body.id
 
-    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+    // No disposer: the assertions below are about the deployer's library no-op, and nothing in
+    // this run provisions anything to reclaim. Refused at save, seeded as stored state.
+    const pipelineId = await seedLegacyPipeline(app, wsId, {
+      id: 'pl_deploy_test_library',
       name: 'Deploy + test',
       agentKinds: ['deployer', 'tester-api'],
     })
     const start = await app.call<ExecutionInstance>(
       'POST',
       `/workspaces/${wsId}/blocks/${taskId}/executions`,
-      { pipelineId: pipeline.body.id },
+      { pipelineId },
     )
     // The run STARTS (the library short-circuits in the tester-infra / deployer start gates keep
     // a compose-declaring library from being refused for a "missing handler").
@@ -1250,14 +1257,17 @@ function registerDeployLifecycleTests(harness: ConformanceHarness): void {
     })
     expect(registered.status).toBe(201)
 
-    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+    // Deploy-only: what this asserts on is the deployer step and the environment it did (or did
+    // not) leave behind, so there is no disposer. Refused at save, seeded as stored state.
+    const pipelineId = await seedLegacyPipeline(app, wsId, {
+      id: 'pl_deploy_only',
       name: 'Deploy only',
       agentKinds: ['deployer'],
     })
     const start = await app.call<ExecutionInstance>(
       'POST',
       `/workspaces/${wsId}/blocks/task_login/executions`,
-      { pipelineId: pipeline.body.id },
+      { pipelineId },
     )
     expect(start.status).toBe(201)
 
@@ -1382,14 +1392,17 @@ function registerDeployLifecycleTests(harness: ConformanceHarness): void {
     })
     expect(registered.status).toBe(201)
 
-    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+    // Deploy-only: what this asserts on is the deployer step and the environment it did (or did
+    // not) leave behind, so there is no disposer. Refused at save, seeded as stored state.
+    const pipelineId = await seedLegacyPipeline(app, wsId, {
+      id: 'pl_deploy_only',
       name: 'Deploy only',
       agentKinds: ['deployer'],
     })
     const start = await app.call<ExecutionInstance>(
       'POST',
       `/workspaces/${wsId}/blocks/task_login/executions`,
-      { pipelineId: pipeline.body.id },
+      { pipelineId },
     )
     expect(start.status).toBe(201)
 

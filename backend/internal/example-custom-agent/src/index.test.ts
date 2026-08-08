@@ -684,10 +684,12 @@ describe('the org:introduce-api reusable operation', () => {
     expect(pipeline?.agentKinds).toEqual([
       'architect',
       'coder',
+      'deployer',
       'tester-api',
       'conflicts',
       'ci',
       'merger',
+      'disposer',
     ])
     expect(pipeline?.stepOptions?.[0]?.agentVariantId).toBe(ORG_ARCHITECT_API_VARIANT_ID)
     expect(pipeline?.stepOptions?.[1]?.agentVariantId).toBe(ORG_CODER_API_VARIANT_ID)

@@ -1075,7 +1075,7 @@ function registerEstimatorAndGateTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Test only',
-        agentKinds: ['tester-api'],
+        agentKinds: ['deployer', 'tester-api', 'disposer'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
         pipelineId: pipeline.body.id,
@@ -1239,7 +1239,7 @@ function registerEstimatorAndGateTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build + human test',
-        agentKinds: ['coder', 'human-test'],
+        agentKinds: ['coder', 'deployer', 'human-test', 'disposer'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
         pipelineId: pipeline.body.id,

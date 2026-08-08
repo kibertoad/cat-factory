@@ -81,3 +81,30 @@ definition out from under them.
 ## Deletion guards
 
 Deleting a pipeline a recurring SCHEDULE points at is refused 409, paused included.
+
+## Authoring rules bind the SAVE door only
+
+`validatePipelineShape` states what is BROKEN (a companion reviewing nothing, a skill step with no
+skill), so both the save boundary and the RUN door refuse it. `validatePipelineAuthoring` states what
+is INCOMPLETE, and that difference decides where it may stand.
+
+Today it holds one rule, the ENVIRONMENT LIFECYCLE a step list has to spell out: provision
+(`deployer`) → consume (a tester / acceptance / human-test step) → reclaim (`disposer`). Each of the
+three faults is a real dead end, and none of them stops a pipeline that already exists from running: a
+chain with no `disposer` leaves its environment to the TTL sweep, and one with no `deployer` runs fine
+against an `infraless` service. Enforcing them at the run door would therefore refuse runs of stored
+pipelines that work today, including every workspace's seeded copy of a built-in that predates the
+rule. So `PipelineService.create` / `update` enforce them, `RunAdmission` does not, and the run door
+keeps its own SERVICE-AWARE guard (`assertDeployerBeforeConsumer`) for a stored chain that would
+genuinely dead-end on the service it was started against.
+
+Three consequences worth knowing before adding a second authoring rule:
+
+- **`clone` is deliberately exempt.** A clone composes nothing, and a workspace holding pre-rule
+  built-in copies would otherwise be unable to clone them until it reseeded.
+- **The catalog must satisfy every authoring rule** (`pipelineShape.test.ts` asserts it), or the
+  platform ships presets its own builder refuses to save. That is why every deploying built-in gained
+  a terminal `disposer`, and why adding an authoring rule means auditing the catalog with it.
+- **The rule itself belongs in `@cat-factory/contracts`** (`pipeline-environment-lifecycle.ts`), so the
+  builder's inline hints and the save refusal are the same function rather than two that drift. Tests
+  that need a refused shape seed the row directly (`seedLegacyPipeline`), modelling the legacy state.

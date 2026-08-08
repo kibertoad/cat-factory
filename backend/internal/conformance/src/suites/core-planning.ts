@@ -772,23 +772,28 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
         // The prose description rides the same symmetric-persistence contract (its own
         // `description` column on both stores) and must round-trip identically.
         description: 'A custom pipeline for the toggles test.',
-        agentKinds: ['task-estimator', 'coder', 'tester-api'],
+        // The Deployer / Disposer pair rides along because the Tester needs the environment
+        // lifecycle spelled out (`validatePipelineAuthoring`); every parallel array below is
+        // index-aligned with THIS list, so the QC config sits on the Tester at index 3.
+        agentKinds: ['task-estimator', 'coder', 'deployer', 'tester-api', 'disposer'],
         // Coder opts out of the Follow-up companion; the Tester's QC companion is gated on the
         // task estimate (an estimator runs earlier, so the gate is valid).
-        followUps: [null, false, null],
+        followUps: [null, false, null, null, null],
         testerQuality: [
           null,
           null,
+          null,
           { enabled: true, gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' } },
+          null,
         ],
         // A per-step options bag opting one step out of auto-recommendation — the extensible
         // seam that must round-trip through the single `step_options` column on both stores.
-        stepOptions: [null, { autoRecommend: false }, null],
+        stepOptions: [null, { autoRecommend: false }, null, null, null],
       })
       expect(created.status).toBe(201)
       expect(created.body.description).toBe('A custom pipeline for the toggles test.')
       expect(created.body.followUps?.[1]).toBe(false)
-      expect(created.body.testerQuality?.[2]).toEqual({
+      expect(created.body.testerQuality?.[3]).toEqual({
         enabled: true,
         gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' },
       })
@@ -799,7 +804,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
       const stored = snapshot.body.pipelines.find((p) => p.id === created.body.id)!
       expect(stored.description).toBe('A custom pipeline for the toggles test.')
       expect(stored.followUps?.[1]).toBe(false)
-      expect(stored.testerQuality?.[2]).toEqual({
+      expect(stored.testerQuality?.[3]).toEqual({
         enabled: true,
         gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' },
       })

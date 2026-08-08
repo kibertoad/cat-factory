@@ -256,10 +256,26 @@ export function registerIntroduceApiOperation(
     // non-builtin, so the org could never roll a fix out to the boards already holding it.
     builtin: true,
     version: 1,
-    agentKinds: ['architect', 'coder', 'tester-api', 'conflicts', 'ci', 'merger'],
+    // The Deployer / Disposer pair rides along because the Tester runs against a provisioned
+    // environment: a chain that tests without deploying, or deploys without reclaiming, is
+    // refused when a workspace CLONES this template and saves its copy. The Deployer is a no-op
+    // on a service that provisions nothing, so one pipeline still covers every kind of service.
+    agentKinds: [
+      'architect',
+      'coder',
+      'deployer',
+      'tester-api',
+      'conflicts',
+      'ci',
+      'merger',
+      'disposer',
+    ],
+    // Index-aligned with the list above.
     stepOptions: [
       { agentVariantId: ORG_ARCHITECT_API_VARIANT_ID },
       { agentVariantId: ORG_CODER_API_VARIANT_ID },
+      null,
+      null,
       null,
       null,
       null,

@@ -39,8 +39,8 @@ describe('validatePipelineShape', () => {
     // refuses to save: clone it, change the name, and the save is rejected for a fault the user
     // did not introduce. The catalog is the one place that cannot be allowed to drift from them.
     for (const p of seedPipelines()) {
-      expect(() =>
-        validatePipelineAuthoring({ agentKinds: p.agentKinds, enabled: p.enabled }),
+      expect(
+        () => validatePipelineAuthoring({ agentKinds: p.agentKinds, enabled: p.enabled }),
         p.id,
       ).not.toThrow()
     }
