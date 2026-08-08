@@ -153,11 +153,17 @@ function recordingSource(
     failComment?: (externalId: string) => Error | null
     /** Drop a capability, the way a vendor without the notion would. */
     omit?: ('resolve' | 'markInProgress')[]
+    /**
+     * Where this adapter gets its authority. Defaults to `stored-connection`, the strict answer,
+     * so a case that wants the credentialless behaviour has to ask for it.
+     */
+    authenticates?: 'stored-connection' | 'out-of-band'
   } = {},
 ): { provider: TaskSourceProvider; recorded: RecordedWriteback } {
   const recorded: RecordedWriteback = { comments: [], resolved: [], marked: [] }
   const omitted = new Set(over.omit ?? [])
   const adapter = {
+    authenticates: over.authenticates ?? 'stored-connection',
     async comment(ctx: TaskWritebackContext, externalId: string, body: string) {
       const failure = over.failComment?.(externalId)
       if (failure) throw failure
@@ -773,6 +779,34 @@ describe('IssueWritebackService.postReviewQuestions — answer channels', () => 
       skipped: 0,
       failed: 1,
     })
+  })
+
+  it('still posts through an OUT-OF-BAND source when the connection read fails', async () => {
+    // GitHub Issues and GitLab Issues authenticate through the workspace's VCS installation and
+    // only ever read the tracker row for the inbound reply secret. Treating an unreadable row as
+    // one fact for every source made a rotated `TASKS_ENCRYPTION_KEY` or a transient DB blip take
+    // the PR notice, the close-on-merge, the pickup claim and the question echo away from them
+    // too. The adapter's own declaration is what keeps the two apart.
+    const { svc, recorded } = serviceWith(
+      {
+        trackerSettingsRepository: fakeTrackerSettings(
+          settings({ writebackQuestionsOnPark: true }),
+        ),
+        taskRepository: fakeTasks([githubIssue('acme/web#3')]),
+        reviewQuestionPostRepository: fakeMarkers(),
+        taskConnectionStore: fakeConnections({ throws: true }),
+      },
+      recordingSource('github', { authenticates: 'out-of-band' }),
+    )
+    expect(await svc.postReviewQuestions('ws', block(), questionPost())).toEqual({
+      posted: 1,
+      skipped: 0,
+      failed: 0,
+    })
+    // What the unreadable row actually carried is still WITHHELD: the reply grammar is a promise
+    // about a channel this deployment could not confirm, and telling a reporter to answer where
+    // nothing listens is the failure the resolution exists to prevent.
+    expect(recorded.comments[0]!.body).not.toContain('@cat-factory')
   })
 
   it('keeps a HEALTHY source wired when a different one is unreadable', async () => {

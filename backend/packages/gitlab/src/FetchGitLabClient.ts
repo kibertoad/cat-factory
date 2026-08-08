@@ -769,10 +769,9 @@ export class FetchGitLabClient implements VcsClient {
     body: string,
   ): Promise<void> {
     const { iid, discussionId } = parseThreadId(threadId)
-    const params = new URLSearchParams({ body })
     await this.request(
-      `/projects/${projectPath(ref)}/merge_requests/${iid}/discussions/${discussionId}/notes?${params.toString()}`,
-      { connection, method: 'POST' },
+      `/projects/${projectPath(ref)}/merge_requests/${iid}/discussions/${discussionId}/notes`,
+      { connection, method: 'POST', body: { body } },
     )
   }
 
@@ -783,12 +782,21 @@ export class FetchGitLabClient implements VcsClient {
   ): Promise<void> {
     const { iid, discussionId } = parseThreadId(threadId)
     await this.request(
-      `/projects/${projectPath(ref)}/merge_requests/${iid}/discussions/${discussionId}?resolved=true`,
-      { connection, method: 'PUT' },
+      `/projects/${projectPath(ref)}/merge_requests/${iid}/discussions/${discussionId}`,
+      { connection, method: 'PUT', body: { resolved: true } },
     )
   }
 
   // ---- writes -------------------------------------------------------------
+  //
+  // Every write sends its parameters as a JSON BODY, never in the query string, even where the
+  // value is short. GitLab accepts both, so the query form works until a caller passes something
+  // long: a note body is capped at 30,000 characters and percent-encodes to several times that,
+  // which blows past the ~8KB request line most GitLab deployments sit behind (nginx's default
+  // `large_client_header_buffers`) and comes back 414. That failure is worse than loud, because
+  // it is SIZE-dependent: the short notices land, so the endpoint reads as working right up to
+  // the parked-review question echo, the one write that is always long. Keeping the rule uniform
+  // is what stops the next write being added in the shape that fails.
 
   async createBranch(
     connection: VcsConnectionRef,
@@ -796,10 +804,10 @@ export class FetchGitLabClient implements VcsClient {
     name: string,
     fromSha: string,
   ): Promise<void> {
-    const params = new URLSearchParams({ branch: name, ref: fromSha })
-    await this.request(`/projects/${projectPath(ref)}/repository/branches?${params.toString()}`, {
+    await this.request(`/projects/${projectPath(ref)}/repository/branches`, {
       connection,
       method: 'POST',
+      body: { branch: name, ref: fromSha },
     })
   }
 
@@ -849,19 +857,20 @@ export class FetchGitLabClient implements VcsClient {
     ref: VcsRepoRef,
     input: { title: string; body: string },
   ): Promise<{ number: number; url: string }> {
-    const params = new URLSearchParams({ title: input.title, description: input.body })
-    const { json } = await this.request(
-      `/projects/${projectPath(ref)}/issues?${params.toString()}`,
-      { connection, method: 'POST' },
-    )
+    const { json } = await this.request(`/projects/${projectPath(ref)}/issues`, {
+      connection,
+      method: 'POST',
+      body: { title: input.title, description: input.body },
+    })
     const issue = (json ?? {}) as { iid?: number; web_url?: string }
     return { number: issue.iid ?? 0, url: issue.web_url ?? '' }
   }
 
   async closeIssue(connection: VcsConnectionRef, ref: VcsRepoRef, number: number): Promise<void> {
-    await this.request(`/projects/${projectPath(ref)}/issues/${number}?state_event=close`, {
+    await this.request(`/projects/${projectPath(ref)}/issues/${number}`, {
       connection,
       method: 'PUT',
+      body: { state_event: 'close' },
     })
   }
 
@@ -876,11 +885,11 @@ export class FetchGitLabClient implements VcsClient {
     issueNumber: number,
     body: string,
   ): Promise<void> {
-    const params = new URLSearchParams({ body })
-    await this.request(
-      `/projects/${projectPath(ref)}/issues/${issueNumber}/notes?${params.toString()}`,
-      { connection, method: 'POST' },
-    )
+    await this.request(`/projects/${projectPath(ref)}/issues/${issueNumber}/notes`, {
+      connection,
+      method: 'POST',
+      body: { body },
+    })
   }
 
   /**
@@ -895,10 +904,10 @@ export class FetchGitLabClient implements VcsClient {
     number: number,
     label: string,
   ): Promise<void> {
-    const params = new URLSearchParams({ add_labels: label })
-    await this.request(`/projects/${projectPath(ref)}/issues/${number}?${params.toString()}`, {
+    await this.request(`/projects/${projectPath(ref)}/issues/${number}`, {
       connection,
       method: 'PUT',
+      body: { add_labels: label },
     })
   }
 
@@ -1142,11 +1151,11 @@ export class FetchGitLabClient implements VcsClient {
     // GitLab issues and MRs have SEPARATE iid spaces and distinct notes endpoints, so the
     // neutral `comment(number)` is ambiguous. The platform uses `comment` for PR/MR
     // conversation (the gates), so route to merge-request notes.
-    const params = new URLSearchParams({ body })
-    await this.request(
-      `/projects/${projectPath(ref)}/merge_requests/${issueOrPrNumber}/notes?${params.toString()}`,
-      { connection, method: 'POST' },
-    )
+    await this.request(`/projects/${projectPath(ref)}/merge_requests/${issueOrPrNumber}/notes`, {
+      connection,
+      method: 'POST',
+      body: { body },
+    })
   }
 
   // ---- internals ----------------------------------------------------------

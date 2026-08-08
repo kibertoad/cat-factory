@@ -24,6 +24,12 @@ still fails closed on an empty secret. Board equality is now the source's own ru
 (`TaskSourceProvider.sameBoard`), because GitLab project paths are case-sensitive where every
 other board id folds.
 
+A writeback adapter declares where it gets its authority (`authenticates`), which decides what an
+unreadable tracker connection costs. Jira and Linear post with the stored bag, so a row that will
+not open takes their writeback with it. GitHub Issues and GitLab Issues authenticate through the
+workspace's VCS installation and read that row only for the inbound reply secret, so they keep
+posting and lose just the reply grammar, which is withheld rather than promised.
+
 Two internal breaks, per the pre-1.0 policy. The facades' `commentOnGitHubIssue` /
 `closeGitHubIssue` / `labelGitHubIssue` writeback seams are gone (the source resolves its own
 installation now), and a writeback for a workspace with no stored connection REFUSES where the

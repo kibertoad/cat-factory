@@ -29,6 +29,10 @@ const USER_AGENT = 'cat-factory'
 
 /** Jira Cloud's REST v3 writeback adapter, wired on the provider itself. */
 export const jiraWriteback: TaskSourceWritebackAdapter = {
+  // HTTP Basic over the connection's stored account email + API token: with no readable bag there
+  // is no identity to post as, so an unreadable connection is fatal to every call here.
+  authenticates: 'stored-connection',
+
   async comment(ctx, externalId, body) {
     await jiraRequest(ctx, `issue/${encodeURIComponent(externalId)}/comment`, {
       method: 'POST',

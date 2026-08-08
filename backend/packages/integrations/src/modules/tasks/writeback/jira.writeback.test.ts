@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createTaskWritebackContext } from '@cat-factory/kernel'
 import { jiraWriteback } from './jira.writeback.js'
 
 // The Jira writeback transport, exercised through a stubbed global `fetch` (the same shape
@@ -10,7 +11,7 @@ const CREDENTIALS = {
   accountEmail: 'a@b.c',
   apiToken: 'tok',
 }
-const CTX = { workspaceId: 'ws_1', credentials: CREDENTIALS }
+const CTX = createTaskWritebackContext({ workspaceId: 'ws_1', credentials: CREDENTIALS })
 
 interface Call {
   url: string
@@ -87,7 +88,11 @@ describe('jiraWriteback', () => {
     // marker for a comment Jira never saw and the questions were swallowed silently.
     const calls = stubFetch()
     await expect(
-      jiraWriteback.comment({ workspaceId: 'ws_1', credentials: {} }, 'PROJ-1', 'hi'),
+      jiraWriteback.comment(
+        createTaskWritebackContext({ workspaceId: 'ws_1', credentials: {} }),
+        'PROJ-1',
+        'hi',
+      ),
     ).rejects.toThrow(/no Jira connection/i)
     expect(calls).toEqual([])
   })
@@ -103,7 +108,10 @@ describe('jiraWriteback', () => {
     const calls = stubFetch()
     await expect(
       jiraWriteback.comment(
-        { workspaceId: 'ws_1', credentials: { ...CREDENTIALS, baseUrl: 'http://127.0.0.1' } },
+        createTaskWritebackContext({
+          workspaceId: 'ws_1',
+          credentials: { ...CREDENTIALS, baseUrl: 'http://127.0.0.1' },
+        }),
         'PROJ-1',
         'hi',
       ),

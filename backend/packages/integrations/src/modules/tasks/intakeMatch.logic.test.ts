@@ -121,6 +121,35 @@ describe('judgeIssueEventForIntake', () => {
         judgeIssueEventForIntake(cfg, delivery, { sameBoard: (a, b) => a === b }).outcome,
       ).toBe('miss')
     })
+
+    it("calls the source's rule as a METHOD, so an implementation reading `this` works", () => {
+      // The port declares `sameBoard` as a method signature, so a deployment is entitled to
+      // implement it as a class method carrying its own configured case rules. Lifting it off the
+      // provider to call it (`(provider?.sameBoard ?? fallback)(…)`) throws a TypeError on the
+      // first pushed delivery and takes the whole push-intake loop down. The built-in providers
+      // assign standalone functions, so nothing else here would ever have shown it.
+      class ExactBoardSource {
+        readonly separator = '/'
+        sameBoard(a: string, b: string): boolean {
+          // Reads `this`: undefined receiver ⇒ TypeError, which is the regression.
+          return a.split(this.separator).join('/') === b.split(this.separator).join('/')
+        }
+      }
+      const cfg = {
+        source: 'gitlab',
+        board: { gitlabProject: 'acme/web' },
+        predicates: {},
+      } as IssueIntakeConfig
+      const provider = new ExactBoardSource()
+      expect(
+        judgeIssueEventForIntake(cfg, event({ source: 'gitlab', board: 'acme/web' }), provider)
+          .outcome,
+      ).toBe('match')
+      expect(
+        judgeIssueEventForIntake(cfg, event({ source: 'gitlab', board: 'Acme/web' }), provider)
+          .outcome,
+      ).toBe('miss')
+    })
   })
 
   describe('a predicate the delivery cannot answer', () => {

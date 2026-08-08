@@ -28,6 +28,10 @@ import {
 
 /** Linear's GraphQL writeback adapter, wired on the provider itself. */
 export const linearWriteback: TaskSourceWritebackAdapter = {
+  // The OAuth token / API key comes from the connection's stored bag (`linearAuthFromCredentials`
+  // throws on one carrying neither), so an unreadable connection is fatal to every call here.
+  authenticates: 'stored-connection',
+
   async comment(ctx, externalId, body) {
     const client = clientFor(ctx)
     const lookup = await client.query<{ issue?: { id?: string } }>(LINEAR_ISSUE_ID_QUERY, {

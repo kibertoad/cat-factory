@@ -20,9 +20,15 @@ prerequisites are configured.
   holds the OUTBOUND mirror of `tasks/webhook/`: the per-vendor `TaskSourceProvider.writeback`
   adapters (comment / resolve / mark in progress) that `writeback/IssueWritebackService.ts`
   dispatches through by registry, so a source is written back to because it DECLARES the
-  capability rather than because a chain in that service names it. The two repo-backed sources
+  capability rather than because a chain in that service names it. Each adapter also declares
+  `authenticates`, the fact that decides what an unreadable tracker connection costs it: the two
+  repo-backed sources are `out-of-band` (they post through the workspace's VCS installation and
+  read that row only for the inbound reply secret), Jira and Linear are `stored-connection`. The
+  two repo-backed sources
   share one factory, and its comment goes through the client's `commentOnIssue`, never `comment`:
-  they are the same call only on GitHub, and on GitLab `comment` addresses merge requests.
+  they are the same call only on GitHub, and on GitLab `comment` addresses merge requests. Its
+  connection read rides `ctx.once`, because the caller fans out over a block's linked issues and
+  the row is the same for all of them.
   `tasks/` also holds the two issue
   PULLS, structural twins differing only in who decides: `BugIntakeService.ts` (the recurring
   step claims the oldest match unattended) and `BugHuntService.ts` (a human picks from a rated

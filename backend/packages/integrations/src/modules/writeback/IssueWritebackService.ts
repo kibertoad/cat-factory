@@ -1,4 +1,5 @@
 import {
+  createTaskWritebackContext,
   describeError,
   type Logger,
   noopLogger,
@@ -105,11 +106,15 @@ export interface IssueWritebackServiceDependencies {
  * for one answer.
  */
 type ResolvedSource =
-  /** A writeback adapter plus the credentials and reply channel that go with it. */
+  /**
+   * A writeback adapter plus the batch context every call for this source shares: one
+   * `TaskWritebackContext`, so an adapter's workspace-invariant reads are paid for once across a
+   * block's linked issues rather than once per call (see the port's `once`).
+   */
   | {
       status: 'ready'
       adapter: TaskSourceWritebackAdapter
-      credentials: TaskCredentials
+      ctx: TaskWritebackContext
       ticketReplies: boolean
     }
   /** No provider registered for this source, or one without the writeback capability. */
@@ -347,17 +352,23 @@ export class IssueWritebackService implements IssueWritebackProvider {
 
   /**
    * What this deployment can do for each source the given issues sit on: the registered
-   * provider's writeback adapter, the workspace's credential bag for it, and whether a reply
-   * typed on one of its tickets reaches the run.
+   * provider's writeback adapter, the batch context carrying the workspace's credential bag for
+   * it, and whether a reply typed on one of its tickets reaches the run.
    *
-   * ONE connection read for the whole set, indexed by source. An unreadable connection resolves
-   * to `unreadable` and is REPORTED, never guessed at: writing back with an empty bag would
-   * authenticate as nobody, and telling a reporter to reply where nothing listens is the exact
-   * thing this resolution exists to prevent.
+   * ONE connection read for the whole set, indexed by source.
    *
-   * Unreadable is scoped to the SOURCE that was unreadable. A block's issues can span trackers,
-   * and a corrupt Linear envelope is no evidence at all about the workspace's Jira connection, so
-   * a batch-wide failure would take a working channel away from a healthy ticket.
+   * What an unreadable row costs is the ADAPTER's own declaration (`authenticates`), never a guess
+   * from the empty bag it leaves behind. A `stored-connection` adapter resolves to `unreadable`
+   * and is REPORTED: writing back with a bag that would not open authenticates as nobody, and the
+   * vendor's rejection would name the wrong fault. An `out-of-band` adapter (GitHub Issues rides
+   * the workspace's App, GitLab Issues its VCS connection) never needed the row to post, so it
+   * stays READY and loses only what the row actually carried: the reply channel, which is
+   * WITHHELD rather than assumed, because telling a reporter to reply where nothing listens is
+   * the exact thing this resolution exists to prevent.
+   *
+   * Both verdicts are scoped to the SOURCE they were learned about. A block's issues can span
+   * trackers, and a corrupt Linear envelope is no evidence at all about the workspace's Jira
+   * connection, so a batch-wide failure would take a working channel away from a healthy ticket.
    */
   private async resolveSources(
     workspaceId: string,
@@ -367,18 +378,29 @@ export class IssueWritebackService implements IssueWritebackProvider {
     const out = new Map<TaskSourceKind, ResolvedSource>()
     /** The adapter for a source, or `undefined` when nothing is registered to write back with. */
     const adapterFor = (source: TaskSourceKind) => this.sources.get(source)?.writeback
-    // A credentialless source (GitHub Issues rides the workspace's App, GitLab Issues its VCS
-    // connection) has no bag to open and often no row at all, so the connection read is a
-    // best-effort enrichment rather than a precondition. Only an UNREADABLE row is fatal, because
-    // that is the one case where something exists and could not be read.
+    const ready = (
+      adapter: TaskSourceWritebackAdapter,
+      credentials: TaskCredentials,
+      ticketReplies: boolean,
+    ): ResolvedSource => ({
+      status: 'ready',
+      adapter,
+      ctx: createTaskWritebackContext({ workspaceId, credentials }),
+      ticketReplies,
+    })
+    /**
+     * A source that HAS no stored connection: no row, or no store wired at all. Every adapter
+     * stays ready with an empty bag, because absence is the adapter's own question to answer. A
+     * credentialless one is unaffected, and one that needs credentials throws from the call with
+     * a message naming the missing connection, which beats this file guessing that fault from
+     * outside (see the port doc on `TaskWritebackContext.credentials`).
+     *
+     * A row that FAILED to open is the opposite case and is handled below: something exists and
+     * could not be read, so an adapter that needs it must not be asked to try.
+     */
     for (const source of sources) {
       const adapter = adapterFor(source)
-      out.set(
-        source,
-        adapter
-          ? { status: 'ready', adapter, credentials: {}, ticketReplies: false }
-          : { status: 'unwired' },
-      )
+      out.set(source, adapter ? ready(adapter, {}, false) : { status: 'unwired' })
     }
 
     const connections = this.deps.taskConnectionStore
@@ -389,34 +411,49 @@ export class IssueWritebackService implements IssueWritebackProvider {
     } catch (error) {
       // The stored-row READ itself failed, before any source was opened, so nothing was learned
       // about any of them.
-      this.log.warn('tracker connections unreadable; writeback cannot authenticate', {
-        workspaceId,
-        sources,
-        ...describeError(error),
-      })
-      for (const source of sources) out.set(source, { status: 'unreadable' })
+      this.markUnreadable(out, workspaceId, sources, error)
       return out
     }
     for (const result of opened) {
       if (result.status === 'unreadable') {
-        this.log.warn('tracker connection unreadable; writeback cannot authenticate', {
-          workspaceId,
-          source: result.source,
-          ...describeError(result.cause),
-        })
-        out.set(result.source, { status: 'unreadable' })
+        this.markUnreadable(out, workspaceId, [result.source], result.cause)
         continue
       }
       const adapter = adapterFor(result.source)
       if (!adapter) continue
-      out.set(result.source, {
-        status: 'ready',
-        adapter,
-        credentials: result.connection.credentials,
-        ticketReplies: trackerWebhookSecret(result.connection.credentials) !== '',
-      })
+      const credentials = result.connection.credentials
+      out.set(result.source, ready(adapter, credentials, trackerWebhookSecret(credentials) !== ''))
     }
     return out
+  }
+
+  /**
+   * Record a connection that would not open, costing each source only what it actually costs.
+   *
+   * An adapter that authenticates WITH the bag is lost until the connection is repaired, so it
+   * resolves to `unreadable` and every call for it fails loudly. An `out-of-band` one keeps its
+   * whole writeback (it authenticates from `workspaceId` and only ever read this row for the
+   * inbound secret) and loses just the reply channel, which the seeded entry already withholds.
+   * Reading the failure as one fact for every source is what would let a rotated
+   * `TASKS_ENCRYPTION_KEY` silence GitHub's PR notices, and the two log lines say which happened
+   * because an operator acts on them differently.
+   */
+  private markUnreadable(
+    out: Map<TaskSourceKind, ResolvedSource>,
+    workspaceId: string,
+    sources: readonly TaskSourceKind[],
+    cause: unknown,
+  ): void {
+    for (const source of sources) {
+      const outOfBand = this.sources.get(source)?.writeback?.authenticates === 'out-of-band'
+      if (!outOfBand) out.set(source, { status: 'unreadable' })
+      this.log.warn(
+        outOfBand
+          ? 'tracker connection unreadable; the writeback still posts but can offer no ticket reply channel'
+          : 'tracker connection unreadable; writeback cannot authenticate',
+        { workspaceId, source, ...describeError(cause) },
+      )
+    }
   }
 
   /**
@@ -473,7 +510,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
       })
       return false
     }
-    await source.adapter.comment(this.contextFor(workspaceId, source), issue.externalId, body)
+    await source.adapter.comment(source.ctx, issue.externalId, body)
     return true
   }
 
@@ -496,7 +533,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
     // An unwired or unreadable source has already been reported by the comment that preceded
     // every call site, so this stays quiet rather than logging the same fact twice.
     if (source?.status !== 'ready') return
-    const ctx = this.contextFor(workspaceId, source)
+    const ctx = source.ctx
     if (action === 'resolve') {
       if (!source.adapter.resolve) {
         this.log.warn('this source cannot resolve an issue; it was commented on but left open', {
@@ -518,12 +555,5 @@ export class IssueWritebackService implements IssueWritebackProvider {
       return
     }
     await source.adapter.markInProgress(ctx, issue.externalId, mark)
-  }
-
-  private contextFor(
-    workspaceId: string,
-    source: Extract<ResolvedSource, { status: 'ready' }>,
-  ): TaskWritebackContext {
-    return { workspaceId, credentials: source.credentials }
   }
 }

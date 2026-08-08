@@ -28,7 +28,10 @@ import {
 //    should produce.
 //  - **The connection is resolved per WORKSPACE, never per issue owner.** An external id names a
 //    repository, not a tenant, so resolving by owner would let two workspaces that both linked
-//    `acme/web#4` write through whichever installation happened to match first.
+//    `acme/web#4` write through whichever installation happened to match first. Being invariant
+//    across the batch is also why it is read through `ctx.once`: the caller fans out over a
+//    block's linked issues and the merge hook takes two calls per issue, so a bare read here
+//    would ask for one unchanging row six times for three issues.
 //  - **Which client method carries an issue comment is DECLARED, never probed.** They are the same
 //    call only on GitHub, where issues and pull requests share one number space and one comment
 //    API; on GitLab `comment` addresses MERGE REQUESTS, so an issue comment routed through it
@@ -63,17 +66,29 @@ export interface RepoIssueWritebackDependencies {
 export function createRepoIssueWriteback(
   deps: RepoIssueWritebackDependencies,
 ): TaskSourceWritebackAdapter {
+  /**
+   * The workspace's connection for this source, read ONCE per batch. The memo is the context's,
+   * so it lives exactly as long as the fan-out that shares it: a later hook builds a fresh
+   * context and re-reads, which is what keeps a reconnected installation from being hidden by a
+   * cache with a lifetime of its own.
+   */
+  const connectionFor = (ctx: TaskWritebackContext) =>
+    ctx.once(`${deps.provider}.installation`, async () => {
+      const connection = await deps.installations.getByWorkspace(ctx.workspaceId)
+      if (!connection || connection.provider !== deps.provider) {
+        throw new ConflictError(
+          `This workspace has no ${deps.label} connection, so its issues cannot be written back to.`,
+        )
+      }
+      return connection
+    })
+
   const target = async (ctx: TaskWritebackContext, externalId: string) => {
     const id = deps.parseExternalId(externalId)
     if (!id) {
       throw new ValidationError(`"${externalId}" is not a valid ${deps.label} issue reference`)
     }
-    const connection = await deps.installations.getByWorkspace(ctx.workspaceId)
-    if (!connection || connection.provider !== deps.provider) {
-      throw new ConflictError(
-        `This workspace has no ${deps.label} connection, so ${externalId} cannot be written back to.`,
-      )
-    }
+    const connection = await connectionFor(ctx)
     return {
       installationId: connection.installationId,
       ref: { owner: id.owner, repo: id.repo },
@@ -82,6 +97,11 @@ export function createRepoIssueWriteback(
   }
 
   return {
+    // Both vendors authenticate through the workspace's VCS installation, resolved above from
+    // `workspaceId`. The tracker connection row carries only the inbound reply secret for them,
+    // so an unreadable one costs the reply channel and nothing else.
+    authenticates: 'out-of-band',
+
     async comment(ctx, externalId, body) {
       const { installationId, ref, id } = await target(ctx, externalId)
       if (deps.issueComments === 'shared-with-pull-requests') {

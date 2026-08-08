@@ -85,7 +85,7 @@ export function judgeIssueEventForIntake(
     // an absent value that fell through to the comparison would read as a definite miss and
     // silently suppress a schedule rather than reporting that it could not be checked.
     if (!event.board?.trim()) unconfirmed.push('board')
-    else if (!(provider?.sameBoard ?? foldedBoardEquality)(event.board, scope)) {
+    else if (!sameBoard(provider, event.board, scope)) {
       return { outcome: 'miss', predicate: 'board' }
     }
   }
@@ -140,6 +140,26 @@ function configuredBoard(config: IntakeConfig): string | undefined {
     board.boardId?.trim() ||
     undefined
   )
+}
+
+/**
+ * Ask the source whether two board ids name the same board, falling back to {@link
+ * foldedBoardEquality} where it declares no rule.
+ *
+ * Called as a METHOD on the provider, never lifted off it. `sameBoard` is declared on the port as
+ * a method signature, so a deployment is entitled to implement it as a class method that reads
+ * `this` (the provider's configured instance URL, its own case rules); a detached
+ * `(provider?.sameBoard ?? fallback)(…)` throws a `TypeError` on the first pushed delivery for
+ * such a provider and takes the whole push-intake loop down with it. The built-in providers assign
+ * standalone functions and would never have shown it. Every sibling capability is invoked the same
+ * bound way (`repoScope.matches(…)`, the writeback's `commentOnIssue.call(client, …)`).
+ */
+function sameBoard(
+  provider: Pick<TaskSourceProvider, 'sameBoard'> | undefined,
+  a: string,
+  b: string,
+): boolean {
+  return provider?.sameBoard ? provider.sameBoard(a, b) : foldedBoardEquality(a, b)
 }
 
 /**

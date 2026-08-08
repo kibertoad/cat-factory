@@ -378,6 +378,7 @@ export type {
   TaskSourceWritebackAdapter,
   TaskWritebackContext,
 } from './task-source-writeback.js'
+export { createTaskWritebackContext } from './task-source-writeback.js'
 export type { BugHuntAssessor, BugHuntSubject } from './bug-hunt.js'
 export type {
   BuiltinTaskSourceKind,

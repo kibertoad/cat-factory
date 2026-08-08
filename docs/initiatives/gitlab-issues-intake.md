@@ -313,6 +313,26 @@ this before slice 6 (webhooks) or 7 (writeback).
   to the case fold everywhere else. Threading it off `repoScope`, as slice 5 suggested, would not
   have worked: `repoScope.matches` compares an EXTERNAL ID to a repo scope, where this compares two
   board ids, and Jira and Linear have boards with no `repoScope` at all.
+- **"Refuse rather than return quietly" is right for a credentialed source and collateral for a
+  credentialless one.** The first cut read an unreadable tracker connection as one fact for every
+  source, so a rotated `TASKS_ENCRYPTION_KEY` or a transient row read failure took the PR notice,
+  the close-on-merge, the pickup claim and the question echo away from GitHub Issues and GitLab
+  Issues too, which authenticate through the workspace's VCS installation and never needed that
+  row to post. The adapter now declares `authenticates` (`stored-connection` / `out-of-band`) and
+  the service costs each source only what it actually costs: an out-of-band one keeps its
+  writeback and loses the reply grammar, which is WITHHELD rather than promised, because a channel
+  this deployment could not confirm is not one to send a reporter to.
+- **A GitLab write puts its payload in the JSON body, never the query string.** GitLab accepts
+  both, so the query form worked for every short notice and 414d only on the long ones: a note
+  body is capped at 30,000 characters and percent-encodes to several times that, past the ~8KB
+  request line most GitLab deployments sit behind. Failing by SIZE is what made it invisible, so
+  the rule is now uniform across every write on the client rather than fixed on the one that
+  surfaced it.
+- **A capability declared as a METHOD on the port is called as one.** `(provider?.sameBoard ??
+fallback)(…)` reads fine and throws a `TypeError` for any deployment implementing `sameBoard` as
+  a class method that touches `this`; the built-in providers assign standalone functions, so no
+  test would ever have shown it. Every capability lookup here calls bound (`repoScope.matches(…)`,
+  `commentOnIssue.call(client, …)`).
 - **What the conformance slice inherits.** Both facades build the writeback from the same
   expression that registers the providers, so production cannot desync them, but a test harness
   that OVERRIDES `taskSourceProviders` re-points only the tasks module: the writeback keeps the

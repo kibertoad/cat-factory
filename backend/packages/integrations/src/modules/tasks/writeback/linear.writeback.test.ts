@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createTaskWritebackContext } from '@cat-factory/kernel'
 import { linearWriteback } from './linear.writeback.js'
 
 // The Linear writeback transport. Every write is a lookup then a mutation, because Linear's
 // mutations take the issue UUID while the stored external id is the human identifier, and both
 // state changes are transitions to a workflow state of a standard TYPE (Linear has no close).
 
-const CTX = { workspaceId: 'ws_1', credentials: { apiKey: 'lin_api_x' } }
+const CTX = createTaskWritebackContext({
+  workspaceId: 'ws_1',
+  credentials: { apiKey: 'lin_api_x' },
+})
 
 interface Operation {
   name: string
@@ -94,7 +98,11 @@ describe('linearWriteback', () => {
   it('REFUSES a workspace with neither an OAuth token nor an API key', async () => {
     const operations = stubLinear()
     await expect(
-      linearWriteback.comment({ workspaceId: 'ws_1', credentials: {} }, 'ENG-1', 'hi'),
+      linearWriteback.comment(
+        createTaskWritebackContext({ workspaceId: 'ws_1', credentials: {} }),
+        'ENG-1',
+        'hi',
+      ),
     ).rejects.toThrow(/neither an OAuth token nor an API key/)
     expect(operations).toEqual([])
   })

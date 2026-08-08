@@ -622,15 +622,16 @@ describe('FetchGitLabClient — approvals, threads, rebase and tree reads', () =
 
   it('resolves and replies to a thread against the MR + discussion the thread id encodes', async () => {
     const { c, calls } = client({
-      'PUT /projects/7/merge_requests/3/discussions/d1?resolved=true': { status: 200 },
-      'POST /projects/7/merge_requests/3/discussions/d1/notes?body=ok': { status: 201 },
+      'PUT /projects/7/merge_requests/3/discussions/d1': { status: 200 },
+      'POST /projects/7/merge_requests/3/discussions/d1/notes': { status: 201 },
     })
     await c.resolveReviewThread(connection, ref, '3:d1')
     await c.replyToReviewThread(connection, ref, '3:d1', 'ok')
     expect(calls.map((x) => `${x.method} ${x.url}`)).toEqual([
-      'PUT /projects/7/merge_requests/3/discussions/d1?resolved=true',
-      'POST /projects/7/merge_requests/3/discussions/d1/notes?body=ok',
+      'PUT /projects/7/merge_requests/3/discussions/d1',
+      'POST /projects/7/merge_requests/3/discussions/d1/notes',
     ])
+    expect(calls.map((x) => x.body)).toEqual([{ resolved: true }, { body: 'ok' }])
   })
 
   it('lists only standalone conversation comments (drops system + threaded notes)', async () => {
@@ -914,6 +915,48 @@ describe('FetchGitLabClient — project-scoped issue search', () => {
     const page = await c.searchProjectIssues(connection, ref, { limit: 1 })
     expect(page.hits).toHaveLength(1)
     expect(page.hasMore).toBe(true)
+  })
+})
+
+describe('FetchGitLabClient — issue writes', () => {
+  it('addresses issue notes on their own endpoint, separately from merge-request notes', async () => {
+    const { c, calls } = client({
+      'POST /projects/7/issues/12/notes': { status: 201 },
+      'POST /projects/7/merge_requests/12/notes': { status: 201 },
+    })
+    await c.commentOnIssue(connection, ref, 12, 'on the issue')
+    await c.comment(connection, ref, 12, 'on the MR')
+    expect(calls.map((x) => `${x.method} ${x.url}`)).toEqual([
+      'POST /projects/7/issues/12/notes',
+      'POST /projects/7/merge_requests/12/notes',
+    ])
+  })
+
+  // The regression this pins is SIZE-dependent, which is why it is asserted on the request shape
+  // rather than on an outcome: as a query parameter a comment body works for every short notice
+  // and 414s only on the long ones (a parked review's question echo runs to several KB, and
+  // percent-encoding multiplies that again), so no fixture-sized happy path would have caught it.
+  it('sends every write payload as a JSON body, never in the request line', async () => {
+    const { c, calls } = client({
+      'POST /projects/7/issues': {
+        body: { iid: 12, web_url: 'https://gitlab.com/g/p/-/issues/12' },
+      },
+      'POST /projects/7/issues/12/notes': { status: 201 },
+      'PUT /projects/7/issues/12': { status: 200 },
+    })
+    const long = 'x'.repeat(30_000)
+    await c.createIssue(connection, ref, { title: 'a crash', body: long })
+    await c.commentOnIssue(connection, ref, 12, long)
+    await c.applyIssueLabel(connection, ref, 12, 'in-progress')
+    await c.closeIssue(connection, ref, 12)
+
+    expect(calls.every((x) => !x.url.includes('?'))).toBe(true)
+    expect(calls.map((x) => x.body)).toEqual([
+      { title: 'a crash', description: long },
+      { body: long },
+      { add_labels: 'in-progress' },
+      { state_event: 'close' },
+    ])
   })
 })
 
