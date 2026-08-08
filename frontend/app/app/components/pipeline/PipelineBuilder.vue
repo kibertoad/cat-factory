@@ -11,6 +11,7 @@ import OutputBudgetInput from '~/components/pipeline/OutputBudgetInput.vue'
 import BinaryOutputStepPicker from '~/components/pipeline/BinaryOutputStepPicker.vue'
 import { ESTIMATE_AXES, ESTIMATE_AXIS_FIELD, type EstimateAxis } from '~/utils/estimateGating'
 import { showOverrideField } from '~/utils/uiMode'
+import { narrowPipelineLibrary } from '~/utils/pipelineLibrary'
 import {
   agentKindMeta,
   companionForProducer,
@@ -404,13 +405,18 @@ const allLabels = computed(() =>
   [...new Set(pipelines.pipelines.flatMap((p) => p.labels ?? []))].sort(),
 )
 const archivedCount = computed(() => pipelines.pipelines.filter((p) => p.archived).length)
-const visiblePipelines = computed(() =>
-  pipelines.pipelines.filter((p) => {
-    if (!showArchived.value && p.archived) return false
-    if (labelFilter.value && !(p.labels ?? []).includes(labelFilter.value)) return false
-    return true
+// The library is narrowed by the same purpose dial the palette is: browsing at `review` lists the
+// pipelines built for reviewing, not the whole workspace catalog. `narrowPipelineLibrary` owns the
+// reduction so the rule is unit-testable and the "n hidden" hint counts the population the purpose
+// control can actually reveal, rather than the rows the label filter is hiding either way.
+const library = computed(() =>
+  narrowPipelineLibrary(pipelines.pipelines, {
+    purpose: pipelines.draftPurpose,
+    label: labelFilter.value,
+    showArchived: showArchived.value,
   }),
 )
+const visiblePipelines = computed(() => library.value.offered)
 async function toggleArchive(p: Pipeline) {
   try {
     if (p.archived) await pipelines.unarchive(p.id)
@@ -1173,6 +1179,19 @@ async function clone(p: Pipeline) {
               {{ l }}
             </UBadge>
           </div>
+
+          <!-- What the purpose dial (one column left, above the palette) is holding back. Stated
+               here rather than beside the control because this is where the absence is noticed:
+               a narrowed library must never read as the whole one. -->
+          <p v-if="library.hiddenByPurpose" class="mb-2 shrink-0 px-1 text-[10px] text-slate-500">
+            {{
+              t(
+                'pipeline.builder.purposeHiddenPipelines',
+                { count: library.hiddenByPurpose },
+                library.hiddenByPurpose,
+              )
+            }}
+          </p>
 
           <ul class="flex-1 space-y-1.5 pe-1 lg:min-h-0 lg:overflow-y-auto">
             <li

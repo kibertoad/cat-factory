@@ -4817,6 +4817,10 @@
       "removeParticipant": "Remove participant (min 2)",
       "addParticipant": "Add participant",
       "savedPipelines": "Saved pipelines",
+      "purposeHiddenPipelines": "{count} saved pipeline hidden for this purpose. | {count} saved pipelines hidden for this purpose.",
+      "@purposeHiddenPipelines": {
+        "description": "Shown above the saved-pipeline list in the pipeline builder: how many saved pipelines are not listed because they were built for a different purpose than the one being edited."
+      },
       "hideArchived": "Hide archived",
       "archivedCount": "Archived ({count})",
       "allLabels": "All",

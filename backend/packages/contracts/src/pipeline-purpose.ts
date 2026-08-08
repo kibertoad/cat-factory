@@ -18,7 +18,8 @@ import type { BlockLevel, TaskType } from './primitives.js'
  *
  * A non-`build` purpose hides the Implementation/Testing agent kinds in the builder
  * ({@link purposeAllowsAgentCategory}), narrows what its palette offers
- * ({@link purposeSuggestsAgentCategory}) and scopes the pipeline in the task pickers
+ * ({@link purposeSuggestsAgentCategory}) and its saved-pipeline library lists
+ * ({@link pipelineMatchesPurpose}), and scopes the pipeline in the task pickers
  * ({@link pipelineAllowedForTaskType}). The `Pipeline.purpose` field references this schema.
  */
 export const PIPELINE_PURPOSES = ['build', 'document', 'review', 'research', 'planning'] as const
@@ -41,23 +42,25 @@ export function isPipelinePurpose(value: string): value is PipelinePurpose {
 // Pipeline-purpose gating (shared by the SPA pickers + the builder palette).
 //
 // A pipeline's `purpose` (see `PIPELINE_PURPOSES` in entities) is its use-case
-// classifier, set in the builder and stamped on every built-in preset. Three surfaces
+// classifier, set in the builder and stamped on every built-in preset. Four surfaces
 // key off it, and all share these pure predicates so they can't drift:
 //   - the task pickers: a `document` task authors a document, so it is offered ONLY
 //     `purpose: 'document'` pipelines (a build/test pipeline makes no sense for it);
 //   - the builder palette, which offers only the categories the purpose makes sense of
 //     ({@link purposeSuggestsAgentCategory});
+//   - the builder's saved-pipeline library, which lists the pipelines built for the
+//     purpose being edited ({@link pipelineMatchesPurpose});
 //   - the builder's save gate, which refuses a draft holding a step the purpose is
 //     INCOMPATIBLE with ({@link purposeAllowsAgentCategory}).
 //
-// The last two are deliberately different questions. RELEVANCE narrows a catalog of ~30
-// kinds to the ones worth offering, and is free to be opinionated because a wrong guess
-// costs one purpose switch. COMPATIBILITY blocks a save, so it states only what is
-// actually contradictory (a pipeline that writes no code carrying an implementation
-// step), or tightening the relevance table would make somebody's stored pipeline
-// unsaveable in the editor it was built in. Relevance is a SUBSET of compatibility
-// (asserted in the tests): the palette may hide what the save gate tolerates, never the
-// reverse, which would offer a kind that cannot then be saved.
+// The palette and the save gate are deliberately different questions. RELEVANCE narrows
+// a catalog of ~30 kinds to the ones worth offering, and is free to be opinionated
+// because a wrong guess costs one purpose switch. COMPATIBILITY blocks a save, so it
+// states only what is actually contradictory (a pipeline that writes no code carrying
+// an implementation step), or tightening the relevance table would make somebody's
+// stored pipeline unsaveable in the editor it was built in. Relevance is a SUBSET of
+// compatibility (asserted in the tests): the palette may hide what the save gate
+// tolerates, never the reverse, which would offer a kind that cannot then be saved.
 //
 // An absent `purpose` means UNCLASSIFIED (a legacy/custom pipeline never given one):
 // treated as `build` for the palette (unrestricted) and hidden from a `document` task
@@ -160,6 +163,37 @@ export function purposeSuggestsAgentCategory(
   const classifier = classifierFor(purpose)
   if (classifier === null || !isAgentCategory(category)) return true
   return PURPOSE_SUGGESTED_CATEGORIES[classifier][category]
+}
+
+/**
+ * Whether `pipeline` belongs in a library being browsed AT `purpose`: the builder's saved-pipeline
+ * list, the third surface the purpose dial narrows (the palette's catalog and the save gate being
+ * the other two).
+ *
+ * A BROWSE filter, so it reads the two unknowns the way its siblings do rather than inventing a
+ * third policy:
+ *
+ *  - an unclassified or unrecognised `purpose` to browse at has nothing to narrow by
+ *    ({@link classifierFor}), so the whole library shows;
+ *  - a pipeline whose OWN `purpose` is absent or unrecognised is shown at every purpose. It is not
+ *    known-wrong for any of them, and `purpose` is optional at every write boundary (the builder
+ *    leaves it unset by default), so matching on it would hide exactly the hand-built pipelines a
+ *    workspace has, with nothing on screen to explain the absence. The same asymmetry
+ *    {@link pipelineAllowedForTaskType} draws for `feature` / `bug`, and for the same reason.
+ *
+ * Unlike the pickers' gate this narrows a list somebody is BROWSING rather than one they are about
+ * to run from, so it may be exact where that one is permissive: two purposes never mix, and the
+ * caller states how many rows the dial is holding back.
+ */
+export function pipelineMatchesPurpose(
+  pipeline: Pick<Pipeline, 'purpose'>,
+  purpose: Pipeline['purpose'] | null | undefined,
+): boolean {
+  const classifier = classifierFor(purpose)
+  if (classifier === null) return true
+  const own = classifierFor(pipeline.purpose)
+  if (own === null) return true
+  return own === classifier
 }
 
 /**

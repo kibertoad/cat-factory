@@ -4671,6 +4671,7 @@
       "removeParticipant": "Quitar participante (mín. 2)",
       "addParticipant": "Añadir participante",
       "savedPipelines": "Pipelines guardados",
+      "purposeHiddenPipelines": "{count} pipeline guardado oculto para este propósito. | {count} pipelines guardados ocultos para este propósito.",
       "hideArchived": "Ocultar archivados",
       "archivedCount": "Archivados ({count})",
       "allLabels": "Todas",

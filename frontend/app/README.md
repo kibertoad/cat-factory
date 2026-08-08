@@ -271,12 +271,14 @@ The builder's palette narrows on two axes, and both controls sit on one row abov
 (`PipelinePurposeSelect` above `AgentTierSelect`), each with its own "n hidden" hint so neither
 narrowing reads as an empty catalog. The tier says how deep to look; the **purpose** says what
 the pipeline is for (`build` / `document` / `review` / `research` / `planning`), and the palette
-drops the categories that purpose has no use for. The purpose is not a view preference: it is
+drops the categories that purpose has no use for. It reaches past the palette: the saved-pipeline
+library in the builder's third column lists the pipelines built for the purpose being edited, so
+one dial narrows both ends of the slideover. The purpose is not a view preference either: it is
 saved on the pipeline and also decides which task pickers offer it, which is why the control
 writes through to the draft while the tier writes to its own store.
 
-Purpose is filtered by two predicates in `@cat-factory/contracts`, and the difference between
-them is the point:
+Purpose is filtered by three predicates in `@cat-factory/contracts`, and the difference between
+the first two is the point:
 
 - `purposeSuggestsAgentCategory` is **relevance**: what the palette OFFERS. Opinionated (a
   review pipeline designs nothing; a planning pipeline has no pull request to gate), because a
@@ -284,14 +286,23 @@ them is the point:
 - `purposeAllowsAgentCategory` is **compatibility**: what the builder will SAVE. It states only
   what is contradictory (a pipeline that writes no code carrying an implementation step) and
   drives the draft's conflict warning.
+- `pipelineMatchesPurpose` is **membership**: which SAVED pipelines the builder's library lists,
+  reduced with the label and archive dials in `utils/pipelineLibrary.ts`. The one dial in that
+  column whose control is elsewhere, so it is the one that owes a "n hidden" hint. It may be
+  exact where the pickers' `pipelineAllowedForTaskType` is permissive, because it narrows a list
+  somebody is BROWSING rather than one they are about to run from: two purposes never mix, but a
+  pipeline carrying no purpose is listed at every purpose, since `purpose` is optional at every
+  write boundary and hiding one would take a workspace's own hand-built pipelines out of the
+  library they were built in.
 
 Relevance is a subset of compatibility, asserted over the whole grid in `pipeline.spec.ts`. Keep
 it that way: the palette may hide what the save gate tolerates, so tightening the relevance table
 never turns a stored pipeline into one its own editor refuses, but offering a kind the save gate
 then rejects would be a dead end with the refusal arriving after the work.
 
-**Each hint counts what relaxing THAT dial alone would reveal**, which is why the reduction is one
-function (`utils/agentPalette.ts`) rather than two chained filters at the call site. Chaining them
+**Each hint counts what relaxing THAT dial alone would reveal**, which is why each reduction is one
+function (`utils/agentPalette.ts` for the catalog, `utils/pipelineLibrary.ts` for the library)
+rather than chained filters at the call site. Chaining them
 and subtracting the lengths gives the second dial an honest count and hands the first one the whole
 rest of the catalog: at the default `basic` tier a `planning` pipeline claimed thirteen kinds hidden
 for its purpose when switching back to Build revealed three, the other ten being tier-hidden either

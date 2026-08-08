@@ -4671,6 +4671,7 @@
       "removeParticipant": "参加者を削除(最低2)",
       "addParticipant": "参加者を追加",
       "savedPipelines": "保存済みパイプライン",
+      "purposeHiddenPipelines": "この目的では {count} 件の保存済みパイプラインが非表示です。",
       "hideArchived": "アーカイブを非表示",
       "archivedCount": "アーカイブ済み({count})",
       "allLabels": "すべて",

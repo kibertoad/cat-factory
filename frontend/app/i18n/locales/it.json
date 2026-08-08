@@ -4232,6 +4232,7 @@
       "removeParticipant": "Rimuovi partecipante (min 2)",
       "addParticipant": "Aggiungi partecipante",
       "savedPipelines": "Pipeline salvate",
+      "purposeHiddenPipelines": "{count} pipeline salvata nascosta per questo scopo. | {count} pipeline salvate nascoste per questo scopo.",
       "hideArchived": "Nascondi archiviate",
       "archivedCount": "Archiviate ({count})",
       "allLabels": "Tutte",

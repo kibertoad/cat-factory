@@ -4671,6 +4671,7 @@
       "removeParticipant": "Katılımcıyı kaldır (en az 2)",
       "addParticipant": "Katılımcı ekle",
       "savedPipelines": "Kayıtlı pipeline'lar",
+      "purposeHiddenPipelines": "Bu amaç için {count} kayıtlı pipeline gizli.",
       "hideArchived": "Arşivlenenleri gizle",
       "archivedCount": "Arşivlenen ({count})",
       "allLabels": "Tümü",

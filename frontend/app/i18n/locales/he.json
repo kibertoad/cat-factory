@@ -4671,6 +4671,7 @@
       "removeParticipant": "הסר משתתף (מינימום 2)",
       "addParticipant": "הוסף משתתף",
       "savedPipelines": "צינורות שמורים",
+      "purposeHiddenPipelines": "צינור שמור אחד מוסתר עבור מטרה זו. | שני צינורות שמורים מוסתרים עבור מטרה זו. | {count} צינורות שמורים מוסתרים עבור מטרה זו.",
       "hideArchived": "הסתר מאורכבים",
       "archivedCount": "מאורכבים ({count})",
       "allLabels": "הכל",
