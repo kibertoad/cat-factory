@@ -1,10 +1,15 @@
-// Inbound-webhook signature verification shared by every tracker adapter.
+// Inbound-webhook verification shared by every tracker adapter.
 //
-// All three vendors sign HMAC-SHA256 over the RAW request body and differ only in which header
-// carries the digest and whether it is prefixed (`sha256=<hex>` on GitHub/Jira, a bare `<hex>` on
-// Linear). So the crypto lives here once and each adapter supplies its header name + prefix —
-// rather than three near-verbatim copies, which is exactly how a fix to one silently misses the
-// others (the lesson `captured-command.ts` records on the harness side).
+// GitHub, Jira and Linear sign HMAC-SHA256 over the RAW request body and differ only in which
+// header carries the digest and whether it is prefixed (`sha256=<hex>` on GitHub/Jira, a bare
+// `<hex>` on Linear). So the crypto lives here once and each adapter supplies its header name +
+// prefix, rather than three near-verbatim copies, which is exactly how a fix to one silently
+// misses the others (the lesson `captured-command.ts` records on the harness side).
+//
+// GitLab does not sign at all: it echoes a caller-chosen secret in `X-Gitlab-Token`, which
+// {@link verifySharedToken} compares. That is a WEAKER scheme (the secret travels on every
+// delivery, and nothing binds it to the body), and it is the vendor's only option, so it is named
+// as its own function rather than dressed up as a signature check.
 //
 // This is the same Web Crypto construction `WebCryptoWebhookVerifier` (`@cat-factory/server`) uses
 // for GitHub VCS deliveries, re-expressed here because `@cat-factory/server` sits ABOVE this
@@ -60,6 +65,28 @@ export async function verifyHmacSignature(
   )
   const computed = new Uint8Array(await crypto.subtle.sign('HMAC', key, raw))
   return timingSafeEqual(provided, computed)
+}
+
+/**
+ * Verify a delivery whose vendor sends the shared secret itself in a header (GitLab's
+ * `X-Gitlab-Token`) rather than a signature over the body.
+ *
+ * The same two guards as {@link verifyHmacSignature} apply and for the same reasons: an empty
+ * stored secret fails closed FIRST (an unconfigured connection must not accept a delivery that
+ * also presents nothing), and the comparison is timing-safe. The body is not read here at all,
+ * because nothing in this scheme binds the token to it, which is precisely why the platform
+ * still reads the RAW body once, before any parse, rather than trusting a re-serialisation.
+ */
+export function verifySharedToken(
+  secret: string,
+  headers: Record<string, string>,
+  header: string,
+): boolean {
+  if (!secret) return false
+  const presented = headers[header]
+  if (!presented) return false
+  const encoder = new TextEncoder()
+  return timingSafeEqual(encoder.encode(presented), encoder.encode(secret))
 }
 
 /** Constant-time byte comparison (length included in the constant-time property). */

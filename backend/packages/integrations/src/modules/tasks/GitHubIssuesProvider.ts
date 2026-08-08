@@ -13,6 +13,7 @@ import {
   type TaskSearchResult,
   type TaskSourceDiagnostic,
   type TaskSourceProvider,
+  type TaskSourceWritebackAdapter,
   type TrackerBoard,
   type NormalizedTaskConnection,
 } from '@cat-factory/kernel'
@@ -21,6 +22,7 @@ import { GITHUB_ISSUES_DESCRIPTOR } from './github-issues.logic.js'
 import * as githubIssuesLogic from './github-issues.logic.js'
 import { httpStatusOf } from './tasks.logic.js'
 import { githubIssuesWebhookAdapter } from './webhook/adapters.js'
+import { createRepoIssueWriteback } from './writeback/repo-issue.writeback.js'
 
 // GitHubIssuesProvider: the task-source provider for GitHub issues. Unlike Jira,
 // it stores NO per-workspace credentials — it reuses the workspace's installed
@@ -59,8 +61,26 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
    * requires a scope and its imported rows narrow to one. See the kernel port.
    */
   readonly repoScope = { matches: githubIssuesLogic.githubIssueInRepoScope }
+  /**
+   * Outbound writeback (comment / close / in-progress label), the mirror of the webhook
+   * capability above. Built in the constructor because it reads through the SAME client and
+   * installation repository the source's reads do, which is the point of the capability living
+   * on the provider: the facade no longer hands the writeback service a second, parallel set of
+   * GitHub seams that could resolve a different installation than an import did.
+   */
+  readonly writeback: TaskSourceWritebackAdapter
 
-  constructor(private readonly deps: GitHubIssuesProviderDependencies) {}
+  constructor(private readonly deps: GitHubIssuesProviderDependencies) {
+    this.writeback = createRepoIssueWriteback({
+      client: deps.githubClient,
+      installations: deps.installations,
+      parseExternalId: githubIssuesLogic.parseGitHubIssueExternalId,
+      provider: 'github',
+      label: 'GitHub',
+      // One number space, one comment API: `comment` IS the issue comment on GitHub.
+      issueComments: 'shared-with-pull-requests',
+    })
+  }
 
   /**
    * GitHub issues piggyback on the installed GitHub App, so there is nothing to

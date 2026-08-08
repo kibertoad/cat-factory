@@ -105,6 +105,51 @@ describe('judgeIssueEventForIntake', () => {
     it('does not evaluate a board the config left unscoped', () => {
       expect(outcome(config({}, {}), event({ board: null }))).toBe('match')
     })
+
+    it("defers to the SOURCE's own equality rule where it declares one", () => {
+      // GitLab project paths are case-SENSITIVE at the vendor, so the default fold above would
+      // admit a delivery from `Acme/web` to a schedule scoped to `acme/web`: two different
+      // projects, and under per-ticket dispatch a real run on a stranger's issue.
+      const cfg = {
+        source: 'gitlab',
+        board: { gitlabProject: 'acme/web' },
+        predicates: {},
+      } as IssueIntakeConfig
+      const delivery = event({ source: 'gitlab', board: 'Acme/web' })
+      expect(judgeIssueEventForIntake(cfg, delivery).outcome).toBe('match')
+      expect(
+        judgeIssueEventForIntake(cfg, delivery, { sameBoard: (a, b) => a === b }).outcome,
+      ).toBe('miss')
+    })
+
+    it("calls the source's rule as a METHOD, so an implementation reading `this` works", () => {
+      // The port declares `sameBoard` as a method signature, so a deployment is entitled to
+      // implement it as a class method carrying its own configured case rules. Lifting it off the
+      // provider to call it (`(provider?.sameBoard ?? fallback)(…)`) throws a TypeError on the
+      // first pushed delivery and takes the whole push-intake loop down. The built-in providers
+      // assign standalone functions, so nothing else here would ever have shown it.
+      class ExactBoardSource {
+        readonly separator = '/'
+        sameBoard(a: string, b: string): boolean {
+          // Reads `this`: undefined receiver ⇒ TypeError, which is the regression.
+          return a.split(this.separator).join('/') === b.split(this.separator).join('/')
+        }
+      }
+      const cfg = {
+        source: 'gitlab',
+        board: { gitlabProject: 'acme/web' },
+        predicates: {},
+      } as IssueIntakeConfig
+      const provider = new ExactBoardSource()
+      expect(
+        judgeIssueEventForIntake(cfg, event({ source: 'gitlab', board: 'acme/web' }), provider)
+          .outcome,
+      ).toBe('match')
+      expect(
+        judgeIssueEventForIntake(cfg, event({ source: 'gitlab', board: 'Acme/web' }), provider)
+          .outcome,
+      ).toBe('miss')
+    })
   })
 
   describe('a predicate the delivery cannot answer', () => {

@@ -16,7 +16,19 @@ prerequisites are configured.
   are also REPO-BACKED, declared by a `TaskSourceProvider.repoScope` carrying the source's own
   id-to-repository comparison: its PRESENCE is what makes the HTTP layer resolve a repository
   before the search and what narrows the workspace's imported rows to one, so a repo-backed source
-  added without it is a search that refuses and a list that never narrows.
+  added without it is a search that refuses and a list that never narrows. `tasks/writeback/`
+  holds the OUTBOUND mirror of `tasks/webhook/`: the per-vendor `TaskSourceProvider.writeback`
+  adapters (comment / resolve / mark in progress) that `writeback/IssueWritebackService.ts`
+  dispatches through by registry, so a source is written back to because it DECLARES the
+  capability rather than because a chain in that service names it. Each adapter also declares
+  `authenticates`, the fact that decides what an unreadable tracker connection costs it: the two
+  repo-backed sources are `out-of-band` (they post through the workspace's VCS installation and
+  read that row only for the inbound reply secret), Jira and Linear are `stored-connection`. The
+  two repo-backed sources
+  share one factory, and its comment goes through the client's `commentOnIssue`, never `comment`:
+  they are the same call only on GitHub, and on GitLab `comment` addresses merge requests. Its
+  connection read rides `ctx.once`, because the caller fans out over a block's linked issues and
+  the row is the same for all of them.
   `tasks/` also holds the two issue
   PULLS, structural twins differing only in who decides: `BugIntakeService.ts` (the recurring
   step claims the oldest match unattended) and `BugHuntService.ts` (a human picks from a rated
@@ -59,7 +71,9 @@ prerequisites are configured.
   owns both directions of the tracker clarification loop: `reviewQuestions.logic.ts` (questions
   OUT) and its sibling `reviewReplies.logic.ts` (the reply grammar + the acknowledgement), kept
   side by side because they share the finding ids, and splitting them is how the two halves would
-  desync.
+  desync. `IssueWritebackService` beside them is the SHARED half of every writeback (settings
+  gating, the linked-issue fan-out and its isolation, the per-source connection read, the
+  parked-review marker); the vendor half lives on the providers in `tasks/writeback/`.
 - `audit/`: `AuditService`, the ONE writer of the account audit log and the implementation of
   kernel's `AuditRecorder`. It lives here rather than beside the tenancy services that call it
   because those are in `@cat-factory/workspaces`, which the facades do not depend on; they consume

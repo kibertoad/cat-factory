@@ -6,7 +6,6 @@ import {
   LinearTaskProvider,
   VcsPatConnectionService,
   createTaskConnectionStore,
-  githubIssuesLogic,
   gitlabWebBaseFromApiBase,
 } from '@cat-factory/integrations'
 import { GitLabIdentityResolver, buildGitLabConnectClient } from '@cat-factory/gitlab'
@@ -347,11 +346,10 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
   // Issue-tracker writeback (comment-on-PR-open + close-on-merge of a task's linked
   // issue), gated per workspace + per task inside the provider.
   const issueWritebackProvider = buildNodeIssueWriteback({
-    githubClient,
-    githubInstallationRepository,
     trackerSettingsRepository,
     sourced,
     clock,
+    taskSourceProviders: tasks.deps.taskSourceProviders ?? [],
     taskConnectionStore: tasks.taskConnectionStore,
   })
 
@@ -621,42 +619,28 @@ function buildNodeGitHubModuleDeps(args: {
 
 /**
  * Assemble the issue-tracker writeback provider (comment-on-PR-open + close/label-on-merge of a
- * task's linked issue), gated per workspace + per task inside the provider. GitHub uses the same
- * per-tenant client + installation lookup as the tracker/CI/merge providers; Jira and Linear reuse
- * the workspace's encrypted connection. Split out of {@link selectNodeGitHubDeps} for the
- * per-function line budget, in the same shape as its {@link selectNodeTasksDeps} sibling.
+ * task's linked issue), gated per workspace + per task inside the provider. Every vendor detail
+ * now rides the task-source providers themselves (each declares a `writeback` adapter), so this
+ * hands over the SAME provider array the tasks module registers and the SAME connection store the
+ * reads authenticate through. Split out of {@link selectNodeGitHubDeps} for the per-function line
+ * budget, in the same shape as its {@link selectNodeTasksDeps} sibling.
  */
 function buildNodeIssueWriteback(args: {
-  githubClient: GitHubClient | undefined
-  githubInstallationRepository: GitHubInstallationRepository
   trackerSettingsRepository: TrackerSettingsRepository
   sourced: NodeGitHubDepsInput['sourced']
   clock: Clock
+  taskSourceProviders: readonly TaskSourceProvider[]
   taskConnectionStore: TaskConnectionStore | undefined
 }): IssueWritebackService {
-  const {
-    githubClient,
-    githubInstallationRepository,
-    trackerSettingsRepository,
-    sourced,
-    clock,
-    taskConnectionStore,
-  } = args
-  // Wired whenever the tracker-settings repo exists (always on Node) so the engine can write
-  // back when a tracker is set; the GitHub half resolves the workspace's installation per issue.
-  const resolveWritebackIssue = githubClient
-    ? async (workspaceId: string, externalId: string) => {
-        const parsed = githubIssuesLogic.parseGitHubIssueExternalId(externalId)
-        if (!parsed) return null
-        const installation = await githubInstallationRepository.getByWorkspace(workspaceId)
-        if (!installation) return null
-        return { installationId: installation.installationId, parsed }
-      }
-    : undefined
+  const { trackerSettingsRepository, sourced, clock, taskSourceProviders, taskConnectionStore } =
+    args
   return new IssueWritebackService({
     trackerSettingsRepository,
     taskRepository: sourced('taskRepository', (d) => new DrizzleTaskRepository(d)),
-    fetchImpl: fetch,
+    // BY REFERENCE, the same array `selectNodeTasksDeps` hands the tasks module: a source is
+    // registered once and is then both readable and writeable, so a deployment's own tracker
+    // cannot end up with intake and no way to answer it.
+    taskSourceProviders,
     // Idempotency markers for the headless clarification loop's question echo — without them
     // the writeback passes through, since a replaying driver would otherwise re-post.
     reviewQuestionPostRepository: sourced(
@@ -667,63 +651,10 @@ function buildNodeIssueWriteback(args: {
     // Every hook here is fire-and-forget; without a logger a permanently broken tracker
     // connection produces no symptom but comments that never appear.
     logger,
-    ...(githubClient && resolveWritebackIssue
-      ? {
-          commentOnGitHubIssue: async (workspaceId, externalId, body) => {
-            // An unresolvable target THROWS rather than returning quietly: returning is this
-            // seam's promise that the comment landed, and the parked-review writeback would
-            // otherwise mark the questions `posted` for an issue that never received them.
-            const target = await resolveWritebackIssue(workspaceId, externalId)
-            if (!target) {
-              throw new Error(`Cannot resolve GitHub issue ${externalId} for this workspace`)
-            }
-            await githubClient.comment(
-              target.installationId,
-              { owner: target.parsed.owner, repo: target.parsed.repo },
-              target.parsed.number,
-              body,
-            )
-          },
-          closeGitHubIssue: async (workspaceId, externalId) => {
-            const target = await resolveWritebackIssue(workspaceId, externalId)
-            if (!target) return
-            await githubClient.closeIssue(
-              target.installationId,
-              { owner: target.parsed.owner, repo: target.parsed.repo },
-              target.parsed.number,
-            )
-          },
-          labelGitHubIssue: async (workspaceId, externalId, label) => {
-            const target = await resolveWritebackIssue(workspaceId, externalId)
-            if (!target) return
-            await githubClient.applyIssueLabel?.(
-              target.installationId,
-              { owner: target.parsed.owner, repo: target.parsed.repo },
-              target.parsed.number,
-              label,
-            )
-          },
-        }
-      : {}),
-    ...(taskConnectionStore
-      ? {
-          resolveJiraConnection: async (workspaceId: string) => {
-            const connection = await taskConnectionStore.getByWorkspace(workspaceId, 'jira')
-            const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
-            if (!baseUrl || !accountEmail || !apiToken) return null
-            return { baseUrl, accountEmail, apiToken }
-          },
-          resolveLinearConnection: async (workspaceId: string) => {
-            const connection = await taskConnectionStore.getByWorkspace(workspaceId, 'linear')
-            const { apiKey, token } = connection?.credentials ?? {}
-            return apiKey || token ? { apiKey, token } : null
-          },
-          // The same store, read for the ONE fact the parked-review question comment needs before
-          // it tells a reporter to answer on the ticket: whether an inbound webhook secret was ever
-          // minted for that connection. Without it the reply path fails closed, so the copy offers
-          // the API route alone. Mirrored in the Worker's `selectRecurringDeps`.
-          taskConnectionStore,
-        }
-      : {}),
+    // The store the adapters authenticate through, and the one fact the parked-review question
+    // comment needs before it tells a reporter to answer on the ticket: whether an inbound
+    // webhook secret was ever minted for that connection. Without it the reply path fails closed,
+    // so the copy offers the API route alone. Mirrored in the Worker's `selectRecurringDeps`.
+    ...(taskConnectionStore ? { taskConnectionStore } : {}),
   })
 }

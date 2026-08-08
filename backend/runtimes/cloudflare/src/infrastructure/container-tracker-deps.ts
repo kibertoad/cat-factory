@@ -1,9 +1,8 @@
 import type { D1Database } from '@cloudflare/workers-types'
-import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type { Clock, IdGenerator, TaskSourceProvider } from '@cat-factory/kernel'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import {
   createTaskConnectionStore,
-  githubIssuesLogic,
   IssueWritebackService,
   TicketTrackerService,
 } from '@cat-factory/integrations'
@@ -15,7 +14,6 @@ import {
 } from '@cat-factory/server'
 import type { Env } from './env.js'
 import { buildAppRegistry, buildResolveRepoTarget } from './container.js'
-import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository.js'
 import { D1PipelineScheduleRepository } from './repositories/D1PipelineScheduleRepository.js'
 import { D1RateLimitRepository } from './repositories/D1RateLimitRepository.js'
 import { D1ReviewQuestionPostRepository } from './repositories/D1ReviewQuestionPostRepository.js'
@@ -45,18 +43,22 @@ export function selectRecurringDeps(
   db: D1Database,
   clock: Clock,
   idGenerator: IdGenerator,
+  taskSourceProviders: readonly TaskSourceProvider[],
 ): Partial<CoreDependencies> {
   const trackerDeps: ConstructorParameters<typeof TicketTrackerService>[0] = {
     trackerSettingsRepository: new D1TrackerSettingsRepository({ db }),
     // workerd exposes a global fetch; the Jira create call uses it.
     fetchImpl: fetch,
   }
-  // Writeback (comment-on-PR-open + close-on-merge of a task's linked issue) shares
-  // the same GitHub client + Jira connection seams as the filing tracker above.
+  // Writeback (comment-on-PR-open + close-on-merge of a task's linked issue) carries no vendor
+  // code of its own any more: each task source declares a `writeback` adapter, so this hands over
+  // the SAME provider array `selectTasksDeps` registers, BY REFERENCE. A source is therefore
+  // registered once and is then both readable and writeable, which is what stops a shipped source
+  // (GitLab Issues) or a deployment's own from having intake and no way to answer it.
   const writebackDeps: ConstructorParameters<typeof IssueWritebackService>[0] = {
     trackerSettingsRepository: new D1TrackerSettingsRepository({ db }),
     taskRepository: new D1TaskRepository({ db }),
-    fetchImpl: fetch,
+    taskSourceProviders,
     // Idempotency markers for the headless clarification loop's question echo — without them
     // the writeback passes through, since a replaying driver would otherwise re-post.
     reviewQuestionPostRepository: new D1ReviewQuestionPostRepository({ db }),
@@ -87,53 +89,6 @@ export function selectRecurringDeps(
       )
       return { externalId: `${repo.owner}/${repo.name}#${issue.number}`, url: issue.url }
     }
-    // Writeback resolves the workspace's single installation, then comments/closes the
-    // issue named by its `owner/repo#number` external id.
-    const installationRepository = new D1GitHubInstallationRepository({ db })
-    const resolveIssue = async (workspaceId: string, externalId: string) => {
-      const parsed = githubIssuesLogic.parseGitHubIssueExternalId(externalId)
-      if (!parsed) return null
-      const installation = await installationRepository.getByWorkspace(workspaceId)
-      if (!installation) return null
-      return { installationId: installation.installationId, parsed }
-    }
-    /** As {@link resolveIssue}, for the writeback that must not mistake "unresolved" for "done". */
-    const requireIssue = async (workspaceId: string, externalId: string) => {
-      const target = await resolveIssue(workspaceId, externalId)
-      if (!target) throw new Error(`Cannot resolve GitHub issue ${externalId} for this workspace`)
-      return target
-    }
-    writebackDeps.commentOnGitHubIssue = async (workspaceId, externalId, body) => {
-      // An unresolvable target THROWS rather than returning quietly: returning is this seam's
-      // promise that the comment landed, and the parked-review writeback would otherwise mark
-      // the questions `posted` for an issue that never received them (see the seam docs).
-      const target = await requireIssue(workspaceId, externalId)
-      await githubClient.comment(
-        target.installationId,
-        { owner: target.parsed.owner, repo: target.parsed.repo },
-        target.parsed.number,
-        body,
-      )
-    }
-    writebackDeps.closeGitHubIssue = async (workspaceId, externalId) => {
-      const target = await resolveIssue(workspaceId, externalId)
-      if (!target) return
-      await githubClient.closeIssue(
-        target.installationId,
-        { owner: target.parsed.owner, repo: target.parsed.repo },
-        target.parsed.number,
-      )
-    }
-    writebackDeps.labelGitHubIssue = async (workspaceId, externalId, label) => {
-      const target = await resolveIssue(workspaceId, externalId)
-      if (!target) return
-      await githubClient.applyIssueLabel?.(
-        target.installationId,
-        { owner: target.parsed.owner, repo: target.parsed.repo },
-        target.parsed.number,
-        label,
-      )
-    }
   }
   // Jira: read the workspace's stored connection credentials (when the tasks
   // integration's encryption key is configured).
@@ -152,18 +107,17 @@ export function selectRecurringDeps(
       return { baseUrl, accountEmail, apiToken }
     }
     trackerDeps.resolveJiraConnection = resolveJiraConnection
-    writebackDeps.resolveJiraConnection = resolveJiraConnection
     const resolveLinearConnection = async (workspaceId: string) => {
       const connection = await taskConnectionStore.getByWorkspace(workspaceId, 'linear')
       const { apiKey, token } = connection?.credentials ?? {}
       return apiKey || token ? { apiKey, token } : null
     }
     trackerDeps.resolveLinearConnection = resolveLinearConnection
-    writebackDeps.resolveLinearConnection = resolveLinearConnection
-    // The same store, read for the ONE fact the parked-review question comment needs before it
-    // tells a reporter to answer on the ticket: whether an inbound webhook secret was ever minted
-    // for that connection. Without it the reply path fails closed, so the copy offers the API
-    // route alone. Mirrored in the Node facade's `buildNodeIssueWriteback`.
+    // The store the writeback adapters authenticate through, and the one fact the parked-review
+    // question comment needs before it tells a reporter to answer on the ticket: whether an
+    // inbound webhook secret was ever minted for that connection. Without it the reply path fails
+    // closed, so the copy offers the API route alone. Mirrored in the Node facade's
+    // `buildNodeIssueWriteback`.
     writebackDeps.taskConnectionStore = taskConnectionStore
   }
   return {

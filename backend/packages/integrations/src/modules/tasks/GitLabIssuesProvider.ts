@@ -15,12 +15,15 @@ import {
   type TaskSearchResult,
   type TaskSourceDiagnostic,
   type TaskSourceProvider,
+  type TaskSourceWritebackAdapter,
   type TrackerBoard,
 } from '@cat-factory/kernel'
 import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import { GITLAB_ISSUES_DESCRIPTOR } from './gitlab-issues.logic.js'
 import * as gitlabIssuesLogic from './gitlab-issues.logic.js'
 import { httpStatusOf } from './tasks.logic.js'
+import { gitlabIssuesWebhookAdapter } from './webhook/adapters.js'
+import { createRepoIssueWriteback } from './writeback/repo-issue.writeback.js'
 
 // GitLabIssuesProvider: the task-source provider for GitLab issues, the sibling of
 // GitHubIssuesProvider and built on the same credentialless shape — it stores no
@@ -88,8 +91,37 @@ export class GitLabIssuesProvider implements TaskSourceProvider {
    * omission being silent all the way out to the schedule form.
    */
   readonly ignoredIntakePredicates = ['issueType'] as const
+  /**
+   * Inbound webhook capability. GitLab does not sign its deliveries: it echoes a caller-chosen
+   * secret in `X-Gitlab-Token`, so the adapter compares that in constant time. Everything else
+   * (raw body first, fast ack, hand-off to the facade's queue) is the shared receiver's.
+   */
+  readonly webhook = gitlabIssuesWebhookAdapter
+  /**
+   * Board ids here are project PATHS, which GitLab treats as case-sensitive, so the push-intake
+   * matcher must not fold them the way it folds a Jira key or a GitHub slug.
+   */
+  readonly sameBoard = gitlabIssuesLogic.gitlabSameProject
+  /**
+   * Outbound writeback (comment / close / in-progress label), reading through the SAME GitLab
+   * client and connection row as this source's reads. Note the comment goes through the client's
+   * `commentOnIssue`, never `comment`: on GitLab the latter addresses merge-request notes, so an
+   * issue comment routed through it would land on whatever MR shares the number. The adapter is
+   * TOLD that rather than probing for it (see `issueComments`).
+   */
+  readonly writeback: TaskSourceWritebackAdapter
 
-  constructor(private readonly deps: GitLabIssuesProviderDependencies) {}
+  constructor(private readonly deps: GitLabIssuesProviderDependencies) {
+    this.writeback = createRepoIssueWriteback({
+      client: deps.gitlabClient,
+      installations: deps.installations,
+      parseExternalId: gitlabIssuesLogic.parseGitLabIssueExternalId,
+      provider: 'gitlab',
+      label: 'GitLab',
+      // Separate endpoints over separate `iid` spaces: only `commentOnIssue` addresses an issue.
+      issueComments: 'dedicated',
+    })
+  }
 
   /**
    * GitLab issues ride the workspace's VCS connection, so there is nothing to validate or

@@ -1,4 +1,4 @@
-import type { IssueIntakeConfig, TrackerIssueEvent } from '@cat-factory/kernel'
+import type { IssueIntakeConfig, TaskSourceProvider, TrackerIssueEvent } from '@cat-factory/kernel'
 
 // Does a pushed tracker issue event qualify for a given schedule's intake configuration?
 //
@@ -52,9 +52,10 @@ export type IntakeMatchVerdict =
  *
  * - **source** must be the schedule's source (always evaluable; a mismatch is a `miss`).
  * - **board** must equal the configured scope for that source. The event carries it in exactly
- *   the shape the configured field does, so no per-vendor knowledge is needed here. A `null`
- *   board on the event is `unconfirmed`, never a match: a schedule scoped to one project must not
- *   be assumed to cover a delivery that never named one.
+ *   the shape the configured field does, so no per-vendor knowledge is needed here beyond the
+ *   EQUALITY rule, which the source owns (see {@link foldedBoardEquality}) and `provider` supplies.
+ *   A `null` board on the event is `unconfirmed`, never a match: a schedule scoped to one project
+ *   must not be assumed to cover a delivery that never named one.
  * - **labels**: every configured label must be present, case-insensitively (the vendor queries
  *   are `AND`-semantics; GitHub and Jira both match labels case-insensitively). An event carrying
  *   no labels at all cannot answer a label predicate, so it is `unconfirmed`.
@@ -70,6 +71,7 @@ export type IntakeMatchVerdict =
 export function judgeIssueEventForIntake(
   config: IntakeConfig,
   event: TrackerIssueEvent,
+  provider?: Pick<TaskSourceProvider, 'sameBoard'>,
 ): IntakeMatchVerdict {
   if (event.source !== config.source) return { outcome: 'miss', predicate: 'source' }
   if (event.action === 'closed') return { outcome: 'miss', predicate: 'closed' }
@@ -83,7 +85,9 @@ export function judgeIssueEventForIntake(
     // an absent value that fell through to the comparison would read as a definite miss and
     // silently suppress a schedule rather than reporting that it could not be checked.
     if (!event.board?.trim()) unconfirmed.push('board')
-    else if (!sameBoard(event.board, scope)) return { outcome: 'miss', predicate: 'board' }
+    else if (!sameBoard(provider, event.board, scope)) {
+      return { outcome: 'miss', predicate: 'board' }
+    }
   }
 
   const labels = config.predicates.labels ?? []
@@ -139,16 +143,38 @@ function configuredBoard(config: IntakeConfig): string | undefined {
 }
 
 /**
- * Case-insensitive comparison, because the two sides are typed by different hands: a Jira project
- * key and a GitHub `owner/repo` are both case-insensitive at the vendor, and the operator typed
- * one of them into a form. A Linear team UUID is unaffected by folding case.
+ * Ask the source whether two board ids name the same board, falling back to {@link
+ * foldedBoardEquality} where it declares no rule.
  *
- * A GitLab project path is the one member the vendor treats as case-SENSITIVE, so this fold is
- * more forgiving than GitLab itself would be. It is unreachable today (GitLab has no webhook
- * adapter, so no delivery ever gets here) and belongs to the slice that adds one, which is where
- * a per-source comparison could be threaded through from the provider's own `repoScope` rules
- * rather than guessed at here.
+ * Called as a METHOD on the provider, never lifted off it. `sameBoard` is declared on the port as
+ * a method signature, so a deployment is entitled to implement it as a class method that reads
+ * `this` (the provider's configured instance URL, its own case rules); a detached
+ * `(provider?.sameBoard ?? fallback)(…)` throws a `TypeError` on the first pushed delivery for
+ * such a provider and takes the whole push-intake loop down with it. The built-in providers assign
+ * standalone functions and would never have shown it. Every sibling capability is invoked the same
+ * bound way (`repoScope.matches(…)`, the writeback's `commentOnIssue.call(client, …)`).
  */
-function sameBoard(a: string, b: string): boolean {
+function sameBoard(
+  provider: Pick<TaskSourceProvider, 'sameBoard'> | undefined,
+  a: string,
+  b: string,
+): boolean {
+  return provider?.sameBoard ? provider.sameBoard(a, b) : foldedBoardEquality(a, b)
+}
+
+/**
+ * The DEFAULT board comparison: case-insensitive, because the two sides are typed by different
+ * hands. A Jira project key and a GitHub `owner/repo` are both case-insensitive at the vendor, the
+ * operator typed one of them into a form, and folding case leaves a Linear team UUID unaffected.
+ *
+ * It is a default rather than the rule, because it is WRONG for GitLab, whose project paths the
+ * vendor treats as case-SENSITIVE: folding them would admit a delivery from `Acme/web` to a
+ * schedule scoped to `acme/web`, two different projects, and under `per-ticket` dispatch that is a
+ * real block and a real agent run on a stranger's issue. So a source that knows better declares
+ * `TaskSourceProvider.sameBoard` and the caller passes its provider in, the same asymmetry
+ * `repoScope` already states about external ids. A source that does not declare one keeps this
+ * fold, so no existing behaviour moves.
+ */
+function foldedBoardEquality(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
