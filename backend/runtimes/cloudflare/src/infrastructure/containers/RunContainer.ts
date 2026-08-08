@@ -5,10 +5,10 @@ import type { Env } from '../env'
 import { logger } from '../observability/logger'
 import {
   clearStopCause,
-  type ContainerStopCause,
   isRolloutSignal,
   recordStopCause,
   type StopCauseStorage,
+  type StopObservation,
   takeStopCause,
 } from './stopCause'
 
@@ -54,20 +54,31 @@ export abstract class RunContainer extends Container<Env> {
    * worker+container deploy causes.
    */
   override async onError(error: unknown): Promise<unknown> {
-    if (isRolloutSignal(error)) await this.record('rollout')
+    if (isRolloutSignal(error)) await this.record({ cause: 'rollout' })
     // Preserve the base behaviour (log + rethrow) so nothing else changes.
     return super.onError(error)
   }
 
   /**
-   * Belt-and-braces: depending on the runtime version, a rollout drain can surface as a
-   * `runtime_signal` stop with SIGTERM (143) through `onStop` instead of (or as well as)
-   * `onError`. Record it the same way.
+   * Record EVERY stop, with whatever this hook can say about it.
+   *
+   * Two things ride the same write. A `runtime_signal` SIGTERM (143) is a rollout drain, which
+   * depending on the runtime version surfaces here instead of (or as well as) through `onError`,
+   * so it is recorded as that cause the same way. And the `{ exitCode, reason }` pair itself is
+   * recorded for every stop, cause or not, because it is the ONLY account of a death this
+   * runtime can keep: a Cloudflare Container's stdout goes to the deployment's Workers logs and
+   * nothing here can read it back, so without this an OOM-killed agent reaches the operator as
+   * "container evicted or crashed" and nothing else (finding D1).
+   *
+   * Recording an exit changes no verdict: the transient/crash classification still comes from
+   * the cause alone, so a plain crash keeps spending the crash budget and merely says why.
    */
-  override onStop(params: StopParams): void {
-    if (params.reason === 'runtime_signal' && params.exitCode === 143) {
-      void this.record('rollout')
-    }
+  override async onStop(params: StopParams): Promise<void> {
+    const rollout = params.reason === 'runtime_signal' && params.exitCode === 143
+    await this.record({
+      ...(rollout ? { cause: 'rollout' as const } : {}),
+      exit: { code: params.exitCode, reason: params.reason },
+    })
   }
 
   /**
@@ -90,7 +101,7 @@ export abstract class RunContainer extends Container<Env> {
    * that case, so a marker would be attributing a reclaim that never happened.
    */
   override async onActivityExpired(): Promise<void> {
-    if (this.ctx.container?.running) await this.record('idle')
+    if (this.ctx.container?.running) await this.record({ cause: 'idle' })
     await super.onActivityExpired()
   }
 
@@ -123,14 +134,15 @@ export abstract class RunContainer extends Container<Env> {
   }
 
   /**
-   * Why this run's container went away, for the transport to read over RPC after `jobId`'s poll
-   * 404s: the one thing that tells a reclaim apart from a crash. `undefined` means no reclaim
-   * this container observed explains that 404, so the caller reports a crash.
+   * What this run's container observed about its own stop, for the transport to read over RPC
+   * after `jobId`'s poll 404s: the `cause` that tells a reclaim apart from a crash, and the
+   * `exit` state that is the only surviving account of the death itself. An EMPTY observation
+   * means nothing this container saw explains that 404, so the caller reports a bare crash.
    *
    * Claimed by the polling job rather than deleted, so a retried durable poll step re-reads the
    * same answer while a different job still finds it spent. See {@link takeStopCause}.
    */
-  async recentEvictionCause(jobId: string): Promise<ContainerStopCause | undefined> {
+  async recentStopObservation(jobId: string): Promise<StopObservation> {
     return takeStopCause(this.storage, Date.now(), jobId)
   }
 
@@ -150,8 +162,8 @@ export abstract class RunContainer extends Container<Env> {
     }
   }
 
-  private record(cause: ContainerStopCause): Promise<void> {
-    return recordStopCause(this.storage, cause, Date.now())
+  private record(observed: StopObservation): Promise<void> {
+    return recordStopCause(this.storage, observed, Date.now())
   }
 
   /** The DO storage, narrowed to what the stop-cause bookkeeping uses. */

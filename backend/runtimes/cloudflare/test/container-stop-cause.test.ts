@@ -5,9 +5,10 @@ import type { ExecutionContainer } from '../src/infrastructure/containers/Execut
 import {
   ATTRIBUTION_WINDOW_MS,
   clearStopCause,
-  type ContainerStopCause,
+  EXIT_ATTRIBUTION_WINDOW_MS,
   recordStopCause,
   type StopCauseStorage,
+  type StopObservation,
   takeStopCause,
 } from '../src/infrastructure/containers/stopCause'
 
@@ -37,16 +38,16 @@ function fakeStorage(): StopCauseStorage & { size: () => number } {
   }
 }
 
-/** A namespace whose poll 404s, with the container answering `cause` about its own reclaim. */
+/** A namespace whose poll 404s, with the container answering `observed` about its own stop. */
 function namespace404(
-  cause: ContainerStopCause | undefined,
+  observed: StopObservation,
 ): DurableObjectNamespace<ExecutionContainer> & { claims: string[] } {
   const claims: string[] = []
   const stub = {
     fetch: () => Promise.resolve(new Response('no such job', { status: 404 })),
-    recentEvictionCause: (jobId: string) => {
+    recentStopObservation: (jobId: string) => {
       claims.push(jobId)
-      return Promise.resolve(cause)
+      return Promise.resolve(observed)
     },
   }
   return {
@@ -59,18 +60,20 @@ function namespace404(
 describe('stop-cause bookkeeping', () => {
   it('attributes a reclaim observed inside its window', async () => {
     const storage = fakeStorage()
-    await recordStopCause(storage, 'idle', NOW)
+    await recordStopCause(storage, { cause: 'idle' }, NOW)
 
-    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.idle, JOB)).toBe('idle')
+    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.idle, JOB)).toEqual({
+      cause: 'idle',
+    })
   })
 
   it('forgets a reclaim the poll found too late to explain', async () => {
     // The container recovered and ran on, so whatever killed it later is its own death, not
     // this one's. Without the window a single reclaim would excuse every eviction after it.
     const storage = fakeStorage()
-    await recordStopCause(storage, 'idle', NOW)
+    await recordStopCause(storage, { cause: 'idle' }, NOW)
 
-    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.idle + 1, JOB)).toBeUndefined()
+    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.idle + 1, JOB)).toEqual({})
   })
 
   it('gives an idle reclaim a wider window than a rollout, because it is found later', async () => {
@@ -81,18 +84,18 @@ describe('stop-cause bookkeeping', () => {
     expect(ATTRIBUTION_WINDOW_MS.idle).toBeGreaterThan(ATTRIBUTION_WINDOW_MS.rollout)
 
     const storage = fakeStorage()
-    await recordStopCause(storage, 'rollout', NOW)
-    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.idle, JOB)).toBeUndefined()
+    await recordStopCause(storage, { cause: 'rollout' }, NOW)
+    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.idle, JOB)).toEqual({})
   })
 
   it('spends a record on one job, so one reclaim explains exactly one eviction', async () => {
     // The engine answers an eviction by re-dispatching onto a FRESH container under the same DO
     // id. A record left readable would still be there to excuse that container's death too.
     const storage = fakeStorage()
-    await recordStopCause(storage, 'idle', NOW)
+    await recordStopCause(storage, { cause: 'idle' }, NOW)
 
-    expect(await takeStopCause(storage, NOW, JOB)).toBe('idle')
-    expect(await takeStopCause(storage, NOW, 'job-2')).toBeUndefined()
+    expect(await takeStopCause(storage, NOW, JOB)).toEqual({ cause: 'idle' })
+    expect(await takeStopCause(storage, NOW, 'job-2')).toEqual({})
   })
 
   it('answers a REPLAYED poll for the same job identically', async () => {
@@ -101,10 +104,10 @@ describe('stop-cause bookkeeping', () => {
     // retry then reports the crash this mechanism exists to spare — so the claim is keyed by the
     // job rather than the record being deleted.
     const storage = fakeStorage()
-    await recordStopCause(storage, 'rollout', NOW)
+    await recordStopCause(storage, { cause: 'rollout' }, NOW)
 
-    expect(await takeStopCause(storage, NOW, JOB)).toBe('rollout')
-    expect(await takeStopCause(storage, NOW, JOB)).toBe('rollout')
+    expect(await takeStopCause(storage, NOW, JOB)).toEqual({ cause: 'rollout' })
+    expect(await takeStopCause(storage, NOW, JOB)).toEqual({ cause: 'rollout' })
   })
 
   it('drops a record when a new job is accepted, so it cannot excuse that job', async () => {
@@ -113,12 +116,83 @@ describe('stop-cause bookkeeping', () => {
     // excuse the NEXT step's genuine OOM as churn — weakening the crash budget on the common
     // path rather than the rare one.
     const storage = fakeStorage()
-    await recordStopCause(storage, 'idle', NOW)
+    await recordStopCause(storage, { cause: 'idle' }, NOW)
 
     await clearStopCause(storage)
 
-    expect(await takeStopCause(storage, NOW, 'job-after-dispatch')).toBeUndefined()
+    expect(await takeStopCause(storage, NOW, 'job-after-dispatch')).toEqual({})
     expect(storage.size()).toBe(0)
+  })
+
+  it('keeps the exit state of a stop no cause explains, which is the crash case', async () => {
+    // The whole point of recording an exit: the deaths with NO cause are exactly the ones an
+    // operator cannot otherwise diagnose, and on this runtime the exit code is the only account
+    // of them that exists (the container's stdout is unreadable from the Worker).
+    const storage = fakeStorage()
+    await recordStopCause(storage, { exit: { code: 137, reason: 'exit' } }, NOW)
+
+    expect(await takeStopCause(storage, NOW, JOB)).toEqual({ exit: { code: 137, reason: 'exit' } })
+  })
+
+  it('merges the two hooks that each know half of one stop', async () => {
+    // A rollout drain reaches the container through `onError` (which recognises the churn and
+    // has no exit state) and `onStop` (which carries the exit state and cannot name the churn),
+    // in either order. A plain overwrite means whichever landed second discarded the other's
+    // half: the recovery budget or the only account of the death, depending on the day.
+    const storage = fakeStorage()
+    await recordStopCause(storage, { cause: 'rollout' }, NOW)
+    await recordStopCause(storage, { exit: { code: 143, reason: 'runtime_signal' } }, NOW + 5)
+
+    expect(await takeStopCause(storage, NOW + 10, JOB)).toEqual({
+      cause: 'rollout',
+      exit: { code: 143, reason: 'runtime_signal' },
+    })
+  })
+
+  it('never merges onto a record that already explained somebody', async () => {
+    // A claimed record is spent. Anything observed after it belongs to the NEXT death, so
+    // merging would resurrect a claimed record under a second job's name.
+    const storage = fakeStorage()
+    await recordStopCause(storage, { cause: 'idle' }, NOW)
+    await takeStopCause(storage, NOW, JOB)
+
+    await recordStopCause(storage, { exit: { code: 137, reason: 'exit' } }, NOW + 5)
+
+    expect(await takeStopCause(storage, NOW + 5, 'job-2')).toEqual({
+      exit: { code: 137, reason: 'exit' },
+    })
+  })
+
+  it('ages the cause and the exit state independently', async () => {
+    // They answer different questions: the cause decides a recovery BUDGET, the exit state only
+    // ever decides a sentence on the failure detail. So a record too old to excuse an eviction as
+    // churn is still the only account of how the container died, and dropping both together
+    // would throw the diagnostic away to protect a budget it does not touch.
+    expect(EXIT_ATTRIBUTION_WINDOW_MS).toBeGreaterThan(ATTRIBUTION_WINDOW_MS.rollout)
+
+    const storage = fakeStorage()
+    await recordStopCause(
+      storage,
+      { cause: 'rollout', exit: { code: 143, reason: 'runtime_signal' } },
+      NOW,
+    )
+
+    expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.rollout + 1, JOB)).toEqual({
+      exit: { code: 143, reason: 'runtime_signal' },
+    })
+  })
+
+  it('attributes nothing to a persisted exit `reason` this build cannot word', async () => {
+    // Same closed-vocabulary-plus-persistence trap as the cause below, and the same answer: an
+    // unworded reason says less than the bare code already does, so it degrades to "nothing
+    // recorded" rather than being spliced into an operator's sentence.
+    const storage = fakeStorage()
+    await storage.put('containerStopCause', {
+      exit: { code: 137, reason: 'abducted' },
+      at: NOW,
+    } as never)
+
+    expect(await takeStopCause(storage, NOW, JOB)).toEqual({})
   })
 
   it('attributes nothing to a persisted cause this build no longer knows', async () => {
@@ -128,7 +202,7 @@ describe('stop-cause bookkeeping', () => {
     const storage = fakeStorage()
     await storage.put('containerStopCause', { cause: 'stargate', at: NOW } as never)
 
-    expect(await takeStopCause(storage, NOW, JOB)).toBeUndefined()
+    expect(await takeStopCause(storage, NOW, JOB)).toEqual({})
   })
 })
 
@@ -136,14 +210,35 @@ describe('CloudflareContainerTransport 404 classification', () => {
   const ref = { runId: 'run-1', jobId: 'job-1' }
 
   it('reports an unexplained 404 as a crash', async () => {
-    const view = await new CloudflareContainerTransport(namespace404(undefined)).poll(ref)
+    const view = await new CloudflareContainerTransport(namespace404({})).poll(ref)
 
     expect(view.evicted).toBe('crash')
     expect(view.error).toBe('Job not found (container evicted or crashed)')
   })
 
+  it('attaches the container exit state to an otherwise unexplained crash', async () => {
+    // The D1 finding on the DEPLOYED runtime: every container death reached the operator as the
+    // bare sentinel string. The verdict is unchanged (a crash still spends the crash budget);
+    // what is new is that the failure now says how the container died.
+    const view = await new CloudflareContainerTransport(
+      namespace404({ exit: { code: 137, reason: 'exit' } }),
+    ).poll(ref)
+
+    expect(view.evicted).toBe('crash')
+    expect(view.detail).toContain('exit code 137')
+    expect(view.detail).toContain('out-of-memory')
+  })
+
+  it('omits the detail entirely when the container observed nothing', async () => {
+    // An absent detail and an empty one are different facts, and only the absence says "nothing
+    // could be read" rather than "the container had nothing to say".
+    const view = await new CloudflareContainerTransport(namespace404({})).poll(ref)
+
+    expect(view.detail).toBeUndefined()
+  })
+
   it('recovers an idle reclaim on the transient budget, and says which churn it was', async () => {
-    const view = await new CloudflareContainerTransport(namespace404('idle')).poll(ref)
+    const view = await new CloudflareContainerTransport(namespace404({ cause: 'idle' })).poll(ref)
 
     // `transient` is what buys the larger recovery budget; the wording is what tells an
     // operator to look at poll scheduling rather than at the last deploy.
@@ -152,7 +247,9 @@ describe('CloudflareContainerTransport 404 classification', () => {
   })
 
   it('keeps the rollout wording distinct from the idle one', async () => {
-    const view = await new CloudflareContainerTransport(namespace404('rollout')).poll(ref)
+    const view = await new CloudflareContainerTransport(namespace404({ cause: 'rollout' })).poll(
+      ref,
+    )
 
     expect(view.evicted).toBe('transient')
     expect(view.error).toContain('transient infrastructure eviction')
@@ -161,7 +258,7 @@ describe('CloudflareContainerTransport 404 classification', () => {
   it('claims the record under the POLLING job, not the run', async () => {
     // A run's container serves every step, so a record claimed by the run would be spent by the
     // first eviction and unreadable on a replay of that same step's poll.
-    const namespace = namespace404('idle')
+    const namespace = namespace404({ cause: 'idle' })
     await new CloudflareContainerTransport(namespace).poll(ref)
 
     expect(namespace.claims).toEqual([ref.jobId])
@@ -176,9 +273,12 @@ describe('CloudflareContainerTransport 404 classification', () => {
       idFromName: (name: string) => ({ name, toString: () => name }),
       get: () => ({
         fetch: () => Promise.reject(new Error('new version rollout')),
-        recentEvictionCause: (jobId: string) => {
+        recentStopObservation: (jobId: string) => {
           claims.push(jobId)
-          return Promise.resolve<ContainerStopCause | undefined>('idle')
+          return Promise.resolve<StopObservation>({
+            cause: 'idle',
+            exit: { code: 143, reason: 'runtime_signal' },
+          })
         },
       }),
     } as unknown as DurableObjectNamespace<ExecutionContainer>
@@ -189,5 +289,8 @@ describe('CloudflareContainerTransport 404 classification', () => {
     // what it recorded earlier is not what this poll just watched happen.
     expect(view.error).toContain('transient infrastructure eviction')
     expect(claims).toEqual([ref.jobId])
+    // The exit state, though, can only ever come from the container, so it rides through the
+    // branch that overrode the cause rather than being dropped with it.
+    expect(view.detail).toContain('exit code 143')
   })
 })

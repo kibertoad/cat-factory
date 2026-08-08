@@ -21,9 +21,31 @@ export type ContainerStopCause = 'rollout' | 'idle'
 /** DO-storage key holding the {@link StopCauseRecord} of the most recent self-observed stop. */
 export const STOP_CAUSE_KEY = 'containerStopCause'
 
-/** What the container persists when it observes its own reclaim. */
+/**
+ * What the runtime reported when the workload stopped, mirroring the container base class's
+ * `StopParams`. Recorded for EVERY stop, including the ones no {@link ContainerStopCause}
+ * explains, because it answers a different question: the cause decides the recovery BUDGET, the
+ * exit state is the only account of the death anyone gets afterwards.
+ *
+ * A Cloudflare Container's stdout is delivered to the deployment's Workers logs and is not
+ * readable back from inside the Durable Object, so this is the whole of the post-mortem this
+ * runtime can mint. It is still the difference between "container evicted or crashed" and "exit
+ * code 137", i.e. between a run nobody can diagnose and an out-of-memory kill.
+ */
+export interface ContainerExitState {
+  code: number
+  reason: 'exit' | 'runtime_signal'
+}
+
+/** What the container persists when it observes its own stop. */
 export interface StopCauseRecord {
-  cause: ContainerStopCause
+  /**
+   * The infrastructure-churn cause, when the container recognised one. Absent for a stop it
+   * cannot explain (a crash, an OOM kill), which is exactly the case {@link exit} exists for.
+   */
+  cause?: ContainerStopCause
+  /** What the runtime reported about the stop, when a hook that carries it fired. */
+  exit?: ContainerExitState
   /** Epoch ms the stop was observed. */
   at: number
   /**
@@ -61,6 +83,28 @@ export const ATTRIBUTION_WINDOW_MS = {
 } satisfies Record<ContainerStopCause, number>
 
 /**
+ * How long a stop this container could NOT attribute (a crash, an OOM kill) may still explain a
+ * 404 poll, i.e. the window governing a record that carries only an {@link ContainerExitState}.
+ *
+ * The same reasoning as the `idle` window, and deliberately the same number: what separates the
+ * death from the poll that discovers it is the POLL GAP, and a crash is discovered by the same
+ * ~15s tick an idle reclaim is, stretched by whatever delayed the driver. Sizing this to the
+ * rollout case instead would read every crash discovered after a re-drive as unexplained, which
+ * is the class this record exists to explain.
+ *
+ * Wide is affordable here for a reason the cause windows do not share: an exit state changes no
+ * verdict. It is attached to the failure `detail`, so the cost of over-attributing is a
+ * misleading sentence, never a wrongly-extended recovery budget.
+ */
+export const EXIT_ATTRIBUTION_WINDOW_MS = 30 * 60_000
+
+/** What a container observed about its own stop, once attributed to the job that reads it. */
+export interface StopObservation {
+  cause?: ContainerStopCause
+  exit?: ContainerExitState
+}
+
+/**
  * The message the base container class surfaces when the RUNTIME (not the workload) stopped a
  * container: a deploy draining the old version. Its own exit-code parser is keyed on the plain
  * "runtime signalled the container to exit:" form and does not recognise the rollout wording,
@@ -82,29 +126,56 @@ function isContainerStopCause(value: unknown): value is ContainerStopCause {
 }
 
 /**
- * The cause a stored record still justifies at `now`, or `undefined` when there is nothing to
- * attribute.
+ * Whether a value read back out of DO storage is an exit state this build can render.
  *
- * `undefined` covers three things that all mean the same to the caller: nothing was recorded,
- * the record outlived its cause's window (the container recovered and ran on, so a later death
+ * The `reason` union is closed and PERSISTED, so an unknown member is possible after a runtime
+ * bump; it degrades to "no exit state recorded" rather than being rendered as a bare string,
+ * because a reason nobody has worded says less than the exit code alone already does.
+ */
+function isContainerExitState(value: unknown): value is ContainerExitState {
+  if (!value || typeof value !== 'object') return false
+  const { code, reason } = value as Partial<ContainerExitState>
+  return typeof code === 'number' && (reason === 'exit' || reason === 'runtime_signal')
+}
+
+/**
+ * What a stored record still explains at `now`, or an EMPTY observation when it explains
+ * nothing.
+ *
+ * An empty observation covers three things that all mean the same to the caller: nothing was
+ * recorded, the record outlived its window (the container recovered and ran on, so a later death
  * is its own), or the record names a cause this build no longer has. The last is possible
  * because the record is PERSISTED and the vocabulary is closed: a deploy that retires a member
  * leaves rows behind. All three land on the caller's existing default, reporting the eviction
  * as a `crash`, which is the honest reading of "no attribution" and the conservative one:
  * it costs a run one restart of its recovery budget, never a wrongly-extended one.
+ *
+ * The two halves are attributed INDEPENDENTLY, on their own windows: a record can be too old to
+ * excuse the eviction as churn while still being the only account of how the container died, and
+ * dropping the exit state with the cause would throw away the diagnostic to protect a budget the
+ * diagnostic never touches.
  */
 export function attributeStopCause(
   record: unknown,
   now: number,
   claimant: string,
-): ContainerStopCause | undefined {
-  if (!record || typeof record !== 'object') return undefined
-  const { cause, at, claimedBy } = record as Partial<StopCauseRecord>
-  if (!isContainerStopCause(cause) || typeof at !== 'number') return undefined
+): StopObservation {
+  if (!record || typeof record !== 'object') return {}
+  const { cause, exit, at, claimedBy } = record as Partial<StopCauseRecord>
+  if (typeof at !== 'number') return {}
   // Spent on somebody else's eviction. Only the job that claimed it may read it back, which is
   // what lets a replay be idempotent without letting one reclaim excuse two deaths.
-  if (claimedBy !== undefined && claimedBy !== claimant) return undefined
-  return now - at <= ATTRIBUTION_WINDOW_MS[cause] ? cause : undefined
+  if (claimedBy !== undefined && claimedBy !== claimant) return {}
+  const age = now - at
+  return {
+    ...(isContainerStopCause(cause) && age <= ATTRIBUTION_WINDOW_MS[cause] ? { cause } : {}),
+    ...(isContainerExitState(exit) && age <= EXIT_ATTRIBUTION_WINDOW_MS ? { exit } : {}),
+  }
+}
+
+/** Whether an observation carries anything at all (i.e. whether claiming it is worth a write). */
+function isEmptyObservation(observation: StopObservation): boolean {
+  return !observation.cause && !observation.exit
 }
 
 /**
@@ -118,13 +189,78 @@ export interface StopCauseStorage {
   delete: (key: string) => Promise<unknown>
 }
 
-/** Persist what this container just observed about its own reclaim. */
+/**
+ * Persist what this container just observed about its own stop, MERGING onto an unclaimed record
+ * from the same stop rather than replacing it.
+ *
+ * Merging is the point. One stop reaches this container through up to two hooks carrying
+ * different halves of the answer: `onError` recognises a rollout drain and knows no exit state,
+ * `onStop` carries `{ exitCode, reason }` and cannot name the churn. They fire in either order
+ * (and, on some runtime versions, both), so a plain overwrite means whichever landed second
+ * silently discarded the other's half: either the recovery budget or the only account of the
+ * death, depending on the ordering that day.
+ *
+ * A CLAIMED record is never merged onto: it has already explained somebody's eviction, and
+ * anything observed after that belongs to the next one. The kept `at` is the EARLIEST of the two
+ * observations, because both describe one stop and the window measures how long ago it happened.
+ */
 export async function recordStopCause(
   storage: StopCauseStorage,
-  cause: ContainerStopCause,
+  observed: StopObservation,
   now: number,
 ): Promise<void> {
-  await storage.put(STOP_CAUSE_KEY, { cause, at: now })
+  const previous = await storage.get(STOP_CAUSE_KEY)
+  const mergeable =
+    previous && typeof previous === 'object' && !(previous as StopCauseRecord).claimedBy
+      ? (previous as Partial<StopCauseRecord>)
+      : undefined
+  const at = typeof mergeable?.at === 'number' ? Math.min(mergeable.at, now) : now
+  const cause = observed.cause ?? mergeable?.cause
+  const exit = observed.exit ?? mergeable?.exit
+  await storage.put(STOP_CAUSE_KEY, {
+    ...(cause ? { cause } : {}),
+    ...(exit ? { exit } : {}),
+    at,
+  })
+}
+
+/**
+ * How a container's own exit reads on a run's failure detail.
+ *
+ * The signal names are a bounded map rather than a `128 + n` derivation on purpose: the platform
+ * reports one number and only a couple of them are worth translating, while decoding an
+ * arbitrary code into a signal name would confidently mislabel an application exit code that
+ * merely happens to exceed 128. An unmapped code is reported as itself.
+ */
+const EXIT_CODE_NOTES: Record<number, string> = {
+  // SIGKILL. The container was killed outright rather than exiting: on this runtime that is
+  // overwhelmingly the instance running out of memory, which is why it is worth saying.
+  137: 'SIGKILL, most often an out-of-memory kill or a forced stop',
+  // SIGTERM: something asked it to stop (a drain, a reclaim, our own shutdown RPC).
+  143: 'SIGTERM, i.e. something asked the container to stop',
+}
+
+/**
+ * The one-line account of a container's stop for the eviction `detail`, or undefined when
+ * nothing was recorded.
+ *
+ * States the platform's own limit rather than leaving it to be inferred: a Cloudflare Container
+ * writes its stdout to the deployment's Workers logs, and nothing inside the Durable Object can
+ * read it back, so an operator who reads this and goes looking for a log tail here should be
+ * told where the tail actually is.
+ */
+export function describeContainerExit(exit: ContainerExitState | undefined): string | undefined {
+  if (!exit) return undefined
+  const note = EXIT_CODE_NOTES[exit.code]
+  const how =
+    exit.reason === 'runtime_signal'
+      ? 'the runtime signalled it to exit'
+      : 'the workload inside it exited'
+  return (
+    `The run's container stopped while the job was running: ${how}, exit code ${exit.code}` +
+    `${note ? ` (${note})` : ''}. The container's own output is not readable from the Worker; ` +
+    `it is in this deployment's Workers logs.`
+  )
 }
 
 /**
@@ -142,25 +278,29 @@ export async function clearStopCause(storage: StopCauseStorage): Promise<void> {
 }
 
 /**
- * Read the cause explaining `claimant`'s 404 poll, CLAIMING it for that job.
+ * Read what explains `claimant`'s 404 poll, CLAIMING it for that job.
  *
- * One reclaim explains exactly one job's eviction: the engine answers one by re-dispatching onto
+ * One stop explains exactly one job's eviction: the engine answers one by re-dispatching onto
  * a fresh container under the same DO id, so an unclaimed record would still be sitting there to
  * excuse the next death, whenever and for whatever reason it came. The claim is written rather
  * than the record deleted so a REPLAYED poll for the same job reads back the same answer (see
  * {@link StopCauseRecord.claimedBy}).
+ *
+ * The claim covers the record, not one half of it: an exit state read here is spent as surely as
+ * a cause is, because attaching one container's death to two runs' failures is the same lie
+ * either way.
  */
 export async function takeStopCause(
   storage: StopCauseStorage,
   now: number,
   claimant: string,
-): Promise<ContainerStopCause | undefined> {
+): Promise<StopObservation> {
   const record = await storage.get(STOP_CAUSE_KEY)
-  const cause = attributeStopCause(record, now, claimant)
+  const observation = attributeStopCause(record, now, claimant)
   // Nothing to claim: either there was no record, it was spent, or it is too old to explain
   // anything. Leaving an expired record in place costs one key until the next reclaim
   // overwrites it, and rewriting it here would only re-date somebody else's observation.
-  if (!cause) return undefined
+  if (isEmptyObservation(observation)) return observation
   await storage.put(STOP_CAUSE_KEY, { ...(record as StopCauseRecord), claimedBy: claimant })
-  return cause
+  return observation
 }

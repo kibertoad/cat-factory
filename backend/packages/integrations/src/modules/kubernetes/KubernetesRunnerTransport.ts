@@ -1,4 +1,5 @@
 import {
+  composePostMortem,
   type ConnectionTestResult,
   CONTAINER_EVICTION_ERROR,
   harnessDispatchError,
@@ -24,6 +25,7 @@ import {
   apiServerConnectionFailureMessage,
   buildPodManifest,
   classifyPodReadiness,
+  describePodTermination,
   KUBERNETES_TOKEN_KEY,
   podName,
   podUrl,
@@ -133,7 +135,18 @@ export class KubernetesRunnerTransport implements RunnerTransport {
       // harness keeps a finished job's view, so a 404 is the pod vanishing, not a
       // forgotten job. Report it as the eviction the engine recovers from — the structured
       // `evicted: 'crash'` field is the primary signal; the string suffix is the fallback.
-      return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
+      //
+      // The pod OBJECT usually outlives the workload (`restartPolicy: Never` leaves a Failed
+      // pod in place until `release` deletes it), so this is the one moment its termination
+      // state is still readable. The post-mortem never changes the verdict, and never fails
+      // the poll: a run that lost its container must still be failed, cause or no cause.
+      const detail = await this.podPostMortem(name)
+      return {
+        state: 'failed',
+        error: EVICTION_ERROR,
+        evicted: 'crash',
+        ...(detail ? { detail } : {}),
+      }
     }
     if (!res.ok) {
       throw new Error(`Container job poll failed (HTTP ${res.status}): ${await safeText(res)}`)
@@ -217,6 +230,48 @@ export class KubernetesRunnerTransport implements RunnerTransport {
   }
 
   // --- internals ----------------------------------------------------------
+
+  /**
+   * What killed the run's pod, for the eviction `detail`, or undefined when nothing can be said.
+   *
+   * The pod is per-RUN, so whatever it reports is unambiguously this run's: none of the
+   * shared-backend caution the local warm pool needs applies here.
+   *
+   * Never throws, and never returns silence for a failure to look. Three outcomes are three
+   * different investigations and only one of them is "the container died": a pod that is GONE
+   * from the apiserver was deleted or garbage-collected by something outside this run, and an
+   * apiserver that would not answer means nobody looked at all. Reporting the last two as an
+   * absent detail would make an unreachable control plane read exactly like a clean vanishing.
+   */
+  private async podPostMortem(name: string): Promise<string | undefined> {
+    try {
+      const res = await this.apiFetch('GET', podUrl(this.config, name), undefined, POLL_TIMEOUT_MS)
+      if (res.status === 404) {
+        return composePostMortem([
+          `Runner pod '${name}' no longer exists: it was deleted or garbage-collected, so the ` +
+            `kubelet's account of how it ended is gone with it.`,
+        ])
+      }
+      if (!res.ok) {
+        return composePostMortem([
+          `Could not read runner pod '${name}' to explain the eviction: the apiserver answered ` +
+            `HTTP ${res.status}. The pod's own termination state was not consulted.`,
+        ])
+      }
+      // Scrubbed, because a kubelet `message` echoes the container's termination log, which is
+      // agent-authored text landing on a surface a person reads.
+      return composePostMortem([describePodTermination(await res.json())])
+    } catch (error) {
+      // The cause goes into PROSE on the run rather than into log fields, so it is the message
+      // itself that is wanted here, not `describeError`'s field pair; `composePostMortem` applies
+      // the same scrub that helper would have.
+      const cause = error instanceof Error ? error.message : String(error)
+      return composePostMortem([
+        `Could not read runner pod '${name}' to explain the eviction: ${cause}. ` +
+          `The pod's own termination state was not consulted.`,
+      ])
+    }
+  }
 
   private async ensurePod(
     name: string,

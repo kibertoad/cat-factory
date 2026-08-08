@@ -52,7 +52,16 @@ it only reaches the logger the Worker writes through while both imports resolve 
   container agent-executor **wiring** (same class names as `@cat-factory/server`'s `agents/`;
   those are the shared abstraction, these are the runtime wiring; see `docs/glossary.md`).
 - `durable-objects/`, `workflows/`, `containers/`, `runners/`: durable execution + real-time
-  - per-run-container machinery. `CacheGenerationDirectory` is the cache-coherency
+  - per-run-container machinery. `containers/stopCause.ts` is what a per-run container records
+    about its OWN stop for the transport to read after that job's poll 404s, and it carries two
+    independent halves: the churn `cause` (rollout / idle) decides the recovery BUDGET, while the
+    `exit` state decides the failure DETAIL and is recorded for every stop, cause or not. The
+    second exists because this runtime can hand the Worker no log tail at all (container stdout
+    goes to the deployment's Workers logs), so an exit code is the whole post-mortem an OOM-killed
+    agent gets. One stop explains exactly one eviction (the record is CLAIMED, not deleted, so a
+    replayed durable poll re-reads it), and both hooks that see a stop MERGE onto it, since
+    `onError` knows the churn and `onStop` knows the exit code and they fire in either order.
+  - `CacheGenerationDirectory` is the cache-coherency
     directory (per-group generation counters); its Worker-side client, the module-scope
     app-cache bag (one per ISOLATE, profile picked by the `CACHE_GENERATIONS` binding) and
     the `ctx.waitUntil` adopter for loader background work live in `appCachesHost.ts` +

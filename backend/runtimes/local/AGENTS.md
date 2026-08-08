@@ -14,6 +14,13 @@ transport + the GitHub token/client seams differ.
 
 - `LocalContainerRunnerTransport.ts`: the per-run container transport (the local analogue of
   the CF Container transport + the runner-pool transport, over the same `RunnerTransport` port).
+- `LocalProcessRunnerTransport.ts`: the NATIVE backend (`LOCAL_NATIVE_AGENTS`), one long-lived
+  host process serving every concurrent job. Its stderr is PIPED and kept as a bounded tail
+  (nothing is forwarded to the developer's console), because that is where the harness routes its
+  warn/error lines: it is the post-mortem for a host process that dies mid-job, and it is folded
+  into the dispatch error for one that never becomes healthy at all. The backend OUTLIVES a run,
+  so the tail is attached only on the `unreachable` eviction branch; a live process that merely
+  404s says so instead, exactly as the warm pool does.
 - `runtimes/`: the `ContainerRuntimeAdapter`s per engine (docker CLI shared by
   Docker/Podman/OrbStack/Colima; a separate Apple `container` adapter), selected by
   `LOCAL_CONTAINER_RUNTIME`. Two contracts an adapter is easy to get wrong: `endpoint()`

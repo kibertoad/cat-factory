@@ -1,4 +1,5 @@
 import {
+  composePostMortem,
   CONTAINER_EVICTION_ERROR,
   harnessDispatchError,
   readRunnerDispatchAck,
@@ -12,7 +13,12 @@ import {
 import type { DurableObjectNamespace } from '@cloudflare/workers-types'
 import type { DeployContainer } from './DeployContainer'
 import type { ExecutionContainer } from './ExecutionContainer'
-import { type ContainerStopCause, isRolloutSignal } from './stopCause'
+import {
+  type ContainerStopCause,
+  describeContainerExit,
+  isRolloutSignal,
+  type StopObservation,
+} from './stopCause'
 import type { ContainerInstanceRegistry } from './ContainerInstanceRegistry'
 
 // The human-readable message for a failed poll the transport maps to a container eviction. The
@@ -41,13 +47,24 @@ const TRANSIENT_EVICTION_ERROR: Record<ContainerStopCause, string> = {
 }
 
 /**
- * The failed view for a 404 poll, given what the container itself observed about its reclaim.
- * No observed cause ⇒ the container is simply gone with nothing to explain it, which is a
- * `crash` (an OOM, a genuine fault) and recovers on the small budget.
+ * The failed view for a 404 poll, given what the container itself observed about its stop.
+ *
+ * The two halves of that observation answer different questions and are read independently. The
+ * `cause` decides the VERDICT: no observed cause ⇒ the container is simply gone with nothing to
+ * explain it, which is a `crash` (an OOM, a genuine fault) and recovers on the small budget. The
+ * `exit` state decides the DETAIL, and is attached whether or not a cause was recognised: on a
+ * runtime that cannot hand a log tail back to the Worker it is the only post-mortem there is,
+ * and a crash is exactly the case with no cause to name (finding D1).
  */
-function evictionView(cause: ContainerStopCause | undefined): RunnerJobView {
-  if (!cause) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
-  return { state: 'failed', error: TRANSIENT_EVICTION_ERROR[cause], evicted: 'transient' }
+function evictionView(observed: StopObservation): RunnerJobView {
+  const detail = composePostMortem([describeContainerExit(observed.exit)])
+  const { cause } = observed
+  return {
+    state: 'failed',
+    error: cause ? TRANSIENT_EVICTION_ERROR[cause] : EVICTION_ERROR,
+    evicted: cause ? 'transient' : 'crash',
+    ...(detail ? { detail } : {}),
+  }
 }
 
 // The default runner transport: a per-RUN Cloudflare Container. One Durable Object
@@ -89,7 +106,7 @@ export class CloudflareContainerTransport implements RunnerTransport {
   constructor(
     // Either per-run container class: `ExecutionContainer` (the agent harness, bound as
     // `EXEC_CONTAINER`) or `DeployContainer` (the deploy harness, bound as `DEPLOY_CONTAINER`).
-    // Both expose the same `/jobs` HTTP contract on 8080 plus `recentEvictionCause`/`shutdown`,
+    // Both expose the same `/jobs` HTTP contract on 8080 plus `recentStopObservation`/`shutdown`,
     // so this transport drives either unchanged — a deploy-dedicated instance simply gets the
     // deploy namespace.
     private readonly namespace:
@@ -169,12 +186,14 @@ export class CloudflareContainerTransport implements RunnerTransport {
    * transport OBSERVED itself wins over a read that could not happen.
    */
   private async evictionOf(
-    stub: { recentEvictionCause: (jobId: string) => Promise<ContainerStopCause | undefined> },
+    stub: { recentStopObservation: (jobId: string) => Promise<StopObservation> },
     ref: RunnerJobRef,
     observed?: ContainerStopCause,
   ): Promise<RunnerJobView> {
-    const claimed = await stub.recentEvictionCause(ref.jobId).catch(() => undefined)
-    return evictionView(observed ?? claimed)
+    const claimed = await stub.recentStopObservation(ref.jobId).catch(() => ({}) as StopObservation)
+    // The transport's own observation wins for the CAUSE (see above); the exit state can only
+    // ever come from the container, so it rides through whichever way the cause was decided.
+    return evictionView({ ...claimed, ...(observed ? { cause: observed } : {}) })
   }
 
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {

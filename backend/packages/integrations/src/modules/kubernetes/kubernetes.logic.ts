@@ -475,6 +475,68 @@ export function describePodStatus(pod: unknown): string {
   return analyzePodStatus(pod).detail
 }
 
+/** The `state.terminated` / `lastState.terminated` block, narrowed to the fields worth reporting. */
+function terminatedOf(
+  cs: Record<string, unknown>,
+  key: 'state' | 'lastState',
+): { exitCode?: number; signal?: number; reason?: string; message?: string } | undefined {
+  const block = (cs[key] as { terminated?: Record<string, unknown> } | undefined)?.terminated
+  if (!block) return undefined
+  return {
+    ...(typeof block.exitCode === 'number' ? { exitCode: block.exitCode } : {}),
+    ...(typeof block.signal === 'number' ? { signal: block.signal } : {}),
+    ...(typeof block.reason === 'string' ? { reason: block.reason } : {}),
+    ...(typeof block.message === 'string' ? { message: block.message } : {}),
+  }
+}
+
+/**
+ * The POST-MORTEM of a pod whose harness stopped answering: how its containers ended, plus
+ * whatever the pod itself says about being taken away. `''` when the pod status carries nothing.
+ *
+ * Distinct from {@link describePodStatus}, which explains a pod that has not come up YET and is
+ * read while the readiness loop still hopes. This one is read after the job poll 404s, when the
+ * only remaining question is what killed a workload that was running: `state.terminated` for a
+ * container that ended and was left in place (`restartPolicy: Never`, so the pod is not
+ * recreated), `lastState.terminated` for the run BEFORE a restart, and the pod-level
+ * `reason`/`message` for the deaths the container never saw at all (a kubelet eviction under
+ * node pressure names itself only there). Finding D1: this is the block the transport had the
+ * `apiFetch` to read and never did.
+ *
+ * `OOMKilled` is the value that pays for the whole function: a memory-capped agent container is
+ * otherwise indistinguishable from an unexplained vanishing.
+ */
+export function describePodTermination(pod: unknown): string {
+  const status = statusOf(pod)
+  const lines: string[] = []
+  for (const cs of containerStatuses(status)) {
+    // `state.terminated` is how it ended NOW; `lastState.terminated` is how the previous
+    // incarnation ended. Prefer the current one, but report the previous when the container is
+    // between lives (waiting to restart), which is where a crash loop's real cause sits.
+    const terminated = terminatedOf(cs, 'state') ?? terminatedOf(cs, 'lastState')
+    if (!terminated) continue
+    const name = typeof cs.name === 'string' ? cs.name : 'container'
+    const how = [
+      terminated.reason,
+      terminated.exitCode !== undefined ? `exit code ${terminated.exitCode}` : undefined,
+      terminated.signal !== undefined ? `signal ${terminated.signal}` : undefined,
+    ]
+      .filter(Boolean)
+      .join(', ')
+    lines.push(
+      `Container '${name}' terminated${how ? `: ${how}` : ''}` +
+        `${terminated.message ? ` (${terminated.message})` : ''}`,
+    )
+  }
+  // A pod-level reason (`Evicted`, `NodeAffinity`, `Shutdown`) is the kubelet's own account of
+  // taking the pod away, which no container status reports: it is ADDITIONAL to the lines above,
+  // never a substitute for them.
+  const reason = typeof status?.reason === 'string' ? status.reason : undefined
+  const message = typeof status?.message === 'string' ? status.message : undefined
+  if (reason) lines.push(`Pod ${joinReasonMessage(reason, message)}`)
+  return lines.join('\n')
+}
+
 /**
  * Validate the apiserver URL at the write boundary. Unlike the manifest pool's
  * STRICT policy (no private hosts), a kube-apiserver is routinely a private IP or

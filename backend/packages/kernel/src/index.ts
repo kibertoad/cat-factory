@@ -749,6 +749,7 @@ export {
   redactSecretsDeep,
 } from './shared/redact-secrets.logic.js'
 export { describeProcessExit } from './shared/process-exit.logic.js'
+export { composePostMortem, MAX_POST_MORTEM_CHARS } from './shared/post-mortem.logic.js'
 export { describeError, runBestEffort } from './shared/best-effort.js'
 export {
   createStoreAgentContextGate,

@@ -14,6 +14,18 @@ function fakeChild() {
   return child
 }
 
+/**
+ * A fake child that also has the piped `stderr` the transport reads its post-mortem from
+ * (`setEncoding` is the one stream method it calls before subscribing).
+ */
+function fakeChildWithStderr() {
+  const stderr = new EventEmitter() as EventEmitter & { setEncoding: (enc: string) => void }
+  stderr.setEncoding = () => {}
+  const child = fakeChild() as ReturnType<typeof fakeChild> & { stderr: typeof stderr }
+  child.stderr = stderr
+  return child
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -109,6 +121,130 @@ describe('LocalProcessRunnerTransport', () => {
     expect(view.state).toBe('failed')
     expect(view.evicted).toBe('crash')
     expect(view.error).toMatch(/container evicted or crashed/)
+  })
+
+  it("carries the dead process's exit and stderr tail onto the eviction detail", async () => {
+    // Finding D1 on this transport: the exit code and stderr were discarded, so a harness that
+    // died mid-run reached the operator as the bare "container evicted or crashed" sentinel.
+    // `stdio: 'ignore'` meant even a developer watching the console had nothing.
+    const child = fakeChildWithStderr()
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      harnessEntry: '/h.js',
+      spawnImpl: (() => child) as unknown as typeof import('node:child_process').spawn,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      pickPort: async () => 6011,
+    })
+    await transport.dispatch({ runId: 'r', jobId: 'j' }, {}, 'agent')
+
+    child.stderr.emit('data', 'FATAL ERROR: JavaScript heap out of memory\n')
+    child.emit('exit', null, 'SIGKILL')
+
+    const view = await transport.poll({ runId: 'r', jobId: 'j' })
+    expect(view.evicted).toBe('crash')
+    // A signal-killed process and one that exited on its own need different investigations, so
+    // the shared `describeProcessExit` wording is what lands rather than "code null".
+    expect(view.detail).toContain('killed by SIGKILL')
+    expect(view.detail).toContain('heap out of memory')
+  })
+
+  it('says the process printed nothing rather than leaving that half of the detail off', async () => {
+    // "It printed nothing" and "nobody captured its output" are different facts about a dead
+    // harness, and only one of them means there is nothing more to find.
+    const child = fakeChildWithStderr()
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      harnessEntry: '/h.js',
+      spawnImpl: (() => child) as unknown as typeof import('node:child_process').spawn,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      pickPort: async () => 6012,
+    })
+    await transport.dispatch({ runId: 'r', jobId: 'j' }, {}, 'agent')
+
+    child.emit('exit', 1, null)
+
+    const view = await transport.poll({ runId: 'r', jobId: 'j' })
+    expect(view.detail).toContain('exited with code 1')
+    expect(view.detail).toContain('printed nothing to stderr')
+  })
+
+  it('attaches no stderr tail when the LIVE process merely forgot the job', async () => {
+    // The shared-backend rule this transport inherits from the local warm pool: one host process
+    // serves every concurrent local job, so a 404 from a process that ANSWERED means it restarted
+    // or reaped the job and is now serving other runs. Its output is somebody else's.
+    const child = fakeChildWithStderr()
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.includes('/jobs/')) return new Response('no such job', { status: 404 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      harnessEntry: '/h.js',
+      spawnImpl: (() => child) as unknown as typeof import('node:child_process').spawn,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      pickPort: async () => 6013,
+    })
+    await transport.dispatch({ runId: 'r', jobId: 'j' }, {}, 'agent')
+    child.stderr.emit('data', 'a DIFFERENT run is failing in here\n')
+
+    const view = await transport.poll({ runId: 'r', jobId: 'j' })
+    expect(view.evicted).toBe('crash')
+    expect(view.detail).toContain('no longer knows this job')
+    expect(view.detail).not.toContain('DIFFERENT run')
+  })
+
+  it('scrubs the stderr tail, which is free text the harness never redacts', async () => {
+    // The harness logger emits its fields verbatim (finding A5), and this text is persisted on
+    // the run and rendered to a person, so the scrub happens here at the emit site.
+    const child = fakeChildWithStderr()
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      harnessEntry: '/h.js',
+      spawnImpl: (() => child) as unknown as typeof import('node:child_process').spawn,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      pickPort: async () => 6014,
+    })
+    await transport.dispatch({ runId: 'r', jobId: 'j' }, {}, 'agent')
+
+    child.stderr.emit('data', 'clone failed: authorization: Bearer ghp_notarealtokenvalue01\n')
+    child.emit('exit', 1, null)
+
+    const view = await transport.poll({ runId: 'r', jobId: 'j' })
+    expect(view.detail).toContain('clone failed')
+    expect(view.detail).not.toContain('ghp_notarealtokenvalue01')
+  })
+
+  it('folds the stderr into a dispatch that never got the harness healthy', async () => {
+    // The other half of the same blindness: a harness that will not boot (a bad entry, a port
+    // clash, a Node it refuses) says why on stderr, and the dispatch error used to name only the
+    // symptom. Composed lazily, so a healthy boot never pays for it.
+    const child = fakeChildWithStderr()
+    const fetchImpl = vi.fn(async () => new Response('nope', { status: 500 }))
+    const transport = mkTransport({
+      harnessEntry: '/h.js',
+      spawnImpl: (() => {
+        // The failure is printed as the harness gives up, i.e. while the health loop is waiting.
+        setTimeout(() => child.stderr.emit('data', 'Error: listen EADDRINUSE 127.0.0.1:6015'), 0)
+        return child
+      }) as unknown as typeof import('node:child_process').spawn,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      pickPort: async () => 6015,
+      readyTimeoutMs: 20,
+    })
+
+    await expect(transport.dispatch({ runId: 'r', jobId: 'j' }, {}, 'agent')).rejects.toThrow(
+      /EADDRINUSE/,
+    )
   })
 
   it('kills the child when the harness never becomes healthy (no leaked process per retry)', async () => {

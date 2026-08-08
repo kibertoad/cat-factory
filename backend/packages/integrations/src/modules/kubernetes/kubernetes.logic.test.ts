@@ -7,6 +7,7 @@ import {
   classifyPodReadiness,
   classifyPodStartupFailure,
   describePodStatus,
+  describePodTermination,
   podName,
   proxyUrl,
   resolveImage,
@@ -127,6 +128,62 @@ describe('describePodStatus', () => {
   it('returns empty string when nothing useful is present', () => {
     expect(describePodStatus({ status: { phase: 'Running' } })).toBe('')
     expect(describePodStatus(null)).toBe('')
+  })
+})
+
+describe('describePodTermination', () => {
+  it('names the container, its reason and its exit code', () => {
+    expect(
+      describePodTermination({
+        status: {
+          phase: 'Failed',
+          containerStatuses: [
+            { name: 'executor', state: { terminated: { reason: 'OOMKilled', exitCode: 137 } } },
+          ],
+        },
+      }),
+    ).toBe("Container 'executor' terminated: OOMKilled, exit code 137")
+  })
+
+  it('falls back to the PREVIOUS incarnation for a container between lives', () => {
+    // A container waiting to restart has no `state.terminated`; the cause of the crash loop is
+    // in `lastState`, which is the field the transport never read (finding D1).
+    expect(
+      describePodTermination({
+        status: {
+          containerStatuses: [
+            {
+              name: 'executor',
+              state: { waiting: { reason: 'CrashLoopBackOff' } },
+              lastState: { terminated: { exitCode: 1, message: 'harness boot failed' } },
+            },
+          ],
+        },
+      }),
+    ).toBe("Container 'executor' terminated: exit code 1 (harness boot failed)")
+  })
+
+  it('adds the pod-level reason, which no container status reports', () => {
+    // A kubelet eviction under node pressure takes the pod away without the container ever
+    // seeing it, so this line is ADDITIONAL to the container's own account, not a substitute.
+    const described = describePodTermination({
+      status: {
+        phase: 'Failed',
+        reason: 'Evicted',
+        message: 'The node was low on resource: memory.',
+        containerStatuses: [
+          { name: 'executor', state: { terminated: { reason: 'Error', exitCode: 137 } } },
+        ],
+      },
+    })
+
+    expect(described).toContain("Container 'executor' terminated")
+    expect(described).toContain('Pod Evicted: The node was low on resource: memory.')
+  })
+
+  it('returns empty string when the status says nothing about a termination', () => {
+    expect(describePodTermination({ status: { phase: 'Running' } })).toBe('')
+    expect(describePodTermination(null)).toBe('')
   })
 })
 

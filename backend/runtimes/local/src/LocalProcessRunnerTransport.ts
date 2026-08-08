@@ -1,13 +1,16 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
-import type {
-  RunnerDispatchAck,
-  RunnerJobStopOutcome,
-  RunnerDispatchKind,
-  RunnerJobRef,
-  RunnerJobView,
-  RunnerTransport,
+import {
+  composePostMortem,
+  describeProcessExit,
+  redactSecrets,
+  type RunnerDispatchAck,
+  type RunnerJobStopOutcome,
+  type RunnerDispatchKind,
+  type RunnerJobRef,
+  type RunnerJobView,
+  type RunnerTransport,
 } from '@cat-factory/kernel'
 import { logger } from '@cat-factory/server'
 import { sanitizedChildEnv } from './childEnv.js'
@@ -15,6 +18,7 @@ import { requireHarnessSharedSecret } from './config.js'
 import { recommendedHarnessVersion, verifyHarnessVersion } from './harnessVersion.js'
 import {
   EVICTION_ERROR,
+  type EvictionCause,
   type HarnessEndpoint,
   pollHarnessJob,
   postHarnessJob,
@@ -38,6 +42,36 @@ import {
 
 /** The harness is always on loopback for the native host-process transport. */
 const endpointFor = (port: number): HarnessEndpoint => ({ host: '127.0.0.1', port })
+
+/**
+ * How much of the harness process's stderr to keep for a post-mortem.
+ *
+ * A ring rather than a whole capture: this is a diagnostic for the moment the process dies, not
+ * a log sink, and it is held for the LIFETIME of a long-lived process. Sized well under
+ * `composePostMortem`'s own cap so the one-line verdict in front of it always survives.
+ */
+const STDERR_TAIL_CHARS = 2_000
+
+/** The single long-lived harness process, and what it printed on its way out. */
+interface HarnessProcess {
+  child: ChildProcess
+  port: number
+  exited: boolean
+  /** The rolling tail of the child's stderr, read live because the stream is not replayable. */
+  stderrTail: () => string
+}
+
+/**
+ * How the LAST harness process ended: the only account anyone gets of a native-mode job whose
+ * host process died under it. Kept on the transport rather than the handle, because the handle
+ * is dropped the moment the child exits and the poll that needs this runs afterwards.
+ */
+interface HarnessProcessExit {
+  code: number | null
+  signal: string | null
+  /** Mutable so `close` (which fires after the stream drains) can complete what `exit` saw. */
+  stderr: string
+}
 
 export interface LocalProcessRunnerTransportOptions {
   /**
@@ -123,8 +157,14 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
   private readonly onVersionWarning?: (message: string) => void
 
   /** The single long-lived harness process, started lazily and reused across all runs. */
-  private proc: { child: ChildProcess; port: number; exited: boolean } | undefined
-  private starting: Promise<{ child: ChildProcess; port: number; exited: boolean }> | undefined
+  private proc: HarnessProcess | undefined
+  private starting: Promise<HarnessProcess> | undefined
+  /**
+   * How the most recent harness process ended, retained until a new one is spawned. This is what
+   * turns "container evicted or crashed" into an exit code and the stderr that preceded it: the
+   * harness writes its warn/error lines there, so a crash's last words are the whole diagnosis.
+   */
+  private lastExit: HarnessProcessExit | undefined
   /** Set by {@link shutdown}; a shut-down transport never (re)spawns the harness. */
   private stopped = false
   /** The child of a start still in its health wait, so {@link shutdown} can kill it NOW
@@ -168,8 +208,17 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
 
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
     const proc = this.proc
-    // The process died (or was never started) → report an eviction so the run can recover.
-    if (!proc || proc.exited) return { state: 'failed', error: EVICTION_ERROR, evicted: 'crash' }
+    // The process died (or was never started) → report an eviction so the run can recover,
+    // carrying whatever the dead process left behind.
+    if (!proc || proc.exited) {
+      const detail = this.describeLastExit()
+      return {
+        state: 'failed',
+        error: EVICTION_ERROR,
+        evicted: 'crash',
+        ...(detail ? { detail } : {}),
+      }
+    }
     return pollHarnessJob({
       fetchImpl: this.fetchImpl,
       endpoint: endpointFor(proc.port),
@@ -178,6 +227,7 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
       timeoutMs: this.requestTimeoutMs,
       label: 'Native harness',
       isDead: () => proc.exited,
+      postMortem: (cause) => Promise.resolve(this.processPostMortem(cause)),
     })
   }
 
@@ -242,7 +292,52 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
 
   // --- internals ----------------------------------------------------------
 
-  private async ensureProcess(): Promise<{ child: ChildProcess; port: number; exited: boolean }> {
+  /**
+   * The post-mortem for a job whose poll fell to an eviction, given which branch it took.
+   *
+   * This backend OUTLIVES a single run: one host process serves every concurrent local job. So
+   * the two branches are not the same question, exactly as they are not for the local warm pool.
+   * On `unreachable` the process is confirmed gone while this job was running, so its exit and
+   * final stderr are this job's last words (and every other in-flight job's too, which is worth
+   * saying). On `job_unknown` the process ANSWERED: it is alive and serving other runs, so a
+   * stderr tail lifted off it now would attach somebody else's work to this failure.
+   */
+  private processPostMortem(cause: EvictionCause): string | undefined {
+    if (cause === 'unreachable') return this.describeLastExit()
+    return composePostMortem([
+      'The native harness process answered the poll but no longer knows this job: it was ' +
+        'restarted, or reaped the job. It is still serving other local runs, so its output is ' +
+        "not this run's and no stderr tail is attached.",
+    ])
+  }
+
+  /**
+   * How the last harness process ended, or a statement that nothing is known.
+   *
+   * Never silently empty: "the process is gone and here is its exit" and "the process is gone
+   * and nobody recorded how" need different next steps, and so does "it exited without printing
+   * anything" versus a tail nobody captured.
+   */
+  private describeLastExit(): string | undefined {
+    const exit = this.lastExit
+    if (!exit) {
+      return composePostMortem([
+        'The native harness host process is not running, and this backend holds no record of ' +
+          'how it ended (it was never started here, or the orchestrator restarted since).',
+      ])
+    }
+    const stderr = exit.stderr.trim()
+    return composePostMortem([
+      `The native harness host process ${describeProcessExit(exit.code, exit.signal)} while the ` +
+        `job was running. It serves every concurrent local job, so anything else in flight died ` +
+        `with it.`,
+      stderr
+        ? `Harness stderr (last ${STDERR_TAIL_CHARS} characters):\n${stderr}`
+        : 'It printed nothing to stderr before exiting.',
+    ])
+  }
+
+  private async ensureProcess(): Promise<HarnessProcess> {
     if (this.stopped) throw new Error('the native harness transport is shut down')
     if (this.proc && !this.proc.exited) return this.proc
     this.starting ??= this.startProcess()
@@ -257,8 +352,11 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
     }
   }
 
-  private async startProcess(): Promise<{ child: ChildProcess; port: number; exited: boolean }> {
+  private async startProcess(): Promise<HarnessProcess> {
     const port = await this.pickPort()
+    // A new process's death cannot be explained by the old one's last words, and a job dispatched
+    // to it that later 404s takes the `job_unknown` branch, which attaches no tail by design.
+    this.lastExit = undefined
     // `sanitized` (the default) confines the child to the allow-list env — the orchestrator's
     // secrets must not reach a host process whose whole job is spawning an agent with shell
     // access. The explicit vars below always win over the inherited base.
@@ -275,9 +373,19 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
         // The harness only auto-listens when NODE_ENV !== 'test'.
         NODE_ENV: 'production',
       },
-      stdio: 'ignore',
+      // stderr is PIPED (stdout stays ignored): the harness routes its warn/error lines and any
+      // uncaught crash there, and it is the only account of a host process that dies mid-job.
+      // Nothing is forwarded to this process's own stderr, so the developer's console is exactly
+      // as quiet as it was; the tail is buffered and read only on a post-mortem. It must be
+      // consumed either way, because an unread pipe fills and blocks the child.
+      stdio: ['ignore', 'ignore', 'pipe'],
     })
-    const handle = { child, port, exited: false }
+    let stderrTail = ''
+    child.stderr?.setEncoding('utf8')
+    child.stderr?.on('data', (chunk: string) => {
+      stderrTail = `${stderrTail}${chunk}`.slice(-STDERR_TAIL_CHARS)
+    })
+    const handle: HarnessProcess = { child, port, exited: false, stderrTail: () => stderrTail }
     // The harness child is long-lived and not detached, but Node does NOT auto-kill a
     // child when the parent exits — without this, every dev restart orphans a `node
     // <harness>` process still bound to its port (and possibly mid-run on the developer's
@@ -291,10 +399,22 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
       }
     }
     process.once('exit', killOnParentExit)
-    child.on('exit', () => {
+    // This child's own exit record, so `close` can only ever complete ITS entry: identity, not a
+    // "is anything newer here" heuristic, because a second process may have started and died in
+    // between and overwriting its tail with this child's is the misattribution the clear-on-spawn
+    // rule exists to prevent.
+    let record: HarnessProcessExit | undefined
+    child.on('exit', (code, signal) => {
       handle.exited = true
+      // Recorded on `exit` rather than `close` so a poll landing in the gap between the two still
+      // gets an answer; `close` then completes the tail, since stderr may still be draining.
+      record = { code, signal, stderr: stderrTail }
+      this.lastExit = record
       process.removeListener('exit', killOnParentExit)
       if (this.proc === handle) this.proc = undefined
+    })
+    child.on('close', () => {
+      if (record && this.lastExit === record) this.lastExit = { ...record, stderr: stderrTail }
     })
     this.startingChild = child
     try {
@@ -314,7 +434,15 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
     return handle
   }
 
-  private async waitForHealth(port: number, handle: { exited: boolean }): Promise<void> {
+  private async waitForHealth(port: number, handle: HarnessProcess): Promise<void> {
+    // Both messages are composed LAZILY (the loop's `LazyError` thunks), so the stderr tail is
+    // read only on the failure branch. A harness that will not boot at all (a bad
+    // LOCAL_HARNESS_ENTRY, a port clash, a Node version it refuses) says so on stderr and said it
+    // to nobody before this: the dispatch failed with a sentence that named only the symptom.
+    const withStderr = (reason: string) => (): string => {
+      const stderr = handle.stderrTail().trim()
+      return stderr ? `${reason}. Harness stderr:\n${redactSecrets(stderr)}` : reason
+    }
     await waitForHarnessHealth({
       fetchImpl: this.fetchImpl,
       endpoint: endpointFor(port),
@@ -322,8 +450,10 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
       requestTimeoutMs: this.requestTimeoutMs,
       intervalMs: 200,
       isDead: () => handle.exited,
-      deadError: 'the native harness process exited before becoming healthy',
-      timeoutError: `Timed out waiting for the native harness on 127.0.0.1:${port} to become healthy`,
+      deadError: withStderr('the native harness process exited before becoming healthy'),
+      timeoutError: withStderr(
+        `Timed out waiting for the native harness on 127.0.0.1:${port} to become healthy`,
+      ),
     })
     // Safety net: verify the spawned harness matches the version this backend expects, failing
     // the dispatch loudly on a skew (e.g. an outdated installed @cat-factory/executor-harness)
