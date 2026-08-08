@@ -3,11 +3,20 @@
 /* The shared rendered-markdown reader presentation (see prose.css). */
 @import './prose.css';
 
+/* The two toaster rules below are scoped by the `app-toaster` marker class that
+ * `app.config.ts` puts on the toaster's viewport slot, NOT by `[data-slot='viewport']`.
+ * That attribute is Nuxt UI's name for the scroll region of ELEVEN components
+ * (Select, SelectMenu, InputMenu, CommandPalette, DropdownMenu, ContextMenu,
+ * NavigationMenu, ScrollArea, Carousel, ChatMessages and the toaster), and all of
+ * the menu ones carry `position: relative`, so a bare `bottom:` here lifts every
+ * dropdown's item list 1rem out of the top of its own popover. Keep any new toaster
+ * rule on the marker class. */
+
 /* Toast text should be selectable. Reka UI sets `user-select: none` inline on
  * the toast root (to support swipe-to-dismiss); since `user-select` is
  * inherited, declaring it directly on the text slots overrides that. */
-[data-slot='viewport'] [data-slot='title'],
-[data-slot='viewport'] [data-slot='description'] {
+.app-toaster [data-slot='title'],
+.app-toaster [data-slot='description'] {
   user-select: text;
 }
 
@@ -20,7 +29,7 @@
  * until the viewport meta carries `viewport-fit=cover` (see nuxt.config.ts), so
  * this collapses to the stock `1rem` on desktop. Assumes the default bottom
  * placement (the app does not configure a top-anchored toaster). */
-[data-slot='viewport'] {
+.app-toaster {
   bottom: calc(1rem + env(safe-area-inset-bottom));
 }
 

@@ -185,12 +185,20 @@ slices; each section is roughly one PR.
   bottom-side override never collides with a shorthand.
   - **Padding only lifts an in-flow surface.** The inspector/step-detail bottom sheets and
     the sidebar drawer are in-flow scroll containers, so `pb-[calc(…)]` on their body/footer
-    works. The toaster is NOT: each toast is `position: absolute; bottom: 0` inside the
-    `data-slot='viewport'`, and an abs child anchored to `bottom-0` tracks the padding-box
-    edge (padding-bottom cannot inset it). So the toaster carries the inset on its `bottom`
+    works. The toaster is NOT: each toast is `position: absolute; bottom: 0` inside its
+    viewport, and an abs child anchored to `bottom-0` tracks the padding-box edge
+    (padding-bottom cannot inset it). So the toaster carries the inset on its `bottom`
     OFFSET instead: `bottom: calc(1rem + env(safe-area-inset-bottom))` in `main.css`
     (matching Nuxt UI's stock `bottom-4`). Reach for the offset, not padding, on any
     absolutely-anchored surface.
+  - **Hang that rule on a marker class of ours, NEVER on `[data-slot='viewport']`.** Nuxt UI
+    reuses that attribute for the scroll region of eleven components, and the item list of
+    every menu one (Select, SelectMenu, InputMenu, CommandPalette, DropdownMenu, ContextMenu,
+    NavigationMenu) is `position: relative` — so the bare selector lifted every dropdown's
+    options a rem out of the top of its own popover, slicing the first option in half, and
+    shipped that way. `app.config.ts` puts `app-toaster` on the toaster's viewport slot and
+    `main.css` targets that; `menu-geometry.spec.ts` pins the geometry. The general rule: an
+    app-level selector may not name a `data-slot` value the component library shares.
 - iOS focus-zoom triggers on _rendered_ input font < 16px. **This is now fixed once, in CSS**
   (`main.css`, `@media (pointer: coarse)` → `input/textarea/select { font-size: max(16px, 1em) }`),
   which is immune to the `size="sm"` reintroduction trap that a component-default approach

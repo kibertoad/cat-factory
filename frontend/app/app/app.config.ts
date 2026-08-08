@@ -22,5 +22,14 @@ export default defineAppConfig({
         title: 'text-white',
       },
     },
+    // The toaster's scroll region is the ONE `[data-slot='viewport']` the app's own
+    // CSS may target: Nuxt UI reuses that attribute for the item list of every menu
+    // component too. This marker class is what `main.css` hangs the safe-area offset
+    // and the selectable-text rules on, so neither can reach a dropdown.
+    toaster: {
+      slots: {
+        viewport: 'app-toaster',
+      },
+    },
   },
 })
