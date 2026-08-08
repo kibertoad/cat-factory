@@ -18,6 +18,12 @@ ones.
 See [Recently landed](#recently-landed) at the bottom for candidates that have since
 shipped and were removed from the active list.
 
+A second, finer-grained round of candidates (duplication-with-drift, dead code, guard
+gaps, per-package dedups) from the August 2026 whole-tree analysis lives in
+[`docs/initiatives/refactoring-simplification-2026-08.md`](../initiatives/refactoring-simplification-2026-08.md).
+The three structural candidates below stay tracked here; nothing in that round depends on
+them.
+
 ---
 
 ## 6. Module registry for the orchestration container: **landed (registry + split); DI-graph deferred**
