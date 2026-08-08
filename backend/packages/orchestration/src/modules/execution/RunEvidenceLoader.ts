@@ -112,10 +112,12 @@ export class RunEvidenceLoader {
    * truthful, not more, and the promotion post-op rewrites the spec on this very branch right
    * after the tester settles.
    *
-   * Only an ANSWER is memoised: a tree that was read, or a repo that demonstrably carries no
-   * `spec/`. A FAILURE (an unresolvable repo, a throwing transport) is not: caching it would turn
-   * one flaky read into "the spec could not be read" for the rest of the run, when the very next
-   * settlement would have succeeded.
+   * Only an ANSWER is memoised: a tree that was read, a repo that demonstrably carries no `spec/`,
+   * or an anchor that is there and corrupt. A FAILURE (an unresolvable repo, a throwing transport,
+   * a provider that would not answer for the anchor) is not: caching it would turn one flaky read
+   * into "the spec could not be read" for the rest of the run, when the very next settlement would
+   * have succeeded. The reader never throws for the last of those, so the distinction is made on
+   * its `diagnostics.anchor` rather than on control flow.
    */
   private async serviceSpec(
     workspaceId: string,
@@ -138,6 +140,12 @@ export class RunEvidenceLoader {
       // the requirements the tester just ruled on. The rule is `runSpecBranch` rather than a
       // local `??` because the SPA answers the same question and the two had already drifted.
       const view = await readServiceSpec(ctx.repo, runSpecBranch(block, ctx.baseBranch))
+      // The reader is TOTAL, so a provider outage arrives as a returned value rather than a throw:
+      // without this line the `catch` below covered only a throwing resolver, and one flaky read
+      // was memoised as the run's answer for the rest of its life. The reader's own anchor is the
+      // discriminator. Every other state IS an answer and is cached: a tree, a branch with no
+      // `spec/`, and a corrupt anchor, which re-reading cannot improve.
+      if (view.diagnostics?.anchor === 'read_failed') return null
       this.rememberSpec(instance.id, view)
       return view
     } catch {

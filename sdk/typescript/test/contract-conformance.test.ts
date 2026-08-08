@@ -347,6 +347,41 @@ expectMutuallyAssignable<
   sdk.PrReportRequirements,
   v.InferOutput<typeof contracts.prReportRequirementsSchema>
 >()
+// The service SPEC read. Every level of the tree is asserted, not just the envelope: the tree is
+// served as the app's own shapes rather than a projection, so a mapping bug anywhere down it
+// reaches an integrator's code with nothing else in the repo checking the hop.
+expectMutuallyAssignable<
+  sdk.PublicServiceSpec,
+  v.InferOutput<typeof contracts.publicServiceSpecSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicSpecProvenance,
+  v.InferOutput<typeof contracts.publicSpecProvenanceSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicSpecFeatureFile,
+  v.InferOutput<typeof contracts.publicSpecFeatureFileSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicSpecTruncation,
+  v.InferOutput<typeof contracts.publicSpecTruncationSchema>
+>()
+expectMutuallyAssignable<sdk.SpecReadIssue, v.InferOutput<typeof contracts.specReadIssueSchema>>()
+expectMutuallyAssignable<sdk.SpecDoc, v.InferOutput<typeof contracts.specDocSchema>>()
+expectMutuallyAssignable<sdk.SpecModule, v.InferOutput<typeof contracts.specModuleSchema>>()
+expectMutuallyAssignable<
+  sdk.RequirementGroup,
+  v.InferOutput<typeof contracts.requirementGroupSchema>
+>()
+expectMutuallyAssignable<
+  sdk.RequirementItem,
+  v.InferOutput<typeof contracts.requirementItemSchema>
+>()
+expectMutuallyAssignable<
+  sdk.AcceptanceCriterion,
+  v.InferOutput<typeof contracts.acceptanceCriterionSchema>
+>()
+expectMutuallyAssignable<sdk.DomainRule, v.InferOutput<typeof contracts.domainRuleSchema>>()
 expectMutuallyAssignable<
   sdk.PrReportEnvironments,
   v.InferOutput<typeof contracts.prReportEnvironmentsSchema>
@@ -469,6 +504,17 @@ const ASSERTED_COMPONENTS = [
   'PrReportTestOutcome',
   'PrReportTestConcern',
   'PrReportRequirements',
+  'PublicServiceSpec',
+  'PublicSpecProvenance',
+  'PublicSpecFeatureFile',
+  'PublicSpecTruncation',
+  'SpecReadIssue',
+  'SpecDoc',
+  'SpecModule',
+  'RequirementGroup',
+  'RequirementItem',
+  'AcceptanceCriterion',
+  'DomainRule',
   'PrReportEnvironments',
   'PrReportMerge',
   'PrReportJudges',

@@ -27,9 +27,18 @@ import * as v from 'valibot'
 // keep their names.
 // ---------------------------------------------------------------------------
 
+/**
+ * The two length bounds a READER has to honour to produce a parseable doc, exported so the
+ * reassembly clamps to the same numbers the schema enforces instead of restating them. A reader
+ * that clamps to its own constant passes its own tests and serves a `200` that fails the published
+ * schema the moment either number moves.
+ */
+export const SPEC_NAME_MAX = 120
+export const SPEC_SUMMARY_MAX = 2000
+
 const requirementIdField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))
-const reqNameField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))
-const reqSummaryField = v.pipe(v.string(), v.maxLength(2000))
+const reqNameField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(SPEC_NAME_MAX))
+const reqSummaryField = v.pipe(v.string(), v.maxLength(SPEC_SUMMARY_MAX))
 const reqStatementField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(4000))
 const blockIdField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))
 
@@ -157,6 +166,27 @@ export const specDocSchema = v.object({
 })
 export type SpecDoc = v.InferOutput<typeof specDocSchema>
 
+/**
+ * The same document as a READER reassembles it, as opposed to as a producer must author it.
+ *
+ * Derived from {@link specDocSchema} rather than restated, so the two cannot drift, with exactly
+ * one field relaxed: `service` may be the empty string. The anchor (`spec/service.json`) is a file
+ * in somebody's repository and can be half-written, so a read has to be able to say "this spec
+ * names no service" (every consumer falls back to the board frame's own title). The STRICT schema
+ * stays the ingestion boundary `parseSpecDoc` guards, so nothing can AUTHOR a nameless spec; this
+ * one exists because refusing to describe one that already exists is the worse answer.
+ *
+ * Both infer the same TypeScript type. The difference is entirely in what each will PARSE, which
+ * is the difference that matters: a view typed `SpecDoc` while carrying `service: ''` is a value
+ * that fails the schema its own type names, and on `/api/v1` that is a published contract the
+ * response violates.
+ */
+export const readSpecDocSchema = v.object({
+  ...specDocSchema.entries,
+  service: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(SPEC_NAME_MAX)), ''),
+})
+export type ReadSpecDoc = v.InferOutput<typeof readSpecDocSchema>
+
 // ---- In-repo spec artifact paths ------------------------------------------
 // The sharded folder layout, the prescriptive sibling of `blueprints/`. The
 // canonical machine-readable files are the per-group `modules/<m>/<g>.json` shards;
@@ -194,6 +224,61 @@ export const specFeatureFileSchema = v.object({
 export type SpecFeatureFile = v.InferOutput<typeof specFeatureFileSchema>
 
 /**
+ * What became of ONE file the reader touched. The reader is deliberately total and salvaging
+ * (a flaky read or a malformed shard degrades to a partial tree rather than a thrown error), and
+ * a salvage that reports nothing is indistinguishable from a repo that genuinely holds less:
+ *
+ *  - `read_failed`: the provider answered with something other than "absent" (rate limit, 5xx,
+ *    a permission the installation lost). The file may well exist; we cannot say.
+ *  - `unparsed`:    the file was read and NOTHING could be recovered from it (unreadable JSON,
+ *    or a shard whose own identity is missing), so its whole subtree is missing from the view.
+ *  - `partial`:     the file was read and salvaged item by item; `dropped` says how many
+ *    requirements/rules failed validation and are therefore absent from an otherwise valid group.
+ *  - `unread`:      the pass ran out of its read budget before reaching this path, so it was never
+ *    fetched. `dropped` counts the files left unread. Reported against the `spec` root, once per
+ *    pass: a per-file row would make the budget's own report the largest thing in the response.
+ */
+export const specReadIssueKindSchema = v.picklist(['read_failed', 'unparsed', 'partial', 'unread'])
+export type SpecReadIssueKind = v.InferOutput<typeof specReadIssueKindSchema>
+
+/** One file the reader could not fully account for, named rather than silently dropped. */
+export const specReadIssueSchema = v.object({
+  /** Repo-relative path of the file (or directory, for a failed listing). */
+  path: v.string(),
+  kind: specReadIssueKindSchema,
+  /**
+   * How much this row cost the tree: items lost from a `partial` file, files left unread by an
+   * exhausted budget, 0 on the kinds that lose nothing countable.
+   *
+   * NULL means content was lost here and NO count describes it. A salvage reaches that state
+   * honestly: a shard whose `requirements` is an object rather than a list has requirements that
+   * are structurally unreadable, so there is nothing to count, and answering `0` would report the
+   * rebuilt group as a complete one that simply declares nothing. An unknown loss and no loss are
+   * different facts, and only a distinct value states the first.
+   */
+  dropped: v.optional(v.nullable(v.number()), 0),
+})
+export type SpecReadIssue = v.InferOutput<typeof specReadIssueSchema>
+
+/**
+ * How the PRESENCE ANCHOR (`spec/service.json`) resolved. Four states rather than the boolean
+ * `present` beside it, because three of them produce the same empty tree and demand different
+ * reactions: a branch with no spec is a normal answer, a provider outage is a retry, and a corrupt
+ * anchor is a repo somebody has to fix. Collapsing them is how "this service has no requirements"
+ * comes to be reported during every VCS incident.
+ */
+export const specAnchorStateSchema = v.picklist(['present', 'absent', 'read_failed', 'unparsed'])
+export type SpecAnchorState = v.InferOutput<typeof specAnchorStateSchema>
+
+/** What the reader could and could not account for on this pass. */
+export const specReadDiagnosticsSchema = v.object({
+  anchor: specAnchorStateSchema,
+  /** Every file the pass could not fully account for. Empty on a clean read. */
+  issues: v.array(specReadIssueSchema),
+})
+export type SpecReadDiagnostics = v.InferOutput<typeof specReadDiagnosticsSchema>
+
+/**
  * The service-spec view served to the SPA: the reassembled prescriptive spec tree read
  * from the service repo's default branch, plus its rendered Gherkin feature files.
  * `present` is false (and `spec` null) when no spec exists on the default branch, or when
@@ -202,12 +287,24 @@ export type SpecFeatureFile = v.InferOutput<typeof specFeatureFileSchema>
 export const serviceSpecViewSchema = v.object({
   /** Whether a spec exists on the service repo's default branch (a `spec/service.json`). */
   present: v.boolean(),
-  /** The reassembled spec tree, or null when none is present. */
-  spec: v.nullable(specDocSchema),
+  /**
+   * The reassembled spec tree, or null when none is present.
+   *
+   * {@link readSpecDocSchema}, not the strict authoring schema: this is what a READER got back
+   * out of a repository, and an anchor that names no service is a state a repository can be in.
+   */
+  spec: v.nullable(readSpecDocSchema),
   /** The rendered Gherkin feature files (empty when none present). The producer always
    * sends this field (`[]` when there are none), and the SPA dereferences it unguarded, so
    * it is required — not optional — to keep the wire shape and its sole consumer in lockstep. */
   features: v.array(specFeatureFileSchema),
+  /**
+   * What the READ itself could account for, as distinct from what the spec says. Optional
+   * because absent means "this producer diagnosed nothing", which is a different fact from a
+   * clean pass and is the honest answer for the callers that assemble a view by hand (a memo, a
+   * test fixture). `readServiceSpec` always sets it.
+   */
+  diagnostics: v.optional(specReadDiagnosticsSchema),
 })
 export type ServiceSpecView = v.InferOutput<typeof serviceSpecViewSchema>
 

@@ -251,6 +251,10 @@ curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN_ID/decisions"
 # 7. Once it finishes, the EVIDENCE, the same bundle the pull request carries:
 curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN_ID/report"
 
+# 7b. …and the criteria it was scored against: the service's own spec, keyed by the same
+#     requirement ids the report's `requirements` rows carry.
+curl -s -H "$AUTH" "$BASE/api/v1/services/$SERVICE_ID/spec"
+
 # 8. The period's spend + budget position, for a dashboard:
 curl -s -H "$AUTH" "$BASE/api/v1/usage"
 
@@ -421,6 +425,7 @@ mapping, so it always agrees with the field it filters on.
 | `DELETE /api/v1/tasks/:taskId`                   | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                                                                                                                                                                                       |
 | `POST /api/v1/services`                          | `admin`  | Create a service, optionally backed by a repository. See [Provisioning the board](#provisioning-the-board).                                                                                                                                                                                                                                                                                        |
 | `GET /api/v1/repos`                              | `read`   | The repositories a service can be created against, and which service each already backs.                                                                                                                                                                                                                                                                                                           |
+| `GET /api/v1/services/:serviceId/spec`           | `read`   | The service's in-repo **specification**: the requirement tree, the Gherkin rendered from it, and the commit both were read at. See [Service specification](#service-specification).                                                                                                                                                                                                                |
 | `POST /api/v1/tasks/:taskId/dependencies`        | `write`  | Declare that this task waits for another. Body `{ dependsOnTaskId }`. Idempotent. See [Ordering a batch of tasks](#ordering-a-batch-of-tasks).                                                                                                                                                                                                                                                     |
 | `POST /api/v1/tasks/:taskId/dependencies/remove` | `write`  | Drop the edge. Idempotent.                                                                                                                                                                                                                                                                                                                                                                         |
 | `GET /api/v1/tasks/:taskId/documents`            | `read`   | The requirements documents attached to the task, in reading order.                                                                                                                                                                                                                                                                                                                                 |
@@ -1513,6 +1518,134 @@ curl -s -X POST -H "$AUTH" -H 'content-type: application/json' \
 curl -s -H "$AUTH" "$BASE/api/v1/merge-records/rollups" \
   | jq '.rollups[] | select(.merged > 0) | {changeClass, merged, autoMerged, effort}'
 ```
+
+### Service specification
+
+`GET /api/v1/services/:serviceId/spec`, at `read` scope.
+
+The service's **prescriptive specification**: what it must be true of, as opposed to what any one
+run did. It lives in the service's own repository under `spec/`, sharded so concurrent task branches
+merge cleanly, and this serves it reassembled: modules → feature groups → requirement items, each
+with its MoSCoW `priority`, its `kind` (`functional` / `nonfunctional` / `constraint`), its
+`state`, and its Given/When/Then `acceptance` criteria, plus the domain rules scoped to each group
+and the `.feature` files rendered from the same tree.
+
+`state` is the axis a prescriptive document is otherwise missing: `aspirational` means the
+requirement was agreed and has not been observed to hold, `established` means a tester actually
+exercised its criteria and they passed. Only the second is standing behaviour, which is why a
+`not_covered` verdict against an `aspirational` requirement is the expected reading rather than a
+gap. Nothing on this surface can change it: promotion is mechanical, driven by an observed test
+pass.
+
+**The join this exists for.** The requirement ids here are the same ids
+`GET /api/v1/runs/:runId/report` and `GET /api/v1/runs/:runId/outcome` key their `requirements`
+rows on. Fetch the spec once per service, fetch a run's outcome per run, and criterion → evidence
+is a map lookup:
+
+```sh
+SVC=$(curl -s -H "$AUTH" "$BASE/api/v1/services" | jq -r '.services[0].serviceId')
+
+# Every requirement the service declares, by id.
+curl -s -H "$AUTH" "$BASE/api/v1/services/$SVC/spec" \
+  | jq '[.spec.modules[].groups[].requirements[] | {key: .id, value: .}] | from_entries' > spec.json
+
+# What one run observed against them, keyed the same way.
+curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/outcome" \
+  | jq '.requirements.entries' > verdicts.json
+
+# criterion → evidence, entirely outside the platform.
+jq --slurpfile s spec.json 'map(. + {spec: $s[0][.id]})' verdicts.json
+```
+
+(`--slurpfile` binds `$s` to an ARRAY of the file's values, so the index into the map is
+`$s[0][.id]`.)
+
+A run's join reads the spec from the branch that run pushed to, not the default branch, because a
+task's spec increment has not merged while its pull request is open. This endpoint always answers
+the **default branch**, which is the service's agreed truth. The two differ exactly for the
+requirements a run is still adding, and `provenance.commit` is what lets a caller notice.
+
+**What the response says about itself.** A spec read has several outcomes and this endpoint keeps
+them apart, because most of them produce an empty tree and need different reactions:
+
+| Outcome                               | Answer                                                                              |
+| ------------------------------------- | ----------------------------------------------------------------------------------- |
+| No spec on the default branch         | `200`, `anchor: "absent"`, `spec: null`. A real and common answer.                  |
+| A `spec/service.json` that is corrupt | `200`, `anchor: "unparsed"`, `spec: null`, with the file named in `issues`.         |
+| The branch could not be resolved      | `503`, `error.details.reason: "spec_ref_unresolved"`. The repo link, not an outage. |
+| The repository could not be read      | `503`, `error.details.reason: "spec_read_failed"`. Retry; the spec may be there.    |
+| No version control connected          | `503`, `error.details.reason: "vcs_not_configured"`. The deployment or workspace.   |
+| The spec read partially               | `200` with the tree, and `issues` naming every file that did not survive.           |
+
+`anchor` is how the endpoint refuses to fold the three states that all render as "no tree". Branch
+on it rather than on `spec === null`: `absent` is the only one that means the service declares
+nothing, `unparsed` means a file in the repository needs fixing, and an outage never reaches a
+`200` at all.
+
+The distinction that matters most is the one between an answer and an outage. The reader behind
+this endpoint is deliberately total (a flaky read degrades rather than throwing) and the app's own
+requirements window folds an unreadable repository into the same empty state as a repository with
+no spec, which is right for a window drawing an empty state and wrong for an integrator: folded
+here, it would report every service as requirement-free for the duration of a VCS incident, with
+nothing in the payload saying otherwise.
+
+`spec_ref_unresolved` is the subtle member. Git hosts answer `404` for a file that is absent, a
+repository that was renamed, transferred or deleted, a branch that no longer exists and an
+installation that lost access, so "no such file" and "no such repository" arrive identically. The
+endpoint resolves the branch's head commit before walking, and that resolution is the only positive
+evidence it has that the branch is reachable at all: an empty read with an unresolved ref is
+unproven and refused, rather than served as a confident `absent`. The fix is a repository link or a
+default branch, not a retry.
+
+A service frame with **no linked repository** answers `422`, the same refusal starting a run on it
+gets. There is deliberately no "first repo in the workspace" fallback anywhere in the platform, so
+a service nothing can run never reads as one that merely has nothing to say.
+
+`issues` is one row per file the read could not fully account for: `read_failed` (the provider
+answered with something other than "absent", so the file may well exist), `unparsed` (read, and
+nothing recoverable, so its subtree is missing from the tree above), `partial` with a `dropped`
+count (a group salvaged item by item, so it looks valid and is quietly missing that many
+requirements or rules), and `unread` against the `spec` root (the walk hit its read budget, and
+`dropped` counts the files it never fetched). An empty `issues` is the statement that the tree is
+whole.
+
+A `dropped` of **`null`** means content was lost there and no count describes it: a shard whose
+`requirements` is an object rather than a list has requirements that are structurally unreadable,
+so the rebuilt group is served as damaged rather than as one that legitimately declares nothing.
+Treat `null` as "some, unknown", never as zero.
+
+`truncations` is the same idea for the caps. Every row counts ITEMS, so `shown` and `total` share
+one unit:
+
+| Section        | Cap                                                         |
+| -------------- | ----------------------------------------------------------- |
+| `requirements` | 2,000 rows across the tree                                  |
+| `rules`        | 2,000 rows across the tree                                  |
+| `acceptance`   | 5,000 criteria across the tree                              |
+| `features`     | 500 files, and 1,000,000 characters of Gherkin between them |
+| `issues`       | 200 rows                                                    |
+
+Each feature file is also clamped to 20,000 characters on its own and carries `chars` /
+`totalChars` / `truncated`. Caps cut in the tree's own traversal order and nothing is re-ranked
+(the platform does not judge which requirement matters more); a group the cap emptied stays in the
+tree rather than vanishing, because a missing group reads as a feature the service never specified;
+and a requirement whose criteria the `acceptance` budget could not fit is still carried, because
+its id is the join key this endpoint exists for. `issues` is capped for the opposite reason to the
+rest: it grows with FAILURE rather than with the spec, so a rate-limit window part-way through a
+large walk would otherwise make the report of a degraded read the largest thing in the response.
+
+`provenance` names `provider`, `owner`, `repo`, the `ref` (the default branch) and the `commit` it
+describes. There is no `directory`, and the absence is the fact: the `spec/` tree is anchored at the
+repository ROOT, so two services carved out of one monorepo share one spec and this endpoint answers
+both the same way. `commit` is resolved immediately before the walk, and the walk itself reads by
+branch name, so a push landing mid-read can leave the response describing a slightly later commit; a
+`null` means the head could not be resolved at all, not that the tree is unknown.
+
+**There is no write side, by decision.** The files are the truth and the spec's write path is a
+reviewed commit: agents propose changes through pull requests, and `state` is promoted only by an
+observed test pass. An API write would bypass exactly the review that makes the spec worth reading.
+The natural sibling, importing Gherkin as requirement items, is a separate proposal for the same
+reason: it AUTHORS requirements, so it belongs behind the review path rather than behind an API key.
 
 ### Key provisioning (`/api/v1/keys`)
 

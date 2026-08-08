@@ -175,6 +175,23 @@ export class PublicBoardReads {
   }
 
   /**
+   * ONE visible service frame the workspace owns, or null when the id names no such thing (absent,
+   * another workspace's, a headless `internal` anchor, a non-frame block, or archived).
+   *
+   * The point read behind every per-service endpoint that is not a task list: a caller naming a
+   * service has to be refused on exactly the population {@link listServiceTasksPage} and
+   * {@link listServices} report, or a `serviceId` this key can see in one place answers a 404 in
+   * another. Its own method rather than a `listServices().find()` at the call site, because that
+   * would read the whole board to answer a keyed question.
+   */
+  async getService(workspaceId: string, serviceId: string): Promise<Block | null> {
+    await this.deps.requireWorkspace(workspaceId)
+    const frame = await this.deps.blockRepository.get(workspaceId, serviceId)
+    if (!frame || frame.level !== 'frame' || frame.internal || frame.archived) return null
+    return frame
+  }
+
+  /**
    * Fetch a board task + its enclosing service frame, scoped to the workspace. Returns null when
    * no such task exists in the workspace, it is not a `task`-level block, it is a headless
    * `internal` anchor, or it has no resolvable enclosing service frame — so the caller (and any
@@ -216,9 +233,7 @@ export class PublicBoardReads {
     serviceId: string,
     opts: { limit: number; afterId?: string; status?: BlockStatus },
   ): Promise<{ tasks: Block[]; hasMore: boolean } | null> {
-    await this.deps.requireWorkspace(workspaceId)
-    const frame = await this.deps.blockRepository.get(workspaceId, serviceId)
-    if (!frame || frame.level !== 'frame' || frame.internal || frame.archived) return null
+    if (!(await this.getService(workspaceId, serviceId))) return null
     const rows = await this.deps.blockRepository.listServiceTasks(workspaceId, serviceId, {
       ...opts,
       limit: opts.limit + 1,
