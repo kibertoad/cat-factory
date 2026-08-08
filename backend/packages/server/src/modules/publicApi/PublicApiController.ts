@@ -39,11 +39,9 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { personalGateForBlock, personalGateForRun } from '../providers/personalCredentialGate.js'
-import {
-  HEADLESS_ACTIONABLE_NOTIFICATION_TYPES,
-  notificationActEffect,
-} from '../notifications/notificationActions.js'
+import { headlessActRefusal, notificationActEffect } from '../notifications/notificationActions.js'
 import type { AppEnv } from '../../http/env.js'
+import { optionalJsonBody } from '../../http/optionalJsonBody.js'
 import { authorize } from './publicApiAuth.js'
 import { toPublicService, toPublicTask } from './boardProjection.js'
 import { createTaskWithAttachments, taskCreationDeps } from './taskCreation.js'
@@ -1266,6 +1264,11 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
   // RETRY a run on an individual-usage model is refused up front, since a headless key has
   // no personal-credential unlock (`ci_failed`/`test_failed` are the only side-effects that
   // resume LLM work; the merge tails need no personal credential).
+  // The route GAINED an all-optional body, and this is what keeps that additive: the contract
+  // validator reads `c.req.json()` first, which throws on an absent one, so without this every
+  // integration that has been calling `act` with no body at all since 1.0 would start getting a
+  // 400 the moment the tag field landed.
+  app.use('/api/v1/notifications/:id/act', optionalJsonBody)
   buildHonoRoute(app, actPublicNotificationContract, async (c) => {
     const gate = await authorize(c, actPublicNotificationContract.minScope)
     if ('fail' in gate) {
@@ -1281,6 +1284,10 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
       throw new UnavailableError('Notifications are not configured')
     }
     const { id } = c.req.valid('param')
+    // All-optional body, and the route mounts `optionalJsonBody`, so a caller that has always
+    // sent nothing still lands here with `{}`. On a merge card the tag rides the SAME request
+    // that confirms the merge, which is what the app's one-tap confirm-and-tag does.
+    const { reviewEffort } = c.req.valid('json')
     const existing = await notifications.service.get(auth.workspaceId, id)
     if (!existing) {
       return c.json({ error: { code: 'not_found', message: 'Notification not found' } }, 404)
@@ -1290,13 +1297,15 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
     // mark the card read while leaving the run parked, silently losing the reminder for a
     // still-pending decision. Refuse it and steer the caller to `dismiss` instead. (Skipped for
     // an already-resolved card, which `service.act` returns idempotently.)
-    if (existing.status === 'open' && !HEADLESS_ACTIONABLE_NOTIFICATION_TYPES.has(existing.type)) {
+    const refusal =
+      existing.status === 'open' ? headlessActRefusal(existing.type, reviewEffort) : null
+    if (refusal) {
       return c.json(
         {
           error: {
             code: 'notification_not_actionable',
-            message:
-              'This notification has no automated action; it parks a run on an interactive human decision. Resolve it in the app, or dismiss the card through the API.',
+            message: refusal.message,
+            details: { reason: refusal.reason },
           },
         },
         409,
@@ -1338,7 +1347,7 @@ function registerNotificationRoutes(app: Hono<AppEnv>): void {
     const acted = await notifications.service.act(
       auth.workspaceId,
       id,
-      notificationActEffect(container, auth.workspaceId, null),
+      notificationActEffect(container, auth.workspaceId, null, reviewEffort),
     )
     return c.json(acted, 200)
   })

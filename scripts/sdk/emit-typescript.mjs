@@ -186,9 +186,17 @@ function queryIsOmittable(operation) {
 function emitMethod(operation) {
   const query = queryTypeName(operation)
   const optionalQuery = queryIsOmittable(operation)
+  // Two trailing params may be left out, and each for its own reason. A body whose every field
+  // is optional gets a `{}` default, so `start(taskId)` reads as the request it is instead of
+  // `start(taskId, {})`. A query bag gets one only when every parameter in it is optional (see
+  // `queryIsOmittable`). Neither moves position: the wire order is path -> body -> query, and a
+  // signature that reordered itself by optionality would put the same operation's body in a
+  // different place depending on its schema.
   const params = [
     ...operation.pathParams.map((p) => `${camel(p.wireName)}: string`),
-    operation.body ? `body: ${tsType(operation.body)}` : null,
+    operation.body
+      ? `body: ${tsType(operation.body)}${operation.bodyOptional ? ' = {}' : ''}`
+      : null,
     query ? `query: ${query}${optionalQuery ? ' = {}' : ''}` : null,
     'options: RequestOptions = {}',
   ].filter(Boolean)
