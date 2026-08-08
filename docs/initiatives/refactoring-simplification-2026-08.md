@@ -37,34 +37,34 @@ and add the PR link when a slice lands.
 
 ## Summary
 
-| #   | Item                                                            | Area          | Impact                          | Effort  |
-| --- | --------------------------------------------------------------- | ------------- | ------------------------------- | ------- |
-| 1   | `settleStepAndAdvance` + dispatch epilogue + `persistAndEmit`   | Engine        | High (terminal-path invariants) | Low     |
-| 2   | Provider-routing VCS client as a Proxy + drift test             | Server        | High (fixes a live gap)         | Low-Med |
-| 3   | Shared HKDF cipher-info constants                               | Runtimes      | High (seal/unseal drift)        | Trivial |
-| 4   | Harness ⇄ backend contract conformity test                      | Harness       | High (no image bump)            | Trivial |
-| 5   | Wire the five telemetry conformance suites to local-sqlite      | Runtimes      | High (enables #6)               | Low     |
-| 6   | One SQLite telemetry store behind a `SqliteRunner` port         | Runtimes      | High (~600-800 lines)           | Medium  |
-| 7   | Gate-action sub-facades; settle the null/404 divergence         | Engine        | High (~350 lines + API fix)     | Medium  |
-| 8   | Shared `notifyError` composable                                 | Frontend      | High (27 sites + better copy)   | Low     |
-| 9   | `refuse` adoption + envelope helpers in `PublicApiController`   | Server        | Medium (~130 lines)             | Trivial |
-| 10  | Safe-fetch consolidation + Jira redirect guard                  | Integrations  | Medium (closes a gap)           | Low-Med |
-| 11  | Repo-issue provider core (GitHub/GitLab/Jira/Linear)            | Integrations  | Medium (~230 lines)             | Medium  |
-| 12  | `selectInChunks` helper in the D1 facade                        | Runtimes      | Medium (~170 lines, 29 sites)   | Low     |
-| 13  | Shared periodic-backstop catalog (sweepers ⇄ crons)             | Runtimes      | Medium (~400 lines + parity)    | Medium  |
-| 14  | Harness dedup batch (one image bump)                            | Harness       | Medium (~350 lines + fixes)     | Medium  |
-| 15  | Kernel home for the cross-VCS pure helpers                      | Server        | Low-Med (4 copies → 1)          | Trivial |
-| 16  | `ContainerAgentExecutor` accounting extraction                  | Server        | Medium (~180 lines)             | Low     |
-| 17  | Human-gate parked-plumbing unification                          | Engine        | Medium (~180 lines)             | Medium  |
-| 18  | Workspace preset-library twins (backend + frontend)             | Engine + SPA  | Medium (fixes twin drift)       | Medium  |
-| 19  | `EnvironmentConnectionService` context + event-log helpers      | Integrations  | Medium (−8 reads, ~150 lines)   | Low     |
-| 20  | Contracts mechanical pass (`nullish`, `nonEmpty`, shared refs)  | Contracts     | Medium (~100 lines, 300 sites)  | Low     |
-| 21  | Decompose `PipelineBuilder` and `ObservabilityPanel`            | Frontend      | Medium (structure)              | Medium  |
-| 22  | Frontend ratchet allowances + knip entry fix + dead files       | Guards        | Medium (guards gain teeth)      | Low     |
-| 23  | Review-window draft machinery + repo-source link UI             | Frontend      | Medium (~350 lines)             | Medium  |
-| 24  | Delete the 8 dead Cloudflare re-export shims                    | Runtimes      | Low (hygiene)                   | Trivial |
-| 25  | Narrow `GitHubClient` consumers with `Pick`                     | Server        | Medium (kills ~20 `as` casts)   | Low     |
-| 26  | Small engine cleanups bundle                                    | Engine        | Low (~150 lines)                | Low     |
+| #   | Item                                                           | Area         | Impact                          | Effort  |
+| --- | -------------------------------------------------------------- | ------------ | ------------------------------- | ------- |
+| 1   | `settleStepAndAdvance` + dispatch epilogue + `persistAndEmit`  | Engine       | High (terminal-path invariants) | Low     |
+| 2   | Provider-routing VCS client as a Proxy + drift test            | Server       | High (fixes a live gap)         | Low-Med |
+| 3   | Shared HKDF cipher-info constants                              | Runtimes     | High (seal/unseal drift)        | Trivial |
+| 4   | Harness ⇄ backend contract conformity test                     | Harness      | High (no image bump)            | Trivial |
+| 5   | Wire the five telemetry conformance suites to local-sqlite     | Runtimes     | High (enables #6)               | Low     |
+| 6   | One SQLite telemetry store behind a `SqliteRunner` port        | Runtimes     | High (~600-800 lines)           | Medium  |
+| 7   | Gate-action sub-facades; settle the null/404 divergence        | Engine       | High (~350 lines + API fix)     | Medium  |
+| 8   | Shared `notifyError` composable                                | Frontend     | High (27 sites + better copy)   | Low     |
+| 9   | `refuse` adoption + envelope helpers in `PublicApiController`  | Server       | Medium (~130 lines)             | Trivial |
+| 10  | Safe-fetch consolidation + Jira redirect guard                 | Integrations | Medium (closes a gap)           | Low-Med |
+| 11  | Repo-issue provider core (GitHub/GitLab/Jira/Linear)           | Integrations | Medium (~230 lines)             | Medium  |
+| 12  | `selectInChunks` helper in the D1 facade                       | Runtimes     | Medium (~170 lines, 29 sites)   | Low     |
+| 13  | Shared periodic-backstop catalog (sweepers ⇄ crons)            | Runtimes     | Medium (~400 lines + parity)    | Medium  |
+| 14  | Harness dedup batch (one image bump)                           | Harness      | Medium (~350 lines + fixes)     | Medium  |
+| 15  | Kernel home for the cross-VCS pure helpers                     | Server       | Low-Med (4 copies → 1)          | Trivial |
+| 16  | `ContainerAgentExecutor` accounting extraction                 | Server       | Medium (~180 lines)             | Low     |
+| 17  | Human-gate parked-plumbing unification                         | Engine       | Medium (~180 lines)             | Medium  |
+| 18  | Workspace preset-library twins (backend + frontend)            | Engine + SPA | Medium (fixes twin drift)       | Medium  |
+| 19  | `EnvironmentConnectionService` context + event-log helpers     | Integrations | Medium (−8 reads, ~150 lines)   | Low     |
+| 20  | Contracts mechanical pass (`nullish`, `nonEmpty`, shared refs) | Contracts    | Medium (~100 lines, 300 sites)  | Low     |
+| 21  | Decompose `PipelineBuilder` and `ObservabilityPanel`           | Frontend     | Medium (structure)              | Medium  |
+| 22  | Frontend ratchet allowances + knip entry fix + dead files      | Guards       | Medium (guards gain teeth)      | Low     |
+| 23  | Review-window draft machinery + repo-source link UI            | Frontend     | Medium (~350 lines)             | Medium  |
+| 24  | Delete the 8 dead Cloudflare re-export shims                   | Runtimes     | Low (hygiene)                   | Trivial |
+| 25  | Narrow `GitHubClient` consumers with `Pick`                    | Server       | Medium (kills ~20 `as` casts)   | Low     |
+| 26  | Small engine cleanups bundle                                   | Engine       | Low (~150 lines)                | Low     |
 
 ## Candidates
 

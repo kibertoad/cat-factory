@@ -226,11 +226,18 @@ describe('isValidMcpServerId', () => {
   })
 })
 
-// The cleartext rule for an HTTP tool server, and the hand-written parse it rests on. An http
-// server routinely carries a resolved credential in a request header, so "is this host loopback"
-// decides whether that credential goes on the wire in the clear. The parse is hand-written rather
-// than `new URL` precisely so the userinfo rule below can be stated, which is why it is worth
-// pinning host by host rather than through one happy-path url.
+// The cleartext rule for an HTTP tool server. An http server routinely carries a resolved
+// credential in a request header, so "is this host loopback" decides whether that credential goes
+// on the wire in the clear, which is why it is worth pinning host by host rather than through one
+// happy-path url.
+//
+// Several of these state the ANSWER beside the reason it is the answer: what the request actually
+// resolves to. That is the property the rule exists for, and asserting a verdict without it is how
+// a spoof nobody thought of passes a hand-written table (the case below with a backslash in it did
+// exactly that). Reached through `globalThis` because the kernel compiles against the ES2022 lib,
+// the same way the module under test reaches it.
+const RequestUrl = (globalThis as { URL?: new (url: string) => { hostname: string } }).URL!
+
 describe('isAllowedMcpHttpUrl', () => {
   it('allows https anywhere', () => {
     expect(isAllowedMcpHttpUrl('https://mcp.example.com/mcp')).toBe(true)
@@ -262,9 +269,9 @@ describe('isAllowedMcpHttpUrl', () => {
   })
 
   it('strips userinfo from the LAST @, so a loopback-looking user is not a loopback host', () => {
-    // The trap the hand-written parse exists for: `http://127.0.0.1@evil.example` sends the
-    // request (and its credential header) to evil.example while reading as loopback to anything
-    // that splits on the FIRST @.
+    // The trap the userinfo rule exists for: `http://127.0.0.1@evil.example` sends the request
+    // (and its credential header) to evil.example while reading as loopback to anything that
+    // splits on the FIRST @.
     expect(isAllowedMcpHttpUrl('http://127.0.0.1@evil.example')).toBe(false)
     expect(isAllowedMcpHttpUrl('http://localhost@evil.example/mcp')).toBe(false)
     expect(isAllowedMcpHttpUrl('http://user@127.0.0.1:8080')).toBe(true)
@@ -272,13 +279,52 @@ describe('isAllowedMcpHttpUrl', () => {
     expect(isAllowedMcpHttpUrl('http://user@evil.example@127.0.0.1')).toBe(true)
   })
 
-  it('never reads a path, query or fragment as part of the host', () => {
+  it('ends the host at every delimiter the REQUEST does, backslash included', () => {
+    // The property that makes this predicate mean anything: the host it rules on is the host the
+    // credential header actually travels to. A backslash terminates the authority of a special
+    // scheme exactly as `/` does, so `fetch` sends these to evil.example with `@127.0.0.1` sitting
+    // in the PATH, while an authority scan that stops only at `/?#` swallows the delimiter, finds
+    // a last `@` that is not a userinfo separator at all, and hands evil.example a cleartext
+    // credential. Pinned beside the `/?#` spoofs it is indistinguishable from.
     for (const spoof of [
       'http://evil.example/@127.0.0.1',
       'http://evil.example?next=@127.0.0.1',
       'http://evil.example#@127.0.0.1',
+      'http://evil.example\\@127.0.0.1/mcp',
+      'http://evil.example\\@localhost',
     ]) {
       expect(isAllowedMcpHttpUrl(spoof), spoof).toBe(false)
+      expect(new RequestUrl(spoof).hostname, `${spoof} really reaches`).toBe('evil.example')
+    }
+  })
+
+  it('grants the exemption to every spelling of loopback the request resolves to one', () => {
+    // The same property read the other way, and the direction a hand-written parse got wrong
+    // silently: these are all `127.0.0.1` to the URL parser the agent CLI dials with, so refusing
+    // them would refuse a server genuinely running beside the agent. `isLoopbackMcpHttpUrl` reads
+    // the same answer, which is what keeps the operability probe off the BACKEND's own loopback.
+    for (const shorthand of ['http://127.1', 'http://0177.0.0.1', 'http://2130706433/mcp']) {
+      expect(new RequestUrl(shorthand).hostname, `${shorthand} really reaches`).toBe('127.0.0.1')
+      expect(isAllowedMcpHttpUrl(shorthand), shorthand).toBe(true)
+      expect(isLoopbackMcpHttpUrl(shorthand), shorthand).toBe(true)
+    }
+    // ... and the uncompressed IPv6 loopback, which the parser compresses to `::1`.
+    expect(isAllowedMcpHttpUrl('http://[0:0:0:0:0:0:0:1]:8080/mcp')).toBe(true)
+  })
+
+  it('refuses a url carrying an ASCII control character or a space, rather than canonicalising it', () => {
+    // The parser TRIMS leading/trailing C0-and-space and REMOVES tab, LF and CR from anywhere, so
+    // each of these parses to a different string than it reads as, and the admitted string is
+    // stored and written verbatim into the agent CLI's MCP config. Refused so that what was
+    // admitted and what is started cannot be two different urls.
+    for (const noisy of [
+      ' https://mcp.example.com',
+      'https://mcp.example.com ',
+      'https://mcp.\texample.com',
+      'https://mcp.example.com/a b',
+      'http://127.0.0.1\n@evil.example',
+    ]) {
+      expect(isAllowedMcpHttpUrl(noisy), JSON.stringify(noisy)).toBe(false)
     }
   })
 
@@ -300,9 +346,8 @@ describe('isAllowedMcpHttpUrl', () => {
       'ftp://127.0.0.1',
       'ws://127.0.0.1',
       'httpsx://mcp.example.com',
-      '127.0.0.1:8080',
-      ' https://mcp.example.com', // the scheme is anchored at the start of the string
-      'see https://mcp.example.com',
+      '127.0.0.1:8080', // a scheme may not start with a digit, so this is not a url at all
+      'see https://mcp.example.com', // a url MENTIONED in prose is not a url
       '',
     ]) {
       expect(isAllowedMcpHttpUrl(bad), bad).toBe(false)

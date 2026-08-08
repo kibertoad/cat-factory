@@ -583,24 +583,67 @@ export function isLoopbackMcpHttpUrl(raw: string): boolean {
 }
 
 /**
+ * Whether the url carries an ASCII control character or a space ANYWHERE, which is refused rather
+ * than canonicalised.
+ *
+ * The WHATWG parser strips leading and trailing C0-and-space and REMOVES tab, LF and CR from
+ * anywhere in the string, so a url carrying one parses to something other than what it reads as.
+ * The admitted string is stored and handed VERBATIM to the agent CLI's MCP config, so admitting one
+ * url and starting another is the one thing this predicate may not do. They are all typos in
+ * deployment-authored config, and a refusal at registration names the problem where a silent
+ * rewrite would not.
+ */
+function hasControlOrSpace(raw: string): boolean {
+  for (let i = 0; i < raw.length; i += 1) {
+    if (raw.charCodeAt(i) <= 0x20) return true
+  }
+  return false
+}
+
+// The WHATWG URL parser is a global in workerd, in Node and in every agent CLI's own runtime, but
+// the kernel compiles against the ES2022 lib only (no DOM/WebWorker), so reach it through
+// `globalThis` with a minimal local type rather than pulling in the DOM lib: the same trade
+// `ports/binary-artifacts.ts` makes for Web Crypto.
+interface MinimalUrl {
+  readonly protocol: string
+  readonly hostname: string
+}
+const UrlParser = (globalThis as { URL?: new (url: string) => MinimalUrl }).URL
+
+/**
  * Split an http(s) URL into its scheme and bare host, or undefined when it is neither.
  *
- * Hand-parsed rather than handed to `new URL`, because the userinfo rule is the whole point: strip it
- * FIRST and from the LAST `@`, or `http://127.0.0.1@evil.example` reads as loopback while the request
- * goes to evil.example.
+ * Parsed by `new URL` DELIBERATELY: it is the same WHATWG parser `fetch` and every agent CLI we
+ * hand the url to resolve the request with, so the host ruled on here is the host the credential
+ * actually travels to. A hand-written parse cannot hold that property, and the ways it silently
+ * loses it are not enumerable. `http://evil.example\@127.0.0.1/t` is the worked example: a
+ * backslash terminates the authority for a special scheme, so the WHATWG host is `evil.example`
+ * while an authority regex that stops only at `/?#` reads the userinfo rule onto `127.0.0.1` and
+ * hands `evil.example` a cleartext credential header.
+ *
+ * `hostname` already applies every rule the hand-parse was written for and several it was not:
+ * userinfo stripped from the LAST `@`, the host lowercased, IDNA applied, and the IPv4 shorthands
+ * (`127.1`, `0177.0.0.1`, `2130706433`) collapsed to the address they dial. Only the brackets an
+ * IPv6 literal keeps have to come off, since {@link isLoopbackHost} tests the address itself.
  */
 function parseMcpHttpUrl(raw: string): { scheme: string; host: string } | undefined {
-  const match = /^(https?):\/\/([^/?#]*)/i.exec(raw)
-  if (!match) return undefined
-  const authority = match[2]!
-  const hostPort = authority.slice(authority.lastIndexOf('@') + 1)
-  const closingBracket = hostPort.indexOf(']')
-  const host = (
-    hostPort.startsWith('[') && closingBracket !== -1
-      ? hostPort.slice(1, closingBracket) // IPv6 literal, e.g. [::1]:8080
-      : hostPort.split(':')[0]!
-  ).toLowerCase()
-  return { scheme: match[1]!.toLowerCase(), host }
+  if (hasControlOrSpace(raw)) return undefined
+  // A runtime with no URL parser REFUSES rather than falling back to an authority scan. Being
+  // unable to hold the property above is exactly what disqualified the hand-written parse, so a
+  // fallback would reinstate the bug on the one runtime nobody tests.
+  if (!UrlParser) return undefined
+  let parsed: MinimalUrl
+  try {
+    parsed = new UrlParser(raw)
+  } catch {
+    // silent-catch-ok: an unparseable url IS the "neither" this returns undefined for, and the
+    // caller renders the refusal. There is nothing here a cause would add.
+    return undefined
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined
+  const hostname = parsed.hostname
+  const host = hostname.startsWith('[') ? hostname.slice(1, -1) : hostname
+  return { scheme: parsed.protocol.slice(0, -1), host }
 }
 
 function isLoopbackHost(host: string): boolean {
