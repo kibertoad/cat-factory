@@ -6157,6 +6157,7 @@
     "design": {
       "summary": "Keine Frames stammen aus dem verknüpften Design. | 1 Frame aus dem verknüpften Design. | {count} Frames aus dem verknüpften Design.",
       "dropped": "Es sind keine weiteren ausgeblendet. | 1 weiterer wird hier nicht angezeigt. | {count} weitere werden hier nicht angezeigt.",
+      "gapDropped": "Keiner seiner Frames ist ausgeblendet. | 1 seiner Frames wird hier nicht angezeigt. | {count} seiner Frames werden hier nicht angezeigt.",
       "gapLine": "{title}:",
       "gap": {
         "partial": "nur ein Teil seiner Frames wurde gespeichert; aktualisiere das Dokument, um es erneut zu versuchen.",

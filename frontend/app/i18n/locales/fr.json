@@ -5601,6 +5601,7 @@
     "design": {
       "summary": "Aucun cadre ne provient de la maquette liée. | 1 cadre issu de la maquette liée. | {count} cadres issus de la maquette liée.",
       "dropped": "Aucun autre n'est masqué. | 1 de plus n'est pas affiché ici. | {count} de plus ne sont pas affichés ici.",
+      "gapDropped": "Aucun de ses cadres n'est masqué. | 1 de ses cadres n'est pas affiché ici. | {count} de ses cadres ne sont pas affichés ici.",
       "gapLine": "{title} :",
       "gap": {
         "partial": "seule une partie de ses cadres a été conservée ; actualisez le document pour réessayer.",

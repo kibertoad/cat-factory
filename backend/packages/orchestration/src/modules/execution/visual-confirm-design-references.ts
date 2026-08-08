@@ -59,10 +59,16 @@ export interface DesignDocumentSummary {
  * everything it has.
  *
  * Reads the stored `renderStatus` AND what the artifact store actually holds, because the two can
- * disagree in the one direction that matters: a row saying `stored` over an empty shelf (an
+ * disagree in the one direction that matters: a row CLAIMING retention over an empty shelf (an
  * account that re-pointed its blob backend, a reclaim that outran its re-import) would otherwise
- * render as a design with no screens, which is the reading that sends a reviewer to the wrong
- * place. `stored` with images held is the only combination that states nothing.
+ * describe a gallery that is not there. `partial` is such a claim just as `stored` is, and left to
+ * speak for itself it tells the reviewer "only part of its frames were retained" above nothing at
+ * all, which reads as a design that is merely short rather than one that is absent, and sends them
+ * looking for the frames that did survive.
+ *
+ * So the two claiming statuses are checked against what is held, and the three that already say
+ * nothing was kept (`failed` / `none` / `storage_unavailable`) stand as they are: each names a
+ * DIFFERENT cause of the same empty shelf, and collapsing them would throw the cause away.
  */
 export function designGapReason(
   renderStatus: DocumentRenderStatus | null,
@@ -72,7 +78,7 @@ export function designGapReason(
     case 'stored':
       return heldImages > 0 ? null : 'not_retained'
     case 'partial':
-      return 'partial'
+      return heldImages > 0 ? 'partial' : 'not_retained'
     case 'failed':
       return 'failed'
     case 'none':
@@ -125,9 +131,37 @@ function documentLabels(documents: readonly DesignDocumentSummary[]): Map<string
 }
 
 /**
+ * Share a bounded budget of gallery slots across the designs competing for it, one slot at a time
+ * in turn, and answer how many each may take.
+ *
+ * The budget is shared, so how it is SPLIT is a decision, and taking the first `cap` views in read
+ * order is the one shape that answers it worst: reads come back oldest-first, so the design linked
+ * longest ago fills the gallery and a design linked this morning contributes nothing, its absence
+ * indistinguishable to the reviewer from a design with no frames. Round-robin instead: every
+ * design is represented before any design gets a second slot, a design with fewer frames than its
+ * share leaves the rest to the others, and the split does not move when the links are re-ordered.
+ */
+function allocate(counts: readonly number[], cap: number): number[] {
+  const taken = counts.map(() => 0)
+  let remaining = Math.max(0, cap)
+  for (let round = 0; remaining > 0; round += 1) {
+    let servedThisRound = false
+    for (let i = 0; i < counts.length && remaining > 0; i += 1) {
+      if (round >= counts[i]!) continue
+      taken[i]! += 1
+      remaining -= 1
+      servedThisRound = true
+    }
+    // Nobody had a frame left at this depth, so nobody will at any greater one.
+    if (!servedThisRound) break
+  }
+  return taken
+}
+
+/**
  * Fold a task's design documents and their retained renders into the gate's reference set.
  *
- * Three rules, each of which the obvious shape gets wrong:
+ * Four rules, each of which the obvious shape gets wrong:
  *
  * A view name claimed by TWO designs is qualified with its design's label on BOTH sides, never
  * just the second. This is the same rule slice 1 applied to a frame name repeated across pages
@@ -140,14 +174,23 @@ function documentLabels(documents: readonly DesignDocumentSummary[]): Map<string
  * first, so a later assignment overriding an earlier one is the rule, not an accident.
  *
  * The cap counts VIEWS, not artifacts, and is applied after the per-view reduction: capping the
- * raw rows first would spend the budget on frames a later revision had already replaced.
+ * raw rows first would spend the budget on frames a later revision had already replaced. It is
+ * SHARED across the linked designs rather than consumed in read order (see {@link allocate}), and
+ * what it cuts is named per design, not just totalled.
+ *
+ * Emission stays in document order with each design's own frames contiguous: the allocation
+ * decides how many slots each design gets, never how the gallery reads.
  */
 export function foldDesignReferences(
   documents: readonly DesignDocumentSummary[],
   artifacts: readonly BinaryArtifactRecord[],
   cap = MAX_DESIGN_REFERENCE_VIEWS,
 ): DesignReferenceFold {
+  // One entry per document IDENTITY, in first-linked order. A repeated link is one design: counted
+  // twice it would take two shares of the budget, state its gap twice, and make its own title look
+  // shared to the qualifier below, which would then qualify every one of its views against itself.
   const known = new Map(documents.map((document) => [documentKey(document), document] as const))
+  const unique = [...known.values()]
   const renders = artifacts.filter(
     (record) =>
       record.kind === 'reference' && record.document && known.has(documentKey(record.document)),
@@ -162,8 +205,10 @@ export function foldDesignReferences(
     if (held) held.add(key)
     else claimants.set(view, new Set([key]))
   }
-  const labels = documentLabels(documents)
-  const byView = new Map<string, string>()
+  const labels = documentLabels(unique)
+  const byDocument = new Map(
+    unique.map((document) => [documentKey(document), new Map<string, string>()]),
+  )
   const heldPerDocument = new Map<string, number>()
   for (const record of renders) {
     // A render with no view has no pairing key, so it can only ever be shown against nothing.
@@ -173,23 +218,35 @@ export function foldDesignReferences(
     if (!record.view) continue
     const contested = (claimants.get(record.view)?.size ?? 0) > 1
     const view = contested ? `${record.view} (${labels.get(key) ?? key})` : record.view
-    byView.set(view, record.id)
+    byDocument.get(key)!.set(view, record.id)
   }
-  const all = [...byView.entries()].map(([view, artifactId]) => ({ view, artifactId }))
-  const references = all.slice(0, cap)
-  const dropped = all.length - references.length
+  const offered = unique.map((document) => [...byDocument.get(documentKey(document))!.entries()])
+  const taken = allocate(
+    offered.map((views) => views.length),
+    cap,
+  )
+  const references = offered.flatMap((views, index) =>
+    views.slice(0, taken[index]!).map(([view, artifactId]) => ({ view, artifactId })),
+  )
   const gaps: VisualConfirmDesignGap[] = []
-  for (const document of documents) {
+  let dropped = 0
+  unique.forEach((document, index) => {
+    const cut = offered[index]!.length - taken[index]!
+    dropped += cut
     const reason = designGapReason(
       document.renderStatus,
       heldPerDocument.get(documentKey(document)) ?? 0,
     )
-    if (reason) gaps.push({ title: document.title, reason })
-  }
+    // The two ways a design falls short are independent, so one entry carries both: a design can
+    // be short at its source, short at the gallery ceiling, or both at once.
+    if (reason || cut > 0) {
+      gaps.push({ title: document.title, reason, ...(cut > 0 ? { dropped: cut } : {}) })
+    }
+  })
   return {
     references,
     summary: {
-      documents: documents.length,
+      documents: unique.length,
       images: references.length,
       ...(dropped > 0 ? { dropped } : {}),
       ...(gaps.length ? { gaps } : {}),

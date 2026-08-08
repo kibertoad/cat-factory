@@ -5601,6 +5601,7 @@
     "design": {
       "summary": "Bağlantılı tasarımdan hiç çerçeve gelmedi. | Bağlantılı tasarımdan {count} çerçeve. | Bağlantılı tasarımdan {count} çerçeve.",
       "dropped": "Gizlenen başka çerçeve yok. | {count} çerçeve daha burada gösterilmiyor. | {count} çerçeve daha burada gösterilmiyor.",
+      "gapDropped": "Gizlenen çerçevesi yok. | Bu tasarımın {count} çerçevesi burada gösterilmiyor. | Bu tasarımın {count} çerçevesi burada gösterilmiyor.",
       "gapLine": "{title}:",
       "gap": {
         "partial": "çerçevelerinin yalnızca bir kısmı saklandı; yeniden denemek için belgeyi yenileyin.",

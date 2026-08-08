@@ -5601,6 +5601,7 @@
     "design": {
       "summary": "Ningún marco procede del diseño vinculado. | 1 marco del diseño vinculado. | {count} marcos del diseño vinculado.",
       "dropped": "No hay otros ocultos. | 1 más no se muestra aquí. | {count} más no se muestran aquí.",
+      "gapDropped": "Ninguno de sus marcos está oculto. | 1 de sus marcos no se muestra aquí. | {count} de sus marcos no se muestran aquí.",
       "gapLine": "{title}:",
       "gap": {
         "partial": "solo se conservó parte de sus marcos; actualiza el documento para volver a intentarlo.",

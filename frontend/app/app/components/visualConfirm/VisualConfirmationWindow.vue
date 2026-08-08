@@ -244,10 +244,16 @@ async function onFilePicked(e: Event) {
               {{ t('visualConfirm.design.dropped', { count: design.dropped }, design.dropped) }}
             </span>
           </p>
+          <!-- One line per short design, carrying both ways it can fall short: what its source
+               kept, and what this gallery's shared ceiling cut from it. A design the ceiling shut
+               out entirely reads as one with no frames unless it is named here. -->
           <ul v-if="design.gaps?.length" class="mt-1.5 space-y-1 text-[11px] text-amber-300/90">
-            <li v-for="gap in design.gaps" :key="`${gap.title}-${gap.reason}`">
+            <li v-for="gap in design.gaps" :key="`${gap.title}-${gap.reason ?? 'capped'}`">
               {{ t('visualConfirm.design.gapLine', { title: gap.title }) }}
-              {{ DESIGN_GAP_LABELS[gap.reason] }}
+              <template v-if="gap.reason">{{ DESIGN_GAP_LABELS[gap.reason] }}</template>
+              <template v-if="gap.dropped">{{
+                t('visualConfirm.design.gapDropped', { count: gap.dropped }, gap.dropped)
+              }}</template>
             </li>
           </ul>
         </section>

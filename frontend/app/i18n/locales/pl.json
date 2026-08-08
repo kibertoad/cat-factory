@@ -5601,6 +5601,7 @@
     "design": {
       "summary": "1 klatka z połączonego projektu. | {count} klatki z połączonego projektu. | Klatek z połączonego projektu: {count}.",
       "dropped": "Jeszcze 1 nie jest tu pokazana. | Jeszcze {count} nie są tu pokazane. | Nie pokazano tu jeszcze {count}.",
+      "gapDropped": "1 jej klatka nie jest tu pokazana. | {count} jej klatki nie są tu pokazane. | Nie pokazano tu {count} jej klatek.",
       "gapLine": "{title}:",
       "gap": {
         "partial": "zachowano tylko część jego klatek; odśwież dokument, aby spróbować ponownie.",

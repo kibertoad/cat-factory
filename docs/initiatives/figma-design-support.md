@@ -419,10 +419,13 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
       PNG bytes in a subdirectory of the job's context, and an `InjectedContextFile` is UTF-8 text
       by type while the harness flattens a context file's path to a bare name. That is an
       image-bumping harness slice; this one is backend-only and ships the designer-visible half now.
-      Four things it had to get right. **A hand upload OUTRANKS a design frame for the same view**:
-      an upload is a deliberate act against this one task and survives every re-import, while a
-      design render is a projection the next body-changing import replaces wholesale, so the design
-      fold runs first and the uploads assign over it. **A view name TWO designs both claim is
+      Six things it had to get right. **An EXPLICITLY CHOSEN reference outranks a design frame for
+      the same view**: an upload is a deliberate act against this one task and survives every
+      re-import, while a design render is a projection the next body-changing import replaces
+      wholesale, so the design fold runs first, the uploads assign over it, and a view whose
+      reference the CAPTURE named is skipped (the fold cannot tell which choice it would overwrite,
+      and the container half will have the tester naming the design files it was handed). **A view
+      name TWO designs both claim is
       qualified on both sides**, the same rule Track D slice 1 applied within one file, because
       leaving the first bare hands the plain name to whichever design is listed first and
       re-ordering the links would then silently re-point a reviewed view at a different screen (the
@@ -434,10 +437,20 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
       attached" and "one is attached and gave nothing" are different facts and the second needs a
       per-design reason: `partial` / `failed` / `none` / `storage_unavailable` / `not_retained`,
       each naming a different fix, derived from what the store actually HOLDS rather than from
-      `render_status` alone (a row claiming `stored` over an empty shelf is exactly the case a
-      reviewer must not read as a design with no screens). It is kept apart from `degradedReason`,
-      which gates the approve button behind an acknowledgement: a design that gave fewer frames
-      than it has is not a degraded review BASIS, since references have always been optional.
+      `render_status` alone (any status CLAIMING retention over an empty shelf, `stored` and
+      `partial` alike, is exactly the case a reviewer must not read as a design that is merely
+      short). **The 12-view ceiling is SHARED round-robin and what it cuts is named per design**,
+      because spending it in read order lets the design linked longest ago fill the gallery while
+      one linked this morning contributes nothing, which reads to a reviewer as a design with no
+      frames; each short design carries its own `dropped` beside its `reason`, the two being
+      independent. And **a gallery ROW is not a captured screenshot**: a reference-only row makes a
+      pair too, so every consumer that asks "did this run capture anything" asks
+      `countCapturedViews` in contracts rather than reading `pairs.length`, or a run that captured
+      nothing loses its warning, reports a verified gallery of blanks in the run outcome, and
+      summons reviewers to screenshots that are not there. That warning is `degradedReason`, kept
+      apart from `designReferences` because it gates the approve button behind an acknowledgement:
+      a design that gave fewer frames than it has is not a degraded review BASIS, since references
+      have always been optional.
       The reads are LIVE at gather time (one batched `listByDocuments`, never a read per design),
       so **recapture** picks up a design linked while the gate is parked, exactly as it already
       does for an upload.

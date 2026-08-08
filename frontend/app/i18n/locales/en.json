@@ -5870,6 +5870,7 @@
     "design": {
       "summary": "No frames came from the linked design. | 1 frame from the linked design. | {count} frames from the linked design.",
       "dropped": "No others are hidden. | 1 more is not shown here. | {count} more are not shown here.",
+      "gapDropped": "None of its frames are hidden. | 1 of its frames is not shown here. | {count} of its frames are not shown here.",
       "gapLine": "{title}:",
       "gap": {
         "partial": "only part of its frames were retained; refresh the document to try again.",

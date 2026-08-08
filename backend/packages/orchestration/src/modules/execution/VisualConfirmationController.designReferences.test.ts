@@ -121,8 +121,8 @@ function fakeDeps(over: Partial<VisualConfirmationControllerDeps> = {}) {
     contextBuilder: { buildContext: vi.fn() } as never,
     resolveRiskPolicy: vi.fn(async () => ({ ciMaxAttempts: 3 })),
     stateMachine: {
-      parkStepOnDecision: vi.fn(async (_ws, _i, s: PipelineStep) => {
-        s.approval = { id: 'appr_1', status: 'pending', proposal: '' }
+      parkStepOnDecision: vi.fn(async (_ws, _i, s: PipelineStep, proposal: string) => {
+        s.approval = { id: 'appr_1', status: 'pending', proposal }
         s.state = 'waiting_decision'
         return { kind: 'awaiting_decision', decisionId: 'appr_1' } as const
       }),
@@ -212,6 +212,63 @@ describe('VisualConfirmationController design references', () => {
         referenceOrigin: 'upload',
       },
     ])
+  })
+
+  it('leaves a reference the CAPTURE named alone rather than re-pointing it', async () => {
+    const frame = artifact({
+      view: 'Checkout',
+      document: { source: 'figma', externalId: 'fileA' },
+    })
+    const ui = uiTesterStep(['Checkout'])
+    ui.test!.lastReport!.screenshots![0]!.referenceArtifactId = 'art_named'
+    const deps = fakeDeps({
+      resolveBinaryArtifactStore: (() =>
+        Promise.resolve(
+          fakeStore({
+            executionArtifacts: [artifact({ id: 'shot_0', kind: 'screenshot', view: 'Checkout' })],
+            documentArtifacts: [frame],
+          }),
+        )) as never,
+      documentRepository: { listByBlock: vi.fn(async () => [designDocument()]) } as never,
+    })
+    const step = gateStep()
+
+    await new VisualConfirmationController(deps).evaluate(
+      'ws',
+      instance([ui, step]),
+      step,
+      BLOCK,
+      true,
+    )
+
+    // Same precedence an upload gets, for the same reason: a reference that was explicitly chosen
+    // for this view outranks a projection of whatever the linked file says today. The origin stays
+    // absent because the gate did not source it and would only be guessing.
+    expect(step.visualConfirm?.pairs).toEqual([
+      { view: 'Checkout', actualArtifactId: 'shot_0', referenceArtifactId: 'art_named' },
+    ])
+  })
+
+  it('still warns that nothing was CAPTURED when the design supplied every row', async () => {
+    const frame = artifact({
+      view: 'Checkout',
+      document: { source: 'figma', externalId: 'fileA' },
+    })
+    const deps = fakeDeps({
+      resolveBinaryArtifactStore: (() =>
+        Promise.resolve(fakeStore({ documentArtifacts: [frame] }))) as never,
+      documentRepository: { listByBlock: vi.fn(async () => [designDocument()]) } as never,
+    })
+    const step = gateStep()
+
+    await new VisualConfirmationController(deps).evaluate('ws', instance([step]), step, BLOCK, true)
+
+    // The gallery has a row, and it is a mock the reviewer already had. Counting rows would drop
+    // this warning — and the approve-button acknowledgement it drives — for exactly the run that
+    // needs it. The gate's own proposal must not promise screenshots either.
+    expect(step.visualConfirm?.pairs).toHaveLength(1)
+    expect(step.visualConfirm?.degradedReason).toMatch(/No UI screenshots were captured/)
+    expect(step.approval?.proposal).toBe('Review the UI change, then approve or request a fix.')
   })
 
   it('states a linked design that retained nothing rather than showing a short gallery', async () => {

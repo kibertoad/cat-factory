@@ -6157,6 +6157,7 @@
     "design": {
       "summary": "Nessun frame proviene dal design collegato. | 1 frame dal design collegato. | {count} frame dal design collegato.",
       "dropped": "Non ce ne sono altri nascosti. | 1 altro non è mostrato qui. | Altri {count} non sono mostrati qui.",
+      "gapDropped": "Nessuno dei suoi frame è nascosto. | 1 dei suoi frame non è mostrato qui. | {count} dei suoi frame non sono mostrati qui.",
       "gapLine": "{title}:",
       "gap": {
         "partial": "solo una parte dei suoi frame è stata conservata; aggiorna il documento per riprovare.",

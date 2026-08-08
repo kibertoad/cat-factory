@@ -115,6 +115,84 @@ describe('foldDesignReferences', () => {
     // whole design.
     expect(summary.dropped).toBe(3)
     expect(summary.images).toBe(MAX_DESIGN_REFERENCE_VIEWS)
+    // And named, so the reviewer knows WHICH design is short of the ceiling, not just that
+    // something is: with one design that is obvious, with two it is the whole question.
+    expect(summary.gaps).toEqual([{ title: 'Checkout flow', reason: null, dropped: 3 }])
+  })
+
+  it('SHARES the cap across designs rather than letting the first spend it', () => {
+    const documents = [
+      design({ externalId: 'fileA', title: 'Older' }),
+      design({ externalId: 'fileB', title: 'Newer' }),
+    ]
+    // The reads come back oldest-first, so in read order the older design alone would fill the
+    // gallery and the one linked this morning would contribute nothing — indistinguishable to a
+    // reviewer from a design with no frames at all.
+    const renders = [
+      ...Array.from({ length: 10 }, (_, i) => render(FILE_A, `a-${i}`)),
+      ...Array.from({ length: 6 }, (_, i) => render(FILE_B, `b-${i}`)),
+    ]
+
+    const { references, summary } = foldDesignReferences(documents, renders, 8)
+
+    // Round-robin: every design is represented before any gets a second slot.
+    expect(references.map((r) => r.view)).toEqual([
+      'a-0',
+      'a-1',
+      'a-2',
+      'a-3',
+      'b-0',
+      'b-1',
+      'b-2',
+      'b-3',
+    ])
+    // Emission stays grouped by design even though the ALLOCATION interleaves them.
+    expect(summary.images).toBe(8)
+    expect(summary.dropped).toBe(8)
+    expect(summary.gaps).toEqual([
+      { title: 'Older', reason: null, dropped: 6 },
+      { title: 'Newer', reason: null, dropped: 2 },
+    ])
+  })
+
+  it('leaves a small design’s unspent share to the others', () => {
+    const documents = [
+      design({ externalId: 'fileA', title: 'Big' }),
+      design({ externalId: 'fileB', title: 'Small' }),
+    ]
+    const renders = [
+      ...Array.from({ length: 8 }, (_, i) => render(FILE_A, `a-${i}`)),
+      render(FILE_B, 'b-0'),
+    ]
+
+    const { references, summary } = foldDesignReferences(documents, renders, 6)
+
+    // An equal split would waste two slots on a design with one frame; the leftover goes back.
+    expect(references.map((r) => r.view)).toEqual(['a-0', 'a-1', 'a-2', 'a-3', 'a-4', 'b-0'])
+    expect(summary.gaps).toEqual([{ title: 'Big', reason: null, dropped: 3 }])
+  })
+
+  it('carries BOTH ways one design fell short on the same entry', () => {
+    const documents = [design({ externalId: 'fileA', title: 'Partial', renderStatus: 'partial' })]
+    const renders = Array.from({ length: 5 }, (_, i) => render(FILE_A, `view-${i}`))
+
+    const { summary } = foldDesignReferences(documents, renders, 3)
+
+    // Short at the source AND short at the ceiling: two independent facts, two fields.
+    expect(summary.gaps).toEqual([{ title: 'Partial', reason: 'partial', dropped: 2 }])
+  })
+
+  it('treats a design linked twice as one design', () => {
+    const documents = [design({ externalId: 'fileA' }), design({ externalId: 'fileA' })]
+
+    const frame = render(FILE_A, 'Checkout')
+
+    const { references, summary } = foldDesignReferences(documents, [frame])
+
+    // Counted twice it would take two shares of the budget, state its gap twice, and look to the
+    // qualifier like two designs sharing a title, which would qualify its views against itself.
+    expect(references).toEqual([{ view: 'Checkout', artifactId: frame.id }])
+    expect(summary).toEqual({ documents: 1, images: 1 })
   })
 
   it('ignores artifacts belonging to another document or of another kind', () => {
@@ -154,15 +232,17 @@ describe('foldDesignReferences', () => {
 })
 
 describe('designGapReason', () => {
-  it('is silent only when the row says stored AND images are actually held', () => {
+  it('is silent only when a claiming status is borne out by what is HELD', () => {
     expect(designGapReason('stored', 3)).toBeNull()
-    // A row claiming `stored` over an empty shelf is the one combination a reader must not see
-    // as "this design has no screens".
+    expect(designGapReason('partial', 4)).toBe('partial')
+    // Both `stored` and `partial` CLAIM frames were kept. Over an empty shelf neither may speak
+    // for itself: "only part of its frames were retained" above nothing at all reads as a design
+    // that is merely short, and sends the reviewer looking for survivors there are none of.
     expect(designGapReason('stored', 0)).toBe('not_retained')
+    expect(designGapReason('partial', 0)).toBe('not_retained')
   })
 
-  it('passes the recorded status through, since each asks for a different fix', () => {
-    expect(designGapReason('partial', 4)).toBe('partial')
+  it('keeps a status that already says nothing was kept, since each names a different fix', () => {
     expect(designGapReason('failed', 0)).toBe('failed')
     expect(designGapReason('none', 0)).toBe('none')
     expect(designGapReason('storage_unavailable', 0)).toBe('storage_unavailable')

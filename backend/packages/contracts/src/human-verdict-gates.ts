@@ -155,19 +155,39 @@ export const visualConfirmDesignGapReasonSchema = v.picklist([
   /** No image storage was configured when the design was imported, so nothing was downloaded. */
   'storage_unavailable',
   /**
-   * No images are held for this design and its last import recorded no render outcome: either the
-   * source does not rasterise at all, or the document predates render retention. Re-importing is
-   * what tells the two apart.
+   * No images are held for this design, and its last import either recorded no render outcome or
+   * claimed one that the shelf does not bear out (`stored` / `partial` over nothing held). The
+   * causes it covers all end in the same place: the source may not rasterise at all, the document
+   * may predate render retention, or the frames it did keep are gone. Re-importing is what tells
+   * them apart, and is the fix for each.
    */
   'not_retained',
 ])
 export type VisualConfirmDesignGapReason = v.InferOutput<typeof visualConfirmDesignGapReasonSchema>
 
-/** One linked design that contributed less than its whole set of frames, and why. */
+/**
+ * One linked design that contributed less than its whole set of frames.
+ *
+ * A design can fall short in two INDEPENDENT ways, so the entry carries both rather than picking
+ * one: its source kept fewer frames than the design has (`reason`), and the gallery's own ceiling
+ * left out some of what it did keep (`dropped`). A design can be short on either axis alone or on
+ * both, and collapsing them into a single field would silently drop whichever lost the coin toss.
+ */
 export const visualConfirmDesignGapSchema = v.object({
   /** The document's title, so the reviewer knows WHICH design is short. */
   title: v.string(),
-  reason: visualConfirmDesignGapReasonSchema,
+  /**
+   * Why the SOURCE holds fewer frames than the design has, or null when retention is complete and
+   * this entry exists only because the gallery ceiling dropped some of them.
+   */
+  reason: v.nullable(visualConfirmDesignGapReasonSchema),
+  /**
+   * How many of THIS design's views the gallery's ceiling left out. Per-design rather than only in
+   * the summary's total, because the budget is shared: a bare total says frames are missing
+   * without saying whose, and a design the ceiling shut out entirely would otherwise look to a
+   * reviewer exactly like one that has no frames at all.
+   */
+  dropped: v.optional(v.number()),
 })
 export type VisualConfirmDesignGap = v.InferOutput<typeof visualConfirmDesignGapSchema>
 
@@ -187,8 +207,10 @@ export const visualConfirmDesignReferencesSchema = v.object({
   /** Rendered frames folded into the pairs above. */
   images: v.number(),
   /**
-   * Frames left out by the gate's own ceiling on how many design views one gallery may carry.
-   * Reported rather than silently trimmed: unstated, a capped gallery reads as the whole design.
+   * Frames left out by the gate's own ceiling on how many design views one gallery may carry,
+   * summed across every linked design. Reported rather than silently trimmed: unstated, a capped
+   * gallery reads as the whole design. Which designs the ceiling cut, and by how much, is on each
+   * one's own {@link visualConfirmDesignGapSchema} entry.
    */
   dropped: v.optional(v.number()),
   /** Designs that contributed less than their whole set; see {@link visualConfirmDesignGapSchema}. */

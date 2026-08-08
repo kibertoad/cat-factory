@@ -1,5 +1,6 @@
 import type { Block } from './entities.js'
 import type { PipelineStep } from './execution.js'
+import type { VisualConfirmPair } from './human-verdict-gates.js'
 import type { RequirementPriority, RequirementState, SpecDoc } from './spec.js'
 import type { RequirementVerdict, RequirementVerdictStatus, TestReport } from './testing.js'
 import { UI_TESTER_AGENT_KIND } from './visual-pipeline.js'
@@ -269,4 +270,26 @@ export function tallyTestOutcomes(report: TestReport): TestOutcomeTally {
   const tally: TestOutcomeTally = { passed: 0, failed: 0, skipped: 0 }
   for (const outcome of report.outcomes) tally[outcome.status] += 1
   return tally
+}
+
+/**
+ * How many of a visual-confirmation gate's pairs carry an ACTUAL capture: a screenshot this run
+ * took of the running UI.
+ *
+ * The count that matters is never `pairs.length`, and the difference is the whole point. A pair
+ * exists for any view either side of the comparison names, so a reference with nothing captured
+ * against it makes one too: a mock someone uploaded, or a frame the task's linked design
+ * contributed. Reading the row count as "screenshots" therefore turns a run that captured
+ * NOTHING into one that captured several, and every consumer that asks the question gets the
+ * same answer wrong in a different place: the gate drops the warning that gates its approve
+ * button behind an acknowledgement, the outcome summary reports a verified gallery of blanks,
+ * and the notification summoning the reviewer promises screenshots that are not there.
+ *
+ * So the rule is stated once, here, and the three of them call it. What a consumer does with the
+ * answer stays its own: the gate words a degraded reason, the summary picks a gap code.
+ */
+export function countCapturedViews(pairs: readonly VisualConfirmPair[]): number {
+  let captured = 0
+  for (const pair of pairs) if (pair.actualArtifactId) captured += 1
+  return captured
 }

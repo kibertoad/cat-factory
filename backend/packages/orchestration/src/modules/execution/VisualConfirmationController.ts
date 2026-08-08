@@ -14,6 +14,7 @@ import type {
   WorkRunner,
 } from '@cat-factory/kernel'
 import { ConflictError, isAsyncAgentExecutor } from '@cat-factory/kernel'
+import { countCapturedViews } from '@cat-factory/contracts'
 import { resolveDesignReferences } from './visual-confirm-design-references.js'
 import { FIXER_AGENT_KIND, UI_TESTER_AGENT_KIND, VISUAL_CONFIRM_AGENT_KIND } from './ci.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
@@ -215,7 +216,11 @@ export class VisualConfirmationController {
       attempts: 0,
       maxAttempts,
       rounds: [],
-      ...(pairs.length === 0
+      // Gated on what was CAPTURED, never on how many rows the gallery has: a reference-only row
+      // (a linked design's frame, an uploaded mock) makes a pair too, so counting rows would drop
+      // this warning — and the approve-button acknowledgement it drives — for exactly the run that
+      // needs it, one showing a reviewer nothing but the mocks they already had.
+      ...(countCapturedViews(pairs) === 0
         ? {
             degradedReason:
               'No UI screenshots were captured for this task — review the change manually, then approve or request a fix.',
@@ -394,6 +399,11 @@ export class VisualConfirmationController {
     for (const ref of design?.references ?? []) {
       const existing = byView.get(ref.view)
       if (existing) {
+        // A reference the CAPTURE named for this view is left alone. The same precedence the
+        // uploads below rely on, for the same reason: an explicitly chosen reference outranks a
+        // projection of whatever the linked file says today, and the design fold cannot tell
+        // which of the two it would be replacing. Only a view with no reference at all is filled.
+        if (existing.referenceArtifactId) continue
         existing.referenceArtifactId = ref.artifactId
         existing.referenceOrigin = 'design'
       } else {
@@ -549,8 +559,19 @@ export class VisualConfirmationController {
     return found
   }
 
+  /**
+   * How many screenshots this gate is asking a human to look at.
+   *
+   * The captured count, not the row count: a design frame or an uploaded mock makes a pair with
+   * nothing captured against it, so summoning a reviewer to "5 captured screenshots" that are all
+   * blank is the same misreading the degraded note above exists to prevent.
+   */
+  private capturedCount(vc: VisualConfirmStepState): number {
+    return countCapturedViews(vc.pairs ?? [])
+  }
+
   private proposal(vc: VisualConfirmStepState): string {
-    const n = vc.pairs?.length ?? 0
+    const n = this.capturedCount(vc)
     return n > 0
       ? `Review ${n} screenshot${n === 1 ? '' : 's'} against the reference designs, then approve or request a fix.`
       : 'Review the UI change, then approve or request a fix.'
@@ -564,7 +585,7 @@ export class VisualConfirmationController {
     vc: VisualConfirmStepState,
   ): Promise<void> {
     if (!this.deps.notificationService) return
-    const n = vc.pairs?.length ?? 0
+    const n = this.capturedCount(vc)
     await this.deps.notificationService.raise(workspaceId, {
       type: 'visual_confirmation_ready',
       blockId: block.id,
