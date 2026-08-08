@@ -1,5 +1,107 @@
 # @cat-factory/orchestration
 
+## 0.241.0
+
+### Minor Changes
+
+- a62bcf8: Deliver notifications by email, and add the notification manager that decides which events go to
+  which channel.
+
+  The `EmailSender` port, its SendGrid/Resend adapters and the per-account connection have been live
+  for a while and were used only for invitations. A new `EmailNotificationChannel` puts them behind
+  the same `NotificationChannel` port the in-app and Slack transports implement, so the engine call
+  sites that raise notifications are untouched. It resolves recipients from the SAME rules
+  `resolveWorkspaceAccess` applies (account membership is the prerequisite, an account admin always
+  qualifies, a `workspace_members` row counts only for a still-current account member), reads them in
+  three batched queries rather than a point-read per person, and isolates each send so one bad address
+  cannot cost every other recipient their notification. An account with no sender connected produces
+  zero attempts and zero warnings.
+
+  The manager (`notification_settings`, one row per workspace, D1 ⇄ Drizzle with a conformance suite)
+  stores per-type, per-channel OVERRIDES over the shipped defaults, and one service answers both the
+  settings API and the delivery gate so the toggle a human sees cannot say something the engine does
+  not do. **By default email carries only the high-impact events**: the ones where something is
+  stopped until a human acts (`merge_review`, `decision_required`, `ci_failed`, `test_failed`,
+  `release_regression`) or the deployment itself is degraded (`platform_health`, `infra_unreachable`,
+  `budget_paused`, `key_drift`). The per-step review parks are deliberately off by default — several
+  arrive on nearly every task, and mailing them is the firehose that gets a sender's domain filtered.
+
+  Only the channels whose delivery is a plain yes/no are routed here: the in-app push and email.
+  Slack and the outbound webhooks answer "which types" where their DESTINATION is declared (a Slack
+  route's channel, a webhook endpoint's own `types` filter), so a second switch would be a place to
+  look that does not decide. The settings panel says so and links to the Slack routing.
+
+  Delivery now carries WHICH lifecycle edge it reports (`NotificationDeliveryReason`: `raised` /
+  `refreshed` / `settled`), because the service re-delivers a card on every transition it makes and
+  the transports split hard on what that means. A STATE transport (the in-app push, the outbound
+  webhook) takes every edge, so a board holding an open card sees it settle instead of rendering an
+  already-made decision as still actionable. An ALERT transport (email, Slack) takes the `raised` edge
+  alone: a mailbox and a chat channel cannot render a correction, so a second "Decision needed" after
+  the decision was made is simply false. This also corrects Slack, which re-posted on every resolve
+  and dismissal before the edge existed, and it is why the escalation sweep's loop over a workspace's
+  overdue cards now performs no routing or audience reads at all. **The edge is a required parameter
+  and rides the mothership delegation wire**, where it is refused rather than defaulted: the persisted
+  row cannot supply it (a raise and an escalation are both `open`), so a node one build behind fails
+  loudly instead of mailing the org about decisions already made.
+
+  Two more behaviours to watch for when reviewing. The in-app push is gated too, but only on the raise:
+  muting a type stops the live toast, while the card is still persisted, still in the inbox on the next
+  snapshot, and still pushed when it settles. And a settings read that FAILS falls back to the shipped
+  default and logs, rather than defaulting to deliver-everything (a mailshot) or deliver-nothing (the
+  parked run nobody hears about). In the settings panel the same distinction is explicit: a deployment
+  with no routing store and a read that broke are separate states, and only the first renders the
+  shipped defaults, because saving is a full replace and a grid built from defaults would otherwise
+  overwrite overrides nobody had seen.
+
+- fe8ca56: Let a deployment define its own binary artifact stores in code. Implement the kernel
+  `BinaryBlobBackend` port, register it on the new app-owned `BinaryStoreRegistry`, and pass the
+  registry to `start()` / `startLocal()` / `createWorker({ overrides })`: each registered store then
+  appears in the account-settings storage picker beside the platform's `fs` / `db` / `s3` / `r2`
+  backends, and the per-account resolver builds it when an account selects it. The registered id is
+  stamped onto every artifact row, an account naming a store this build does not register resolves to
+  no storage and is named in the log and the settings panel, and the retention sweeps reclaim through
+  a custom store like any built-in one.
+
+  On the Worker the registry is held PROCESS-WIDE rather than on the app, alongside the model-provider
+  and capability-credential registrations and for the same reason: that runtime builds a container per
+  entry point, and the entry points that write and reclaim artifacts (the durable driver, the queue
+  consumers, the retention cron) take no overrides. A store must be registered on every process that
+  handles its bytes, which in mothership mode means the nodes that write them AND the mothership that
+  sweeps them; a mothership-mode node now says so at boot.
+
+  Internal break: `ContentStorageCapability` gains a required `customStores` and `ContentStorageSummary`
+  a required `customStoreId`, so a facade or test building either literal must add them (the compile
+  error is the point). `BinaryArtifactStorageKind` is now open at the type level, since a registered
+  store's id is a legitimate value of the `storage` column.
+
+- 2544fb3: Put the run's terminal transition in one place on `RunStateMachine`.
+
+  The "finish this step, then finish the run or advance the cursor" epilogue was copy-pasted at
+  seven sites, each re-asserting by hand that `stopRunContainer` may fire only on the final step
+  and that the persist must precede the emit. `settleStepAndAdvance` owns both invariants, with the
+  three real variations (`confidence`, `resolverOwnsTerminalStatus`, the interview gate's extra
+  state) as options. `persistAndEmit` replaces the 29 remaining adjacent `casPersist` + `emitInstance`
+  pairs, and `recordDispatchedJob` bundles the job id, the dispatch attribution and the container
+  projection at the six dispatch sites, so omitting the attribution (a silent regression that lands
+  as "unknown" in production, never as an error) now takes deleting a call rather than forgetting a line.
+
+### Patch Changes
+
+- Updated dependencies [a62bcf8]
+- Updated dependencies [2544fb3]
+- Updated dependencies [fe8ca56]
+- Updated dependencies [2544fb3]
+- Updated dependencies [2544fb3]
+  - @cat-factory/kernel@0.273.0
+  - @cat-factory/contracts@0.275.0
+  - @cat-factory/integrations@0.151.0
+  - @cat-factory/agents@0.118.0
+  - @cat-factory/caching@0.18.14
+  - @cat-factory/prompt-fragments@1.0.23
+  - @cat-factory/sandbox@0.11.100
+  - @cat-factory/spend@0.15.41
+  - @cat-factory/workspaces@0.26.13
+
 ## 0.240.0
 
 ### Minor Changes
