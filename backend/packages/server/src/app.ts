@@ -142,8 +142,10 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // OpenAI-compatible LLM proxy for implementation containers (authenticated by a
   // signed, model-locked container token; upstream/in-process via the llmUpstream gateway).
   app.route('/', llmProxyController())
-  // In-container screenshot ingest for the UI tester (same container session token as the
-  // LLM proxy; reachable at `${proxyBaseUrl}/artifacts/ingest`). 503 when no blob storage.
+  // In-container screenshot ingest for the UI tester plus the reference-design download its
+  // job body's manifest names (same container session token as the LLM proxy; reachable at
+  // `${proxyBaseUrl}/artifacts/ingest` and `${proxyBaseUrl}/artifacts/reference/:id`). 503
+  // when no blob storage.
   app.route('/', harnessArtifactController())
   // SearXNG-compatible web-search proxy for implementation containers (same
   // model-locked container token; the search runs server-side under the deployment's

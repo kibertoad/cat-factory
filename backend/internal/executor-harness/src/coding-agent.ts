@@ -8,6 +8,7 @@ import type {
   HarnessAuthFields,
   PeerRepoSpec,
   ReferenceRepoSpec,
+  ReferenceScreenshotsSpec,
   RepoSpec,
   SkillSpec,
   McpServerSpec,
@@ -180,6 +181,14 @@ export interface CodingAgentSpec extends HarnessAuthFields {
    * has already dropped anything this harness cannot serve. Absent ⇒ built-in tools only.
    */
   mcpServers?: McpServerSpec[]
+  /**
+   * The task's reference design images, downloaded into `.cat-context/reference-screenshots/`
+   * before the agent's first turn. Carried on the coding path as well as the explore one because
+   * what earns a run its references is the KIND's declared `ui` image, and a deployment's own
+   * UI-facing kind may well be a coding one, and nothing here switches on which built-in it is.
+   * Absent ⇒ none (the normal case).
+   */
+  referenceScreenshots?: ReferenceScreenshotsSpec
 }
 
 /** The outcome of a coding agent run, before each caller maps it to its own result shape. */
@@ -458,6 +467,9 @@ export async function runCodingAgent(
             guardLimits: spec.guardLimits,
             ...(spec.skills?.length ? { skills: spec.skills } : {}),
             ...(spec.mcpServers?.length ? { mcpServers: spec.mcpServers } : {}),
+            ...(spec.referenceScreenshots
+              ? { referenceScreenshots: spec.referenceScreenshots }
+              : {}),
           },
           opts,
         )
@@ -1190,6 +1202,7 @@ export async function runMultiRepoCoding(
           // are properties of the AGENT KIND, not of the checkout layout.
           ...(job.skills?.length ? { skills: job.skills } : {}),
           ...(job.mcpServers?.length ? { mcpServers: job.mcpServers } : {}),
+          ...(job.referenceScreenshots ? { referenceScreenshots: job.referenceScreenshots } : {}),
           multiRepo: true,
         },
         opts,

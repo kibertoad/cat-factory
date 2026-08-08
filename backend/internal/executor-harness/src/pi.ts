@@ -218,6 +218,13 @@ export async function writeAgentsContext(
      * every turn) pointing at files that don't exist. Absent/false ⇒ the note is omitted.
      */
     hasBlueprints?: boolean
+    /**
+     * The reference-design block composed by `referenceScreenshotGuidance`: which files the run
+     * was handed and which it could not fetch. Composed by the caller (it is the only side that
+     * knows what actually landed on disk) and appended verbatim. Absent/'' ⇒ nothing is said,
+     * which is the normal case: only a capturing kind is sent references at all.
+     */
+    referenceGuidance?: string
   } = {},
 ): Promise<void> {
   const dir = join(homedir(), '.pi', 'agent')
@@ -246,9 +253,13 @@ export async function writeAgentsContext(
   // (see the note above `writeAgentsContext`): it comes solely from the backend `spec-aware`
   // trait, so a spec-aware run no longer carries it twice.
   const blueprint = opts.hasBlueprints ? BLUEPRINT_GUIDANCE : ''
+  // The reference designs the harness downloaded for a capturing kind, listed with their view
+  // names (and the ones that could not be fetched). Last, beside the linked-context list it is the
+  // sibling of: both point the agent at files already on disk.
+  const references = opts.referenceGuidance ?? ''
   await writeFile(
     join(dir, 'AGENTS.md'),
-    `${systemPrompt}${blueprint}${TODO_GUIDANCE}${monorepo}${multiRepo}${webTools}${context}`,
+    `${systemPrompt}${blueprint}${TODO_GUIDANCE}${monorepo}${multiRepo}${webTools}${context}${references}`,
     'utf8',
   )
 }
@@ -312,9 +323,22 @@ export async function materializeContextFiles(
   const dir = join(cwd, CONTEXT_DIR)
   await mkdir(dir, { recursive: true })
   for (const f of files) await writeFile(join(dir, f.path), f.content, 'utf8')
-  // The exclude pattern has no leading slash, so it matches `.cat-context/` at any depth
-  // — covering the monorepo case where cwd is a service subdirectory below the repo root.
-  // Walk up to find the repo's `.git` (best-effort; a from-scratch scaffold has none).
+  await excludeContextDir(cwd)
+}
+
+/**
+ * Add the LOCAL git exclude entry for {@link CONTEXT_DIR}, so nothing the harness materialises
+ * there can be committed into the agent's PR by a `git add -A`.
+ *
+ * The exclude pattern has no leading slash, so it matches `.cat-context/` at any depth, covering
+ * the monorepo case where cwd is a service subdirectory below the repo root. Best-effort: a
+ * scaffold-from-scratch checkout has no `.git` yet, and the files then simply stay untracked.
+ *
+ * One helper rather than a copy per materialiser: every writer into that directory owes the same
+ * exclude, and a new one that forgot it would leak the platform's own files into a customer's
+ * repository with nothing failing.
+ */
+export async function excludeContextDir(cwd: string): Promise<void> {
   const gitRoot = await findGitRoot(cwd)
   if (!gitRoot) return
   try {
@@ -356,13 +380,7 @@ export async function materializeSkillResources(
       await writeFile(dest, r.content, 'utf8')
     }
   }
-  const gitRoot = await findGitRoot(cwd)
-  if (!gitRoot) return
-  try {
-    await appendFile(join(gitRoot, '.git', 'info', 'exclude'), `\n${CONTEXT_DIR}/\n`, 'utf8')
-  } catch {
-    // No writable .git/info; the files simply stay untracked.
-  }
+  await excludeContextDir(cwd)
 }
 
 /** Walk up from `dir` (bounded) to the directory containing a `.git` folder, or null. */
