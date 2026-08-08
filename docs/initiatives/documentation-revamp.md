@@ -106,7 +106,9 @@ and the landing order (website PR first, so the repo link never 404s).
 Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR links as slices
 land.
 
-- [ ] 0. Trackers land: this PR and its website sibling.
+- [ ] 0. Trackers land: [#1847](https://github.com/kibertoad/cat-factory/pull/1847) and the
+      website sibling
+      [cat-factory-website#22](https://github.com/kibertoad/cat-factory-website/pull/22).
 - [ ] 1. Classify every doc under `backend/docs/` and `docs/` as contributor / user-facing /
       mixed; record the outcome as a table in this tracker.
 - [ ] 2. Pilot: model support (website absorbs usage; repo doc reduced to internals plus
