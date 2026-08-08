@@ -431,7 +431,8 @@ suite covers.
 
 ## Open documentation gaps
 
-Registered by the 2026-08-08 documentation revision, which restructured the three READMEs
+Registered by the 2026-08-08 documentation revision
+([#1845](https://github.com/kibertoad/cat-factory/pull/1845)), which restructured the three READMEs
 (bindings, machinery, template) around what each piece is, its purpose, usage, configuration and
 customization, added the Gatekeeper naming map to `docs/glossary.md`, documented `deny`, masking
 semantics, the reserved capability methods and the error split, and fixed the template README's
