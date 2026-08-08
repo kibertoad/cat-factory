@@ -19,6 +19,13 @@ stamped onto every artifact row, an account naming a store this build does not r
 no storage and is named in the log and the settings panel, and the retention sweeps reclaim through
 a custom store like any built-in one.
 
+On the Worker the registry is held PROCESS-WIDE rather than on the app, alongside the model-provider
+and capability-credential registrations and for the same reason: that runtime builds a container per
+entry point, and the entry points that write and reclaim artifacts (the durable driver, the queue
+consumers, the retention cron) take no overrides. A store must be registered on every process that
+handles its bytes, which in mothership mode means the nodes that write them AND the mothership that
+sweeps them; a mothership-mode node now says so at boot.
+
 Internal break: `ContentStorageCapability` gains a required `customStores` and `ContentStorageSummary`
 a required `customStoreId`, so a facade or test building either literal must add them (the compile
 error is the point). `BinaryArtifactStorageKind` is now open at the type level, since a registered

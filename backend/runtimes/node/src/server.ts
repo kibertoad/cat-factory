@@ -297,8 +297,16 @@ export interface StartOptions {
    * this runtime's built-in `fs` / `db` / `s3` backends alone.
    *
    * Unlike {@link binaryGeneratorRegistry} this one is per-process even in MOTHERSHIP mode, and
-   * that is not an oversight: a store is a live client only the process about to write the bytes
-   * can build, so the node that serves the settings picker is the node that stores.
+   * that is not an oversight: a store is a live client only the process holding the bytes can
+   * build, so there is nothing for a machine API to carry and no second copy to disagree with.
+   *
+   * What follows from that, and is the part easy to get wrong: a store must be registered on
+   * EVERY process that handles its bytes, which in mothership mode is TWO. The node writes them
+   * through its own registry, and THIS process runs the artifact-retention sweep, which deletes
+   * them through this one. Register only on the node and the bytes are written and never
+   * reclaimed: the sweep resolves no store for those accounts, skips them, and reports the zero
+   * it would report for a deployment that stores nothing (the resolver names the account and the
+   * unknown store id once, which is the only signal there is).
    */
   binaryStoreRegistry?: NodeContainerOptions['binaryStoreRegistry']
   /**

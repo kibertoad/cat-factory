@@ -30,10 +30,11 @@ function fakeBackend(kind: BinaryArtifactRecord['storage']): BinaryBlobBackend {
   }
 }
 
-describe('makeResolveBinaryArtifactStore', () => {
-  const buildBlobBackend: BuildBlobBackend = (kind) =>
-    kind === 'fs' || kind === 's3' || kind === 'r2' || kind === 'db' ? fakeBackend(kind) : null
+/** A Node-like runtime: it serves the platform's own backends and nothing else. */
+const buildBlobBackend: BuildBlobBackend = (kind) =>
+  kind === 'fs' || kind === 's3' || kind === 'r2' || kind === 'db' ? fakeBackend(kind) : null
 
+describe('makeResolveBinaryArtifactStore', () => {
   it('uses the runtime default when the account has no content-storage config', async () => {
     const accountSettings = { resolve: vi.fn().mockResolvedValue({ config: {} }) }
     const resolve = makeResolveBinaryArtifactStore({
@@ -195,9 +196,12 @@ describe('makeResolveBinaryArtifactStore', () => {
     expect(await resolve('ws-1')).not.toBeNull()
     expect(accountSettings.resolve).not.toHaveBeenCalled()
   })
+})
 
-  // ---- Deployment-registered stores ---------------------------------------
-
+// Split from the block above rather than nested in it: the two ask different questions (which
+// backend a config selects, versus how a DEPLOYMENT-REGISTERED one is built and remembered), and
+// one `describe` covering both had grown past the max-lines-per-function ceiling.
+describe('makeResolveBinaryArtifactStore with deployment-registered stores', () => {
   /** A metadata store that records what the composed store inserts (the `storage` tag matters). */
   function recordingMetadata(): {
     store: BinaryArtifactMetadataStore
@@ -328,6 +332,110 @@ describe('makeResolveBinaryArtifactStore', () => {
       binaryStoreRegistry: registry,
     })
     expect(await resolve('ws-1')).toBeNull()
+  })
+
+  // ---- Remembering a refusal ----------------------------------------------
+  //
+  // A refusal is resolved on the same paths a success is: every artifact request, every infra
+  // check, every engine advance, and once an hour per workspace from the retention sweep. Left
+  // un-remembered, one misconfigured account re-derives it (and re-logs it) forever, which is how
+  // the one line naming the unregistered id becomes the line an operator filters out.
+
+  it('says an unregistered store id ONCE per account, not once per resolve', async () => {
+    const logger = createRecordingLogger()
+    const resolve = makeResolveBinaryArtifactStore({
+      accountSettings: { resolve: () => Promise.resolve(customConfig('gcs')) },
+      accountOf: () => Promise.resolve('acc-1'),
+      metadata,
+      idGenerator,
+      clock,
+      buildBlobBackend,
+      defaultBackend: 'off',
+      binaryStoreRegistry: new BinaryStoreRegistry(),
+      logger,
+    })
+    for (let i = 0; i < 5; i++) expect(await resolve('ws-1')).toBeNull()
+
+    expect(logger.lines.filter((line) => line.level === 'warn')).toHaveLength(1)
+  })
+
+  it('re-derives a refusal once the account edits the config that caused it', async () => {
+    const registry = new BinaryStoreRegistry()
+    registry.register({ id: 'azure-blob', name: 'Azure Blob', create: () => fakeBackend('azure') })
+    const logger = createRecordingLogger()
+    let selected = 'gcs'
+    const resolve = makeResolveBinaryArtifactStore({
+      accountSettings: { resolve: () => Promise.resolve(customConfig(selected)) },
+      accountOf: () => Promise.resolve('acc-1'),
+      metadata,
+      idGenerator,
+      clock,
+      buildBlobBackend,
+      defaultBackend: 'off',
+      binaryStoreRegistry: registry,
+      logger,
+    })
+    expect(await resolve('ws-1')).toBeNull()
+    // The remembered refusal is keyed by the SAME signature a success is, so repointing the
+    // account at a store this build does have must not keep serving the cached null.
+    selected = 'azure-blob'
+    expect(await resolve('ws-1')).not.toBeNull()
+  })
+
+  it('keeps asking a store that DECLINED, so an unset credential recovers without a restart', async () => {
+    const registry = new BinaryStoreRegistry()
+    let ready = false
+    let creates = 0
+    registry.register({
+      id: 'gcs',
+      name: 'Cloud Storage',
+      create: () => {
+        creates += 1
+        return ready ? fakeBackend('gcs') : null
+      },
+    })
+    const logger = createRecordingLogger()
+    const resolve = makeResolveBinaryArtifactStore({
+      accountSettings: { resolve: () => Promise.resolve(customConfig('gcs')) },
+      accountOf: () => Promise.resolve('acc-1'),
+      metadata,
+      idGenerator,
+      clock,
+      buildBlobBackend,
+      defaultBackend: 'off',
+      binaryStoreRegistry: registry,
+      logger,
+    })
+    expect(await resolve('ws-1')).toBeNull()
+    expect(await resolve('ws-1')).toBeNull()
+    // Asked again each time (the store's "not right now" is its own to revise), but reported once.
+    expect(creates).toBe(2)
+    expect(logger.lines.filter((line) => line.level === 'info')).toHaveLength(1)
+
+    ready = true
+    expect(await resolve('ws-1')).not.toBeNull()
+  })
+
+  it('stops re-running a runtime backend factory that cannot serve the account’s choice', async () => {
+    let calls = 0
+    const resolve = makeResolveBinaryArtifactStore({
+      accountSettings: {
+        resolve: () => Promise.resolve({ config: { contentStorage: { backend: 'fs' } } }),
+      },
+      accountOf: () => Promise.resolve('acc-1'),
+      metadata,
+      idGenerator,
+      clock,
+      // Cloudflare-like: `fs` is not servable here, and no amount of asking changes that.
+      buildBlobBackend: (kind) => {
+        calls += 1
+        return kind === 'r2' ? fakeBackend('r2') : null
+      },
+      defaultBackend: 'r2',
+    })
+    expect(await resolve('ws-1')).toBeNull()
+    expect(await resolve('ws-1')).toBeNull()
+    expect(calls).toBe(1)
   })
 })
 

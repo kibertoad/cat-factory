@@ -123,8 +123,15 @@ export interface StartLocalOptions {
    * **Unlike {@link binaryGeneratorRegistry} this one DOES decide runs in MOTHERSHIP mode**, and
    * for the reason that makes the two different in kind: a generator definition is data a run
    * resolves, so a local copy can disagree with the picker the mothership fed; a store is a live
-   * client, and the process about to write the bytes is the only one that can build it. This node
-   * stores its own artifacts, so this node's registry is the right one.
+   * client, and only the process holding the bytes can build it. This node stores its own
+   * artifacts, so this node's registry is the right one for writing them.
+   *
+   * **It is not the only one that has to hold them.** In mothership mode the ARTIFACT-RETENTION
+   * sweep runs on the mothership (this boot deliberately starts no Postgres-backed sweeper), and
+   * it deletes bytes through the mothership's OWN registry. So a store registered only here is
+   * written to and never reclaimed: the sweep resolves nothing for those accounts and reports the
+   * zero it would report for a deployment that stores nothing. Register the same stores on the
+   * mothership's `start({ binaryStoreRegistry })` too. Boot says so when this node registers any.
    */
   binaryStoreRegistry?: BinaryStoreRegistry
   /**
@@ -571,6 +578,30 @@ async function startLocalMothership(
         'is what the pipeline builder offered them from. Register them on the mothership’s own ' +
         'entry point.',
       { binaryGeneratorIds: localGenerators },
+    )
+  }
+
+  // The binary artifact STORES are the family member that inverts the rule above, which is why
+  // they get a line of their own rather than being folded into the one before it: registering
+  // them here is not redundant, it is REQUIRED. This node writes its artifacts' bytes through
+  // this registry.
+  //
+  // What it cannot do is reclaim them. The retention sweep is one of the Postgres-backed sweepers
+  // this boot deliberately does not start, so it runs on the mothership and deletes bytes through
+  // the MOTHERSHIP's registry. Register only here and the bytes are written and kept forever,
+  // with the sweep reporting the same zero it reports for a deployment that stores nothing.
+  //
+  // `info`, not `warn`, and the distinction is the point: this node cannot see the mothership's
+  // registrations, so a correctly-configured deployment reaches this line too. Warning at it
+  // would be warning about doing the right thing, which is how a boot line stops being read.
+  const localStores = container.binaryStoreRegistry.ids()
+  if (localStores.length > 0) {
+    logger.info(
+      'local mode: binary artifact stores registered on this node serve ITS writes, but the ' +
+        'artifact-retention sweep runs on the mothership and reclaims through the mothership’s ' +
+        'own registry. Register the same stores on the mothership’s entry point too, or their ' +
+        'bytes are never reclaimed.',
+      { binaryStoreIds: localStores },
     )
   }
 

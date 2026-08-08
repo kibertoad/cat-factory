@@ -100,7 +100,10 @@ export {
 // implementing the `BinaryBlobBackend` port on it, and passes it via the `binaryStoreRegistry`
 // option. Each becomes a `custom` choice in the account-settings storage picker. Register these
 // HERE even in mothership mode, unlike the integrations above: this node writes the bytes, so this
-// node is the only process that can hold the client that writes them.
+// node is the only process that can hold the client that writes them. Register them on the
+// MOTHERSHIP too, and for the mirror image of the same reason: the artifact-retention sweep runs
+// there and deletes through its own client, so stores registered only here are written to and
+// never reclaimed.
 export {
   BinaryStoreRegistry,
   BinaryStoreRegistrationError,

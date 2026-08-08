@@ -69,18 +69,42 @@ resembles.
 A generator definition is DATA a run resolves (ids, content types, a credential's name), so a
 mothership-mode node reading its own copy can disagree with the picker the mothership fed, and the
 set has to cross `/internal/binary-generators`. A store is the opposite kind of thing: it is a live
-client holding credentials, and only the process about to write the bytes can construct one. The
-process that answers the settings picker is therefore the process that stores, on a mothership node
-exactly as on a standalone one, and there is nothing for a machine API to carry. Register your
-stores on every process that serves requests, mothership node included.
+client holding credentials, and only the process holding the bytes can construct one. There is
+nothing for a machine API to carry, and no second copy that could disagree with a first.
+
+What follows from that is the rule to actually wire by: **register your stores on every process
+that HANDLES the bytes**, which is more than the processes that serve requests.
+
+- **A standalone deployment** (Node, local, or a Worker) is one process, so one registration is the
+  whole story.
+- **A mothership deployment is two.** Each node writes its artifacts' bytes through its own
+  registry, and the mothership runs the artifact-retention sweep, which deletes them through
+  _its_ registry. Register on `startLocal({ binaryStoreRegistry })` and on the mothership's
+  `start({ binaryStoreRegistry })`. Registering only on the nodes is the failure this section
+  exists to prevent: the bytes are written and never reclaimed, and the sweep reports the same
+  zero it reports for a deployment that stores nothing. A mothership-mode node says so at boot,
+  naming the ids it registered.
+
+On the Worker the registration is process-wide rather than held on the app
+(`infrastructure/binaryStores.ts`), because that runtime builds a container per entry point and
+the entry points that need a store take no options: the durable driver that stores a
+visual-confirmation screenshot, the queue consumers, and the retention cron, which builds its
+store resolver outside the container entirely. `createWorker({ overrides: { binaryStoreRegistry } })`
+registers on your behalf, so a deployment using the documented seam needs to know none of that.
 
 ## What a store owes the retention sweeps
 
-Nothing beyond `delete`. The per-workspace retention sweep, the re-import reclaim and the
-workspace-delete purge all resolve the account's store and delete the bytes before dropping the
-metadata rows, so a store that implements `delete` is reclaimed like any built-in backend. A
-`delete` that throws is tolerated for one object and its metadata row is RETAINED, so a later
-sweep retries rather than orphaning the bytes.
+`delete`, and a registration on the process that sweeps (above). The per-workspace retention sweep,
+the re-import reclaim and the workspace-delete purge all resolve the account's store and delete the
+bytes before dropping the metadata rows, so a store that implements `delete` is reclaimed like any
+built-in backend. A `delete` that throws is tolerated for one object and its metadata row is
+RETAINED, so a later sweep retries rather than orphaning the bytes.
+
+A sweep that cannot BUILD the store skips the workspace, which is also what it does for the far
+more common account that configured no storage at all. The two are told apart where the difference
+is knowable: the resolver logs the account and the store id it could not build, once per account
+per configuration rather than once per resolve, so the line that names a misconfiguration is not
+buried under its own repetitions.
 
 ## Where the pieces live
 

@@ -1,5 +1,4 @@
 import {
-  defaultBinaryStoreRegistry,
   defaultJudgeRegistry,
   defaultProviderRegistry,
   defaultStepResolverRegistry,
@@ -10,6 +9,7 @@ import { createBackendRegistries } from '@cat-factory/integrations'
 import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
 import { eksEnvironmentBackend, eksRunnerBackend } from '@cat-factory/eks'
+import { registeredBinaryStoreRegistry } from './binaryStores'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 
 /** The app-owned registries the Worker facade resolves once per build. */
@@ -81,11 +81,18 @@ export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): W
   const promptFragmentRegistry =
     overrides.promptFragmentRegistry ?? promptFragmentRegistryWithBuiltins()
   // The app-owned registry of the deployment's OWN binary artifact stores: the injected instance,
-  // else an empty default (the platform's R2 backend is this facade's own wiring, not an entry).
-  // Resolved here rather than only at `createWorker` for the same reason the gate registry is: a
-  // container built directly for a cron sweep takes no overrides, and a sweep that cannot build an
-  // account's store reclaims nothing for it.
-  const binaryStoreRegistry = overrides.binaryStoreRegistry ?? defaultBinaryStoreRegistry()
+  // else the PROCESS-WIDE registration (empty when a deployment registered none; the platform's
+  // R2 backend is this facade's own wiring, not an entry).
+  //
+  // The fallback differs in kind from every other one here, and the difference is the whole
+  // point. The others fall back to a default the PLATFORM ships, so a container built with no
+  // overrides is still correct. This registry has no platform default: its entire content is a
+  // deployment's own, so falling back to a fresh empty one leaves the override-less builders
+  // (the `ExecutionWorkflow` wake that stores a visual-confirmation screenshot, the queue
+  // consumers, the Durable Objects) resolving NO store for an account that selected one. The gate
+  // passes through when no store resolves, so nothing fails: the run completes having captured
+  // nothing. `infrastructure/binaryStores.ts` holds the registration this reads.
+  const binaryStoreRegistry = overrides.binaryStoreRegistry ?? registeredBinaryStoreRegistry()
 
   // Register the opt-in AWS EKS backends by reference (symmetric with the Node facade; a
   // pass-through until a workspace connects an `eks` backend). `register` is idempotent (keyed
