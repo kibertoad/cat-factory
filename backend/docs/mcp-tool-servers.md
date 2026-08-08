@@ -304,6 +304,12 @@ ride the log line, since a metric dimension has to be bounded.
 - **An `http` server must be `https`, or loopback.** Its credential rides the request as a header,
   so a cleartext off-box endpoint is refused at registration (`insecure_tool_server_url`) and again
   at the harness boundary. A sidecar on `http://127.0.0.1:…` is fine.
+  - **"Loopback" is decided by the URL parser that resolves the request**, not by how the host
+    reads. So `http://127.1` and `http://0177.0.0.1` are loopback (they dial `127.0.0.1`), while
+    `http://evil.example\@127.0.0.1` is not: the backslash ends the authority, and everything after
+    it is path. The one thing the rule will not do is canonicalise for you, because the url is
+    stored and written verbatim into the CLI's config: a url carrying an ASCII control character or
+    a space is refused rather than trimmed, so what was admitted and what is started cannot differ.
 - **`required` defaults to true**, because a tool whose first call 401s is worse than one the agent
   was told it does not have.
 - **Give each credential a `usage` line.** It is rendered beside the key in the operator's checklist,

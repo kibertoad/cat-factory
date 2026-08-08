@@ -29,6 +29,8 @@ binary-artifact storage (the substrate both rely on)
   programmatic precheck).
 - The UI tester is the browser sibling of the (renamed) API tester; both share the Tester→Fixer
   loop via `isTesterKind`.
+- The gate's REFERENCE side has two producers: images a person uploaded against the task, and the
+  frames an import retained for the designs the task links. See "Design references" below.
 
 ---
 
@@ -103,6 +105,47 @@ binary-artifact storage (the substrate both rely on)
 - **Verified:** Node conformance incl. a new gate pass-through test (59 tests total); frontend
   `nuxt typecheck` + catalog tests pass.
 
+### Design references: a linked design populates the gallery itself ✅
+
+A designer who links a Figma/Zeplin frame to a task gets screenshot-vs-design comparison with no
+manual upload. When the gate gathers its pairs it reads the task's linked DESIGN documents
+(`documentRepository.listByBlock`, filtered by contracts' `isDesignSource`) and the frames their
+last import retained (`BinaryArtifactStore.listByDocuments`, one batched read however many designs
+are attached), and folds those in beside the hand-uploaded set. The fold itself lives in
+`orchestration/.../visual-confirm-design-references.ts`; four rules bind it.
+
+- **An EXPLICITLY CHOSEN reference outranks a design frame for the same view.** An upload is a
+  deliberate act against this one task and survives every re-import; a design render is a
+  projection of a live document that the next body-changing import replaces wholesale. So the
+  design fold runs FIRST and the uploads assign over it, and the fold skips a view whose reference
+  the capture itself named: the fold cannot tell which choice it would be overwriting, and once the
+  container half lands the tester will be naming the design files it was handed.
+- **A view name two designs both claim is qualified on BOTH sides** (`Summary (Checkout flow)`),
+  the same rule the Figma import applies to a frame name repeated across pages. Leaving the first
+  occurrence bare would hand the plain name to whichever design is listed first, so re-ordering the
+  links would silently re-point a reviewed view at a different screen.
+- **Each pair carries `referenceOrigin`**, so the surface can say whether a reviewer is looking at
+  the design's own frame or at somebody's attachment. It is ABSENT when the capture named its own
+  reference: the gate did not source that one and can only guess at its provenance, which is a
+  different answer from "an upload".
+- **`designReferences` states what the designs contributed, gaps included.** Present whenever a
+  design is linked, so a reviewer can tell "no design is attached" from "one is attached and gave
+  nothing", with a per-design reason (`partial` / `failed` / `none` / `storage_unavailable` /
+  `not_retained`) because each asks for a different fix. `not_retained` covers any status CLAIMING
+  retention over an empty shelf (`stored` and `partial` alike) as well as a document whose import
+  recorded no render outcome: left to speak for itself, "only part of its frames were retained"
+  above an empty gallery reads as a design that is merely short.
+- **The 12-view ceiling is SHARED, and what it cuts is named per design.** Slots go round-robin, so
+  every linked design is represented before any gets a second one and re-ordering the links does
+  not move the split; taking the first twelve in read order would let the design linked longest ago
+  fill the gallery while one linked this morning contributed nothing, indistinguishable to a
+  reviewer from a design with no frames. Each short design carries its own `dropped` count beside
+  its `reason`, since the two are independent (a design can be short at its source, at the ceiling,
+  or both). Emission stays grouped by design: the allocation decides how many, never the order.
+
+The reads are LIVE at gather time, like the hand-uploaded ones: **recapture** is the action a person
+takes after attaching something mid-review, and linking a design is that same act.
+
 ---
 
 ## What's LEFT (deploy-time, intentionally not landed)
@@ -152,11 +195,16 @@ flags them as predating the fix). Auto re-running `tester-ui` after a fix to ref
 needs the gate to dispatch a `tester-ui` job and consume its result back into the gate (a small
 extension of `onHelperComplete` + the `pollAgentJob` capture-result path).
 
-### 3. Reference-screenshot pre-op injection
+### 3. Reference screenshots INSIDE the container
 
-The UI-tester prompt references `.cat-context/reference-screenshots/`; a `preOps` that pulls the
-block's `kind:'reference'` artifacts from the store and writes them into the container context is
-not yet wired (the gate still pairs by view from the store, so the comparison works regardless).
+The gate itself no longer needs a manual upload: a task that links a Figma/Zeplin design has that
+design's retained frames folded into the gallery automatically (see "Design references" below). What
+is still unwired is the CONTAINER half. The UI-tester prompt references
+`.cat-context/reference-screenshots/`, and nothing writes it: an `InjectedContextFile` is UTF-8 text
+by type and the harness flattens a context file's path to a bare name, so putting real PNG bytes in
+a subdirectory of the job's context needs a harness change, which is an image bump. Until then the
+tester names its own views and the gate pairs by view from the store, so the comparison works
+regardless.
 
 ### 4. Non-redundant capture heuristic
 

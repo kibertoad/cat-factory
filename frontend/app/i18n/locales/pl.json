@@ -5597,6 +5597,19 @@
     "history": {
       "heading": "Historia ({count} runda) | Historia ({count} rundy) | Historia ({count} rund)",
       "fixRequested": "Poproszono o poprawkę"
+    },
+    "design": {
+      "summary": "1 klatka z połączonego projektu. | {count} klatki z połączonego projektu. | Klatek z połączonego projektu: {count}.",
+      "dropped": "Jeszcze 1 nie jest tu pokazana. | Jeszcze {count} nie są tu pokazane. | Nie pokazano tu jeszcze {count}.",
+      "gapDropped": "1 jej klatka nie jest tu pokazana. | {count} jej klatki nie są tu pokazane. | Nie pokazano tu {count} jej klatek.",
+      "gapLine": "{title}:",
+      "gap": {
+        "partial": "zachowano tylko część jego klatek; odśwież dokument, aby spróbować ponownie.",
+        "failed": "przy ostatnim imporcie nie udało się pobrać jego klatek; odśwież dokument, aby spróbować ponownie.",
+        "none": "nie ma klatek do pokazania.",
+        "storage_unavailable": "podczas importu nie skonfigurowano magazynu obrazów, więc nic nie pobrano.",
+        "not_retained": "nie ma dla niego zapisanych obrazów. Jego źródło może nie generować klatek albo został zaimportowany, zanim klatki były zachowywane; ponowny import to rozstrzygnie."
+      }
     }
   },
   "outcome": {
@@ -5843,6 +5856,7 @@
       },
       "actual": "Rzeczywiste",
       "reference": "Wzorzec",
+      "fromLinkedDesign": "· z połączonego projektu",
       "actualAlt": "{view} (rzeczywiste)",
       "referenceAlt": "{view} (wzorzec)",
       "replace": "Zamień",

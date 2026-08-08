@@ -10,7 +10,7 @@ import type {
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
-import { describeError, redactSecrets, runBestEffort } from '@cat-factory/kernel'
+import { composePostMortem, describeError, runBestEffort } from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
 import type { LocalSettings } from '@cat-factory/contracts'
 import { logger } from '@cat-factory/server'
@@ -954,9 +954,9 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     const logs = (await this.adapter.logs(this.exec, containerId)).trim()
     if (logs) parts.push(`Container logs:\n${logs}`)
     // The container's own output is free text that can echo a token it was handed; this string
-    // is persisted on the run and rendered in its details, so scrub known secret shapes first
-    // (the same defence the harness applies to its structured failure messages).
-    return redactSecrets(parts.join('\n')) ?? ''
+    // is persisted on the run and rendered in its details, so it goes through the shared
+    // compose (scrub + cap) every transport's post-mortem does.
+    return composePostMortem(parts) ?? ''
   }
 
   /**
@@ -984,9 +984,9 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         : `Container ${containerId} stopped serving the job; the runtime reports no exit state for it (it may still be running).`,
     ]
     if (logs) parts.push(`Container logs:\n${logs}`)
-    // Persisted on the run and rendered in its details, so scrub known secret shapes out of the
-    // container's own output first.
-    return redactSecrets(parts.join('\n')) ?? undefined
+    // Persisted on the run and rendered in its details, so the container's own output goes
+    // through the shared compose (scrub + cap) rather than a per-transport copy of it.
+    return composePostMortem(parts)
   }
 
   /**

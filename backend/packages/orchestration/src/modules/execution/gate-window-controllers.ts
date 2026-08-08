@@ -66,6 +66,8 @@ export interface GateWindowControllerDeps {
   environmentTeardown: ExecutionServiceDependencies['environmentTeardown']
   branchUpdater: ExecutionServiceDependencies['branchUpdater']
   resolveBinaryArtifactStore: ExecutionServiceDependencies['resolveBinaryArtifactStore']
+  /** The document corpus the visual-confirmation gate reads a task's linked DESIGNS from. */
+  documentRepository: ExecutionServiceDependencies['documentRepository']
   forkChatService: ExecutionServiceDependencies['forkChatService']
   /** Tracker writeback — the review gate echoes a HEADLESS park's open findings through it. */
   issueWriteback: ExecutionServiceDependencies['issueWriteback']
@@ -96,6 +98,7 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     environmentTeardown,
     branchUpdater,
     resolveBinaryArtifactStore,
+    documentRepository,
     forkChatService,
     issueWriteback,
     logger,
@@ -174,6 +177,7 @@ export function buildGateWindowControllers(deps: GateWindowControllerDeps) {
     contextBuilder,
     notificationService,
     ...(resolveBinaryArtifactStore ? { resolveBinaryArtifactStore } : {}),
+    ...(documentRepository ? { documentRepository } : {}),
     resolveRiskPolicy,
     stateMachine,
     stepGraph,

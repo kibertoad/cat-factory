@@ -5,6 +5,9 @@ import {
   MCP_HARNESS_TRANSPORTS,
   MCP_SUPPORTED_HARNESSES,
   TOOL_SERVER_BUDGET,
+  isAllowedMcpHttpUrl,
+  isLoopbackMcpHttpUrl,
+  isValidMcpServerId,
   isValidMcpToolName,
   mcpHarnessServesTransport,
   mcpServableHarnesses,
@@ -148,6 +151,223 @@ describe('toolServerDeclaredBytes', () => {
         httpServer({ transport: { kind: 'http', url: 'https://mcp.example.com/mcp' } }),
       ),
     ).toBeLessThan(TOOL_SERVER_BUDGET.maxTotalBytes)
+  })
+
+  it('counts the HTTP transport fields, not just the stdio ones', () => {
+    // The two transports contribute different fields, so the measure has to branch on the kind.
+    // Counting the stdio shape for an http server would report a fat header block as ~nothing,
+    // which is the one direction a FLOOR may not be wrong in.
+    const lean = toolServerDeclaredBytes(httpServer())
+    const longUrl = toolServerDeclaredBytes(
+      httpServer({
+        transport: { kind: 'http', url: `https://mcp.example.com/mcp${'x'.repeat(40)}` },
+      }),
+    )
+    expect(longUrl - lean).toBe(40)
+    const withHeaders = toolServerDeclaredBytes(
+      httpServer({
+        transport: {
+          kind: 'http',
+          url: 'https://mcp.example.com/mcp',
+          headers: { A: 'y'.repeat(500) },
+        },
+      }),
+    )
+    expect(withHeaders - lean).toBeGreaterThan(500)
+  })
+
+  it('counts each UTF-8 width class at its exact boundary', () => {
+    // The widths are picked by three chained comparisons, and every one of them is a boundary the
+    // budget is wrong at if it is off by one: `<= 0x7f` rather than `<`, and so on up. Measured as
+    // deltas against a one-byte value so the surrounding JSON cancels out.
+    const bytesFor = (value: string) =>
+      toolServerDeclaredBytes(
+        server({ transport: { kind: 'stdio', command: 'npx', env: { V: value } } }),
+      )
+    const oneByte = bytesFor('a')
+    expect(bytesFor('\u007f') - oneByte).toBe(0) // last 1-byte code point
+    expect(bytesFor('\u0080') - oneByte).toBe(1) // first 2-byte
+    expect(bytesFor('\u07ff') - oneByte).toBe(1) // last 2-byte
+    expect(bytesFor('\u0800') - oneByte).toBe(2) // first 3-byte
+    expect(bytesFor('\uffff') - oneByte).toBe(2) // last 3-byte
+    // A code point above the BMP is FOUR bytes and ONE character: walking UTF-16 units instead
+    // would see two 3-byte characters and overcount it by two.
+    expect(bytesFor('\u{10000}') - oneByte).toBe(3)
+  })
+})
+
+describe('isValidMcpServerId', () => {
+  it('accepts the ids that survive both a tool-name prefix and a TOML table key', () => {
+    for (const good of ['issues', 'issue-tracker', 'issue_tracker', 'v2', '0']) {
+      expect(isValidMcpServerId(good), good).toBe(true)
+    }
+  })
+
+  it('refuses anything that would break `mcp__<id>__<tool>` or the Codex TOML key', () => {
+    // Each of these fails deep inside the CLI rather than at registration: a dot or a quote
+    // malforms the TOML table key, an uppercase letter or a space produces an allow-list entry no
+    // tool name ever matches.
+    for (const bad of [
+      'Issues',
+      'issue.tracker',
+      'issue tracker',
+      'issue"s',
+      '-issues',
+      '_issues',
+      '',
+    ]) {
+      expect(isValidMcpServerId(bad), bad).toBe(false)
+    }
+  })
+
+  it('bounds the length at 64 characters', () => {
+    expect(isValidMcpServerId('a'.repeat(64))).toBe(true)
+    expect(isValidMcpServerId('a'.repeat(65))).toBe(false)
+  })
+})
+
+// The cleartext rule for an HTTP tool server. An http server routinely carries a resolved
+// credential in a request header, so "is this host loopback" decides whether that credential goes
+// on the wire in the clear, which is why it is worth pinning host by host rather than through one
+// happy-path url.
+//
+// Several of these state the ANSWER beside the reason it is the answer: what the request actually
+// resolves to. That is the property the rule exists for, and asserting a verdict without it is how
+// a spoof nobody thought of passes a hand-written table (the case below with a backslash in it did
+// exactly that). Reached through `globalThis` because the kernel compiles against the ES2022 lib,
+// the same way the module under test reaches it.
+const RequestUrl = (globalThis as { URL?: new (url: string) => { hostname: string } }).URL!
+
+describe('isAllowedMcpHttpUrl', () => {
+  it('allows https anywhere', () => {
+    expect(isAllowedMcpHttpUrl('https://mcp.example.com/mcp')).toBe(true)
+  })
+
+  it('allows cleartext http ONLY on loopback', () => {
+    expect(isAllowedMcpHttpUrl('http://127.0.0.1:8080/mcp')).toBe(true)
+    expect(isAllowedMcpHttpUrl('http://localhost:8080/mcp')).toBe(true)
+    expect(isAllowedMcpHttpUrl('http://[::1]:8080/mcp')).toBe(true)
+    expect(isAllowedMcpHttpUrl('http://mcp.example.com/mcp')).toBe(false)
+  })
+
+  it('treats the whole 127.0.0.0/8 range as loopback, and nothing that merely resembles it', () => {
+    expect(isAllowedMcpHttpUrl('http://127.0.0.1')).toBe(true)
+    expect(isAllowedMcpHttpUrl('http://127.255.255.255')).toBe(true)
+    for (const notLoopback of [
+      'http://a127.0.0.1', // the range is anchored at the start of the host
+      'http://127.0.0.1.evil.example', // ... and at its end
+      'http://127x0x0x1', // the dots are literal, not any-character
+      'http://128.0.0.1',
+    ]) {
+      expect(isAllowedMcpHttpUrl(notLoopback), notLoopback).toBe(false)
+    }
+  })
+
+  it('reads the host case-insensitively, scheme included', () => {
+    expect(isAllowedMcpHttpUrl('HTTP://LOCALHOST:8080')).toBe(true)
+    expect(isAllowedMcpHttpUrl('HTTPS://MCP.EXAMPLE.COM')).toBe(true)
+  })
+
+  it('strips userinfo from the LAST @, so a loopback-looking user is not a loopback host', () => {
+    // The trap the userinfo rule exists for: `http://127.0.0.1@evil.example` sends the request
+    // (and its credential header) to evil.example while reading as loopback to anything that
+    // splits on the FIRST @.
+    expect(isAllowedMcpHttpUrl('http://127.0.0.1@evil.example')).toBe(false)
+    expect(isAllowedMcpHttpUrl('http://localhost@evil.example/mcp')).toBe(false)
+    expect(isAllowedMcpHttpUrl('http://user@127.0.0.1:8080')).toBe(true)
+    // Userinfo may itself contain an `@`, so the host is what follows the last one.
+    expect(isAllowedMcpHttpUrl('http://user@evil.example@127.0.0.1')).toBe(true)
+  })
+
+  it('ends the host at every delimiter the REQUEST does, backslash included', () => {
+    // The property that makes this predicate mean anything: the host it rules on is the host the
+    // credential header actually travels to. A backslash terminates the authority of a special
+    // scheme exactly as `/` does, so `fetch` sends these to evil.example with `@127.0.0.1` sitting
+    // in the PATH, while an authority scan that stops only at `/?#` swallows the delimiter, finds
+    // a last `@` that is not a userinfo separator at all, and hands evil.example a cleartext
+    // credential. Pinned beside the `/?#` spoofs it is indistinguishable from.
+    for (const spoof of [
+      'http://evil.example/@127.0.0.1',
+      'http://evil.example?next=@127.0.0.1',
+      'http://evil.example#@127.0.0.1',
+      'http://evil.example\\@127.0.0.1/mcp',
+      'http://evil.example\\@localhost',
+    ]) {
+      expect(isAllowedMcpHttpUrl(spoof), spoof).toBe(false)
+      expect(new RequestUrl(spoof).hostname, `${spoof} really reaches`).toBe('evil.example')
+    }
+  })
+
+  it('grants the exemption to every spelling of loopback the request resolves to one', () => {
+    // The same property read the other way, and the direction a hand-written parse got wrong
+    // silently: these are all `127.0.0.1` to the URL parser the agent CLI dials with, so refusing
+    // them would refuse a server genuinely running beside the agent. `isLoopbackMcpHttpUrl` reads
+    // the same answer, which is what keeps the operability probe off the BACKEND's own loopback.
+    for (const shorthand of ['http://127.1', 'http://0177.0.0.1', 'http://2130706433/mcp']) {
+      expect(new RequestUrl(shorthand).hostname, `${shorthand} really reaches`).toBe('127.0.0.1')
+      expect(isAllowedMcpHttpUrl(shorthand), shorthand).toBe(true)
+      expect(isLoopbackMcpHttpUrl(shorthand), shorthand).toBe(true)
+    }
+    // ... and the uncompressed IPv6 loopback, which the parser compresses to `::1`.
+    expect(isAllowedMcpHttpUrl('http://[0:0:0:0:0:0:0:1]:8080/mcp')).toBe(true)
+  })
+
+  it('refuses a url carrying an ASCII control character or a space, rather than canonicalising it', () => {
+    // The parser TRIMS leading/trailing C0-and-space and REMOVES tab, LF and CR from anywhere, so
+    // each of these parses to a different string than it reads as, and the admitted string is
+    // stored and written verbatim into the agent CLI's MCP config. Refused so that what was
+    // admitted and what is started cannot be two different urls.
+    for (const noisy of [
+      ' https://mcp.example.com',
+      'https://mcp.example.com ',
+      'https://mcp.\texample.com',
+      'https://mcp.example.com/a b',
+      'http://127.0.0.1\n@evil.example',
+    ]) {
+      expect(isAllowedMcpHttpUrl(noisy), JSON.stringify(noisy)).toBe(false)
+    }
+  })
+
+  it('refuses a malformed host rather than reinterpreting it into a loopback one', () => {
+    // An unterminated IPv6 bracket, or a stray `]` in a name, must fall through as "not loopback".
+    // Salvaging a host out of either is how a non-loopback name earns the cleartext exemption.
+    for (const malformed of [
+      'http://[127.0.0.1',
+      'http://[localhost:',
+      'http://x127.0.0.1]',
+      'http://[]',
+    ]) {
+      expect(isAllowedMcpHttpUrl(malformed), malformed).toBe(false)
+    }
+  })
+
+  it('refuses anything that is not an http(s) url at all', () => {
+    for (const bad of [
+      'ftp://127.0.0.1',
+      'ws://127.0.0.1',
+      'httpsx://mcp.example.com',
+      '127.0.0.1:8080', // a scheme may not start with a digit, so this is not a url at all
+      'see https://mcp.example.com', // a url MENTIONED in prose is not a url
+      '',
+    ]) {
+      expect(isAllowedMcpHttpUrl(bad), bad).toBe(false)
+    }
+  })
+})
+
+describe('isLoopbackMcpHttpUrl', () => {
+  it('answers where the server LIVES, independently of the scheme', () => {
+    // The operability probe reads this one: the backend's own 127.0.0.1 is a different machine
+    // from the run container's, so a loopback server is refused by name rather than probed. An
+    // https sidecar is no more reachable from the backend than a cleartext one.
+    expect(isLoopbackMcpHttpUrl('https://127.0.0.1:8080/mcp')).toBe(true)
+    expect(isLoopbackMcpHttpUrl('http://localhost/mcp')).toBe(true)
+    expect(isLoopbackMcpHttpUrl('https://[::1]/mcp')).toBe(true)
+    expect(isLoopbackMcpHttpUrl('https://mcp.example.com/mcp')).toBe(false)
+  })
+
+  it('is false for a url it cannot parse', () => {
+    expect(isLoopbackMcpHttpUrl('not-a-url')).toBe(false)
   })
 })
 
