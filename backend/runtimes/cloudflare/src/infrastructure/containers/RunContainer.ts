@@ -5,10 +5,11 @@ import type { Env } from '../env'
 import { logger } from '../observability/logger'
 import {
   clearStopCause,
-  type ContainerStopCause,
   isRolloutSignal,
+  observationForStop,
   recordStopCause,
   type StopCauseStorage,
+  type StopObservation,
   takeStopCause,
 } from './stopCause'
 
@@ -46,28 +47,73 @@ export abstract class RunContainer extends Container<Env> {
   override sleepAfter = '10m'
 
   /**
+   * Whether the stop this container is about to observe is one WE asked for: the idle reclaim in
+   * {@link onActivityExpired} and the deliberate teardown in {@link shutdown}, both of which stop
+   * the container by signalling it.
+   *
+   * It exists because the resulting exit state is evidence about nothing. We sent the signal, so
+   * the code that comes back describes our own request (and escalates to a SIGKILL 137 whenever
+   * the harness does not exit inside the platform's grace period), while the account the run
+   * actually needs is the cause already recorded beside it. Left recorded, that exit is read back
+   * as the container's cause of death and reported as "most often an out-of-memory kill" under a
+   * verdict that says the platform reclaimed an idle container.
+   *
+   * In-memory rather than persisted, and reset by {@link onStart}: it describes ONE stop of ONE
+   * container life, and the isolate cannot outlive the stop it is set for. A container that comes
+   * back up has a real death ahead of it again.
+   */
+  private selfInitiatedStop = false
+
+  /**
+   * A container life is starting, so nothing from here on is a stop we asked for.
+   *
+   * The base class flushes any deferred `onStop` from the PREVIOUS life before it calls this, so
+   * the reset can never land between a self-initiated stop and the hook that observes it.
+   */
+  override async onStart(): Promise<void> {
+    this.selfInitiatedStop = false
+    await super.onStart()
+  }
+
+  /**
    * Record that THIS run's container was drained by a new-version rollout (a deploy, exit 143)
    * rather than crashing. The transport's next job poll (which 404s once the container restarts
-   * empty) reads this back through {@link recentEvictionCause}, so the engine
+   * empty) reads this back through {@link recentStopObservation}, so the engine
    * recovers it on the larger transient budget instead of failing the run as a crash.
    * Persisted to DO storage (not in-memory) so it survives the isolate reset a combined
    * worker+container deploy causes.
    */
   override async onError(error: unknown): Promise<unknown> {
-    if (isRolloutSignal(error)) await this.record('rollout')
+    if (isRolloutSignal(error)) await this.record({ cause: 'rollout' })
     // Preserve the base behaviour (log + rethrow) so nothing else changes.
     return super.onError(error)
   }
 
   /**
-   * Belt-and-braces: depending on the runtime version, a rollout drain can surface as a
-   * `runtime_signal` stop with SIGTERM (143) through `onStop` instead of (or as well as)
-   * `onError`. Record it the same way.
+   * Record EVERY stop, with whatever this hook can say about it.
+   *
+   * Two things ride the same write. A `runtime_signal` SIGTERM (143) is a rollout drain, which
+   * depending on the runtime version surfaces here instead of (or as well as) through `onError`,
+   * so it is recorded as that cause the same way. And the `{ exitCode, reason }` pair itself is
+   * recorded for every stop, cause or not, because it is the ONLY account of a death this
+   * runtime can keep: a Cloudflare Container's stdout goes to the deployment's Workers logs and
+   * nothing here can read it back, so without this an OOM-killed agent reaches the operator as
+   * "container evicted or crashed" and nothing else (finding D1).
+   *
+   * Recording an exit changes no verdict: the transient/crash classification still comes from
+   * the cause alone, so a plain crash keeps spending the crash budget and merely says why.
+   *
+   * A stop WE asked for is the exception, and records nothing. Its exit state is the echo of our
+   * own signal rather than an observation, and the cause that explains it has already been
+   * recorded by whoever asked (see {@link selfInitiatedStop}).
+   *
+   * Both rules live in {@link observationForStop}, beside the other half of "what does this stop
+   * mean" (`isRolloutSignal`) and where a plain unit test can reach them: nothing in this class
+   * can be exercised without a real Durable Object.
    */
-  override onStop(params: StopParams): void {
-    if (params.reason === 'runtime_signal' && params.exitCode === 143) {
-      void this.record('rollout')
-    }
+  override async onStop(params: StopParams): Promise<void> {
+    const observed = observationForStop(params, this.selfInitiatedStop)
+    if (observed) await this.record(observed)
   }
 
   /**
@@ -90,7 +136,13 @@ export abstract class RunContainer extends Container<Env> {
    * that case, so a marker would be attributing a reclaim that never happened.
    */
   override async onActivityExpired(): Promise<void> {
-    if (this.ctx.container?.running) await this.record('idle')
+    if (this.ctx.container?.running) {
+      await this.record({ cause: 'idle' })
+      // The reclaim below is us signalling the container, so the exit it reports is our own
+      // request coming back (a SIGKILL 137 whenever the harness does not exit inside the grace
+      // period) and not a death to attribute. The cause just recorded is the whole account.
+      this.selfInitiatedStop = true
+    }
     await super.onActivityExpired()
   }
 
@@ -123,14 +175,15 @@ export abstract class RunContainer extends Container<Env> {
   }
 
   /**
-   * Why this run's container went away, for the transport to read over RPC after `jobId`'s poll
-   * 404s: the one thing that tells a reclaim apart from a crash. `undefined` means no reclaim
-   * this container observed explains that 404, so the caller reports a crash.
+   * What this run's container observed about its own stop, for the transport to read over RPC
+   * after `jobId`'s poll 404s: the `cause` that tells a reclaim apart from a crash, and the
+   * `exit` state that is the only surviving account of the death itself. An EMPTY observation
+   * means nothing this container saw explains that 404, so the caller reports a bare crash.
    *
    * Claimed by the polling job rather than deleted, so a retried durable poll step re-reads the
    * same answer while a different job still finds it spent. See {@link takeStopCause}.
    */
-  async recentEvictionCause(jobId: string): Promise<ContainerStopCause | undefined> {
+  async recentStopObservation(jobId: string): Promise<StopObservation> {
     return takeStopCause(this.storage, Date.now(), jobId)
   }
 
@@ -140,18 +193,35 @@ export abstract class RunContainer extends Container<Env> {
    * isn't billed while idle. Best-effort and idempotent: destroying an already-stopped
    * container is a no-op, and we swallow any error so the caller's failure handling is never
    * derailed by cleanup.
+   *
+   * It is also where the stop record's life ENDS. A record is written on every stop and deleted
+   * only when a NEW job is accepted, so without this the last one a run ever observed sits in
+   * that run's Durable Object for good: the run is over, no dispatch is coming to clear it, and
+   * the value is a diagnostic nobody will read again. Deleting it here is what keeps the whole
+   * mechanism transient rather than a per-run key that accumulates for the lifetime of the
+   * deployment.
+   *
+   * Ordered after the teardown so the destroy's own `onStop` cannot land behind the delete,
+   * belt-and-braces with {@link selfInitiatedStop}, which stops that hook writing at all.
    */
   async shutdown(): Promise<void> {
+    this.selfInitiatedStop = true
     try {
       await this.destroy()
     } catch {
       // silent-catch-ok: already gone / not running, so there is nothing to reclaim and nothing
       // for an operator to do about it.
     }
+    // Best-effort: the container is reclaimed either way, and a retained key is a tidiness
+    // problem, never a correctness one. Reported rather than swallowed so a storage backend
+    // failing every delete does not stay invisible.
+    await runBestEffort(logger, 'clear container stop cause on shutdown', () =>
+      clearStopCause(this.storage),
+    )
   }
 
-  private record(cause: ContainerStopCause): Promise<void> {
-    return recordStopCause(this.storage, cause, Date.now())
+  private record(observed: StopObservation): Promise<void> {
+    return recordStopCause(this.storage, observed, Date.now())
   }
 
   /** The DO storage, narrowed to what the stop-cause bookkeeping uses. */
