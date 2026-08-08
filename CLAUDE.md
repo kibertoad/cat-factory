@@ -156,9 +156,8 @@ messages, code comments, UI copy.
   `git commit -F - <<'EOF'`; `git commit --amend -F -` fixes a mangled message before pushing.
 - **Worker tests fail on Windows** (`config wrangler validation failed`), a pre-existing wrangler issue.
   Verify pure-logic changes with `--filter=@cat-factory/orchestration`.
-- **The Postgres-backed suites need a reachable server AND `--env-mode=loose`** (Turbo declares no env
-  for `test:run`, so strict mode DROPS `DATABASE_URL`); a bare `[ELIFECYCLE] Command failed` with no
-  vitest summary is a task a sibling CANCELLED. Recipe: [`running-tests.md`](./docs/internal/running-tests.md).
+- **The Postgres-backed suites need a reachable server AND `--env-mode=loose`**; a bare `[ELIFECYCLE]
+Command failed` with no vitest summary is a CANCELLED sibling. Recipe, including how to start a cluster where no Docker daemon runs: [`running-tests.md`](./docs/internal/running-tests.md).
 - **ALWAYS format/lint-fix the ENTIRE tree, never a subset.** `pnpm lint:fix` from the root (or
   `pnpm exec oxfmt .`); the only correct argument to `oxfmt`/`oxlint` is `.`, for any reason. On
   Windows the whole-tree run rewrites line endings across hundreds of files: expected, and git's
@@ -573,9 +572,9 @@ recipe, release-PR re-sync, new-published-package checklist: [`docs/internal/rel
 
 ### Run the CI guard scripts locally before committing
 
-> **Do NOT run locally: the whole-tree `pnpm test:run` (CI's test lanes own it), `pnpm lint:knip`,
-> `node scripts/check-package-catalog.mjs`** (slow; CI's `Build & typecheck` is authoritative) **or
-> `turbo run test:mutation`** (nightly only: [`mutation-testing.md`](./docs/internal/mutation-testing.md)).
+> **Do NOT run locally: the whole-tree `pnpm test:run` NOR a `--filter`ed package lane** (CI's test
+> lanes own both; see Conventions), **`pnpm lint:knip`, `node scripts/check-package-catalog.mjs`**
+> (slow; CI's `Build & typecheck` is authoritative) **or `turbo run test:mutation`** (nightly: [`mutation-testing.md`](./docs/internal/mutation-testing.md)).
 
 - `node scripts/check-file-size.mjs`: the file-size ratchet (split, don't raise).
 - `node scripts/check-silent-catch.mjs`: bans `.catch(() => {})` in backend non-test source.
@@ -706,11 +705,11 @@ harness rules).
 
 **Built-in catalog lifecycle**: built-ins are COPIED into each workspace at creation and reconciled
 against the CATALOG, never the stored row; a run ADOPTS an entry the board was never seeded with, so a
-PINNED pipeline is never stuck behind an advisory. Traps: retiring a built-in is TWO edits (delete the
-definition AND name it in `buildRetiredPipelines()`), doing only the first being a silent no-op; and a
-bare `pipelineRepository.get` on a run-adjacent path is the smell, since every gate in front of a start
-resolves the pipeline and then CONCLUDES from it. Doc:
-[`pipeline-catalog-lifecycle.md`](./backend/docs/pipeline-catalog-lifecycle.md).
+PINNED pipeline is never stuck behind an advisory. Traps: retiring one is TWO edits (definition AND
+`buildRetiredPipelines()`), the first alone a silent no-op; a bare `pipelineRepository.get` on a
+run-adjacent path is the smell, since every start gate resolves the pipeline and CONCLUDES from it; and
+an AUTHORING rule (`validatePipelineAuthoring`) binds create/update, the run door refusing only the
+subset that dead-ends ANY run, or every stored pipeline predating it stops running. Doc: [`pipeline-catalog-lifecycle.md`](./backend/docs/pipeline-catalog-lifecycle.md).
 
 **Repo bootstrap** mirrors the execution pattern: `BootstrapService` → `bootstrap_jobs` →
 `BootstrapWorkflow` polling the idempotent `pollBootstrapJob()`, then links the repo to the block and
@@ -835,9 +834,9 @@ sections, so the write-avoidance cache keys per TARGET; a rule BOTH reductions s
 regressions, coverage) lives in contracts' `run-evidence.ts`. Doc: [`pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
 
 **Environment disposal**: the `disposer` step reclaims what the run provisioned where its author placed
-it, and every teardown path re-probes afterwards. Trap: a teardown call returning is not the environment
-being gone (a manifest with no `teardown:` request destroys nothing and reports `torn_down`), so only a
-`confirmed` probe is a reclaim and a missing verify row is never a pass.
+it, every teardown path re-probes afterwards, and a SAVE refuses a chain that neither reclaims nor says
+the environment outlives it. Traps: a no-op `teardown:` reports `torn_down`, so only a `confirmed` probe
+is a reclaim, a missing verify row is never a pass, and a DECLARED-retained environment is not `pending`.
 Doc: [`environment-disposal-and-teardown-proof.md`](./docs/initiatives/environment-disposal-and-teardown-proof.md).
 
 **Post-release health**, the LAST standard step: watch monitors/SLOs for a window and, on a regression,
@@ -1076,8 +1075,9 @@ AND that a gated controller leaves no route of its own uncovered.
   [ADR 0049](./backend/docs/adr/0049-modular-vue-adoption.md).
 - **Tests**: Worker integration tests use real `workerd` + real local D1; Node tests use real Postgres
   (`DATABASE_URL`); only the LLM is faked. **Run the FILES your change touched, NAMED on the command line**
-  (`pnpm exec vitest run <file>`). A `--filter`ed package, `test:changed`, `test:quick` and the whole tree are
-  LANES: CI's to run, and reaching for one to check nothing else broke is the banned habit, not thoroughness.
+  (`pnpm exec vitest run <file>`). A `--filter`ed package, `test:changed`, `test:quick` and the tree are LANES:
+  CI's to run, and reaching for one is the banned habit, not thoroughness. An edit with no runnable file of
+  its OWN (a conformance suite, a catalog change) is NOT the exception: [`conformance/README`](./backend/internal/conformance/README.md) names the spec.
   A green run printing the app's OWN log lines is a SUITE bug: silence the gate, or inject a silent logger.
 - **Count what the test OWNS; assert a RELATION over what it does not.** Seed two rows and assert two:
   the test made that population, so the count is a local fact. A total over a population it does NOT

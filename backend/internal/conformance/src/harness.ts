@@ -28,6 +28,7 @@ import type {
   InitiativeRepository,
   LlmCallActivity,
   NotificationRepository,
+  Pipeline,
   PipelineRegistry,
   PromptFragmentRegistry,
   PrVerificationReportPublisher,
@@ -221,6 +222,24 @@ export interface ConformanceApp {
     blockId: string | null
     hasBlock: boolean
   }[]
+  /**
+   * Insert a pipeline row STRAIGHT into the facade's pipeline store, bypassing
+   * `PipelineService.create` and with it the authoring rules
+   * (`validatePipelineAuthoring`).
+   *
+   * The suite needs this for the shapes those rules refuse but the ENGINE must still handle,
+   * because they remain reachable as stored state: a pipeline authored before the rule existed,
+   * or a workspace's seeded copy of a built-in that predates it. The environment-lifecycle
+   * behaviours are exactly that set: a deploy-only run whose environment outlives it and is
+   * torn down by hand afterwards, and a test-only run whose PR report has to say that no
+   * deployer ever stood anything up. Driving those through the authoring door would assert the
+   * refusal instead of the behaviour, and adding the missing steps to make the save legal would
+   * change the very thing under test.
+   *
+   * A pipeline whose shape the builder WOULD accept is still created through `POST /pipelines`:
+   * this is for legacy state, not a shortcut around validation.
+   */
+  seedPipeline(workspaceId: string, pipeline: Pipeline): Promise<void>
   /**
    * Seed an already-"incorporated" requirements review for a block straight into the
    * facade's real review store, so the suite can assert the engine substitutes the

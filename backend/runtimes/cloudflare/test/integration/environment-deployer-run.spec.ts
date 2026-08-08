@@ -6,7 +6,9 @@ import type {
   EnvironmentHandle,
 } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { env } from 'cloudflare:test'
 import { makeApp } from '../helpers'
+import { D1PipelineRepository } from '../../src/infrastructure/repositories/D1PipelineRepository'
 import { bearerConfig, readyEnvBody, recordingFetch, TEST_API_TOKEN } from './environment.fixtures'
 
 /** Captures the context each agent step receives, so we can assert discovery. */
@@ -44,14 +46,17 @@ describe('deployer agent + environment discovery', () => {
       description: 'Stand the service up and run the end-to-end suite against it.',
     })
 
-    const pipeline = await app.call<{ id: string }>('POST', `/workspaces/${ws}/pipelines`, {
+    // No disposer: the assertions below read the environment AFTER the run, so it has to still be
+    // standing. That shape is refused at save (`validatePipelineAuthoring`), so the row is written
+    // straight to the store: the legacy state the rule deliberately leaves runnable.
+    const pipelineId = 'pl_deploy_test_legacy'
+    await new D1PipelineRepository({ db: env.DB }).insert(ws, {
+      id: pipelineId,
       name: 'Deploy & test',
       purpose: 'build',
       agentKinds: ['deployer', 'tester-api'],
     })
-    await app.call('POST', `/workspaces/${ws}/blocks/${task.body.id}/executions`, {
-      pipelineId: pipeline.body.id,
-    })
+    await app.call('POST', `/workspaces/${ws}/blocks/${task.body.id}/executions`, { pipelineId })
     await app.drive(ws)
 
     // The deployer step ran deterministically (not through the agent executor),

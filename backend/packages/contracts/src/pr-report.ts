@@ -518,6 +518,13 @@ export type PrReportEnvironmentEvidence = v.InferOutput<typeof prReportEnvironme
  *                       and distinct from `pending` because the platform did do its part; see
  *                       {@link teardownConfirmationSchema} for which of the causes applies.
  *  - `pending`        — at least one is still standing (the run may still be using it).
+ *  - `retained`       — at least one is still standing AND the pipeline's deployer step DECLARED
+ *                       that its environments outlive the run
+ *                       ({@link StepOptions.retainEnvironment}), so no reclaim is coming from this
+ *                       run and the TTL sweep or an operator owns it from here. Distinct from
+ *                       `pending`, which says a teardown is still expected: a reviewer reading
+ *                       `pending` on a preview environment waits for something that never happens,
+ *                       and an operator reading it goes looking for the failure that isn't there.
  *  - `failed`         — an environment's latest teardown attempt FAILED, so it is still standing
  *                       for a reason someone has to act on.
  *  - `not_applicable` — nothing was ever provisioned.
@@ -526,12 +533,22 @@ export const prReportEnvironmentsSchema = v.object({
   status: prReportSectionStatusSchema,
   note: v.optional(v.nullable(v.string())),
   entries: v.array(prReportEnvironmentSchema),
-  teardown: v.picklist(['confirmed', 'unconfirmed', 'pending', 'failed', 'not_applicable']),
+  teardown: v.picklist([
+    'confirmed',
+    'unconfirmed',
+    'pending',
+    'retained',
+    'failed',
+    'not_applicable',
+  ]),
   timeline: prReportEnvironmentTimelineSchema,
   evidence: prReportEnvironmentEvidenceSchema,
   /**
    * The composed verdict over the three legs:
-   *  - `complete`:       up, observed, and reclaimed.
+   *  - `complete`:       up, observed, and reclaimed — or, where the deployer declared the
+   *                        environment outlives the run, up, observed and deliberately kept. It
+   *                        means the run did everything it undertook to do, NOT that nothing is
+   *                        left standing; {@link teardown} is where that is stated.
    *  - `incomplete`:     at least one leg is missing; {@link gaps} names which.
    *  - `not_applicable`: no environment was ever meant to stand up (no deployer step, or every
    *                       frame is infraless), so there is nothing to prove.

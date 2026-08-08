@@ -505,7 +505,7 @@ function registerCapturedEvidenceTests(harness: ConformanceHarness): void {
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Build + test',
       purpose: 'build',
-      agentKinds: ['coder', 'tester-api'],
+      agentKinds: ['coder', 'deployer', 'tester-api', 'disposer'],
     })
     await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
       pipelineId: pipeline.body.id,

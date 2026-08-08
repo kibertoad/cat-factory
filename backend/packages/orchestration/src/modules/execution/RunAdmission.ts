@@ -47,9 +47,10 @@ import { validatePipelineShape, type PipelineShape } from '../pipelines/pipeline
 import { assertInitiativeShapeAllowed } from '../initiative/initiative.logic.js'
 import { isTesterKind } from './ci.logic.js'
 import {
+  CONSUMER_ENVIRONMENT_FAULT_MESSAGES,
+  consumerEnvironmentFault,
   decideTesterInfra,
   ENV_CONSUMER_KINDS,
-  needsDeployerBeforeConsumer,
   TESTER_INFRA_MESSAGES,
 } from './tester-infra.logic.js'
 import {
@@ -530,13 +531,21 @@ export class RunAdmission {
 
   /**
    * Fail fast when a `docker-compose`/`kubernetes`/`custom` service's chain would dead-end at an
-   * env-consumer (tester / human-test / playwright) because no enabled `deployer` provisions the
-   * environment before it — the exact silent dead-end this initiative fixes (the tester picks
-   * ephemeral mode from the provision type but finds no coordinates). The pure ordering check lives
-   * in {@link needsDeployerBeforeConsumer}; here we resolve the service's provision type (only when a
-   * consumer is present, so consumer-less chains skip the read) and translate a positive verdict
-   * into an actionable {@link ConflictError}. Pass-through for infraless/frontend services and for
-   * chains with a deployer before the first consumer.
+   * env-consumer (tester / human-test / playwright) that has no LIVE environment to read: either
+   * nothing provisioned one before it, or the `disposer` reclaimed it first. The exact silent
+   * dead-end this initiative fixes (the tester picks ephemeral mode from the provision type but
+   * finds no coordinates), and both directions of it, because a chain can starve its consumer from
+   * either side.
+   *
+   * The pure ordering check lives in {@link consumerEnvironmentFault}, which defers to the ONE
+   * shared rule in contracts; here we resolve the service's provision type (only when a consumer is
+   * present, so consumer-less chains skip the read) and translate a returned fault into an
+   * actionable {@link ConflictError}. Pass-through for infraless/frontend services and for chains
+   * whose consumers each run against something.
+   *
+   * The `reason` stays `deployer_required_before_tester` across both faults: it is the STATUS-class
+   * vocabulary the SPA maps to remedy copy, and both faults have the same remedy surface (the
+   * pipeline builder). Which one it is rides in `details.fault`.
    */
   private async assertDeployerBeforeConsumer(
     workspaceId: string,
@@ -552,15 +561,13 @@ export class RunAdmission {
     // A `library` frame stands nothing up via the Deployer (its tester runs the suite in-container),
     // so a missing Deployer before the tester is never a dead-end — pass through like `infraless`.
     if (service?.type && !frameProfile(service.type).deployable) return
-    if (!needsDeployerBeforeConsumer(agentKinds, enabled, service?.provisioning?.type)) return
+    const provisionType = service?.provisioning?.type
+    const fault = consumerEnvironmentFault(agentKinds, enabled, provisionType)
+    if (!fault) return
     throw new ConflictError(
-      `This service provisions a '${service!.provisioning!.type}' environment, but this pipeline ` +
-        'has no Deployer step before its first Tester / human-test step, so the environment would ' +
-        'never be stood up. Add a Deployer step before that step in the pipeline builder, reseed ' +
-        'this pipeline to the latest built-in (which includes one), or set the service to ' +
-        'docker-compose / infraless.',
+      CONSUMER_ENVIRONMENT_FAULT_MESSAGES[fault.reason](fault.agentKind, provisionType!),
       'deployer_required_before_tester',
-      { provisionType: service!.provisioning!.type },
+      { provisionType: provisionType!, fault: fault.reason, stepIndex: fault.index },
     )
   }
 

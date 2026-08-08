@@ -992,7 +992,7 @@ function registerCompanionCapTests(harness: ConformanceHarness): void {
     const res = await app.call('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Build + gap companion',
       purpose: 'build',
-      agentKinds: ['coder', 'tester-api', 'reviewer'],
+      agentKinds: ['coder', 'deployer', 'tester-api', 'reviewer', 'disposer'],
     })
     expect(res.status).toBe(422)
   })

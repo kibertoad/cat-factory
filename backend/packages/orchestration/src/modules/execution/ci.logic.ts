@@ -122,8 +122,12 @@ export const TRACKER_AGENT_KIND = 'tracker'
  * `conflict-resolver` (when a "pull latest main" hits a conflict). Confirming tears the env
  * down and advances. Handled by the {@link HumanTestController}; passes through to a manual
  * (no-env) mode when no ephemeral-environment provider is wired.
+ *
+ * Re-exported from `@cat-factory/contracts` rather than restated: it is one of the steps that
+ * CONSUME a provisioned environment, and the pipeline builder has to name the same set to warn a
+ * draft that reaches one with no Deployer in front of it.
  */
-export const HUMAN_TEST_AGENT_KIND = 'human-test'
+export { HUMAN_TEST_AGENT_KIND } from '@cat-factory/contracts'
 
 /**
  * The agent kind of the special `visual-confirmation` gate: a non-LLM engine step that

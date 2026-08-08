@@ -72,8 +72,15 @@ test.describe('run outcome summary (read the result)', () => {
       pullRequest: { url: 'https://github.com/o/r/pull/7', number: 7, branch: 'feat/login' },
     })
     // No merger: the run settles at `pr_ready` with the PR open, which is the state a human
-    // actually reads a result in (a merged task has left the board).
-    const pipeline = await createSimplePipeline(request, workspaceId, ['coder', 'tester-api'])
+    // actually reads a result in (a merged task has left the board). The Deployer / Disposer pair
+    // rides along because a chain that tests has to spell the environment lifecycle out
+    // (`validatePipelineAuthoring`); both no-op on the seeded `infraless` board.
+    const pipeline = await createSimplePipeline(request, workspaceId, [
+      'coder',
+      'deployer',
+      'tester-api',
+      'disposer',
+    ])
 
     const card = taskCard(page, 'task_login')
     await startRun(request, workspaceId, 'task_login', pipeline.id)
