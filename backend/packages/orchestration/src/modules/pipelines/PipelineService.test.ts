@@ -550,7 +550,43 @@ describe('PipelineService: environment-lifecycle authoring rules', () => {
         purpose: 'build',
         agentKinds: ['coder', 'disposer'],
       }),
-    ).rejects.toThrow(/would have nothing to reclaim/)
+    ).rejects.toThrow(/nothing is standing by the time it runs/)
+  })
+
+  it('refuses a chain whose tester runs after the disposer reclaimed its environment', async () => {
+    // The other direction of the same dead end. A save boundary that only looks for a deployer
+    // BEFORE the consumer accepts this happily, and the run then fails inside the tester.
+    await expect(
+      service().create(WS, {
+        name: 'Reclaimed too early',
+        purpose: 'build',
+        agentKinds: ['coder', 'deployer', 'disposer', 'tester-api'],
+      }),
+    ).rejects.toThrow(/has already reclaimed the one/)
+  })
+
+  it('accepts a Deployer that DECLARES its environment outlives the run', async () => {
+    // The shape the rule would otherwise make unrepresentable: a preview a reviewer pokes at
+    // after the PR is open. Dropping the Disposer alone is refused (see above), so without a way
+    // to SAY so there is no savable form of it at all.
+    const p = await service().create(WS, {
+      name: 'Preview',
+      purpose: 'build',
+      agentKinds: ['coder', 'deployer', 'human-test'],
+      stepOptions: [null, { retainEnvironment: true }, null],
+    })
+    expect(p.stepOptions?.[1]?.retainEnvironment).toBe(true)
+  })
+
+  it('refuses a retain declaration a Disposer in the same chain contradicts', async () => {
+    await expect(
+      service().create(WS, {
+        name: 'Both ways',
+        purpose: 'build',
+        agentKinds: ['coder', 'deployer', 'tester-api', 'disposer'],
+        stepOptions: [null, { retainEnvironment: true }, null, null],
+      }),
+    ).rejects.toThrow(/would be torn down anyway/)
   })
 
   it('carries the fault on the error so a client reacts to it without matching the message', async () => {

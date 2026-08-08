@@ -34,18 +34,6 @@ describe('validatePipelineShape', () => {
     }
   })
 
-  it('every built-in seed pipeline satisfies the AUTHORING rules too, so one can be edited', () => {
-    // A built-in that failed these would be a preset the platform ships and its own builder
-    // refuses to save: clone it, change the name, and the save is rejected for a fault the user
-    // did not introduce. The catalog is the one place that cannot be allowed to drift from them.
-    for (const p of seedPipelines()) {
-      expect(
-        () => validatePipelineAuthoring({ agentKinds: p.agentKinds, enabled: p.enabled }),
-        p.id,
-      ).not.toThrow()
-    }
-  })
-
   it('pl_build is the positional default: the design phase plus the everyday loop', () => {
     const pipelines = seedPipelines()
     // The POSITIONAL default: a plain "Start" with no pinned pipeline resolves `pipelines[0]`, so
@@ -650,5 +638,29 @@ describe('assertValidBinaryOutputSteps', () => {
 
   it('skips the check entirely with no registry in view (the built-in-catalog caller)', () => {
     expect(() => assertValidBinaryOutputSteps({ agentKinds: ['image-generator'] })).not.toThrow()
+  })
+})
+
+// The AUTHORING rules (`validatePipelineAuthoring`) are a layer above the shape validation: what
+// is INCOMPLETE rather than what is BROKEN, and so bound to the save door alone. Their own
+// behaviour is unit-tested beside the rule in contracts; what belongs HERE is the one claim that
+// needs the shipped catalog in view.
+describe('validatePipelineAuthoring — against the shipped catalog', () => {
+  it('accepts every built-in seed pipeline, so one can be cloned and edited', () => {
+    // A built-in that failed these would be a preset the platform ships and its own builder
+    // refuses to save: clone it, change the name, and the save is rejected for a fault the user
+    // did not introduce, with no reseed to escape by. The catalog is the one place that cannot
+    // be allowed to drift from them.
+    for (const p of seedPipelines()) {
+      expect(
+        () =>
+          validatePipelineAuthoring({
+            agentKinds: p.agentKinds,
+            enabled: p.enabled,
+            stepOptions: p.stepOptions,
+          }),
+        p.id,
+      ).not.toThrow()
+    }
   })
 })

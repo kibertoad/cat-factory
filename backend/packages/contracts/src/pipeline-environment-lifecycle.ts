@@ -19,6 +19,15 @@ import { UI_TESTER_AGENT_KIND } from './visual-pipeline.js'
 // (`infraless` / `docker-compose` with no handler). One pipeline covers every provision type;
 // there is no pipeline-per-infra-type fan-out, and that is what makes a purely structural rule
 // the right one to enforce.
+//
+// RECLAIM IS THE DEFAULT, NOT THE ONLY LEGAL END. An environment that deliberately outlives its
+// run is a real shape (a preview a reviewer pokes at after the PR is open), so the reclaim leg is
+// satisfied EITHER by a `disposer` or by the deployer step DECLARING the retention
+// (`StepOptions.retainEnvironment`). What the rule refuses is the third case, silence: a chain
+// that neither reclaims nor says it means not to, which is indistinguishable from an author who
+// forgot. The declaration is not a validation bypass — it is the fact the PR verification report
+// needs to render the teardown leg as `retained` rather than as a `pending` reclaim that is never
+// coming (`prReport.environments.ts`).
 // ---------------------------------------------------------------------------
 
 /**
@@ -62,23 +71,35 @@ export const ENV_CONSUMER_AGENT_KINDS: readonly string[] = [
 ]
 
 /**
- * The three ways a step list gets the environment lifecycle wrong. Machine-readable, so the SPA
- * maps each to translated copy and the backend's refusal carries it on `details.reason` rather
- * than making a client string-match the message.
+ * The ways a step list gets the environment lifecycle wrong. Machine-readable, so the SPA maps
+ * each to translated copy and the backend's refusal carries it on `details.reason` rather than
+ * making a client string-match the message.
  *
  *  - `consumer_without_deployer`: a tester / acceptance / human-test step with no enabled
  *    `deployer` before it. Nothing provisions what it reads.
- *  - `deployer_without_disposer`: an enabled `deployer` with no enabled `disposer` after it.
- *    The environment it stands up outlives the run, reclaimed (if at all) by the TTL sweep long
- *    after the run settled, which is a backstop and cannot close the run's own teardown proof.
- *  - `disposer_without_deployer`: an enabled `disposer` with no enabled `deployer` before it.
- *    It reclaims by the ids the deployer recorded, so with none it can only report that there
- *    was nothing to reclaim, which is indistinguishable from a clean teardown.
+ *  - `consumer_after_disposer`: a consumer that IS preceded by a deployer, but also by the
+ *    `disposer` that reclaimed it, with no re-provision in between. The environment is gone by
+ *    the time the step runs, so it dead-ends exactly as an unprovisioned one does; the two are
+ *    separate reasons because the fixes are opposite (add a Deployer vs move the Disposer down).
+ *  - `deployer_without_disposer`: an enabled `deployer` with no enabled `disposer` after it and
+ *    no {@link StepOptions.retainEnvironment} declaration. The environment it stands up outlives
+ *    the run, reclaimed (if at all) by the TTL sweep long after the run settled, which is a
+ *    backstop and cannot close the run's own teardown proof.
+ *  - `disposer_without_deployer`: an enabled `disposer` with no LIVE environment in front of it,
+ *    because no enabled `deployer` precedes it or an earlier disposer already reclaimed what did.
+ *    It reclaims by the ids the deployer recorded, so with none it can only report that there was
+ *    nothing to reclaim, which is indistinguishable from a clean teardown.
+ *  - `retained_deployer_reclaimed`: a `deployer` that declares `retainEnvironment` with an enabled
+ *    `disposer` after it, which reclaims by the ids that deployer recorded. The declaration and
+ *    the chain say opposite things and the chain is the one that runs, so an author who ticked
+ *    "keep this environment" would otherwise watch it disappear with nothing naming the reason.
  */
 export type PipelineEnvironmentProblemReason =
   | 'consumer_without_deployer'
+  | 'consumer_after_disposer'
   | 'deployer_without_disposer'
   | 'disposer_without_deployer'
+  | 'retained_deployer_reclaimed'
 
 /** One lifecycle fault, anchored on the step that carries it. */
 export interface PipelineEnvironmentProblem {
@@ -90,7 +111,24 @@ export interface PipelineEnvironmentProblem {
 }
 
 /**
+ * The only per-step option this rule reads, structurally typed so the rule stays at the bottom of
+ * the package's import graph. `StepOptions` (entities) is the shape both real callers pass.
+ */
+export interface EnvironmentStepOptions {
+  retainEnvironment?: boolean | undefined
+}
+
+/**
  * Every environment-lifecycle fault in a step list, in step order.
+ *
+ * Walked as a STATE MACHINE over the enabled steps rather than as a set of presence checks,
+ * because every one of these faults is about ORDER and half of them are invisible to a scan that
+ * only asks whether a kind appears somewhere. The state is whether an environment is standing at
+ * this point in the chain: a `deployer` raises it, a `disposer` drops it, and a consumer is
+ * judged against what is standing WHEN IT RUNS. That is what separates a consumer with nothing
+ * yet provisioned from one whose environment has already been reclaimed, and it is what lets a
+ * chain that provisions twice (`deployer → tester → disposer → deployer → tester → disposer`)
+ * read as two clean lifecycles instead of a pile of contradictions.
  *
  * Evaluated over the ENABLED subset, like every other structural pipeline rule: a run is built
  * from the enabled steps alone, so a disabled `deployer` provisions nothing and a disabled
@@ -103,24 +141,66 @@ export interface PipelineEnvironmentProblem {
 export function pipelineEnvironmentProblems(
   agentKinds: readonly string[],
   enabled?: readonly (boolean | undefined)[],
+  stepOptions?: readonly (EnvironmentStepOptions | null | undefined)[],
 ): PipelineEnvironmentProblem[] {
   const isEnabled = (i: number) => enabled?.[i] !== false
   const problems: PipelineEnvironmentProblem[] = []
-  let deployerSeen = false
+  // Whether an environment is standing at this point in the chain. `reclaimed` is deliberately
+  // distinct from `none`: both mean a consumer here has nothing to run against, and they need
+  // opposite fixes.
+  let environment: 'none' | 'live' | 'reclaimed' = 'none'
   for (let i = 0; i < agentKinds.length; i++) {
     const agentKind = agentKinds[i]
     if (agentKind === undefined || !isEnabled(i)) continue
     if (agentKind === DEPLOYER_AGENT_KIND) {
-      deployerSeen = true
+      environment = 'live'
+      // The disposer reclaims by the ids the deployer recorded, so ANY enabled disposer after
+      // this one takes this environment down: that is both what satisfies the reclaim
+      // requirement and what contradicts a retain declaration.
       const reclaimed = agentKinds.some(
         (kind, j) => j > i && kind === DISPOSER_AGENT_KIND && isEnabled(j),
       )
-      if (!reclaimed) problems.push({ reason: 'deployer_without_disposer', index: i, agentKind })
+      if (stepOptions?.[i]?.retainEnvironment === true) {
+        if (reclaimed) {
+          problems.push({ reason: 'retained_deployer_reclaimed', index: i, agentKind })
+        }
+      } else if (!reclaimed) {
+        problems.push({ reason: 'deployer_without_disposer', index: i, agentKind })
+      }
     } else if (agentKind === DISPOSER_AGENT_KIND) {
-      if (!deployerSeen) problems.push({ reason: 'disposer_without_deployer', index: i, agentKind })
-    } else if (!deployerSeen && ENV_CONSUMER_AGENT_KINDS.includes(agentKind)) {
-      problems.push({ reason: 'consumer_without_deployer', index: i, agentKind })
+      if (environment !== 'live') {
+        problems.push({ reason: 'disposer_without_deployer', index: i, agentKind })
+      }
+      environment = 'reclaimed'
+    } else if (environment !== 'live' && ENV_CONSUMER_AGENT_KINDS.includes(agentKind)) {
+      problems.push({
+        reason:
+          environment === 'reclaimed' ? 'consumer_after_disposer' : 'consumer_without_deployer',
+        index: i,
+        agentKind,
+      })
     }
   }
   return problems
 }
+
+/**
+ * The subset of {@link PipelineEnvironmentProblemReason} that names a step which would DEAD-END
+ * for want of a live environment, as opposed to one that leaves the lifecycle untidy.
+ *
+ * Exported because the two halves are enforced at different doors and only these cross both: the
+ * save boundary refuses the whole set on what is being AUTHORED, while the run door refuses a
+ * STORED chain (see `RunAdmission`) and may only refuse what would genuinely fail on the service
+ * the run was started against. A pipeline stored before this rule existed still runs; one whose
+ * tester has no environment to read does not.
+ */
+export const ENV_CONSUMER_STARVATION_REASONS = [
+  'consumer_without_deployer',
+  'consumer_after_disposer',
+] as const satisfies readonly PipelineEnvironmentProblemReason[]
+
+/**
+ * The narrow union of {@link ENV_CONSUMER_STARVATION_REASONS}, so a `Record` keyed by it stays
+ * total over exactly those two rather than over every reason the save boundary also refuses.
+ */
+export type EnvConsumerStarvationReason = (typeof ENV_CONSUMER_STARVATION_REASONS)[number]

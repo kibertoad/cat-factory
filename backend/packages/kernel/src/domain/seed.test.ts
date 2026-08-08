@@ -4,6 +4,7 @@ import {
   isPipelinePurpose,
   pipelineAllowedForBlockLevel,
   pipelineAllowedForTaskType,
+  pipelineEnvironmentProblems,
 } from '@cat-factory/contracts'
 import { hasInitiativeKinds } from './initiative-logic.js'
 import { PipelineRegistry } from './pipeline-registry.js'
@@ -587,5 +588,27 @@ describe('defaultPipelineIdForTaskType', () => {
       })
       expect(defaultPipelineIdForTaskType('document', r)).toBe(DOCUMENT_PIPELINE_ID)
     })
+  })
+})
+
+describe('seedPipelines — environment lifecycle', () => {
+  it('RECLAIMS in every preset that provisions, rather than declaring the environment retained', () => {
+    // That the catalog satisfies the lifecycle rule at all is pinned where the rule is enforced
+    // (`pipelineShape.test.ts`). This states the stronger thing the rule cannot: WHICH legal end
+    // each preset takes. `retainEnvironment` also satisfies it, and a built-in quietly leaving its
+    // environments up would bill every workspace that runs it until the TTL sweep, which is a
+    // choice no shipped default gets to make on an operator's behalf.
+    const deploying = seedPipelines().filter((p) => p.agentKinds.includes('deployer'))
+    expect(deploying.length).toBeGreaterThan(0)
+    for (const p of deploying) {
+      expect(pipelineEnvironmentProblems(p.agentKinds, p.enabled, p.stepOptions), p.id).toEqual([])
+      expect(
+        p.stepOptions?.some((o) => o?.retainEnvironment),
+        p.id,
+      ).toBeFalsy()
+      expect(p.agentKinds.lastIndexOf('disposer'), p.id).toBeGreaterThan(
+        p.agentKinds.lastIndexOf('deployer'),
+      )
+    }
   })
 })

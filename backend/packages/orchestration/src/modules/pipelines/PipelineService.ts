@@ -225,7 +225,11 @@ export class PipelineService {
     // Authoring-only correctness (see `validatePipelineAuthoring`): the environment lifecycle a
     // composed chain has to spell out: provision, consume, reclaim. Not part of the shared shape
     // validation, because a pipeline authored before this rule still RUNS.
-    validatePipelineAuthoring({ agentKinds: input.agentKinds, enabled: input.enabled })
+    validatePipelineAuthoring({
+      agentKinds: input.agentKinds,
+      enabled: input.enabled,
+      stepOptions: input.stepOptions,
+    })
     // Launch-constraint validation (no origin — a save, not a launch): a `bug-intake` step
     // requires a recurring pipeline. `availability` absent ⇒ `'both'` (unrestricted). Evaluated
     // over the enabled subset — a disabled bug-intake step imposes no requirement.
@@ -367,7 +371,7 @@ export class PipelineService {
       // The authoring rules bind an edit exactly as they bind a create: removing the Deployer from
       // a chain that still tests, or the Disposer from one that still deploys, is composing the
       // dead end rather than inheriting it.
-      validatePipelineAuthoring({ agentKinds, enabled })
+      validatePipelineAuthoring({ agentKinds, enabled, stepOptions })
       await this.assertObservabilityGatedStepAllowed(workspaceId, agentKinds, enabled)
     }
     // Re-check the launch constraint when the chain, the enable mask, or the availability

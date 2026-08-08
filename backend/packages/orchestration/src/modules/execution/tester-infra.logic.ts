@@ -1,5 +1,12 @@
 import type { ProvisionType } from '@cat-factory/kernel'
-import { DEPLOYER_AGENT_KIND, ENV_CONSUMER_AGENT_KINDS } from '@cat-factory/contracts'
+import {
+  ENV_CONSUMER_STARVATION_REASONS,
+  pipelineEnvironmentProblems,
+} from '@cat-factory/contracts'
+import type {
+  EnvConsumerStarvationReason,
+  PipelineEnvironmentProblem,
+} from '@cat-factory/contracts'
 
 // Pure decision for the Tester's start-time infra gate — no IO, no ports. Given the
 // service's declared provision type and whether a workspace handler resolves for the type,
@@ -82,34 +89,71 @@ export function decideTesterInfra(input: TesterInfraInput): TesterInfraDecision 
 export { ENV_CONSUMER_AGENT_KINDS as ENV_CONSUMER_KINDS } from '@cat-factory/contracts'
 
 /**
- * For a Deployer-provisioned service (`docker-compose`/`kubernetes`/`custom`): whether the ENABLED
- * chain reaches an env-consuming step (tester / playwright / human-test) with NO enabled `deployer`
- * before it — i.e. nothing would provision the environment the consumer needs, so the run would
- * dead-end inside the consumer. The pure half of the run-start guard: `ExecutionService` resolves the
- * service's provision type and translates a `true` verdict into an actionable launch error. Returns
- * false for `infraless`/none/a frontend frame (nothing to provision) and whenever a deployer precedes
- * the first consumer.
+ * For a Deployer-provisioned service (`docker-compose`/`kubernetes`/`custom`): the FIRST step in the
+ * ENABLED chain that would dead-end for want of a live environment, or `null` when none would.
+ * `ExecutionService` resolves the service's provision type and translates a returned problem into an
+ * actionable launch error. Returns `null` for `infraless`/none/a frontend frame, where nothing is
+ * provisioned and so nothing can be missing.
+ *
+ * The ORDERING is not re-derived here: it is {@link pipelineEnvironmentProblems}, the same function
+ * the builder warns on and the save boundary refuses on, filtered to the two reasons that describe a
+ * dead end rather than an untidy lifecycle. A second hand-written walk beside it is what let the
+ * run door check the deployer→consumer direction and miss the consumer→disposer one, agreeing with
+ * the save boundary only because both copies had the same hole.
+ *
+ * What stays here is the half the shared rule structurally cannot answer: whether the SERVICE this
+ * run was started against stands an environment up at all. That split is also why the run door
+ * refuses this subset only. The save boundary binds what is being AUTHORED and may hold a draft to
+ * the whole lifecycle; the run door meets pipelines STORED before any of it existed, and a chain
+ * whose environment merely goes unreclaimed still runs.
  */
-export function needsDeployerBeforeConsumer(
+export function consumerEnvironmentFault(
   agentKinds: readonly string[],
   enabled: readonly boolean[] | undefined,
   provisionType: ProvisionType | undefined,
-): boolean {
+): ConsumerEnvironmentFault | null {
   if (
     provisionType !== 'docker-compose' &&
     provisionType !== 'kubernetes' &&
     provisionType !== 'custom'
   ) {
-    return false
+    return null
   }
-  let deployerSeen = false
-  for (let i = 0; i < agentKinds.length; i++) {
-    if (enabled?.[i] === false) continue
-    const kind = agentKinds[i]!
-    if (kind === DEPLOYER_AGENT_KIND) deployerSeen = true
-    else if (!deployerSeen && ENV_CONSUMER_AGENT_KINDS.includes(kind)) return true
-  }
-  return false
+  return pipelineEnvironmentProblems(agentKinds, enabled).find(isStarvation) ?? null
+}
+
+/** One lifecycle fault, narrowed to the reasons this door refuses. */
+export type ConsumerEnvironmentFault = PipelineEnvironmentProblem & {
+  reason: EnvConsumerStarvationReason
+}
+
+/**
+ * Narrowed by the same list the messages are keyed by, so a reason added to that list is carried
+ * through the guard and the copy together rather than silently falling out of one of them.
+ */
+function isStarvation(problem: PipelineEnvironmentProblem): problem is ConsumerEnvironmentFault {
+  return (ENV_CONSUMER_STARVATION_REASONS as readonly string[]).includes(problem.reason)
+}
+
+/**
+ * The actionable launch error for each way a stored chain starves its env-consuming step, naming
+ * the step and the edit that fixes it. Separate sentences per reason because the fixes are
+ * opposite: one chain never provisions, the other reclaims too early.
+ */
+export const CONSUMER_ENVIRONMENT_FAULT_MESSAGES: Record<
+  EnvConsumerStarvationReason,
+  (agentKind: string, provisionType: string) => string
+> = {
+  consumer_without_deployer: (agentKind, provisionType) =>
+    `This service provisions a '${provisionType}' environment, but this pipeline has no Deployer ` +
+    `step before its '${agentKind}' step, so the environment would never be stood up. Add a ` +
+    'Deployer step before it in the pipeline builder, reseed this pipeline to the latest built-in ' +
+    '(which includes one), or set the service to docker-compose / infraless.',
+  consumer_after_disposer: (agentKind, provisionType) =>
+    `This service provisions a '${provisionType}' environment, but this pipeline's Disposer step ` +
+    `reclaims it before the '${agentKind}' step that reads it runs, so there would be nothing ` +
+    'left to run against. Move the Disposer after that step in the pipeline builder, or add ' +
+    'another Deployer before it.',
 }
 
 /** The actionable error message for each refusal reason. */

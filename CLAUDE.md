@@ -708,8 +708,8 @@ against the CATALOG, never the stored row; a run ADOPTS an entry the board was n
 PINNED pipeline is never stuck behind an advisory. Traps: retiring one is TWO edits (definition AND
 `buildRetiredPipelines()`), the first alone a silent no-op; a bare `pipelineRepository.get` on a
 run-adjacent path is the smell, since every start gate resolves the pipeline and CONCLUDES from it; and
-an AUTHORING rule (`validatePipelineAuthoring`) binds create/update ONLY, never the run door, or every
-stored pipeline predating it stops running. Doc: [`pipeline-catalog-lifecycle.md`](./backend/docs/pipeline-catalog-lifecycle.md).
+an AUTHORING rule (`validatePipelineAuthoring`) binds create/update, the run door refusing only the
+subset that dead-ends ANY run, or every stored pipeline predating it stops running. Doc: [`pipeline-catalog-lifecycle.md`](./backend/docs/pipeline-catalog-lifecycle.md).
 
 **Repo bootstrap** mirrors the execution pattern: `BootstrapService` → `bootstrap_jobs` →
 `BootstrapWorkflow` polling the idempotent `pollBootstrapJob()`, then links the repo to the block and
@@ -834,9 +834,9 @@ sections, so the write-avoidance cache keys per TARGET; a rule BOTH reductions s
 regressions, coverage) lives in contracts' `run-evidence.ts`. Doc: [`pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
 
 **Environment disposal**: the `disposer` step reclaims what the run provisioned where its author placed
-it, and every teardown path re-probes afterwards. Trap: a teardown call returning is not the environment
-being gone (a manifest with no `teardown:` request destroys nothing and reports `torn_down`), so only a
-`confirmed` probe is a reclaim and a missing verify row is never a pass.
+it, every teardown path re-probes afterwards, and a SAVE refuses a chain that neither reclaims nor says
+the environment outlives it. Traps: a no-op `teardown:` reports `torn_down`, so only a `confirmed` probe
+is a reclaim, a missing verify row is never a pass, and a DECLARED-retained environment is not `pending`.
 Doc: [`environment-disposal-and-teardown-proof.md`](./docs/initiatives/environment-disposal-and-teardown-proof.md).
 
 **Post-release health**, the LAST standard step: watch monitors/SLOs for a window and, on a regression,

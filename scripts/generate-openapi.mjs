@@ -254,7 +254,19 @@ const API_PREFIX = '/api/v1'
 // SAME shapes the app's requirements window consumes, deliberately, so the two surfaces cannot
 // drift about one artifact. Those schemas were internal and freely breakable until this version;
 // from here they are part of the stable `/api/v1` surface and change on its terms.
-const API_VERSION = '1.34.0'
+//
+// 1.35.0: one new `teardown` value, `retained`, on the environments section of the verification
+// report (`GET /api/v1/runs/{runId}/verification-report`). It says the run's Deployer DECLARED
+// that its environments outlive the run, so no reclaim is coming and none is missing. Additive:
+// no path, shape, scope floor or error vocabulary moves, and a consumer built against 1.34.0
+// keeps parsing every response it already understood.
+//
+// It is worth naming what a consumer that does NOT recognise it will do, because this is an enum
+// on a field that already had five values and the SDKs tolerate unknown members by design: such a
+// consumer sees a value it cannot classify rather than a wrong one. That is the whole reason the
+// state is new instead of folded into `pending` — `pending` is a teardown still expected, and
+// reporting one that is never coming is the misreport the section exists to avoid.
+const API_VERSION = '1.35.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

@@ -77,6 +77,16 @@ INDEPENDENT probe found afterwards, so only a positively confirmed reclaim reads
   same call site and only the error TYPE separates them: a `NotFoundError` is "something else
   already reclaimed it" (`none`), anything else is a failure to reclaim (`failed`). The earlier
   `.catch(() => null)` collapsed them and reported "nothing to reclaim" about a live environment.
+- **Reclaim is the DEFAULT end of the lifecycle, not the only legal one.** A run whose environment
+  is meant to outlive it is a real shape (a preview a reviewer pokes at once the PR is open), so the
+  save-time rule is satisfied EITHER by a `disposer` or by the deployer step declaring the retention
+  (`StepOptions.retainEnvironment`). What it refuses is the third case, silence, which is
+  indistinguishable from an author who forgot. The declaration is deliberately NOT a validation
+  bypass: it is the fact the report needs to render the teardown leg as `retained` rather than as a
+  `pending` reclaim that is never coming, and setting it while KEEPING a disposer is refused in turn,
+  because the disposer reclaims by the ids that deployer recorded and the chain is the half that
+  runs. It changes no runtime behaviour: with no disposer in the chain there was never a reclaim to
+  suppress.
 - **The disposer NEVER fails the run.** It commonly sits after `merger`: the work shipped and the
   PR is in, so an un-reclaimed environment is a recorded warning and an operator's job. This is
   the opposite disposition from the deployer, whose primary-frame failure IS terminal —
@@ -149,18 +159,19 @@ INDEPENDENT probe found afterwards, so only a positively confirmed reclaim reads
 
 ### Slice C: the report's third leg
 
-| Unit                                                                                   | Status | PR   |
-| -------------------------------------------------------------------------------------- | ------ | ---- |
-| `teardown: 'unconfirmed'` + `timeline.teardownsUnconfirmed`                            | done   | this |
-| `indexEnvironments` follows verify rows by identity; absence of one is not a pass      | done   | this |
-| Gaps carry the probe's VERBATIM reason (deduped); render is ⚠️, neither tick nor cross | done   | this |
-| Unit tests: unverified ≠ reclaimed, unconfirmed ≠ pending, mixed run reports `pending` | done   | this |
+| Unit                                                                                           | Status | PR   |
+| ---------------------------------------------------------------------------------------------- | ------ | ---- |
+| `teardown: 'unconfirmed'` + `timeline.teardownsUnconfirmed`                                    | done   | this |
+| `indexEnvironments` follows verify rows by identity; absence of one is not a pass              | done   | this |
+| Gaps carry the probe's VERBATIM reason (deduped); render is ⚠️, neither tick nor cross         | done   | this |
+| Unit tests: unverified ≠ reclaimed, unconfirmed ≠ pending, mixed run reports `pending`         | done   | this |
+| `teardown: 'retained'` for a declared-retained deployer; not a gap, and never softens `failed` | done   | this |
 
 ### Deferred (NOT in this PR — each needs its own call)
 
-| Unit                                                                                                                                                                                                                                                                                                            | Status   |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `DELETE /environments/:id` still answers `status: 'torn_down'` unconditionally. The confirmation is recorded in the log the drawer reads, but the endpoint's own response does not carry it; adding it means widening `EnvironmentHandle`.                                                                      | deferred |
-| Container-backed (`asyncTeardown`) disposal, for a helm/kustomize uninstall that needs a deploy container. Namespace-DELETE covers the k8s adapter today; the plan's original deferral stands.                                                                                                                  | deferred |
-| `ENVIRONMENT_DEFAULT_TTL_MINUTES` (plan D1), so no environment is immortal when neither provider nor manifest supplies a TTL. Independent of this work and still worth doing: a pipeline STORED before the save-time rule can still carry a deployer and no disposer, so TTL remains the only backstop for one. | deferred |
-| A sweep lease (plan D3), so a concurrent Node timer + CF cron cannot double-invoke a teardown. Providers are idempotent, so this stays low priority.                                                                                                                                                            | deferred |
+| Unit                                                                                                                                                                                                                                                                                                                                                                                        | Status   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `DELETE /environments/:id` still answers `status: 'torn_down'` unconditionally. The confirmation is recorded in the log the drawer reads, but the endpoint's own response does not carry it; adding it means widening `EnvironmentHandle`.                                                                                                                                                  | deferred |
+| Container-backed (`asyncTeardown`) disposal, for a helm/kustomize uninstall that needs a deploy container. Namespace-DELETE covers the k8s adapter today; the plan's original deferral stands.                                                                                                                                                                                              | deferred |
+| `ENVIRONMENT_DEFAULT_TTL_MINUTES` (plan D1), so no environment is immortal when neither provider nor manifest supplies a TTL. Independent of this work and MORE wanted now, not less: a pipeline stored before the save-time rule can still carry a deployer and no disposer, and a DECLARED retention is a deliberate second way to reach the same place, so TTL is the backstop for both. | deferred |
+| A sweep lease (plan D3), so a concurrent Node timer + CF cron cannot double-invoke a teardown. Providers are idempotent, so this stays low priority.                                                                                                                                                                                                                                        | deferred |

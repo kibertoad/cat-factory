@@ -828,6 +828,24 @@ export const stepOptionsSchema = v.object({
    */
   binaryOutput: v.optional(binaryOutputConfigSchema),
   /**
+   * `deployer` steps only. Declares that the environments THIS step provisions are meant to
+   * OUTLIVE the run: nothing in the chain reclaims them, and the TTL sweep (or an operator) takes
+   * them down later. The shape a preview environment has, where the point is that a reviewer can
+   * poke at the live URL after the PR is open.
+   *
+   * It exists because the reclaim leg has two legitimate ends and only one of them is a step. A
+   * `deployer` with no `disposer` after it is refused at pipeline save
+   * ({@link pipelineEnvironmentProblems}) precisely because an environment nobody reclaims is
+   * usually an oversight; this is how an author says it is not one. Setting it AND keeping a
+   * `disposer` is refused in turn: the disposer reclaims by the ids this step recorded, so the
+   * two say opposite things and the chain is the half that runs.
+   *
+   * Read by the PR verification report as well as by the save boundary, which is what makes it a
+   * declaration rather than a validation bypass: the teardown leg renders `retained` instead of a
+   * `pending` reclaim nothing will ever close. Ignored on every other kind.
+   */
+  retainEnvironment: v.optional(v.boolean()),
+  /**
    * This step's GATE configuration: who may resolve its human approval gate and how many of
    * them must, plus the parameters of the registered gate its kind runs (see
    * {@link stepGateConfigSchema}). The `gates[i]` flag stays the "is there a human checkpoint

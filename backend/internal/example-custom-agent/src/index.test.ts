@@ -710,7 +710,12 @@ describe('the org:introduce-api reusable operation', () => {
     // the operation's pipeline once and never update the boards holding it.
     const registered = pipelineRegistry.registered().find((p) => p.id === INTRODUCE_API_PIPELINE_ID)
     expect(registered?.builtin).toBe(true)
-    expect(registered?.version).toBe(1)
+    // Above the seeding path's default of 1, which is the only assertion that can tell a DECLARED
+    // version from an absent one and does not have to be re-pinned every time the chain moves. It
+    // pins the rollout channel having actually been USED, too: changing a built-in's steps without
+    // bumping it leaves every board already holding the old copy on a chain nothing will reseed,
+    // and (since the save boundary now judges the lifecycle) one a clone-and-edit cannot save.
+    expect(registered?.version).toBeGreaterThan(1)
   })
 
   it("renders a run's collected parameters under the descriptor's labels", () => {

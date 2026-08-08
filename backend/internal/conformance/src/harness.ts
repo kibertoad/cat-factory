@@ -223,13 +223,6 @@ export interface ConformanceApp {
     hasBlock: boolean
   }[]
   /**
-   * Seed an already-"incorporated" requirements review for a block straight into the
-   * facade's real review store, so the suite can assert the engine substitutes the
-   * reworked requirements into the agent context — on EVERY runtime, not just the one
-   * a feature-specific spec happens to cover. (The review/rework run themselves call a
-   * real LLM, so the suite seeds the persisted outcome rather than driving them.)
-   */
-  /**
    * Insert a pipeline row STRAIGHT into the facade's pipeline store, bypassing
    * `PipelineService.create` and with it the authoring rules
    * (`validatePipelineAuthoring`).
@@ -247,6 +240,13 @@ export interface ConformanceApp {
    * this is for legacy state, not a shortcut around validation.
    */
   seedPipeline(workspaceId: string, pipeline: Pipeline): Promise<void>
+  /**
+   * Seed an already-"incorporated" requirements review for a block straight into the
+   * facade's real review store, so the suite can assert the engine substitutes the
+   * reworked requirements into the agent context — on EVERY runtime, not just the one
+   * a feature-specific spec happens to cover. (The review/rework run themselves call a
+   * real LLM, so the suite seeds the persisted outcome rather than driving them.)
+   */
   seedIncorporatedReview(workspaceId: string, blockId: string, requirements: string): Promise<void>
   /**
    * Seed a `ready` review with `openItems` still-open findings (one by default) straight into the

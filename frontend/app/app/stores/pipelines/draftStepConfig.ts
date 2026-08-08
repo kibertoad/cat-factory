@@ -15,6 +15,27 @@ import { defaultConsensusConfig, type PipelinesContext } from './context'
  * touches nothing else, which is what makes the two independent; both are spread into the store,
  * so the store's API is unchanged.
  */
+/**
+ * Write ONE field of the step's `StepOptions` bag at `index`, merging into whatever else that step
+ * carries and normalizing an emptied bag back to `null`. `undefined` CLEARS the field.
+ *
+ * Every per-step option below goes through this rather than repeating the clone/assign/normalize
+ * dance, because the two halves that are easy to get wrong are shared by all of them: replacing
+ * the bag loses the neighbouring options a step may also carry, and leaving a `{}` behind makes a
+ * step that is back on every default persist a shape it never had.
+ */
+function patchStepOption<K extends keyof StepOptions>(
+  draftStepOptions: PipelinesContext['draftStepOptions'],
+  index: number,
+  key: K,
+  value: StepOptions[K] | undefined,
+) {
+  const next: StepOptions = { ...draftStepOptions.value[index] }
+  if (value === undefined) delete next[key]
+  else next[key] = value
+  draftStepOptions.value[index] = Object.keys(next).length ? next : null
+}
+
 export function createPipelineStepConfigActions(ctx: PipelinesContext) {
   const {
     draftGates,
@@ -118,10 +139,27 @@ export function createPipelineStepConfigActions(ctx: PipelinesContext) {
    * flag. Merges with any other future StepOptions fields rather than clobbering the whole bag.
    */
   function toggleDraftAutoRecommend(index: number) {
-    const next: StepOptions = { ...draftStepOptions.value[index] }
-    if (draftAutoRecommendEnabled(index)) next.autoRecommend = false
-    else delete next.autoRecommend
-    draftStepOptions.value[index] = Object.keys(next).length ? next : null
+    const off = draftAutoRecommendEnabled(index) ? false : undefined
+    patchStepOption(draftStepOptions, index, 'autoRecommend', off)
+  }
+
+  /**
+   * Whether the draft `deployer` step at `index` declares that its environments outlive the run
+   * (its `stepOptions.retainEnvironment`). OFF by default: the everyday shape is a run that
+   * reclaims what it stood up, and the save boundary refuses a Deployer that does neither.
+   */
+  function draftRetainEnvironment(index: number): boolean {
+    return draftStepOptions.value[index]?.retainEnvironment === true
+  }
+
+  /**
+   * Toggle the retain declaration on the draft `deployer` step at `index`. It is off by default,
+   * so we store ONLY the opt-in (the mirror of `toggleDraftAutoRecommend`, which stores only the
+   * opt-out); toggling back drops the flag and, if the bag empties, the whole entry.
+   */
+  function toggleDraftRetainEnvironment(index: number) {
+    const on = draftRetainEnvironment(index) ? undefined : true
+    patchStepOption(draftStepOptions, index, 'retainEnvironment', on)
   }
 
   /** The skill picked for the draft `skill` step at `index` (its `stepOptions.skillId`). */
@@ -135,10 +173,7 @@ export function createPipelineStepConfigActions(ctx: PipelinesContext) {
    * bag empties, the whole entry (so it normalizes away like the other options).
    */
   function setDraftSkillId(index: number, skillId: string | undefined) {
-    const next: StepOptions = { ...draftStepOptions.value[index] }
-    if (skillId) next.skillId = skillId
-    else delete next.skillId
-    draftStepOptions.value[index] = Object.keys(next).length ? next : null
+    patchStepOption(draftStepOptions, index, 'skillId', skillId || undefined)
   }
 
   /**
@@ -156,10 +191,7 @@ export function createPipelineStepConfigActions(ctx: PipelinesContext) {
    * shipped prompt persists nothing.
    */
   function setDraftAgentVariantId(index: number, agentVariantId: string | undefined) {
-    const next: StepOptions = { ...draftStepOptions.value[index] }
-    if (agentVariantId) next.agentVariantId = agentVariantId
-    else delete next.agentVariantId
-    draftStepOptions.value[index] = Object.keys(next).length ? next : null
+    patchStepOption(draftStepOptions, index, 'agentVariantId', agentVariantId || undefined)
   }
 
   /**
@@ -188,17 +220,16 @@ export function createPipelineStepConfigActions(ctx: PipelinesContext) {
    * wrong thing.
    */
   function setDraftBinaryOutput(index: number, config: BinaryOutputConfig | undefined) {
-    const next: StepOptions = { ...draftStepOptions.value[index] }
-    if (config?.storageServiceId) {
-      const { storageServiceId, contextServiceIds, generatorIds, modalities } = config
-      next.binaryOutput = {
-        storageServiceId,
-        ...(contextServiceIds?.length ? { contextServiceIds } : {}),
-        ...(generatorIds?.length ? { generatorIds } : {}),
-        ...(modalities?.length ? { modalities } : {}),
-      }
-    } else delete next.binaryOutput
-    draftStepOptions.value[index] = Object.keys(next).length ? next : null
+    const { storageServiceId, contextServiceIds, generatorIds, modalities } = config ?? {}
+    const selection = storageServiceId
+      ? {
+          storageServiceId,
+          ...(contextServiceIds?.length ? { contextServiceIds } : {}),
+          ...(generatorIds?.length ? { generatorIds } : {}),
+          ...(modalities?.length ? { modalities } : {}),
+        }
+      : undefined
+    patchStepOption(draftStepOptions, index, 'binaryOutput', selection)
   }
 
   /**
@@ -216,10 +247,7 @@ export function createPipelineStepConfigActions(ctx: PipelinesContext) {
    * other fields here.
    */
   function setDraftMaxOutputTokens(index: number, maxOutputTokens: number | undefined) {
-    const next: StepOptions = { ...draftStepOptions.value[index] }
-    if (maxOutputTokens != null) next.maxOutputTokens = maxOutputTokens
-    else delete next.maxOutputTokens
-    draftStepOptions.value[index] = Object.keys(next).length ? next : null
+    patchStepOption(draftStepOptions, index, 'maxOutputTokens', maxOutputTokens ?? undefined)
   }
 
   return {
@@ -234,6 +262,8 @@ export function createPipelineStepConfigActions(ctx: PipelinesContext) {
     toggleDraftEnabled,
     draftAutoRecommendEnabled,
     toggleDraftAutoRecommend,
+    draftRetainEnvironment,
+    toggleDraftRetainEnvironment,
     draftSkillId,
     setDraftSkillId,
     draftAgentVariantId,
