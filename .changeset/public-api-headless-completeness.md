@@ -20,7 +20,18 @@ instead of racing a batch of related tasks against one repository), and
 `GET|POST /api/v1/tasks/:taskId/documents` plus `.../documents/detach` (a task's spec routinely
 arrives after the task does). New fields: `autoStartDependents` on the task patch, `dependsOn` and
 `autoStartDependents` on the task projection, `output` and `data` on a run step (an inline-only
-pipeline's deliverable, previously readable only in the app), and `scope` on a run artifact.
+pipeline's deliverable, previously readable only in the app), `truncated` on a run step,
+`linkedElsewhere` on a repo option, and `scope` on a run artifact.
+
+Two rules a consumer of the new fields should read. **`GET /api/v1/tasks/:taskId/events` serves a
+run's step deliverables REDUCED**: an SSE frame carries the whole run, so an oversized `output` is
+clipped to a preview and an oversized `data` withheld, with `truncated: true` on the step saying so.
+The point read (`GET /api/v1/tasks/:taskId/run`) serves both whole and is what to read for a
+deliverable. And **`GET /api/v1/repos` distinguishes three states, not two**: `serviceId` names the
+service a repository backs ON THIS BOARD, and `linkedElsewhere` marks one already backing a service
+homed on another board of the account, which `POST /api/v1/services` refuses
+(`reason: repo_service_homed_elsewhere`) rather than answering with a frame id a workspace-scoped
+key could not then use.
 
 One population change worth reading before upgrading: `GET /api/v1/runs/:runId/artifacts` now
 returns the reference designs attached to the run's TASK alongside the artifacts the run captured,

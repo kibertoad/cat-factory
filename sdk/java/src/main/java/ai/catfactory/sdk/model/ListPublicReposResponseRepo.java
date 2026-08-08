@@ -10,6 +10,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code ListPublicReposResponseRepo} wire model.
  * @param defaultBranch the {@code defaultBranch} field.
+ * @param linkedElsewhere the {@code linkedElsewhere} field.
  * @param monorepo the {@code monorepo} field.
  * @param name the {@code name} field.
  * @param owner the {@code owner} field.
@@ -21,6 +22,8 @@ import org.jspecify.annotations.Nullable;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ListPublicReposResponseRepo(
     @JsonProperty("defaultBranch") String defaultBranch,
+
+    @JsonProperty("linkedElsewhere") Boolean linkedElsewhere,
 
     @JsonProperty("monorepo") Boolean monorepo,
 
@@ -51,6 +54,7 @@ public record ListPublicReposResponseRepo(
      */
     public static final class Builder {
         private @Nullable String defaultBranch;
+        private @Nullable Boolean linkedElsewhere;
         private @Nullable Boolean monorepo;
         private @Nullable String name;
         private @Nullable String owner;
@@ -62,6 +66,12 @@ public record ListPublicReposResponseRepo(
         /** Set {@code defaultBranch}. */
         public Builder defaultBranch(@Nullable String defaultBranch) {
             this.defaultBranch = defaultBranch;
+            return this;
+        }
+
+        /** Set {@code linkedElsewhere}. */
+        public Builder linkedElsewhere(@Nullable Boolean linkedElsewhere) {
+            this.linkedElsewhere = linkedElsewhere;
             return this;
         }
 
@@ -109,7 +119,7 @@ public record ListPublicReposResponseRepo(
 
         /** Build the {@link ListPublicReposResponseRepo}. */
         public ListPublicReposResponseRepo build() {
-            return new ListPublicReposResponseRepo(defaultBranch, monorepo, name, owner, isPrivate, provider, repoId, serviceId);
+            return new ListPublicReposResponseRepo(defaultBranch, linkedElsewhere, monorepo, name, owner, isPrivate, provider, repoId, serviceId);
         }
     }
 }

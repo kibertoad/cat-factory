@@ -880,6 +880,7 @@ export interface ListPublicReposResponse {
 
 export interface ListPublicReposResponseRepo {
   defaultBranch: string
+  linkedElsewhere: boolean
   monorepo: boolean
   name: string
   owner: string
@@ -2155,6 +2156,7 @@ export interface PublicRunStep {
   state: StepState
   /** Always present; `null` when the server has no value for it. */
   subtasks: RunSubtaskCounts | null
+  truncated?: boolean
 }
 
 export interface PublicService {

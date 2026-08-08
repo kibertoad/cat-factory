@@ -464,7 +464,8 @@ file work at all.
 ```http
 GET /api/v1/repos
 { "repos": [ { "repoId": 40123, "provider": "github", "owner": "acme", "name": "payments-api",
-               "defaultBranch": "main", "private": true, "monorepo": false, "serviceId": null } ] }
+               "defaultBranch": "main", "private": true, "monorepo": false,
+               "serviceId": null, "linkedElsewhere": false } ] }
 
 POST /api/v1/services
 { "title": "Payments API", "type": "service", "repo": { "repoId": 40123 } }
@@ -478,17 +479,32 @@ but it is not a finished service.
 
 `GET /api/v1/repos` is the discovery half, and it is what makes the create usable at all: the create
 takes a `repoId`, and until now there was nowhere to learn one. `serviceId` on each row names the
-service that repository already backs, so a caller re-running its provisioning finds what it created
-last time rather than discovering it through a `409`. A monorepo answers `null` there even when its
-subdirectories back services, since it can back more.
+service that repository already backs **on this board**, so a caller re-running its provisioning
+finds what it created last time rather than discovering it through a `409`. A monorepo answers
+`null` there even when its subdirectories back services, since it can back more.
+
+`linkedElsewhere` is the third state the pair cannot express: the repository already backs a service
+homed on ANOTHER board of the account, so the choice is spent and there is no id here that would
+address it (every read on this API is scoped to your key's workspace, so a frame homed elsewhere
+would not appear in `GET /api/v1/services` and `POST /api/v1/services/{serviceId}/tasks` would 404
+on it). Read the flag before treating `serviceId: null` as "available".
 
 Guards, all of them the app's own rather than a second set:
 
 - A whole-repo repository that already backs a service **anywhere in the account** is MOUNTED onto
   this board rather than duplicated, so two boards in one org share the service, its subtree and its
-  task list.
+  task list. Where that mount would answer with a frame homed on another board, this surface
+  REFUSES instead (`422`, `reason: repo_service_homed_elsewhere`): a `serviceId` a workspace-scoped
+  key cannot then list or file work under is worse than a refusal, because it reads as success. Use
+  the board that homes the service, or a key scoped to it.
 - A **monorepo** service must name its `repo.directory`, and a subdirectory another service already
-  claims is refused. Send `repo.monorepo: true` with the create to flag the repository as you go.
+  claims is refused. Send `repo.monorepo: true` with the create to flag the repository as you go. A
+  `repo.directory` on a whole-repo repository is refused (`422`,
+  `reason: directory_requires_monorepo`) rather than stored: dispatch reads a service's directory
+  only while its repository is flagged a monorepo, so storing one would run the agents at the
+  repository root while the created service says otherwise. Omitting `repo.monorepo` leaves the
+  repository's flag as it stands, so it is the STORED flag that decides — and a refused create never
+  changes it.
 - `type` is the repo-backed subset (`service` / `frontend` / `library` / `document`). A `database` or
   `queue` frame documents infrastructure for the agents and runs nothing, so nothing here creates one.
 
@@ -519,7 +535,11 @@ other blockers are also done starts. Without it a dependent is merely refused un
 lands, and something has to notice and start it.
 
 Both writes are **explicit and idempotent**, not toggles: an edge that already exists is returned
-as-is, and one that is not there is a no-op to remove. That is the difference from the app's own
+as-is, and one that is not there is a no-op to remove. A REMOVE also converges on an edge whose
+blocker no longer resolves as a visible task (deleted, or homed on a board this key cannot read):
+the edge is a fact about the task's own row, and refusing to drop it would leave the task gated on a
+blocker that can never reach `done`. An id that is neither a visible task nor a declared edge is
+still `404`, so a transposed pair is answered rather than silently doing nothing. That is the difference from the app's own
 canvas gesture, where "flip it" is exactly the intent. A provisioning integration re-running its own
 setup has to CONVERGE, and a toggle would invert every edge it declared last time, silently, since
 both calls succeed and the graph it asked for is the one it does not get.
@@ -868,17 +888,23 @@ knowable, so they do not gate the start; see
 
 Run `status` distinguishes the states a caller reacts to: `running`, `blocked` (parked on a human;
 go read `/runs/:runId/decisions`), `paused` (spend-gated), `done`, `failed`. Each step reports
-`{ agentKind, state, progress, subtasks, output, data }`, with live subtask counts while a container
-step works.
+`{ agentKind, state, progress, subtasks, output, data, truncated? }`, with live subtask counts while
+a container step works.
 
 **`output` is the step's deliverable** (the agent's final reply), and `data` its structured result
 when its kind produces one; both are `null` for a step that produced none. This is what a board task
 running an INLINE-only pipeline delivers: a research pass, an estimate, a written assessment opens
-no pull request, so before 1.31.0 its result was readable only in the app. It is served whole rather
-than as a sized excerpt, matching `publicJob.result.output`, which carries the same class of content
-for a headless job. The SSE stream re-emits a frame only when the projection CHANGES, so an output
-lands on the wire once per step that produced one, not once per poll. For raw diagnostics, use the
-[`/debug` surface](./debug-api.md) instead, which sizes every body before it serves it.
+no pull request, so before 1.31.0 its result was readable only in the app. **This endpoint serves
+both whole**, matching `publicJob.result.output`, which carries the same class of content for a
+headless job. For raw diagnostics, use the [`/debug` surface](./debug-api.md) instead, which sizes
+every body before it serves it.
+
+**The SSE stream serves them REDUCED, and says so per step.** A frame carries the whole run, so an
+unreduced late frame repeats every output the run has produced so far and the traffic grows with the
+square of the pipeline's length. On the stream an oversized `output` is clipped to a leading preview,
+an oversized `data` is withheld as `null`, and the step carries `truncated: true`. A step whose
+deliverable already fits rides the stream untouched and unflagged, so `truncated` means exactly
+"something was left out of this frame". Read this endpoint for the whole thing.
 
 #### Streaming (SSE)
 
@@ -888,7 +914,7 @@ there is **no heartbeat**, so a quiet run produces a quiet stream. Event names:
 
 | Event      | Meaning                                                                                                                                                      |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `progress` | The run advanced; data is the full job / run projection (same shape as the GET).                                                                             |
+| `progress` | The run advanced; data is the job / run projection (same shape as the GET, with a run's step deliverables reduced — see above).                              |
 | `decision` | The run just **parked** on a human decision. Answer via `/runs/:runId/decisions`; the stream stays open, and a later park after a resume is announced again. |
 | `done`     | Terminal success. Stream closes.                                                                                                                             |
 | `error`    | Terminal failure. Stream closes.                                                                                                                             |
@@ -1249,10 +1275,11 @@ the default branch is missing exactly the requirements the tester just ruled on.
 
 The **artifact** rows are `{ artifactId, kind, scope, view, contentType, byteSize, hash, createdAt }`.
 `kind` is `screenshot` (machine-captured during the run) or `reference` (the image a human uploaded
-for it to be judged against); `view` pairs the two. The list is deliberately unpaged: the capture
-path caps how many artifacts one run may store and a task's uploads are a human-sized set, so the
-response size is bounded before the request, and `byteSize` lets a caller decide whether to fetch
-the bytes at all.
+for it to be judged against); `view` pairs the two. The list is deliberately unpaged, and both of
+its halves carry a standing row cap for that to hold: the capture path bounds how many artifacts one
+run may store, and the upload path bounds how many one task may hold (a `429` once it is full, never
+an eviction of a design somebody already attached). So the response size is bounded before the
+request, and `byteSize` lets a caller decide whether to fetch the bytes at all.
 
 **`scope` says which anchor a row came from**, and the list carries BOTH: `run` for what this run
 captured, `task` for what is attached to its task and outlives any single run of it. Until 1.31.0

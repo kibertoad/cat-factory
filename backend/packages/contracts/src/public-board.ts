@@ -116,15 +116,30 @@ export const publicRepoSchema = v.object({
   /** Whether the repo is flagged as hosting several services (see `repo.monorepo`). */
   monorepo: v.boolean(),
   /**
-   * The service this repository already backs, or null when nothing does.
+   * The service this repository already backs ON THIS BOARD, or null.
    *
    * Present because a whole-repo repository backs at most ONE service, so a caller choosing one to
    * create against needs to know which choices are already spent, and, more usefully, because a
    * caller re-running its provisioning finds the service it created last time here rather than
    * discovering it through a `409`. A monorepo answers null even when its subdirectories back
    * services, since it can back more.
+   *
+   * Null and {@link linkedElsewhere} together are the honest answer when the service is homed on
+   * another board of the account: read the flag before treating null as "available".
    */
   serviceId: v.nullable(v.string()),
+  /**
+   * True when this repository already backs a whole-repo service homed on ANOTHER board of the
+   * account, so `POST /api/v1/services` will refuse it (`reason: repo_service_homed_elsewhere`).
+   *
+   * A service is account-owned and a board can MOUNT one homed elsewhere, but every read on this
+   * API is scoped to the calling key's own workspace, so a frame homed on another board has no id
+   * this surface could hand back: it would not appear in `GET /api/v1/services` and
+   * `POST /api/v1/services/{serviceId}/tasks` would 404 on it. Hence a flag rather than a second
+   * id field — this states that the choice is spent without naming an address that does not work
+   * here. Use the board that homes the service, or a key scoped to it.
+   */
+  linkedElsewhere: v.boolean(),
 })
 export type PublicRepo = v.InferOutput<typeof publicRepoSchema>
 

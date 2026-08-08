@@ -12,7 +12,7 @@ import {
 } from '@cat-factory/contracts'
 import type { Block, PublicTask, SourceDocument } from '@cat-factory/contracts'
 import type { PublicRepoOption } from '@cat-factory/orchestration'
-import { NotFoundError, ValidationError } from '@cat-factory/kernel'
+import { NotFoundError } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
@@ -47,7 +47,7 @@ import { authorizeOrThrow } from './publicApiAuth.js'
 
 /** Project one repo option onto the wire, dropping the installation/sync bookkeeping. */
 function toPublicRepo(option: PublicRepoOption): PublicRepo {
-  const { repo, serviceBlockId } = option
+  const { repo, serviceBlockId, linkedElsewhere } = option
   return {
     repoId: repo.githubId,
     // Absent on rows written before the column existed, which the platform reads as `github`
@@ -61,6 +61,7 @@ function toPublicRepo(option: PublicRepoOption): PublicRepo {
     private: repo.private,
     monorepo: repo.isMonorepo === true,
     serviceId: serviceBlockId,
+    linkedElsewhere,
   }
 }
 
@@ -152,23 +153,25 @@ async function createService(
       type: authored.type ?? 'service',
     })
   }
-  // A monorepo service is pinned to a subdirectory and a whole-repo service must NOT name one:
-  // stated here rather than in the schema because which applies depends on the repo, not on the
-  // request. The board service re-applies the first half against the flag as it stands after this
-  // call's own `monorepo` write, which is the value that matters; this is the half it cannot make,
-  // since a directory on a whole-repo service would be silently ignored rather than refused.
-  if (repo.directory && repo.monorepo === false) {
-    throw new ValidationError(
-      'A whole-repo service cannot name a directory; set repo.monorepo to true to pin a subdirectory',
-      { reason: 'directory_requires_monorepo' },
-    )
-  }
-  return container.boardService.addServiceFromRepo(workspaceId, {
-    ...authored,
-    repoGithubId: repo.repoId,
-    ...(repo.directory ? { directory: repo.directory } : {}),
-    ...(repo.monorepo === undefined ? {} : { isMonorepo: repo.monorepo }),
-  })
+  // Both halves of the monorepo rule (a monorepo service names a subdirectory, a whole-repo one
+  // must not) belong to the board service, which is the only layer that knows the flag as it
+  // stands AFTER this request's own `monorepo` write. Restating either here would be a second
+  // rule reading a value it cannot see: an omitted `monorepo` leaves the stored flag alone, so
+  // whether a `directory` is legal is not a fact about the request at all. Both refusals arrive
+  // as a `ValidationError` carrying the `reason` a caller branches on.
+  //
+  // `refuse` is what makes this surface's own reads honest about the answer: see
+  // `SharedServicePolicy`.
+  return container.boardService.addServiceFromRepo(
+    workspaceId,
+    {
+      ...authored,
+      repoGithubId: repo.repoId,
+      ...(repo.directory ? { directory: repo.directory } : {}),
+      ...(repo.monorepo === undefined ? {} : { isMonorepo: repo.monorepo }),
+    },
+    'refuse',
+  )
 }
 
 function registerDependencyRoutes(app: Hono<AppEnv>): void {
@@ -191,16 +194,24 @@ function registerDependencyRoutes(app: Hono<AppEnv>): void {
 }
 
 /**
- * The body both dependency routes share: resolve BOTH ends as board-visible tasks of this
- * workspace, then set the edge.
+ * The body both dependency routes share: resolve the task, admit the blocker, then set the edge.
  *
- * Resolving the blocker too is the point of the shared helper. `setDependency` resolves it as a
- * BLOCK, which on the board legitimately includes a frame, a module, or a task homed on another
- * workspace that this board merely mounts, none of which this key addresses through
- * `/api/v1/tasks/:taskId`. Without this check a caller could name any block id it happened to
- * learn and have the refusal arrive as "only tasks can have dependency edges", which describes the
- * board's rule rather than the caller's mistake, or worse succeed against a shared task the key
- * cannot read back.
+ * Resolving the blocker is the point of the shared helper, and it is asymmetric on purpose.
+ *
+ * On an ADD, `setDependency` would resolve it as a BLOCK, which on the board legitimately includes
+ * a frame, a module, or a task homed on another workspace that this board merely mounts, none of
+ * which this key addresses through `/api/v1/tasks/:taskId`. Without this check a caller could name
+ * any block id it happened to learn and have the refusal arrive as "only tasks can have dependency
+ * edges", which describes the board's rule rather than the caller's mistake, or worse succeed
+ * against a shared task the key cannot read back.
+ *
+ * On a REMOVE, an edge the task ALREADY CARRIES is removable whether or not its blocker still
+ * resolves as a visible task. The blocker can be deleted, archived under a removed service, or a
+ * shared task this board only mounts, and every one of those leaves `GET /api/v1/tasks/:taskId`
+ * advertising the edge in `dependsOn` with nothing able to drop it: the same requirement-to-
+ * converge that made these routes explicit rather than a toggle, one level down. A remove naming
+ * an id that is neither a visible task nor a declared edge still 404s, so a transposed pair is
+ * still answered with the field that was wrong rather than with a success that did nothing.
  */
 async function writeDependency<E extends AppEnv>(
   c: Context<E>,
@@ -213,8 +224,8 @@ async function writeDependency<E extends AppEnv>(
   const found = await requireTask(c, workspaceId, taskId)
   // The blocker's own 404 names the field that was wrong, so a caller that transposed two ids is
   // not left comparing two identical refusals.
-  const blocker = await boardService.getServiceTask(workspaceId, dependsOnTaskId)
-  if (!blocker) {
+  const declared = !linked && (found.block.dependsOn ?? []).includes(dependsOnTaskId)
+  if (!declared && !(await boardService.getServiceTask(workspaceId, dependsOnTaskId))) {
     throw new NotFoundError('Task', dependsOnTaskId, { reason: 'depends_on_task_not_found' })
   }
   const block = await boardService.setDependency(workspaceId, taskId, dependsOnTaskId, linked)

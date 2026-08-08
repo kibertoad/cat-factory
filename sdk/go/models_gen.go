@@ -1574,13 +1574,14 @@ type ListPublicReposResponse struct {
 
 // ListPublicReposResponseRepo is the `ListPublicReposResponseRepo` wire model.
 type ListPublicReposResponseRepo struct {
-	DefaultBranch string  `json:"defaultBranch"`
-	Monorepo      bool    `json:"monorepo"`
-	Name          string  `json:"name"`
-	Owner         string  `json:"owner"`
-	Private       bool    `json:"private"`
-	Provider      string  `json:"provider"`
-	RepoID        float64 `json:"repoId"`
+	DefaultBranch   string  `json:"defaultBranch"`
+	LinkedElsewhere bool    `json:"linkedElsewhere"`
+	Monorepo        bool    `json:"monorepo"`
+	Name            string  `json:"name"`
+	Owner           string  `json:"owner"`
+	Private         bool    `json:"private"`
+	Provider        string  `json:"provider"`
+	RepoID          float64 `json:"repoId"`
 	// ServiceID always present; nil when the server has no value for it.
 	ServiceID *string `json:"serviceId"`
 }
@@ -3922,6 +3923,8 @@ type PublicRunStep struct {
 	State    StepState `json:"state"`
 	// Subtasks always present; nil when the server has no value for it.
 	Subtasks *RunSubtaskCounts `json:"subtasks"`
+	// Truncated may be absent entirely.
+	Truncated *bool `json:"truncated,omitempty"`
 }
 
 // PublicService is the `PublicService` wire model.

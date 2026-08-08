@@ -4,6 +4,7 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
@@ -15,6 +16,7 @@ import org.jspecify.annotations.Nullable;
  * @param progress the {@code progress} field.
  * @param state the {@code state} field.
  * @param subtasks Always present; {@code null} when the server has no value for it.
+ * @param truncated May be absent entirely.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicRunStep(
@@ -31,7 +33,10 @@ public record PublicRunStep(
     @JsonProperty("state") StepState state,
 
     /** Always present; {@code null} when the server has no value for it. */
-    @JsonProperty("subtasks") @Nullable RunSubtaskCounts subtasks
+    @JsonProperty("subtasks") @Nullable RunSubtaskCounts subtasks,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("truncated") @Nullable Boolean truncated
 ) {
 
     /** A new builder for {@link PublicRunStep}. */
@@ -52,6 +57,7 @@ public record PublicRunStep(
         private @Nullable Double progress;
         private @Nullable StepState state;
         private @Nullable RunSubtaskCounts subtasks;
+        private @Nullable Boolean truncated;
 
         /** Set {@code agentKind}. */
         public Builder agentKind(@Nullable String agentKind) {
@@ -89,9 +95,15 @@ public record PublicRunStep(
             return this;
         }
 
+        /** Set {@code truncated}. */
+        public Builder truncated(@Nullable Boolean truncated) {
+            this.truncated = truncated;
+            return this;
+        }
+
         /** Build the {@link PublicRunStep}. */
         public PublicRunStep build() {
-            return new PublicRunStep(agentKind, data, output, progress, state, subtasks);
+            return new PublicRunStep(agentKind, data, output, progress, state, subtasks, truncated);
         }
     }
 }

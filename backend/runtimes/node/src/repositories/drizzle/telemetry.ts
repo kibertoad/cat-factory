@@ -1179,6 +1179,16 @@ export class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadat
     return rows[0]?.n ?? 0
   }
 
+  async countByBlock(workspaceId: string, blockId: string): Promise<number> {
+    const rows = await this.db
+      .select({ n: count() })
+      .from(binaryArtifacts)
+      .where(
+        and(eq(binaryArtifacts.workspace_id, workspaceId), eq(binaryArtifacts.block_id, blockId)),
+      )
+    return rows[0]?.n ?? 0
+  }
+
   async listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]> {
     const rows = await this.db
       .select()

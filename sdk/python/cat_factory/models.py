@@ -3596,6 +3596,7 @@ class ListPublicReposResponseRepo:
     """`ListPublicReposResponseRepo`, as carried on the wire."""
 
     default_branch: str
+    linked_elsewhere: bool
     monorepo: bool
     name: str
     owner: str
@@ -3613,9 +3614,10 @@ class ListPublicReposResponseRepo:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicReposResponseRepo":
         """Decode a `ListPublicReposResponseRepo` from its JSON object."""
-        known = {"defaultBranch", "monorepo", "name", "owner", "private", "provider", "repoId", "serviceId"}
+        known = {"defaultBranch", "linkedElsewhere", "monorepo", "name", "owner", "private", "provider", "repoId", "serviceId"}
         return cls(
             default_branch=data.get("defaultBranch"),
+            linked_elsewhere=data.get("linkedElsewhere"),
             monorepo=data.get("monorepo"),
             name=data.get("name"),
             owner=data.get("owner"),
@@ -3630,6 +3632,7 @@ class ListPublicReposResponseRepo:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
         out["defaultBranch"] = self.default_branch
+        out["linkedElsewhere"] = self.linked_elsewhere
         out["monorepo"] = self.monorepo
         out["name"] = self.name
         out["owner"] = self.owner
@@ -8940,6 +8943,8 @@ class PublicRunStep:
     output: str | None = None
     #: Always present; ``None`` when the server has no value for it.
     subtasks: RunSubtaskCounts | None = None
+    #: May be absent entirely.
+    truncated: bool | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -8949,7 +8954,7 @@ class PublicRunStep:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicRunStep":
         """Decode a `PublicRunStep` from its JSON object."""
-        known = {"agentKind", "progress", "state", "data", "output", "subtasks"}
+        known = {"agentKind", "progress", "state", "data", "output", "subtasks", "truncated"}
         return cls(
             agent_kind=data.get("agentKind"),
             progress=data.get("progress"),
@@ -8957,6 +8962,7 @@ class PublicRunStep:
             data=data.get("data"),
             output=data.get("output"),
             subtasks=None if data.get("subtasks") is None else RunSubtaskCounts.from_dict(data.get("subtasks")),
+            truncated=data.get("truncated"),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -8969,6 +8975,8 @@ class PublicRunStep:
         out["data"] = self.data
         out["output"] = self.output
         out["subtasks"] = _encode(self.subtasks)
+        if self.truncated is not None:
+            out["truncated"] = self.truncated
         return out
 
 

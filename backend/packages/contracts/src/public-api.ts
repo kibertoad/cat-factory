@@ -554,12 +554,14 @@ export const publicRunStepSchema = v.object({
    * the pipeline opened. A pipeline that opens none (a research pass, an estimate, a written
    * assessment) produced a result readable only in the app.
    *
-   * Served WHOLE rather than as a sized excerpt, which is deliberate: `publicJobResult.output`
-   * already serves the same class of content whole, and two surfaces that disagree about the same
-   * fact are worse than a large response. The size is a step's own output budget, not a log tail
-   * (`GET /api/v1/debug/runs/:runId` is where raw diagnostics live, and it reports `outputChars`
-   * for exactly this reason). The SSE stream re-emits a frame only when the projection CHANGES, so
-   * an output lands on the wire once per step that produced one, not once per poll.
+   * Served WHOLE by the POINT READ (`GET /api/v1/tasks/{taskId}/run`), which is deliberate:
+   * `publicJobResult.output` already serves the same class of content whole, and two surfaces that
+   * disagree about the same fact are worse than a large response. The size is a step's own output
+   * budget, not a log tail (`GET /api/v1/debug/runs/:runId` is where raw diagnostics live, and it
+   * reports `outputChars` for exactly this reason).
+   *
+   * The SSE stream is the one place it is not, and {@link publicRunStepSchema} `truncated` says so
+   * per step. See that field for why.
    */
   output: v.nullable(v.string()),
   /**
@@ -573,6 +575,23 @@ export const publicRunStepSchema = v.object({
    * result at all, which is the normal state for an agent whose deliverable is its prose.
    */
   data: v.nullable(v.unknown()),
+  /**
+   * True when THIS PROJECTION reduced the step's deliverable for size: {@link output} is clipped
+   * to a leading preview and {@link data} is withheld as null. Absent/false ⇒ both are whole.
+   *
+   * Set only on the SSE stream (`GET /api/v1/tasks/{taskId}/events`), never on a point read. The
+   * stream re-sends the WHOLE run on every change, so carrying every step's output in every frame
+   * is quadratic in the run's own length: a late frame repeats every output produced so far, and a
+   * long pipeline turns a progress channel into a repeated bulk transfer. The platform already
+   * settles this trade the same way for the run's own `detail` JSON, which is re-serialized on
+   * every step-progress write and clips a recorded output with a `truncated` flag for it.
+   *
+   * A caller that needs the whole deliverable reads `GET /api/v1/tasks/{taskId}/run`, which serves
+   * it and every step's `data` untouched. The flag exists so a clipped preview can never be
+   * mistaken for the output itself: an absent tail and a step that wrote nothing more are
+   * different facts, and only the flag distinguishes them.
+   */
+  truncated: v.optional(v.boolean()),
 })
 export type PublicRunStep = v.InferOutput<typeof publicRunStepSchema>
 

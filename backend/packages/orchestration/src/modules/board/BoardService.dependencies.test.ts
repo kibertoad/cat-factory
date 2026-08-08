@@ -82,6 +82,24 @@ describe('BoardService — explicit dependency edges', () => {
     expect((await service.toggleDependency(WS, 't1', 't2')).dependsOn).toEqual([])
   })
 
+  it('drops an edge whose BLOCKER no longer resolves, so a task cannot be gated forever', async () => {
+    // `pruneDanglingEdges` runs against the deleted block's HOME workspace, so a blocker deleted on
+    // the board that homes it leaves the edge behind on a task homed elsewhere. Resolving the
+    // source on the remove path made that edge permanently unremovable — and the engine's start
+    // gate waits for a blocker that can never reach `done`, so the task never runs again.
+    const { service, writes } = build(seed())
+    await service.setDependency(WS, 't1', 't2', true)
+    const { service: afterDelete } = build([
+      block('f1', { level: 'frame', parentId: null }),
+      block('t1', { dependsOn: ['t_gone'] }),
+    ])
+    expect((await afterDelete.setDependency(WS, 't1', 't_gone', false)).dependsOn).toEqual([])
+    // The ADD keeps requiring it: an edge may only point at a resolvable task, and that rule is
+    // about what an edge points AT rather than about the target's own row.
+    await expect(service.setDependency(WS, 't1', 't_gone', true)).rejects.toThrow()
+    expect(writes).toEqual([{ id: 't1', dependsOn: ['t2'] }])
+  })
+
   it('refuses a cycle, an edge onto a non-task, and a self-edge, whichever form asks', async () => {
     // These guards belong to the write path both forms share, so both must inherit them: a cycle
     // would wedge the engine's start gate and the auto-start against each other forever, and an

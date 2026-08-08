@@ -24,12 +24,24 @@ import { serviceOf } from './board.logic.js'
 export interface PublicRepoOption {
   repo: GitHubRepo
   /**
-   * The frame block id of the WHOLE-REPO service this repository already backs, or null.
+   * The frame block id of the WHOLE-REPO service this repository already backs ON THIS BOARD, or
+   * null.
    *
    * Null for a monorepo even when its subdirectories back services, because a monorepo can back
    * more: the field answers "is this choice already spent", and for a monorepo it never is.
    */
   serviceBlockId: string | null
+  /**
+   * True when the repository already backs a whole-repo service homed on ANOTHER board of the
+   * account, so nothing on a workspace-scoped surface can name it.
+   *
+   * The third state the pair `serviceBlockId: string` / `serviceBlockId: null` cannot express, and
+   * the one a caller most needs: the choice IS spent (the create refuses it, since the frame it
+   * would answer with is one this key could neither list nor file a task under), but there is no
+   * id here that would address the service. Reporting it as a plain `null` said the opposite of
+   * both facts, and steered a caller straight into the refusal.
+   */
+  linkedElsewhere: boolean
 }
 
 export interface PublicBoardReadsDeps {
@@ -38,6 +50,8 @@ export interface PublicBoardReadsDeps {
   repoProjectionRepository?: RepoProjectionRepository
   /** The account-owned services frames map onto; absent ⇒ nothing can report a repo's service. */
   serviceRepository?: ServiceRepository
+  /** The workspace's owning account, for the account-scoped service dedupe the create applies. */
+  accountOf(workspaceId: string): Promise<string | null | undefined>
   /** Throws when the workspace does not exist; bound from the owning service. */
   requireWorkspace(workspaceId: string): Promise<unknown>
   /** The normal task-creation path, reused verbatim so placement + task-type validation applies. */
@@ -69,9 +83,15 @@ export class PublicBoardReads {
    * deployment could not perform without a browser was also the one it could not even DESCRIBE.
    *
    * Three reads, all batched, never per-repo: the projection list, the workspace's frames, and ONE
-   * `listByFrameBlocks` for their services. The pairing is then an in-memory index: a `getByRepo`
+   * account-scoped service list. The pairing is then an in-memory index: a `getByRepo`
    * per repository would be the N+1 this codebase bans, and on a workspace with a hundred
    * repositories it is a hundred queries to render one picker.
+   *
+   * The service read is ACCOUNT-scoped rather than scoped to this board's frames, because that is
+   * the population the CREATE dedupes against (`findAccountWholeRepoService`). Asking only about
+   * this board's own frames answers "no service backs this repository" for one the create will
+   * refuse, and the two have to agree: a discovery read whose whole job is to say what a caller
+   * may ask for cannot be reading a narrower table than the endpoint that decides.
    *
    * An unwired VCS integration answers an EMPTY list rather than throwing: this is a discovery
    * read, and "you have connected no repositories" and "this deployment has no VCS integration" are
@@ -87,7 +107,9 @@ export class PublicBoardReads {
       (block) => block.level === 'frame' && !block.internal && !block.archived,
     )
     const services = this.deps.serviceRepository
-      ? await this.deps.serviceRepository.listByFrameBlocks(frames.map((frame) => frame.id))
+      ? await this.deps.serviceRepository.listByAccount(
+          (await this.deps.accountOf(workspaceId)) ?? null,
+        )
       : []
     // Whole-repo services only (no `directory`), which is exactly what `serviceBlockId` claims.
     const byRepo = new Map(
@@ -98,11 +120,14 @@ export class PublicBoardReads {
     const visibleFrames = new Set(frames.map((frame) => frame.id))
     return repos.map((repo) => {
       const frameBlockId = byRepo.get(repo.githubId)
+      // A service homed on another board (one this board merely mounts, or does not mount at all)
+      // is not a frame of THIS workspace, so its id is withheld: it would name a block this key
+      // cannot read. `linkedElsewhere` is what stops that withholding reading as "available".
+      const homedHere = frameBlockId !== undefined && visibleFrames.has(frameBlockId)
       return {
         repo,
-        // A service homed on another board (a mounted shared service) is not a frame of THIS
-        // workspace, so it is not reported here: the id would name a block this key cannot read.
-        serviceBlockId: frameBlockId && visibleFrames.has(frameBlockId) ? frameBlockId : null,
+        serviceBlockId: homedHere ? frameBlockId : null,
+        linkedElsewhere: frameBlockId !== undefined && !homedHere,
       }
     })
   }

@@ -18,6 +18,7 @@ const EMPTY_BINARY_ARTIFACT_STORE: BinaryArtifactStore = {
   listByExecution: () => Promise.resolve([]),
   countByExecution: () => Promise.resolve(0),
   listByBlock: () => Promise.resolve([]),
+  countByBlock: () => Promise.resolve(0),
   listByDocument: () => Promise.resolve([]),
   listByDocuments: () => Promise.resolve([]),
   pruneByDocument: () => Promise.resolve(0),
@@ -82,6 +83,12 @@ export function memoryBinaryArtifactStore(): BinaryArtifactStore & {
         [...rows.values()]
           .filter((r) => r.record.workspaceId === workspaceId && r.record.blockId === blockId)
           .map((r) => r.record),
+      ),
+    countByBlock: (workspaceId, blockId) =>
+      Promise.resolve(
+        [...rows.values()].filter(
+          (r) => r.record.workspaceId === workspaceId && r.record.blockId === blockId,
+        ).length,
       ),
     listByDocument: (workspaceId, document) =>
       Promise.resolve(

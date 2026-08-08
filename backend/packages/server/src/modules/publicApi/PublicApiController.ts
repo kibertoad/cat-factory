@@ -59,7 +59,7 @@ import {
   PUBLIC_JOB_CANCEL_PATH,
   PUBLIC_TASK_STOP_PATH,
 } from './publicApiAdmission.js'
-import { createParkAnnouncer, isParked } from './publicApiStream.js'
+import { createParkAnnouncer, isParked, reduceRunForStream } from './publicApiStream.js'
 import { viewRunIdentity } from './runIdentityVisibility.js'
 import {
   decodeCursor,
@@ -1165,7 +1165,11 @@ function registerTaskRunStreamRoute(app: Hono<AppEnv>): void {
         // the block (not the execution) carries it.
         const block = await container.boardService.getServiceTask(auth.workspaceId, taskId)
         if (!execution || !block) break
-        const runView = toPublicRun(execution, block.block, auth.externalIdentity)
+        // Reduced for the wire: the frame carries the whole run, so an oversized step deliverable
+        // would be re-sent on every change for the rest of the run. See `reduceRunForStream`.
+        const runView = reduceRunForStream(
+          toPublicRun(execution, block.block, auth.externalIdentity),
+        )
         const data = JSON.stringify(runView)
         if (data !== last) {
           await stream.writeSSE({

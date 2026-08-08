@@ -147,6 +147,12 @@ export function defineBinaryArtifactsSuite(
       // upload path the visual-confirmation gate reads).
       const byBlock = await store.listByBlock(ws, blk)
       expect(byBlock.map((r) => r.id)).toEqual([rec.id])
+      // countByBlock (the per-block upload-cap precheck) agrees with the list and scopes by block,
+      // the same pairing `countByExecution` owes the run half. A count that disagreed with the list
+      // would let the cap admit a row the reconcile then rolls back, or refuse one there is room
+      // for — and only a cross-runtime assertion catches a WHERE clause that drifted on one of them.
+      expect(await store.countByBlock(ws, blk)).toBe(byBlock.length)
+      expect(await store.countByBlock(ws, 'blk_other')).toBe(0)
     })
 
     it('keys a render to its DOCUMENT and reclaims the whole set on re-import', async () => {

@@ -4361,6 +4361,9 @@
                       "type": "null"
                     }
                   ]
+                },
+                "truncated": {
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -9743,6 +9746,9 @@
                           "defaultBranch": {
                             "type": "string"
                           },
+                          "linkedElsewhere": {
+                            "type": "boolean"
+                          },
                           "monorepo": {
                             "type": "boolean"
                           },
@@ -9780,7 +9786,8 @@
                           "defaultBranch",
                           "private",
                           "monorepo",
-                          "serviceId"
+                          "serviceId",
+                          "linkedElsewhere"
                         ],
                         "type": "object"
                       },

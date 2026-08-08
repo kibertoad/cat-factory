@@ -153,8 +153,12 @@ a scope change to weigh on its own.
 **Whenever a mechanism is enumerated by hand, ask what the enumeration is derived FROM.** The scope
 rule had been written against the two park mechanisms anyone would think of (a flag on a step, a
 kind that blocks) and missed the third (a gate that never stops polling), which is exactly the one
-carried by `pl_full`, the preset most board tasks run. `HUMAN_WAIT_GATE_KINDS` and
-`BUILTIN_GATE_KINDS` now carry drift guards deriving their expectation from the gate registry.
+carried by `pl_full`, the preset most board tasks run. The first answer was a pair of hand-kept
+constants (`HUMAN_WAIT_GATE_KINDS`, `BUILTIN_GATE_KINDS`) with drift guards deriving their
+expectation from the gate registry; [ADR 0050](./0050-public-api-headless-completeness.md) then
+deleted both, moving `pollExhaustion` onto the registration itself so admission reads the registry
+directly and a deployment's own gate is seen for free. The lesson outlived the mechanism: a guard
+over a hand-kept list is a second-best to not keeping one.
 
 **Two SDK-generation rules bite the CONTRACT, not the emitter.** A request-body field may not carry
 a valibot `default`: the emitters read it as "always present" outbound, so four published clients

@@ -59,9 +59,11 @@ describe('BoardService — repository options for service creation', () => {
             repoProjectionRepository: {
               list: async (ws: string) => (ws === WS ? (options.repos ?? []) : []),
             },
+            // The ACCOUNT-scoped read the create dedupes against, which is what this read must
+            // agree with: a service homed on another board of the account is in it, and is
+            // precisely the case `serviceBlockId` cannot name.
             serviceRepository: {
-              listByFrameBlocks: async (ids: string[]) =>
-                (options.services ?? []).filter((s) => ids.includes(s.frameBlockId)),
+              listByAccount: async () => options.services ?? [],
             },
           }),
     } as unknown as BoardServiceDependencies
@@ -93,15 +95,29 @@ describe('BoardService — repository options for service creation', () => {
     expect((await service.listRepoOptions(WS))[0]?.serviceBlockId).toBeNull()
   })
 
-  it('does not name a frame this board cannot see', async () => {
-    // A service homed on ANOTHER board (one this workspace merely mounts) is not a frame of this
-    // workspace, so naming it would hand a key an id it cannot read back through `/api/v1/services`.
+  it('does not name a frame this board cannot see, and says the choice is spent anyway', async () => {
+    // A service homed on ANOTHER board (one this workspace merely mounts, or does not mount at
+    // all) is not a frame of this workspace, so naming it would hand a key an id it cannot read
+    // back through `/api/v1/services`. Reporting a bare null instead said the opposite of the
+    // other half of the truth — the create REFUSES this repo — and steered a caller into it, so
+    // both facts are asserted together.
     const service = build({
       repos: [repo(1)],
       blocks: [frame('f1')],
       services: [{ frameBlockId: 'f_elsewhere', repoGithubId: 1, directory: null }],
     })
-    expect((await service.listRepoOptions(WS))[0]?.serviceBlockId).toBeNull()
+    const [option] = await service.listRepoOptions(WS)
+    expect(option?.serviceBlockId).toBeNull()
+    expect(option?.linkedElsewhere).toBe(true)
+  })
+
+  it('reports an unbacked repository as available rather than merely unnamed', async () => {
+    // The counterpart of the case above: both answer `serviceBlockId: null`, and only the flag
+    // separates "nothing backs this" from "something does, elsewhere".
+    const service = build({ repos: [repo(1)], blocks: [frame('f1')], services: [] })
+    const [option] = await service.listRepoOptions(WS)
+    expect(option?.serviceBlockId).toBeNull()
+    expect(option?.linkedElsewhere).toBe(false)
   })
 
   it('ignores archived and internal frames when resolving what backs a repository', async () => {
@@ -113,7 +129,11 @@ describe('BoardService — repository options for service creation', () => {
         { frameBlockId: 'f2', repoGithubId: 1, directory: null },
       ],
     })
-    expect((await service.listRepoOptions(WS))[0]?.serviceBlockId).toBeNull()
+    const [option] = await service.listRepoOptions(WS)
+    expect(option?.serviceBlockId).toBeNull()
+    // A frame hidden from this board is unaddressable here for the same reason a foreign-homed one
+    // is, so it reads the same way rather than as an available choice.
+    expect(option?.linkedElsewhere).toBe(true)
   })
 
   it('answers EMPTY rather than throwing when no VCS integration is wired', async () => {

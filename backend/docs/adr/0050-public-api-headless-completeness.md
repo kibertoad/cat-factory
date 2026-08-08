@@ -87,7 +87,7 @@ account-wide dedupe that MOUNTS a shared service rather than duplicating it. `GE
 reports each repository's existing service, so a caller re-running its provisioning finds what it
 created last time rather than discovering it through a `409`.
 
-Two boundaries decided here rather than assumed:
+Four boundaries decided here rather than assumed:
 
 - **No board coordinates.** Positions, sizes, reparenting, archive/restore and the module/epic
   vocabulary are ergonomics for a human looking at a canvas. `addFrameSchema.position` became
@@ -98,6 +98,30 @@ Two boundaries decided here rather than assumed:
   run anything (`resolveRepoTarget` throws by design, deliberately with no first-repo fallback), so
   a slice that created frames and could not link them would have shipped output the surface that
   made it cannot use. Creating an unlinked frame stays reachable as an intermediate state.
+- **The shared-service mount is REFUSED here, and the discovery read says so in advance.** The
+  account-wide dedupe answers with the service's frame block, which may be homed on another board.
+  The app can render that (it composes mounts into the board it draws); this surface cannot address
+  it at all, because every read on it is a workspace-scoped repository read, so a 201 naming that
+  frame hands back a `serviceId` `GET /api/v1/services` will not list and
+  `POST /api/v1/services/{id}/tasks` will 404 on. Answering with an unusable id is worse than
+  refusing, because it reads as success. So `addServiceFromRepo` takes a `SharedServicePolicy`
+  (`mount` for the app, `refuse` here) and the refusal carries
+  `reason: repo_service_homed_elsewhere`. `GET /api/v1/repos` gained `linkedElsewhere` to match:
+  `serviceId: null` alone said the choice was AVAILABLE for a repository the create will refuse,
+  which steered a caller straight into it. Widening the public reads to resolve through mounts was
+  the alternative and was rejected: it would put a second access semantic behind a surface whose
+  isolation property is exactly that a key sees only blocks homed in its own workspace.
+- **The monorepo rule is enforced in ONE place, against the flag as it will stand.** Both halves (a
+  monorepo service names a subdirectory; a whole-repo service must not) live in the board service,
+  which is the only layer that can see the flag after the request's own `monorepo` write. Restating
+  either in the controller reads a value it does not have: an omitted `monorepo` leaves the stored
+  flag alone, so whether a `directory` is legal is not a fact about the request. The second half was
+  the silent one — dispatch reads a service's directory only while the repository is flagged a
+  monorepo, so a directory stored against a whole-repo service is ignored at dispatch and the agents
+  run at the repository root while the caller and the created service both say otherwise. And
+  because the flag is repository-WIDE, it is written only once every refusal has had its chance: a
+  422 that had already flipped it would move the working directory of every service that repository
+  already backs.
 
 ### 3. Task dependencies, declared rather than toggled
 
@@ -122,6 +146,16 @@ purpose (a reference outlives any single run), so folding them silently would ma
 3 screenshots" unreadable off a list of 5. A row satisfying both anchors is emitted once, as `run`,
 so no count taken off the list double-reports it.
 
+The list stays UNPAGED, and folding in the task half is what made the second half of that claim
+owe an enforcement. "Bounded by construction, size computable before the request" had rested on the
+capture path's per-run row cap; the human upload path had per-file byte ceilings and no row cap at
+all, so the block half quietly withdrew the guarantee the contract rests on. Both halves now carry a
+standing row cap through one shared check (`artifactSetCap`), needing a `countByBlock` beside the
+existing `countByExecution` on the kernel port, mirrored D1 ⇄ Drizzle with a conformance assertion
+that the count agrees with the list. The block cap REFUSES the newest upload rather than evicting an
+older row: the uploader is present and can be told, and nothing here could know which of their
+existing designs is the one to lose.
+
 ### 5. Documents after create: list, attach, detach
 
 `GET|POST /api/v1/tasks/:taskId/documents` and `POST .../documents/detach`, taking the same two
@@ -141,11 +175,24 @@ block to roll back on this path (the task predates the request), so the ordering
 
 ### 6. Step output on the run read
 
-`publicRunStep` gained `output` and `data`. Served WHOLE rather than as a sized excerpt, because
-`publicJobResult.output` already serves the same class of content whole and two surfaces disagreeing
-about one fact is worse than a large response; raw diagnostics stay on `/api/v1/debug/*`, which
-sizes every body before it serves it. The SSE stream re-emits only on CHANGE, so an output lands on
-the wire once per step that produced one.
+`publicRunStep` gained `output` and `data`. The POINT READ serves them WHOLE rather than as a sized
+excerpt, because `publicJobResult.output` already serves the same class of content whole and two
+surfaces disagreeing about one fact is worse than a large response; raw diagnostics stay on
+`/api/v1/debug/*`, which sizes every body before it serves it.
+
+The SSE stream is the exception, and the reason is structural rather than a matter of taste. A frame
+carries the WHOLE run, and re-emitting only on change bounds how OFTEN a frame is sent, not what is
+in one: every frame after a step completes repeats that step's output, so a long pipeline's traffic
+grows with the square of its own length. So the stream clips an oversized `output` to a preview,
+withholds an oversized `data`, and marks the step `truncated: true`; a deliverable that already fits
+rides through untouched and unflagged. The platform settles the same trade the same way one layer
+down, for the run's `detail` JSON that is re-serialized on every step-progress write
+(`MAX_HISTORY_OUTPUT_CHARS`).
+
+The flag is what keeps this from being the degrade-loudly rule inverted: a clipped preview that did
+not say so is indexed by a caller as the output itself, and its missing tail then reads exactly like
+a step that wrote nothing more. Omitting the fields from stream frames entirely was the alternative
+and is worse for the same reason — `output: null` already means "produced none".
 
 ### 7. A gate declares `pollExhaustion` at REGISTRATION
 
