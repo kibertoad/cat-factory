@@ -38,6 +38,13 @@ export const MAX_DESIGN_REFERENCE_VIEWS = 12
 export interface DesignReference {
   view: string
   artifactId: string
+  /**
+   * The stored image's MIME type. Carried because a consumer that WRITES the frame to disk (the
+   * container delivery) has to name the file, and a `.png` over a JPEG is a lie an image loader
+   * is entitled to act on. The gate itself never reads it: it serves the bytes through the blob
+   * endpoint, which reads the type off the same record.
+   */
+  contentType: string
 }
 
 /** The fold's product: what to show, and what to say about what is missing. */
@@ -207,7 +214,10 @@ export function foldDesignReferences(
   }
   const labels = documentLabels(unique)
   const byDocument = new Map(
-    unique.map((document) => [documentKey(document), new Map<string, string>()]),
+    unique.map((document) => [
+      documentKey(document),
+      new Map<string, { artifactId: string; contentType: string }>(),
+    ]),
   )
   const heldPerDocument = new Map<string, number>()
   for (const record of renders) {
@@ -218,7 +228,7 @@ export function foldDesignReferences(
     if (!record.view) continue
     const contested = (claimants.get(record.view)?.size ?? 0) > 1
     const view = contested ? `${record.view} (${labels.get(key) ?? key})` : record.view
-    byDocument.get(key)!.set(view, record.id)
+    byDocument.get(key)!.set(view, { artifactId: record.id, contentType: record.contentType })
   }
   const offered = unique.map((document) => [...byDocument.get(documentKey(document))!.entries()])
   const taken = allocate(
@@ -226,7 +236,7 @@ export function foldDesignReferences(
     cap,
   )
   const references = offered.flatMap((views, index) =>
-    views.slice(0, taken[index]!).map(([view, artifactId]) => ({ view, artifactId })),
+    views.slice(0, taken[index]!).map(([view, render]) => ({ view, ...render })),
   )
   const gaps: VisualConfirmDesignGap[] = []
   let dropped = 0

@@ -22,6 +22,13 @@ import {
   type SkillSpec,
 } from './agent-capabilities.js'
 import { type TestSecretSpec, parseInfraEnv, parseSecretEnvPairs, str } from './job-env.js'
+import {
+  parseContextFiles,
+  parseReferenceScreenshots,
+  type ContextFileSpec,
+  type ReferenceScreenshotSpec,
+  type ReferenceScreenshotsSpec,
+} from './context-manifests.js'
 
 // Re-exported so a handler describing a job keeps ONE import site (the env-pair shape is a job
 // body field like any other; only its VALIDATION moved out).
@@ -29,6 +36,10 @@ export type { TestSecretSpec }
 
 // Re-exported so the job body stays the one import site for a harness handler describing a job.
 export type { McpServerSpec, SkillResourceSpec, SkillSpec }
+
+// Same rule for the two staged-file manifests: their shapes and their defensive parsing moved to
+// `context-manifests.ts`, but they remain job body fields, so this stays the import site.
+export type { ContextFileSpec, ReferenceScreenshotSpec, ReferenceScreenshotsSpec }
 
 // The job the Worker's ContainerAgentExecutor POSTs to /run. Kept as plain
 // types with a hand-rolled validator so the image needs no schema dependency.
@@ -610,19 +621,6 @@ export interface AgentBootstrapSpec {
   fromScratch?: boolean
 }
 
-/**
- * A linked-context file the backend prepared (requirements / RFC / PRD / tracker issue)
- * for the harness to materialise under CONTEXT_DIR in the checkout, so the agent can read
- * it on demand. The harness can't reach Jira/GitHub itself, so all such context is fetched
- * and shipped here up front. `path` is sanitised to a safe basename on parse.
- */
-export interface ContextFileSpec {
-  path: string
-  title: string
-  url: string
-  content: string
-}
-
 /** How an explore agent's reply is consumed. */
 export interface AgentOutputSpec {
   /** `prose` keeps the reply text; `structured` parses (and optionally repairs) it to JSON. */
@@ -712,6 +710,13 @@ export interface AgentJob extends HarnessAuthFields {
    * The agent reads them on demand; they are kept out of any commit. Absent ⇒ none.
    */
   contextFiles?: ContextFileSpec[]
+  /**
+   * The task's reference design images, downloaded into `.cat-context/reference-screenshots/`
+   * before the agent runs (see {@link ReferenceScreenshotsSpec}). Sent only for a kind that
+   * CAPTURES views and only when the task actually has references, so absent is the normal case
+   * and means the agent names its own views.
+   */
+  referenceScreenshots?: ReferenceScreenshotsSpec
   /**
    * Private package-registry auth (npm private orgs, GitHub Packages), rendered into
    * `~/.npmrc` before the run so the checkout's installs — the agent's own and the
@@ -1015,41 +1020,6 @@ function parseAgentBootstrapSpec(value: unknown): AgentBootstrapSpec | undefined
   }
 }
 
-/**
- * Sanitise a body-supplied context filename to a safe basename within CONTEXT_DIR:
- * strip any directory part, allow only `[A-Za-z0-9._-]`, and reject empties / dotfiles
- * / `..` so a hostile value can't escape the directory or clobber repo files.
- */
-function sanitizeContextFileName(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
-  const base = value.replace(/\\/g, '/').split('/').pop() ?? ''
-  const cleaned = base.replace(/[^A-Za-z0-9._-]/g, '')
-  if (!cleaned || cleaned === '.' || cleaned === '..' || cleaned.startsWith('.')) return undefined
-  return cleaned
-}
-
-/** Parse the linked-context files, dropping any malformed/unsafe entry. */
-function parseContextFiles(value: unknown): ContextFileSpec[] {
-  if (!Array.isArray(value)) return []
-  const files: ContextFileSpec[] = []
-  const used = new Set<string>()
-  for (const entry of value) {
-    if (typeof entry !== 'object' || entry === null) continue
-    const e = entry as Record<string, unknown>
-    const path = sanitizeContextFileName(e.path)
-    if (!path || used.has(path)) continue
-    if (typeof e.content !== 'string') continue
-    used.add(path)
-    files.push({
-      path,
-      title: typeof e.title === 'string' ? e.title : path,
-      url: typeof e.url === 'string' ? e.url : '',
-      content: e.content,
-    })
-  }
-  return files
-}
-
 /** Parse the explore-mode infra stand-up spec, or undefined when absent/unrecognised. */
 function parseAgentInfraSpec(value: unknown): AgentInfraSpec | undefined {
   if (typeof value !== 'object' || value === null) return undefined
@@ -1230,6 +1200,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     referenceBranches: parseReferenceBranches(o.referenceBranches),
     bootstrap: parseAgentBootstrapSpec(o.bootstrap),
     contextFiles: parseContextFiles(o.contextFiles),
+    referenceScreenshots: parseReferenceScreenshots(o.referenceScreenshots),
     packageRegistries: parsePackageRegistries(o.packageRegistries),
     skills: parseSkillSpecs(o.skills),
     mcpServers: parseMcpServerSpecs(o.mcpServers),
@@ -1272,6 +1243,7 @@ interface ParsedAgentJobParts {
   referenceBranches: ReturnType<typeof parseReferenceBranches>
   bootstrap: ReturnType<typeof parseAgentBootstrapSpec>
   contextFiles: ReturnType<typeof parseContextFiles>
+  referenceScreenshots: ReturnType<typeof parseReferenceScreenshots>
   packageRegistries: ReturnType<typeof parsePackageRegistries>
   skills: ReturnType<typeof parseSkillSpecs>
   mcpServers: ReturnType<typeof parseMcpServerSpecs>
@@ -1329,6 +1301,7 @@ function assembleAgentJob(
     referenceBranches,
     bootstrap,
     contextFiles,
+    referenceScreenshots,
     packageRegistries,
     skills,
     mcpServers,
@@ -1356,6 +1329,7 @@ function assembleAgentJob(
     ...(bootstrap ? { bootstrap } : {}),
     ...(output ? { output } : {}),
     ...(contextFiles.length ? { contextFiles } : {}),
+    ...(referenceScreenshots ? { referenceScreenshots } : {}),
     ...(packageRegistries.length ? { packageRegistries } : {}),
     ...(skills ? { skills } : {}),
     ...(mcpServers ? { mcpServers } : {}),

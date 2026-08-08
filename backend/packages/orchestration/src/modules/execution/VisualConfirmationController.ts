@@ -15,7 +15,7 @@ import type {
 } from '@cat-factory/kernel'
 import { ConflictError, isAsyncAgentExecutor } from '@cat-factory/kernel'
 import { countCapturedViews } from '@cat-factory/contracts'
-import { resolveDesignReferences } from './visual-confirm-design-references.js'
+import { resolveBlockReferences } from './block-reference-set.js'
 import { FIXER_AGENT_KIND, UI_TESTER_AGENT_KIND, VISUAL_CONFIRM_AGENT_KIND } from './ci.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { AdvanceResult } from './advance.js'
@@ -379,61 +379,35 @@ export class VisualConfirmationController {
         referenceArtifactId: shot.referenceArtifactId ?? null,
       })
     }
-    // Reference, first half: the frames retained from the DESIGNS this task links. Folded in
-    // BEFORE the hand-uploaded set below, which is the precedence that matters: an upload is a
-    // deliberate act against this one task, while a design render is a projection the next import
-    // replaces, so a person who uploaded a reference for a view must not have it swapped out from
-    // under them by whatever the file happens to say today.
-    const design = await resolveDesignReferences(
+    // Reference: the task's own reference set, the frames its linked DESIGNS retained plus the
+    // images a person uploaded against it, already merged (an upload outranks a design frame for
+    // the same view) by the one module both this gate and a capturing dispatch read it through.
+    const { references, design } = await resolveBlockReferences(
       this.deps.documentRepository,
       store,
       workspaceId,
       block.id,
     )
-    for (const ref of design?.references ?? []) {
+    for (const ref of references) {
       const existing = byView.get(ref.view)
-      if (existing) {
-        // A reference the CAPTURE named for this view is left alone. The same precedence the
-        // uploads below rely on, for the same reason: an explicitly chosen reference outranks a
-        // projection of whatever the linked file says today, and the design fold cannot tell
-        // which of the two it would be replacing. Only a view with no reference at all is filled.
-        if (existing.referenceArtifactId) continue
-        existing.referenceArtifactId = ref.artifactId
-        existing.referenceOrigin = 'design'
-      } else {
+      if (!existing) {
         byView.set(ref.view, {
           view: ref.view,
           actualArtifactId: null,
           referenceArtifactId: ref.artifactId,
-          referenceOrigin: 'design',
+          referenceOrigin: ref.origin,
         })
+        continue
       }
+      // A reference the CAPTURE named for this view outranks a DESIGN frame: an explicitly chosen
+      // reference beats a projection of whatever the linked file says today, and the design fold
+      // cannot tell which of the two it would be replacing. It does NOT outrank an UPLOAD, which
+      // is the more deliberate act of the two and the one a person takes to correct a pairing.
+      if (ref.origin === 'design' && existing.referenceArtifactId) continue
+      existing.referenceArtifactId = ref.artifactId
+      existing.referenceOrigin = ref.origin
     }
-    // Reference, second half: the block's uploaded reference design images (carry no executionId).
-    if (store) {
-      const refs = (await store.listByBlock(workspaceId, block.id)).filter(
-        (r) => r.kind === 'reference',
-      )
-      // `listByBlock` returns references oldest-first, so assign unconditionally: the LAST
-      // (newest) reference uploaded for a view wins. A human re-uploading a corrected reference
-      // for a view they already populated must override the stale one, not be discarded.
-      for (const ref of refs) {
-        const view = ref.view ?? '(reference)'
-        const existing = byView.get(view)
-        if (existing) {
-          existing.referenceArtifactId = ref.id
-          existing.referenceOrigin = 'upload'
-        } else {
-          byView.set(view, {
-            view,
-            actualArtifactId: null,
-            referenceArtifactId: ref.id,
-            referenceOrigin: 'upload',
-          })
-        }
-      }
-    }
-    return { pairs: [...byView.values()], design: design?.summary ?? null }
+    return { pairs: [...byView.values()], design }
   }
 
   /** Flip to awaiting-human, summon the human (idempotent notification), and park. */

@@ -10,6 +10,7 @@ import { EFFORT_REPORT_FILE } from '../src/effort.js'
 import { FOLLOW_UPS_FILENAME } from '../src/follow-ups.js'
 import { CONTEXT_DIR } from '../src/pi.js'
 import { PR_DESCRIPTION_FILE } from '../src/pr-description.js'
+import { REFERENCE_SCREENSHOT_DIR } from '../src/reference-screenshots.js'
 
 // The harness image builds from `src/` plus typescript alone, so it can carry no runtime
 // dependency on a workspace package: every path both halves must agree about is computed
@@ -174,6 +175,11 @@ describe('harness ⇄ backend sentinel paths', () => {
     ['PR description', PR_DESCRIPTION_FILE, HARNESS_SENTINEL_PATHS.prDescription],
     ['context directory', CONTEXT_DIR, HARNESS_SENTINEL_PATHS.contextDir],
     ['follow-ups', FOLLOW_UPS_FILENAME, HARNESS_SENTINEL_PATHS.followUps],
+    [
+      'reference screenshots directory',
+      REFERENCE_SCREENSHOT_DIR,
+      HARNESS_SENTINEL_PATHS.referenceScreenshots,
+    ],
   ]
 
   for (const [name, harness, backend] of PAIRS) {
