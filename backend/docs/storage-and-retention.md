@@ -5,11 +5,10 @@ the bounded commit backfill). Item 4 remains a watch item. Companion to
 [`adr/0002-cloudflare-platform.md`](./adr/0002-cloudflare-platform.md), which
 records why the backend runs on Cloudflare D1.
 
-> **Operators read the windows on the website**:
-> [Upgrades & Data Retention](https://www.catfactory.ai/operate/upgrades-and-retention.html) owns
-> which store holds what, every retention variable and its default, and what capture the two gates
-> prevent in the first place. Change a default here and that page changes in the same PR: the
-> defaults are the one part of this doc a reader acts on without a checkout.
+> **The retention windows an operator sets are the one part of this doc read without a checkout**,
+> and they have no website page yet, so this file and
+> [`docs/environment-variables.md`](../../docs/environment-variables.md) are the authority for
+> them. Changing a default changes both, in the same PR.
 
 This is a working list of storage-related improvements to make before the
 database becomes large enough for any of them to bite. None is urgent today: with

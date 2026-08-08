@@ -1,0 +1,59 @@
+# Every page catfactory.ai serves, one URL path per line.
+#
+# `scripts/check-doc-links.mjs` refuses any https://www.catfactory.ai/... link in this repo's
+# markdown whose path is not listed here. The point is ORDERING: the website page lands first, then
+# its path is added here, and only then may a doc link it. The documentation revamp got that order
+# backwards once and shipped fourteen links to pages that did not exist, across the root README, the
+# four shipped SDK READMEs and six backend docs, several of them replacing material deleted in the
+# same commit. Every one of them read as correct in review.
+#
+# This list is a RECORD, not a probe: nothing here contacts the site, so it can only be as honest as
+# the person editing it. That is deliberate. A network check in CI is flaky and fails on the
+# website's outages rather than on our mistakes, whereas adding a line here is a diff a reviewer sees
+# and can refuse. Verify the page loads before adding its path.
+#
+# Sorted, and `docs/initiatives/documentation-revamp.md` records which topics are still unowned.
+# Last verified against the live site: 2026-08-08.
+
+/
+deploy/cloudflare.html
+deploy/configuration.html
+deploy/custom-agents.html
+deploy/custom-providers.html
+deploy/deployment-repository.html
+deploy/environments.html
+deploy/frontend-extensions.html
+deploy/github-app.html
+deploy/kubernetes.html
+deploy/local.html
+deploy/nodejs.html
+deploy/notifications.html
+deploy/observability.html
+deploy/runner-pools.html
+guide/budgets.html
+guide/cookbook.html
+guide/core-concepts.html
+guide/designing-your-board.html
+guide/documents.html
+guide/foundational-services.html
+guide/frontend-preview.html
+guide/initiatives.html
+guide/introduction.html
+guide/issue-sources.html
+guide/model-providers.html
+guide/prompt-fragments.html
+guide/pull-requests.html
+guide/quick-start.html
+guide/recurring-pipelines.html
+guide/repositories.html
+guide/requirements.html
+guide/running-pipelines.html
+guide/sandbox.html
+guide/shared-services.html
+guide/skills.html
+guide/team-and-access.html
+reference/agent-isolation.html
+reference/architecture.html
+reference/manifests.html
+reference/packages.html
+reference/public-api.html

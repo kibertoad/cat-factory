@@ -15,11 +15,9 @@ labelled as one of:
 - **judgment**: an LLM's assessment; assumed to be defeatable by prompt injection, and therefore
   never the last line of defence for anything that matters.
 
-Audience: **contributors changing anything on the write path.** The operator-facing account (the
-same layer taxonomy, what is deliberately not a boundary, the hardening checklist and the known
-gaps in the shape an operator acts on) is the website's
-[Security Model & Hardening](https://www.catfactory.ai/reference/security-model.html); this page
-keeps the full layer-by-layer mechanism and the code it lives in. Related: [github-integration.md](./github-integration.md) (App setup and token
+Audience: **operators** deciding how much to trust autonomous runs, who want the hardening
+checklist below, and **contributors** changing anything on the write path, who want the
+layer-by-layer mechanism and the code it lives in. Related: [github-integration.md](./github-integration.md) (App setup and token
 plumbing), [ADR 0025](./adr/0025-workspace-rbac.md) (who may trigger runs at all), and the
 "Untrusted text crossing a rendered surface" and "Harness rules" sections of the root `CLAUDE.md`
 (contributor-facing rules that keep these properties true).
@@ -503,28 +501,107 @@ Do not lean on any of these; the codebase explicitly refuses to:
 
 ## Operator hardening checklist
 
-**The checklist itself is on the website**, where the operators who act on it read it:
-[Security Model & Hardening → Operator hardening checklist](https://www.catfactory.ai/reference/security-model.html#operator-hardening-checklist).
-It is the same eight items in the same priority order, and it is maintained there.
+In priority order. The first two are the ones that decide whether "malicious code reaches `main`"
+is possible at all:
 
-What belongs here is the coupling a contributor has to keep true, because breaking it turns a
-documented control into advice:
+1. **Protect the default branch of every repo the installation covers** (required). Require PRs,
+   forbid direct pushes, require your CI checks. This is the _only_ control over a stolen
+   `Contents: write` token (covering both a direct push and a merge-API call) and it lives on the
+   host, not in this codebase. The platform never needs to push to a protected default branch
+   (bootstrap targets an empty repo; everything else is work branches), so protection costs nothing.
+   **The product now tells you where this is missing**: the GitHub settings panel's
+   "Default-branch protection" preflight probes each linked repo's default branch on demand
+   (`GET /workspaces/:ws/github/branch-protection`). It reports three states, never two (a repo
+   it could not reach is `unknown`, not "fine"), says so when a branch is protected but the rule
+   itself was unreadable (a minimally-scoped App installation cannot read it, and such a rule may
+   still permit direct pushes), and states how many repos a probe cap left unchecked. A provider
+   that cannot answer at all reports `capability: 'unavailable'` rather than an empty list, which
+   is what today's GitLab connections get. It needs `integrations.manage`: the one READ on that
+   controller that does, because it spends the installation's GitHub rate limit, which the CI gate
+   and the merger draw on for every run; on the ordinary read tier a viewer could degrade the write
+   path by holding down a button. Its fan-out is bounded for the same reason.
+2. **Choose merge presets deliberately.** For anything sensitive: pin `Manual review only`, or keep
+   auto-merge and add class floors for `source` and `schema`. Remember the shipped default
+   auto-merges under Balanced ceilings with no floors.
+3. **Scope the GitHub App installation to only the repos the platform should work on.** The job
+   token is now narrowed per dispatch to the repos that run resolved, so the installation is the
+   CEILING on what any run could ask for rather than the blast radius of every one. It still binds:
+   it is what stops a task linked to the wrong repo, or a widened mint that could not be scoped,
+   from reaching further. Don't install on "All repositories" of an org that also holds crown
+   jewels. This applies whenever the run is using the App token at all, which item 4 is about.
+4. **Govern stored personal PATs, or item 3 does not bind.** An initiator's stored `github_pat`
+   outranks the App token on the standard dispatch path, so a member with a classic-scope PAT
+   would otherwise silently widen every run they start to their own whole account.
+
+   **The strongest controls here are GitHub's, not ours, and they are worth reaching for first,
+   but only if this deployment serves the whole org.** A GitHub org owner can, under
+   _Settings → Personal access tokens_, deny classic PATs access to the org outright and require
+   owner approval for fine-grained tokens (naming the repositories each may touch); SAML/SSO
+   authorization gates PATs independently. Those bind every tool the member uses, cannot be
+   undone by the member, and apply whether or not cat-factory is involved. Nothing below is a
+   substitute for them.
+
+   **They are the wrong tool for individual adoption**, which is the case our own controls exist
+   for. Someone running cat-factory alone inside an org that has not adopted it has no App
+   installation to inherit and no authority to change org policy, and restricting classic PATs
+   org-wide to constrain one person's agent runs would break every other workflow in the org. A
+   personal token is the right credential there, which is why it stays fully supported and why
+   the account floor below ships UNSET.
+
+   Ours, in the order they bind:
+   - **Enforced, account-wide**: `allowInitiatorPat: false` in account settings ("Run credential
+     policy"). No board in the account may then use an initiator's token. This is the tier a
+     workspace admin cannot lift, which matters because the workspace switch below is edited with
+     `settings.manage`: a permission a member elevated on one board holds. Unset by default.
+   - **Enforced, per board**: turn `allowInitiatorPat` off in workspace settings ("Run
+     credential"). The board then authenticates as the App installation, at the cost of bot
+     attribution. Effective = the account permits AND the board permits.
+   - **Visible**: the personal-token form states what a token actually grants the moment it is
+     tested or saved; a classic token carrying `repo` is called out as reaching every repository
+     its owner can push to, scopes the platform never uses are flagged, and a token whose scopes
+     GitHub did not report is reported as unknown rather than passing as narrow. Advice, not a
+     gate: the save still succeeds.
+
+   Beyond that, ask members to store fine-grained PATs limited to the working repos, or to leave
+   the personal-PAT slot empty. The same fine-grained advice covers local mode's shared
+   `GITHUB_PAT` and a workspace's GitLab PAT, where the platform inherits the PAT's whole scope
+   and `allowInitiatorPat` has nothing to say (it governs the INITIATOR's token, not the
+   deployment's own).
+
+5. **Treat local native mode (`LOCAL_NATIVE_AGENTS`) as trusted-input only.** No container means the
+   process boundary is only the agent CLI's own sandboxing: the env allow-list still strips the
+   orchestrator's secrets, but nothing stops a subverted agent from reading your filesystem. Don't
+   point native-mode runs at repositories or issues whose content you don't trust.
+6. **Self-hosted runner pools execute jobs with these tokens**: the pool host is inside the trust
+   boundary. Run pools on infrastructure you'd trust with the installation token itself
+   (`runner-pool-integration.md`, ADR 0026 for the warm-pool isolation hazard).
+7. **Leave `LOCAL_MODELS_ALLOW_LAN` off on any shared deployment.** A user-registered local model
+   endpoint is fetched server-side, so the runner-host allow-list is what the server may be
+   pointed at. The default permits loopback only; the opt-in widens it to the whole private
+   network (RFC1918 / ULA / mDNS `.local`), which on a multi-tenant box lets any user aim
+   server-side requests at internal LAN services. Turn it on only where every user already owns
+   the network the server runs in (the single-tenant local mode default). The base URL itself is
+   constrained to an origin plus a path prefix (no query, no fragment, no dot segments) and every
+   endpoint URL is composed by the platform, because a base that could shape the request path
+   would turn the two fixed forwards into an arbitrary request against whatever listens locally.
+8. **Make your CI test what you care about.** The CI gate is exactly as strong as the checks it
+   reads.
+
+### What a contributor must keep true
+
+The checklist is only worth its ink while the mechanisms behind it hold, so a change on the write
+path is measured against these three:
 
 - **Items 1 and 2 (branch protection, merge presets) are the only two that decide whether malicious
-  code can reach a default branch at all.** Anything on the write path that would let a run land a
-  change without traversing both is a design error, not a feature.
-- **Item 4 (govern stored personal PATs) is what makes item 3 (installation scope) bind.** The
-  initiator's token outranks the App token on the standard dispatch path, so the account-level and
-  workspace-level `allowInitiatorPat` switches are enforced mechanisms at BOTH tiers and every mint
-  site routes through the one decision. A new mint site that reads the token directly silently
-  removes the control.
+  code can reach a default branch at all.** Anything that would let a run land a change without
+  traversing both is a design error, not a feature.
+- **Item 4 is what makes item 3 bind.** The initiator's token outranks the App token on the
+  standard dispatch path, so the account-level and workspace-level `allowInitiatorPat` switches are
+  enforced at BOTH tiers only because every mint site routes through the one decision. A new mint
+  site that reads the token directly silently removes the control.
 - **The branch-protection preflight reports three states, never two.** A repo it could not reach is
-  `unknown`, a protected branch whose rule was unreadable says so, and a provider that cannot answer
-  reports `capability: 'unavailable'` rather than an empty list. It needs `integrations.manage`
-  because it spends the installation's rate limit, which the CI gate and the merger draw on.
-
-Changing any of those means updating the website page in the same PR, per the documentation sweep in
-the root `CLAUDE.md`.
+  `unknown`, a protected branch whose rule was unreadable says so, and a provider that cannot
+  answer reports `capability: 'unavailable'` rather than an empty list.
 
 ## Known gaps
 

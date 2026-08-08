@@ -1,9 +1,9 @@
 # Ephemeral environment provider integration
 
 > **Setting one up is on the website**:
-> [Environments](https://www.catfactory.ai/operate/environments.html) owns configuring and
+> [Environments](https://www.catfactory.ai/deploy/environments.html) owns configuring and
 > operating ephemeral environments, and
-> [Custom Providers](https://www.catfactory.ai/extend/custom-providers.html) owns writing a code
+> [Custom Providers](https://www.catfactory.ai/deploy/custom-providers.html) owns writing a code
 > adapter. This page is the provider-integration DESIGN.
 
 Let a workspace plug in its **own** ephemeral/preview-environment tooling so a

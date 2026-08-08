@@ -84,20 +84,20 @@ first draft of this table recorded "none" for four topics the site already docum
 their slices as moves into a gap rather than as the reconciliations they are. Website cells name
 the source path in the website repo.
 
-| Topic                            | Repo doc                                                                                                                      | Website page                                     | Proposed authority                                                                                                                                     |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Custom agents                    | `backend/docs/custom-agents.md`, `custom-agent-roles.md`, `custom-agent-gate-ergonomics.md`                                   | `deploy/custom-agents.md`                        | Website owns authoring how-to; repo keeps engine design (registries, the three stages).                                                                |
-| Public API                       | `backend/docs/public-api.md`                                                                                                  | `reference/public-api.md`                        | Website owns endpoint/scope/webhook usage; repo keeps the stability policy (ADR 0034) and the contracts → spec → SDK chain.                            |
-| Model support                    | `backend/docs/model-support.md`                                                                                               | `guide/model-providers.md`                       | Website owns configuration and usage; repo keeps provisioning internals. Pilot slice.                                                                  |
-| Runner pools                     | `backend/docs/runner-pool-integration.md`                                                                                     | `deploy/runner-pools.md`                         | Website owns operating a pool; repo keeps the integration protocol.                                                                                    |
-| Environments                     | `backend/docs/environments-integration.md`, `local-k3s-environments.md`, `kubernetes-topology.md`                             | `deploy/environments.md`, `deploy/kubernetes.md` | Website owns setup and operation; repo keeps provider integration design.                                                                              |
-| GitHub App                       | `backend/docs/github-integration.md`, `github-operations.md`                                                                  | `deploy/github-app.md`                           | Website owns setup and the operations runbook; repo keeps integration design.                                                                          |
-| Environment variables            | `docs/environment-variables.md`                                                                                               | `deploy/configuration.md`                        | Website owns the operator-facing reference; the repo file stays as the canonical list its guard reads.                                                 |
-| Glossary                         | `docs/glossary.md`                                                                                                            | `guide/core-concepts.md`                         | Website owns the product vocabulary; the repo glossary keeps the code-level naming map (dir ⇄ package names, internal seams).                          |
-| Agent trust model                | `backend/docs/security-model.md`                                                                                              | `reference/agent-isolation.md`                   | Website owns the operator-facing account of what an adversarial agent can reach; repo keeps the full layer-by-layer boundary and the write-path rules. |
-| Storage and retention            | `backend/docs/storage-and-retention.md`, `llm-telemetry.md`                                                                   | `deploy/observability.md`                        | Website owns retention windows and what is kept; repo keeps the table/rollup design.                                                                   |
-| Repository layout                | root `README.md` tables                                                                                                       | `reference/packages.md`                          | Website owns the orientation map; the repo tables stay, pinned by `check-package-catalog.mjs`.                                                         |
-| Repo-only, no website page today | `backend/docs/vcs-providers.md`, `backend/docs/debug-api.md`, `backend/docs/reports.md`, `sdk/README.md`, `sdk/mcp/README.md` | none                                             | Website gains the user-facing account (its tracker names the target section per doc); repo keeps internals where any remain.                           |
+| Topic                            | Repo doc                                                                                                                      | Website page                                     | Proposed authority                                                                                                                                         |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Custom agents                    | `backend/docs/custom-agents.md`, `custom-agent-roles.md`, `custom-agent-gate-ergonomics.md`                                   | `deploy/custom-agents.md`                        | Website owns authoring how-to; repo keeps engine design (registries, the three stages).                                                                    |
+| Public API                       | `backend/docs/public-api.md`                                                                                                  | `reference/public-api.md`                        | Website owns endpoint/scope/webhook usage; repo keeps the stability policy (ADR 0034) and the contracts → spec → SDK chain.                                |
+| Model support                    | `backend/docs/model-support.md`                                                                                               | `guide/model-providers.md`                       | Website owns configuration and usage; repo keeps provisioning internals. Pilot slice.                                                                      |
+| Runner pools                     | `backend/docs/runner-pool-integration.md`                                                                                     | `deploy/runner-pools.md`                         | Website owns operating a pool; repo keeps the integration protocol.                                                                                        |
+| Environments                     | `backend/docs/environments-integration.md`, `local-k3s-environments.md`, `kubernetes-topology.md`                             | `deploy/environments.md`, `deploy/kubernetes.md` | Website owns setup and operation; repo keeps provider integration design.                                                                                  |
+| GitHub App                       | `backend/docs/github-integration.md`, `github-operations.md`                                                                  | `deploy/github-app.md`                           | Website owns setup and the operations runbook; repo keeps integration design.                                                                              |
+| Environment variables            | `docs/environment-variables.md`                                                                                               | `deploy/configuration.md` (narrative only)       | The website owns the configuration narrative; the repo file stays the canonical list its guard reads, and until a generated copy lands it is the only one. |
+| Glossary                         | `docs/glossary.md`                                                                                                            | `guide/core-concepts.md`                         | Website owns the product vocabulary via core-concepts (there is no glossary page); the repo glossary keeps the code-level naming map.                      |
+| Agent trust model                | `backend/docs/security-model.md`                                                                                              | `reference/agent-isolation.md`                   | Website owns what an adversarial agent can reach; repo keeps the layer-by-layer boundary, the write-path rules AND the operator hardening checklist.       |
+| Storage and retention            | `backend/docs/storage-and-retention.md`, `llm-telemetry.md`                                                                   | `deploy/observability.md`                        | Website owns the dashboard and capture settings; the retention WINDOWS have no page yet and stay in the repo with the table/rollup design.                 |
+| Repository layout                | root `README.md` tables                                                                                                       | `reference/packages.md`                          | Website owns the orientation map; the repo tables stay, pinned by `check-package-catalog.mjs`.                                                             |
+| Repo-only, no website page today | `backend/docs/vcs-providers.md`, `backend/docs/debug-api.md`, `backend/docs/reports.md`, `sdk/README.md`, `sdk/mcp/README.md` | none                                             | Each keeps its user-facing account IN FULL until the website page exists. Reducing one ahead of its page is what slices 7 and 9 got wrong.                 |
 
 ## Classification (slice 1)
 
@@ -115,8 +115,8 @@ because a per-file table of 160 rows rots faster than the docs it describes.
 | `docs/internal/*`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | contributor          | This repository's own process.                                                                                                                                                                        |
 | Engine flow docs: `agent-prompt-overrides`, `bug-hunt`, `bug-triage-pipeline`, `concurrency-and-redis`, `consensus-panels`, `container-reaping`, `env-lifecycle`, `execution-state-machine`, `gitlab-parity`, `individual-subscription-usage`, `infrastructure-providers-window`, `logging`, `per-service-provisioning`, `pipeline-catalog-lifecycle`, `pipeline-pr-descriptions`, `prompt-caching`, `ralph-loop`, `requirements-review`, `review-debt-friction`, `service-connections`, `visual-confirmation`                   | contributor          | Each describes a seam, an invariant or a flow the code implements. The product behaviour they produce is described on the website by the page that owns that feature, and none of these is that page. |
 | `model-support`, `security-model`, `storage-and-retention`, `llm-telemetry`, `custom-agents`, `custom-agent-roles`, `custom-agent-gate-ergonomics`, `mcp-tool-servers`, `custom-binary-stores`, `github-integration`, `github-operations`, `vcs-providers`, `environments-integration`, `local-k3s-environments`, `native-environment-adapter`, `kubernetes-topology`, `runner-pool-integration`, `document-sources`, `auth`, `reports`, `debug-api`, `reusable-operations`, `initiative-presets`, `figma-claude-design-context` | mixed                | Split by depth. Each now opens with a pointer naming the website page that owns the user-facing account.                                                                                              |
-| `docs/environment-variables.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | user-facing, stays   | A CI guard reads it. The website RENDERS it.                                                                                                                                                          |
-| `docs/glossary.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | contributor          | Code-level naming map; the product vocabulary is the website's glossary.                                                                                                                              |
+| `docs/environment-variables.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | user-facing, stays   | A CI guard reads it. A website copy must be GENERATED from it, and none exists yet.                                                                                                                   |
+| `docs/glossary.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | contributor          | Code-level naming map; the product vocabulary is the website's core-concepts page.                                                                                                                    |
 | `docs/README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `AGENTS.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | contributor          | This repository's own orientation and process.                                                                                                                                                        |
 | `backend/docs/public-api.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | mixed, deferred      | See checklist item 12.                                                                                                                                                                                |
 | `backend/docs/local-kubernetes-setup-windows.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | user-facing, unmoved | A platform-specific setup recipe with no website home yet. Candidate for the Deploy section; not worth a page of its own until the Kubernetes page needs it.                                          |
@@ -160,33 +160,45 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       load-bearing**: `agents/src/providers/docs.ts` links `#8-provisioning-per-runtime` and
       `#aws-bedrock-opt-in` from runtime error messages, so sections may be reduced but not
       renumbered.
-- [x] 3. Environment variables. The repo file stays canonical (`check-reserved-env-keys.mjs` reads
-      it) and the website page is GENERATED from it by the site's `scripts/sync-env-vars.mjs`, with
-      `--check` failing on staleness. Two variables the code reads were documented nowhere
-      (`NOTIFICATION_RETENTION_DAYS`, `PROVISIONING_LOG_RETENTION_DAYS`): documenting them required
-      reserving them, so `reserved-env-keys.ts` gained both as exact names.
-- [x] 4. Agent trust model. The website gained a security-model page (layer taxonomy, the
-      non-boundaries, the hardening checklist, the known gaps) beside agent-isolation; the repo doc
-      keeps the layer-by-layer mechanism and the couplings a contributor must not break.
-- [x] 5. Glossary. The website gained a product glossary; the repo glossary states that it is the
-      code-level naming map and what belongs where.
-- [x] 6. Storage and retention. The website's upgrades-and-retention page owns the windows and the
-      upgrade path; the repo docs keep the sink and rollup design. The site's observability page
-      claimed a 3-day telemetry default the code had moved to 14; fixed.
-- [x] 7. SDKs and MCP. Two website pages (SDKs, MCP server); `sdk/README.md` reduced to the
-      generation chain, the smoketest and releases. The four shipped clients' anchored links to its
-      "pointing at localhost" section were repointed at the website page in the same change, per the
-      gotcha below.
+- [~] 3. Environment variables. The repo file stays canonical (`check-reserved-env-keys.mjs` reads
+  it). The website page that was to be GENERATED from it by the site's `scripts/sync-env-vars.mjs`
+  has NOT landed, so the repo file is currently the only copy and says so. Two variables the code read were documented nowhere
+  (`NOTIFICATION_RETENTION_DAYS`, `PROVISIONING_LOG_RETENTION_DAYS`): documenting them required
+  reserving them, so `reserved-env-keys.ts` gained both as exact names.
+- [~] 4. Agent trust model. Only `reference/agent-isolation.html` landed. The security-model page
+  (layer taxonomy, the non-boundaries, the hardening checklist, the known gaps) did NOT, so
+  `security-model.md` keeps the full operator hardening checklist alongside the layer-by-layer
+  mechanism and the couplings a contributor must not break. The checklist may not be reduced to
+  a pointer again until that page is live.
+- [~] 5. Glossary. No website glossary page landed; the repo glossary states that it is the
+  code-level naming map and points a purely user-facing term at `guide/core-concepts.html`
+  instead.
+- [~] 6. Storage and retention. The observability page landed (and its 3-day telemetry default, which
+  the code had moved to 14, was fixed there). The upgrades-and-retention page did NOT, so the
+  retention windows stay owned by `storage-and-retention.md` plus `docs/environment-variables.md`.
+- [ ] 7. SDKs and MCP. **Withdrawn, not deferred.** Neither website page landed, so `sdk/README.md`
+      keeps all of it: the eight caller-facing invariants, the Java/Kotlin decision, and the
+      "pointing at localhost or a mock" section the four shipped client READMEs deep-link. Those four
+      links are absolute GitHub blob URLs, which resolve from a checkout and from an installed
+      artifact alike; a published README is frozen per release, so they may only be repointed at a
+      website page that is already live.
 - [x] 8. Custom agents, gates, providers, frontend extensions. Website owns authoring; the repo docs
       open with the pointer. `custom-binary-stores.md` (added after this tracker was written) landed
       its user-facing half on the website's custom-providers page as a third code seam.
-- [x] 9. VCS. The support matrix moved to the website; `vcs-providers.md` is now the provider-layer
-      map plus the two facts that bite a change, and `gitlab-parity.md` stays the accepted-gap log.
+- [ ] 9. VCS. **Withdrawn, not deferred.** No support-matrix page landed, so `vcs-providers.md` keeps
+      the GitHub/GitLab capability table and `## Setup` beside the provider-layer map and the two
+      facts that bite a change; `gitlab-parity.md` stays the accepted-gap log. `## Setup` is
+      load-bearing: the GitLab webhook-rejection warning deep-links it (`DOCS.vcsProviders('setup')`),
+      and `check-doc-links.mjs` now fails the build if the heading goes.
 - [x] 10. Root README: the Feature guide is a "using it / how it is built" table, and the
       Documentation index states the ownership model.
 - [x] 11. State the model: `docs/README.md` and `CONTRIBUTING.md` gained "Where does a new doc go?",
       and CLAUDE.md's staleness sweep gained the website question (paid for inside the file's size
       budget, not by raising it).
+- [x] 14. Enforce the ordering. `docs/website-pages.txt` records every page the site serves and
+      `scripts/check-doc-links.mjs` refuses a catfactory.ai link that is not in it, so a slice can no
+      longer reduce a doc to a pointer at a page that has not shipped. The same guard resolves every
+      code-built doc URL (`DOCS.*`, `VCS_DOC_URLS`) to a file AND a heading.
 - [ ] 12. **The `/api/v1` endpoint reference stays in the repo, deliberately deferred.**
       `public-api.md` is 2000 lines of prose companion to the generated `docs/openapi.json`, and
       several of its anchors are linked from published package READMEs and from error messages in
@@ -211,12 +223,24 @@ Checked against `main` on 2026-08-08, after the tracker's base commit:
 - **Land the website page before the repo link to it.** A repo doc linking a 404 fails
   silently for every reader. This tracker's header obeys its own rule: it links the open website
   PR, not the file that PR adds.
+- **This rule was written down and then broken, which is why it is now a GUARD.** The execution PR
+  reduced eight docs and the four shipped SDK READMEs to pointers at an `/extend/*` and `/operate/*`
+  URL space the site never gained, and marked slices 3 to 9 done on the strength of a website PR
+  that had not merged. Fourteen dead links, each one deleting material in the same commit, each one
+  reading as perfectly ordinary in review. A checklist item is not evidence that a page exists:
+  `docs/website-pages.txt` plus `scripts/check-doc-links.mjs` is, so a link to an unpublished page
+  now reds CI. Marking a slice done means the page RESOLVES, and a slice whose page never landed is
+  reverted rather than left pointing at nothing (7 and 9 were).
+- **A withdrawn slice keeps the doc it was going to reduce, in full.** Halfway is the worst of the
+  three states: the material is gone from the repo and absent from the site. When a page does not
+  land, the repo doc stays the authority and says so.
 - **The website restructure changes URLs.** Its tracker's phase A regroups navigation without
   moving files precisely so slices here can start early; slices that link moved pages wait
   for the website's redirect slice, or link section anchors that survive the move.
-- **Landing the website page FIRST is the ordering rule, and the generated env page is the one
-  exception**: it is rendered from the repo file, so the repo edit comes first and the site's
-  `sync-env-vars.mjs` run comes second, in the website PR.
+- **Landing the website page FIRST is the ordering rule, and a GENERATED page is the one
+  exception**: an env-var page rendered from the repo file would take the repo edit first and the
+  site's `sync-env-vars.mjs` run second, in the website PR. Neither has happened, so the exception
+  is still hypothetical and `docs/environment-variables.md` says as much.
 - **`check-shipped-doc-links.mjs` checks BOTH directions of a shipped doc's links.** A published
   package `README` may not link a repo-relative path outside its own package, so website links
   from one must be absolute URLs. And a repo-absolute
@@ -226,9 +250,12 @@ Checked against `main` on 2026-08-08, after the tracker's base commit:
   `backend/docs/reusable-operations.md` 2, `backend/docs/custom-agents.md` and
   `backend/docs/model-support.md` 1 each, with `public-api.md` and `sdk/README.md` each carrying one
   anchored link. A slice reducing one of those to a pointer keeps the anchors it names, or repoints
-  the inbound links in the same PR. Slice 7 took the second route for `#pointing-an-sdk-at-localhost-or-a-mock`
-  and slice 2 took the first, because `model-support.md`'s anchors are linked from RUNTIME ERROR
-  MESSAGES (`agents/src/providers/docs.ts`), where a stale link reaches an operator with no way back.
+  the inbound links in the same PR. Slice 2 took the first route, because `model-support.md`'s
+  anchors are linked from RUNTIME ERROR MESSAGES (`agents/src/providers/docs.ts`), where a stale link
+  reaches an operator with no way back. Slice 7 tried the second and is the reason repointing is now
+  the weaker option: a shipped README is FROZEN per release, so a link it carries may only be moved
+  to a target that is already live, and `#pointing-an-sdk-at-localhost-or-a-mock` was repointed at a
+  page that never shipped.
 - **`check-reserved-env-keys.mjs` is a SAME-REPO coupling, not a file-path one.** It reads
   `docs/environment-variables.md` and fails when a documented variable is missing from the reserved
   set, and its whole value is that this fires in the PR that adds the variable: the documentation

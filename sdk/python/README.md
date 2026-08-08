@@ -92,7 +92,7 @@ Frozen dataclasses with `from_dict` / `to_dict`. Two properties to know:
 
 The base URL takes any origin (`http://localhost:8787`, a fixture server, a mock) and no scheme
 validation is applied. Each client also accepts a custom transport, so you can intercept in-process
-instead. See [the SDK guide](https://www.catfactory.ai/extend/sdks.html#pointing-a-client-at-localhost-or-a-mock).
+instead. See [the SDK guide](https://github.com/kibertoad/cat-factory/blob/main/sdk/README.md#pointing-an-sdk-at-localhost-or-a-mock).
 
 ## Notes
 

@@ -1,11 +1,10 @@
 # LLM telemetry & agent-context observability
 
-> **Operators read this on the website**:
-> [Observability](https://www.catfactory.ai/operate/observability.html) owns the dashboard, what
-> each capture setting does and how to read a run; retention windows are on
-> [Upgrades & Data Retention](https://www.catfactory.ai/operate/upgrades-and-retention.html). This
-> page is the INTERNAL account: the sinks, the producers, and the rules a new recording path has
-> to keep.
+> **Operators read the dashboard side on the website**:
+> [Observability](https://www.catfactory.ai/deploy/observability.html) owns what each capture
+> setting does and how to read a run. Retention windows are still repo-only, in
+> [`storage-and-retention.md`](./storage-and-retention.md). This page is the INTERNAL account: the
+> sinks, the producers, and the rules a new recording path has to keep.
 
 Four sinks live in a dedicated telemetry store, separate from the transactional domain
 (append-heavy, high-volume, short-retention): a required `TELEMETRY_DB` D1 database on Cloudflare

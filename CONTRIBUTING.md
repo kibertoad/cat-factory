@@ -45,8 +45,12 @@ reads [catfactory.ai](https://www.catfactory.ai/), whose source is
 the code reads the docs here.
 
 Where a topic serves both, split it by DEPTH rather than copying: the website page owns the
-user-facing account and the doc here keeps the internal design plus a link. Land the website page
-FIRST, so the link from here never 404s. The named exceptions that stay in this repo whatever their
+user-facing account and the doc here keeps the internal design plus a link. **Land the website page
+FIRST**, and only then reduce the doc here: a doc pointed at a page that does not exist yet is
+strictly worse than the doc it replaced. `scripts/check-doc-links.mjs` enforces the ordering by
+refusing any catfactory.ai link whose path is not recorded in
+[`docs/website-pages.txt`](./docs/website-pages.txt), so publishing the page and adding its line
+there is the same PR. The named exceptions that stay in this repo whatever their
 audience, the audit and the open slices are in
 [`docs/README.md`](./docs/README.md#where-does-a-new-doc-go) and
 [`docs/initiatives/documentation-revamp.md`](./docs/initiatives/documentation-revamp.md).

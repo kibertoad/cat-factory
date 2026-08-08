@@ -6,9 +6,9 @@ platform and without rebuilding the executor-harness image**. This document is t
 the seams. The worked reference is `backend/internal/example-custom-agent`.
 
 > **Authoring one is documented on the website**:
-> [Custom Agents & Gates](https://www.catfactory.ai/extend/custom-agents.html) walks an author
+> [Custom Agents & Gates](https://www.catfactory.ai/deploy/custom-agents.html) walks an author
 > through registering a kind, a gate or a judge from a deployment repository, with
-> [Integration Manifests](https://www.catfactory.ai/extend/manifests.html) beside it. This page is
+> [Integration Manifests](https://www.catfactory.ai/reference/manifests.html) beside it. This page is
 > the ENGINE design behind those seams: the three stages, what each registry owns, and the
 > invariants a new capability has to keep.
 

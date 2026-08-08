@@ -492,6 +492,17 @@ jobs:
       - name: Guard shipped documentation links
         run: node scripts/check-shipped-doc-links.mjs
 
+      # Requires every catfactory.ai link to name a page recorded in `docs/website-pages.txt`, and
+      # every doc URL built in code (`DOCS.*`, `VCS_DOC_URLS`) to resolve to a file AND a heading.
+      # Both are invisible to everything else: nothing typechecks a markdown link, and an anchor is
+      # a string in one file and a heading in another. The docs revamp shipped fourteen links to
+      # website pages that did not exist, and deleted `## Setup` from `vcs-providers.md` while the
+      # GitLab webhook-rejection warning still deep-linked it — the unit test on that message
+      # passed, because it only knew about the string. Its fixtures run in the `node --test` step
+      # above. Pure node, no install, no network.
+      - name: Guard documentation links
+        run: node scripts/check-doc-links.mjs
+
       # Requires `pnpm test:quick` to exclude exactly the packages the `test-units` lane below
       # excludes. The two deny-lists are the same fact written twice, and `running-tests.md` sells
       # the script as "the same set CI runs", which is the only evidence that set really needs no

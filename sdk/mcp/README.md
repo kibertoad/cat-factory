@@ -4,11 +4,10 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server over the cat-
 API** (`/api/v1`). It lets an MCP host — Claude Desktop, an IDE, an agent framework — plan work on a
 workspace's board, start and watch runs, answer parked decisions, and read a run's telemetry.
 
-> **Using it is documented on the website**:
-> [MCP Server](https://www.catfactory.ai/extend/mcp-server.html) owns the two access paths, the
-> configuration table, the tool surface and the worked flow, for readers who never clone this repo.
-> This README ships in the published tarball, so it stays self-contained rather than becoming a
-> pointer; keep the two in step when the tool surface or the filters change.
+> **This README ships in the published tarball**, so it is self-contained by design: the two access
+> paths, the configuration table, the tool surface and the worked flow are all below rather than
+> behind a link. The website has no MCP page yet; when it gains one, this file stays the reference
+> the installed package carries and the two are kept in step.
 
 It is a **facade**, not a client. Every tool is one call on
 [`@cat-factory/sdk`](https://github.com/kibertoad/cat-factory/tree/main/sdk/typescript), and the tool table is generated from the same

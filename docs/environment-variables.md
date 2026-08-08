@@ -7,11 +7,11 @@ narrative on how config is loaded per runtime, see the facade sections in
 
 **This file is the canonical list, and it stays in this repo** even though its audience is
 operators: `scripts/check-reserved-env-keys.mjs` reads it, and that guard is only useful when it
-fires in the PR that adds the variable. The operator-facing copy at
-[catfactory.ai/reference/environment-variables](https://www.catfactory.ai/reference/environment-variables.html)
-is RENDERED from this file by the website's `scripts/sync-env-vars.mjs`, so adding a row here is
-still the one edit. Configuration narrative (what to set first, what refuses to boot) belongs on
-the website's [Configuration](https://www.catfactory.ai/deploy/configuration.html) page, not here.
+fires in the PR that adds the variable. It is also, for now, the only copy: the website has no
+rendered mirror of it yet, so an operator is sent here. Should one land, it must be GENERATED from
+this file rather than hand-written, or the guard starts policing a list nobody reads.
+Configuration narrative (what to set first, what refuses to boot) belongs on the website's
+[Configuration](https://www.catfactory.ai/deploy/configuration.html) page, not here.
 
 ## These names are RESERVED
 

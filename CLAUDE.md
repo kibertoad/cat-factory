@@ -107,16 +107,16 @@ after the PR forked: merge `origin/main` into the PR branch, fix there, and push
 
 ### Documentation-staleness sweep before every PR
 
-Docs are part of the change and CI cannot catch staleness. Match the sweep to the blast radius (a one-line
-internal fix needs none; a new export / env var / capability / flow does):
+Docs are part of the change and CI catches only broken LINKS, never staleness. Match the sweep to the blast
+radius (a one-line internal fix needs none; a new export / env var / capability / flow does):
 
 - The package's own `README.md` + `AGENTS.md`; the root `README.md`'s layout and feature-guide rows.
 - This file, only for a new CROSS-CUTTING convention or a change to a flow it indexes; detail about one flow
   goes in that flow's doc, and a higher-level doc POINTS AT a new deeper one or the deeper one is lost.
 - **Does this change behaviour a catfactory.ai page describes?** OWNERSHIP FOLLOWS THE READER: the website
-  owns what anyone can act on with NO checkout, a doc here keeps the internal design plus a LINK, and the
-  two split by DEPTH, never mirrored. If yes, say so in the PR or open the website PR, landing it FIRST so
-  the link never 404s. Model and open slices: `docs/initiatives/documentation-revamp.md`.
+  owns what anyone can act on with NO checkout, a doc here keeps the internal design plus a LINK, and the two
+  split by DEPTH, never mirrored. Say so in the PR or open the website PR, landing it FIRST: a doc may never
+  be reduced to a pointer at a page that does not exist yet. Model: `docs/initiatives/documentation-revamp.md`.
 
 ### Bigger initiatives get a tracker document
 
@@ -580,10 +580,10 @@ recipe, release-PR re-sync, new-published-package checklist: [`docs/internal/rel
 - `node scripts/check-silent-catch.mjs`: bans `.catch(() => {})` in backend non-test source.
 - `node scripts/check-component-imports.mjs`: every layer component used in a Vue template is
   imported by path ([`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly)).
-- `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is
-  RESERVED, so it can never be named as a capability credential.
+- `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is RESERVED, so it can never be named as a capability credential.
 - `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through `buildStepApproval`.
 - `node scripts/check-shipped-doc-links.mjs`: a published tarball's docs never link out of the package.
+- `node scripts/check-doc-links.mjs`: a catfactory.ai link names a page in `docs/website-pages.txt`, and a code-built doc URL resolves to a file AND a heading.
 - `node scripts/check-test-lane-parity.mjs`: `pnpm test:quick` excludes what CI's no-DB lane does.
 - `node scripts/check-deploy-placeholders.mjs`: the `deploy/*` templates hold placeholders, never real ids.
 - `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs them all).
