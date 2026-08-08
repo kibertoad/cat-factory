@@ -63,8 +63,9 @@ const GITHUB_ONLY_MEMBERS = new Set<string>([
 ])
 
 /**
- * Property names the router must answer `undefined` for rather than with a routing function,
- * because the LANGUAGE reads them as protocol rather than as a port method.
+ * Property names the router must never route, even when a backing client happens to define one,
+ * because the LANGUAGE reads them as protocol rather than as a port method. They are answered by
+ * the proxy TARGET instead (see the `get` trap).
  *
  * `then` is the one that bites: an object with a callable `then` is a thenable, so `await client`
  * or returning the client from an `async` function makes the promise machinery call it with
@@ -74,6 +75,35 @@ const GITHUB_ONLY_MEMBERS = new Set<string>([
  */
 function isProtocolKey(property: string | symbol): boolean {
   return typeof property === 'symbol' || property === 'then' || property === 'toJSON'
+}
+
+/**
+ * Whether `client` implements `property` as a PORT member: the ONE definition of membership the
+ * router has, so reading a member and testing for one can never answer differently.
+ *
+ * It walks the prototype chain, because the backing clients are CLASSES whose methods live on the
+ * prototype rather than as own properties, and stops BEFORE `Object.prototype`. That stop is the
+ * whole point. A bare `Reflect.has` / `in` keeps walking, so `toString`, `valueOf`, `constructor`,
+ * `hasOwnProperty` and the rest of `Object.prototype` all answer true and the router hands back an
+ * installation-routing function for each of them. Any string coercion of the client (a template
+ * literal, `String(client)`, a logger rendering it) then calls `toString()` with NO arguments: the
+ * router reads `args[0]` as the installation id, fires an installation read nobody awaits, and
+ * returns a promise where a primitive was required, so the coercion dies as
+ * `TypeError: Cannot convert object to primitive value` with an unhandled rejection behind it.
+ *
+ * {@link isProtocolKey} cannot carry this rule: these are ordinary string keys, and enumerating
+ * them by hand would pass today and silently miss whatever `Object.prototype` gains next. The
+ * prototype BOUNDARY holds for names nobody has thought of.
+ */
+function implementsPortMember(client: object, property: string): boolean {
+  for (
+    let level: object | null = client;
+    level !== null && level !== Object.prototype;
+    level = Reflect.getPrototypeOf(level)
+  ) {
+    if (Object.hasOwn(level, property)) return true
+  }
+  return false
 }
 
 /**
@@ -118,9 +148,14 @@ export function providerRoutingGitHubClient(
     return row.provider
   }
 
-  /** The member of `client` named `property`, bound, or undefined when it does not implement it. */
+  /**
+   * The member of `client` named `property`, bound, or undefined when it does not implement it.
+   * Gated on {@link implementsPortMember} so that "what counts as a member" is decided in ONE
+   * place: reading through and testing for a member by different rules is how an inherited
+   * `Object.prototype` key becomes a callable route.
+   */
   function memberOf(client: GitHubClient | undefined, property: string): unknown {
-    if (!client) return undefined
+    if (!client || !implementsPortMember(client, property)) return undefined
     const member = Reflect.get(client as object, property, client)
     return typeof member === 'function'
       ? (member as (...a: unknown[]) => unknown).bind(client)
@@ -134,14 +169,21 @@ export function providerRoutingGitHubClient(
   /** Whether any configured backing client implements `property`. */
   function anyImplements(property: string): boolean {
     return (
-      (deps.github !== undefined && Reflect.has(deps.github as object, property)) ||
-      (deps.gitlab !== undefined && Reflect.has(deps.gitlab as object, property))
+      (deps.github !== undefined && implementsPortMember(deps.github, property)) ||
+      (deps.gitlab !== undefined && implementsPortMember(deps.gitlab, property))
     )
   }
 
   return new Proxy({} as GitHubClient, {
-    get(_target, property) {
-      if (isProtocolKey(property)) return undefined
+    // Anything that is not a port member is answered by the plain proxy TARGET rather than with a
+    // hard `undefined`, and the two cases that reach it need exactly that. An optional port method
+    // neither client implements is absent on `{}`, so a feature-testing caller still sees
+    // `undefined` and degrades. A name the language owns resolves to `Object.prototype`'s own
+    // implementation, so coercing, inspecting or logging the client behaves as it does for any
+    // object. Answering `undefined` there instead would leave the client with no callable
+    // `toString`/`valueOf` at all, which fails string coercion just as loudly as routing them did.
+    get(_target, property, receiver) {
+      if (isProtocolKey(property)) return Reflect.get(_target, property, receiver)
       const name = property as string
 
       if (GITHUB_ONLY_MEMBERS.has(name)) {
@@ -159,7 +201,7 @@ export function providerRoutingGitHubClient(
         return undefined
       }
 
-      if (!anyImplements(name)) return undefined
+      if (!anyImplements(name)) return Reflect.get(_target, property, receiver)
 
       // Installation-keyed: the first argument is the routing key for every remaining member of
       // the port. Async because resolving the provider is a repository read.
@@ -180,13 +222,16 @@ export function providerRoutingGitHubClient(
       }
     },
 
+    // Mirrors `get`: a non-member reports whatever the target reports, so an unimplemented
+    // optional port method is absent (the feature-test callers rely on) while `'toString' in
+    // client` stays true, as it is for every object.
     has(_target, property) {
-      if (isProtocolKey(property)) return false
+      if (isProtocolKey(property)) return Reflect.has(_target, property)
       const name = property as string
       if (GITHUB_ONLY_MEMBERS.has(name)) {
-        return deps.github !== undefined && Reflect.has(deps.github as object, name)
+        return deps.github !== undefined && implementsPortMember(deps.github, name)
       }
-      return anyImplements(name)
+      return anyImplements(name) || Reflect.has(_target, property)
     },
   })
 }

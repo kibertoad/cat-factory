@@ -124,6 +124,7 @@ export { githubRepoOrigin } from './agents/containerAgentBody.js'
 // suite can pin it against the harness's own independently-computed copy.
 export {
   HARNESS_SENTINEL_PATHS,
+  checkoutDirDigest,
   safeDirSegment,
   siblingCheckoutDir,
 } from './agents/harnessContract.js'

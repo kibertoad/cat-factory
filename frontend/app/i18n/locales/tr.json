@@ -530,7 +530,8 @@
       "description": {
         "binary_generators_unreachable": "Bu dağıtımın üretken entegrasyonları şu anda okunamadı, bu yüzden çalıştırma başlatılmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin.",
         "foundational_builtins_unreachable": "Bu dağıtımın yerleşik temel hizmetleri şu anda okunamadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin.",
-        "connection_credentials_unreadable": "Bu bağlantı için saklanan kimlik bilgileri okunamadı. Bu dağıtım, anahtarını tutan hizmete ulaşabiliyorsa kaynağı yeniden bağlayarak bilgileri değiştirin; ulaşamıyorsa o bağlantı düzeldiğinde yeniden deneyin."
+        "connection_credentials_unreadable": "Bu bağlantı için saklanan kimlik bilgileri okunamadı. Bu dağıtım, anahtarını tutan hizmete ulaşabiliyorsa kaynağı yeniden bağlayarak bilgileri değiştirin; ulaşamıyorsa o bağlantı düzeldiğinde yeniden deneyin.",
+        "vcs_capability_unsupported": "Bu çalışma alanına bağlı kaynak kontrol sağlayıcısı bu işlemi sunmuyor. Yanlış yapılandırılmış bir şey yok ve ayar değiştirmek işe yaramaz: bu işlem bu sağlayıcıda kullanılamıyor."
       }
     },
     "action": {

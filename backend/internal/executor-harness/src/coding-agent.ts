@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { runCapturedCommand } from './captured-command.js'
+import { makeDirClaimer } from './checkout-dir.js'
 import type {
   AgentJob,
   AgentResult,
@@ -1018,25 +1019,6 @@ export async function runRalphValidation(
   }
 }
 
-/** Sanitise an owner/name into a safe single path segment for a sibling checkout directory. */
-export function safeDirSegment(value: string): string {
-  return value.replace(/[^A-Za-z0-9._-]/g, '-') || '_'
-}
-
-/**
- * A sibling-directory allocator for a multi-repo run: returns the checkout directory name for a
- * repo under the workspace root. Deterministic (`owner__name`) and collision-free by construction
- * — the checkout set is deduped by `owner/name` upstream and GitHub owners contain no `_`, so the
- * `owner__name` join is unique per repo without a stateful collision dance. Kept as a factory so
- * the coding + read-only explore fan-outs share ONE scheme, and it MUST stay byte-identical to the
- * backend's `siblingCheckoutDir` / `renderMultiRepoWorkspaceSection` in `@cat-factory/server`
- * (jobBody.ts), which names this exact directory in the agent's prompt — the two are computed
- * independently, so a divergent rule would point the agent at a directory that does not exist.
- */
-export function makeDirClaimer(): (repo: Pick<RepoSpec, 'name' | 'owner'>) => string {
-  return (repo) => `${safeDirSegment(repo.owner)}__${safeDirSegment(repo.name)}`
-}
-
 /** One repository participating in a multi-repo run: where to clone it + what to do after. */
 interface RepoLeg {
   repo: RepoSpec
@@ -1086,8 +1068,9 @@ export async function runMultiRepoCoding(
   const references: ReferenceRepoSpec[] = job.referenceRepos ?? []
   const primaryWorkBranch = job.pushBranch ?? job.newBranch ?? job.branch
 
-  // Assign the sibling directory per repo via the shared deterministic allocator (`owner__name`,
-  // matching the backend prompt's `siblingCheckoutDir`), shared with the read-only explore fan-out.
+  // Assign the sibling directory per repo via the shared deterministic allocator
+  // (`owner__name__digest`, matching the backend prompt's `siblingCheckoutDir`), shared with the
+  // read-only explore fan-out.
   const claimDir = makeDirClaimer()
   const legs: RepoLeg[] = [
     {

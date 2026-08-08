@@ -227,4 +227,48 @@ describe('providerRoutingGitHubClient', () => {
     expect((router as unknown as Record<symbol, unknown>)[Symbol.toPrimitive]).toBeUndefined()
     expect(() => JSON.stringify({ router })).not.toThrow()
   })
+
+  it('does not route the names Object.prototype owns', async () => {
+    // Membership was once tested with a bare `Reflect.has`, which keeps walking into
+    // `Object.prototype`, so `toString` / `valueOf` / `constructor` / `hasOwnProperty` were all
+    // answered with installation-routing functions. Coercing the client then called `toString()`
+    // with no arguments: the router read `args[0]` as the installation id, so the coercion got a
+    // promise where it needed a primitive AND an unawaited installation read rejected behind it.
+    // A logger or a template literal reaching the client is enough to trigger it.
+    const { repo, reads } = fakeInstallations([installation(1, 'github')])
+    const router = providerRoutingGitHubClient({
+      installations: repo,
+      github: stubClient('gh').client,
+      gitlab: stubClient('gl').client,
+    })
+
+    // Asserted over `Object.prototype`'s OWN keys against a PLAIN object rather than a hand-listed
+    // few, so a name added to it later is covered without anyone remembering to extend this, and
+    // the accessor keys (`__proto__`) compare by what they resolve to rather than by identity.
+    const plain = {} as Record<string, unknown>
+    const drifted = Object.getOwnPropertyNames(Object.prototype).filter(
+      (name) => (router as unknown as Record<string, unknown>)[name] !== plain[name],
+    )
+    expect(drifted).toEqual([])
+
+    // The observable consequence, which is what actually reached production code.
+    expect(() => `${router}`).not.toThrow()
+    expect(String(router)).toBe('[object Object]')
+    expect(reads()).toBe(0)
+  })
+
+  it('keeps an unimplemented optional port method absent while Object.prototype names stay present', () => {
+    // The two halves of the target fall-through must not blur together: an optional method
+    // nobody implements has to read as ABSENT (callers feature-test with `in` and degrade),
+    // while a name every object has must keep reading as present.
+    const router = providerRoutingGitHubClient({
+      installations: fakeInstallations([]).repo,
+      github: stubClient('gh').client,
+      gitlab: stubClient('gl').client,
+    })
+    expect('getBranchProtection' in router).toBe(false)
+    expect(router.getBranchProtection).toBeUndefined()
+    expect('toString' in router).toBe(true)
+    expect('then' in router).toBe(false)
+  })
 })

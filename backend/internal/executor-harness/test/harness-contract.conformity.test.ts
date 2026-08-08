@@ -1,9 +1,11 @@
 import {
   HARNESS_SENTINEL_PATHS,
+  checkoutDirDigest as backendCheckoutDirDigest,
   safeDirSegment as backendSafeDirSegment,
+  siblingCheckoutDir as backendSiblingCheckoutDir,
 } from '@cat-factory/server'
 import { describe, expect, it } from 'vitest'
-import { makeDirClaimer, safeDirSegment } from '../src/coding-agent.js'
+import { checkoutDirDigest, makeDirClaimer, safeDirSegment } from '../src/checkout-dir.js'
 import { EFFORT_REPORT_FILE } from '../src/effort.js'
 import { FOLLOW_UPS_FILENAME } from '../src/follow-ups.js'
 import { CONTEXT_DIR } from '../src/pi.js'
@@ -54,16 +56,24 @@ describe('harness ⇄ backend checkout-directory contract', () => {
     })
   }
 
-  // The join, not just its inputs: the backend composes `owner__name` in `siblingCheckoutDir` and
-  // the harness in `makeDirClaimer`, so a matching sanitiser with a different separator would
-  // still point the agent at the wrong directory.
-  it('joins owner and name identically on both sides', () => {
+  // The whole directory name, not just its inputs: a matching sanitiser joined differently would
+  // still point the agent at the wrong directory. Compared against the backend's OWN
+  // `siblingCheckoutDir` rather than a join recomposed here, so this pins the two PRODUCTION
+  // functions to each other instead of pinning both to a third copy of the rule that would go
+  // stale without failing.
+  it('names the checkout directory identically on both sides', () => {
     const claim = makeDirClaimer()
     for (const owner of SEGMENTS) {
       for (const name of SEGMENTS) {
-        expect(claim({ owner, name })).toBe(
-          `${backendSafeDirSegment(owner)}__${backendSafeDirSegment(name)}`,
-        )
+        expect(claim({ owner, name })).toBe(backendSiblingCheckoutDir(owner, name))
+      }
+    }
+  })
+
+  it('digests the owner/name pair identically on both sides', () => {
+    for (const owner of SEGMENTS) {
+      for (const name of SEGMENTS) {
+        expect(checkoutDirDigest(owner, name)).toBe(backendCheckoutDirDigest(owner, name))
       }
     }
   })
@@ -80,12 +90,81 @@ describe('harness ⇄ backend checkout-directory contract', () => {
     }
   })
 
-  it('keeps `_` available as the join separator', () => {
-    // GitHub owners contain no `_`, which is what makes `owner__name` collision-free. The
-    // sanitiser must not manufacture one out of a replaced character, or two distinct repos
-    // could claim one directory.
+  it('keeps `_` out of what the sanitiser manufactures', () => {
+    // Not a collision-freedom argument any more (the digest carries that), but still the rule
+    // the readable prefix depends on: a replaced character must not turn into the join's own
+    // separator, or `owner__name` stops reading as owner-then-name for a human skimming the
+    // prompt.
     expect(safeDirSegment('a/b')).not.toContain('_')
     expect(safeDirSegment('a b')).not.toContain('_')
+  })
+
+  // The property the digest exists for, asserted on the pairs that actually collide rather than
+  // on a restatement of the rule. Each pair below sanitises+joins to ONE prefix, so before the
+  // digest both legs of a multi-repo run claimed a single directory and the second one's clone
+  // died against a directory the first had already filled.
+  //
+  // These are GitLab shapes, not hypotheticals: `owner` is a namespace PATH there (`grp/sub`,
+  // sanitised to `grp-sub`) and GitLab paths allow `_`, so neither the separator argument nor
+  // the sanitiser is injective on its own.
+  const COLLIDING_PREFIX_PAIRS: Array<[[string, string], [string, string]]> = [
+    // `_` inside a segment makes the `__` join ambiguous.
+    [
+      ['a__b', 'c'],
+      ['a', 'b__c'],
+    ],
+    // A nested namespace path and a top-level group named for it sanitise alike.
+    [
+      ['grp/sub', 'api'],
+      ['grp-sub', 'api'],
+    ],
+    // The sanitiser folds distinct character classes onto the same `-`.
+    [
+      ['acme corp', 'api'],
+      ['acme/corp', 'api'],
+    ],
+  ]
+
+  for (const [[ownerA, nameA], [ownerB, nameB]] of COLLIDING_PREFIX_PAIRS) {
+    const label = `${ownerA}/${nameA} vs ${ownerB}/${nameB}`
+    it(`separates two repos whose sanitised prefix collides (${label})`, () => {
+      const claim = makeDirClaimer()
+      const a = claim({ owner: ownerA, name: nameA })
+      const b = claim({ owner: ownerB, name: nameB })
+
+      // The premise: without the digest these two ARE the same directory.
+      expect(`${backendSafeDirSegment(ownerA)}__${backendSafeDirSegment(nameA)}`).toBe(
+        `${backendSafeDirSegment(ownerB)}__${backendSafeDirSegment(nameB)}`,
+      )
+      expect(a).not.toBe(b)
+      // Both sides have to separate them the same way, or the prompt names one of the two.
+      expect(a).toBe(backendSiblingCheckoutDir(ownerA, nameA))
+      expect(b).toBe(backendSiblingCheckoutDir(ownerB, nameB))
+    })
+  }
+
+  it('gives every distinct pair in the fixture set its own directory', () => {
+    const claim = makeDirClaimer()
+    const byDir = new Map<string, string>()
+    const collisions: string[] = []
+    for (const owner of SEGMENTS) {
+      for (const name of SEGMENTS) {
+        const dir = claim({ owner, name })
+        const previous = byDir.get(dir)
+        if (previous !== undefined) collisions.push(`${previous} and ${owner}/${name} → ${dir}`)
+        else byDir.set(dir, `${owner}/${name}`)
+      }
+    }
+    expect(collisions).toEqual([])
+  })
+
+  it('emits a directory name that is still a single safe path segment', () => {
+    // The digest must not reintroduce what the sanitiser exists to remove.
+    for (const owner of SEGMENTS) {
+      for (const name of SEGMENTS) {
+        expect(makeDirClaimer()({ owner, name })).toMatch(/^[A-Za-z0-9._-]+$/)
+      }
+    }
   })
 })
 

@@ -1,7 +1,9 @@
 ---
 '@cat-factory/kernel': minor
+'@cat-factory/contracts': minor
 '@cat-factory/integrations': minor
 '@cat-factory/server': minor
+'@cat-factory/app': patch
 '@cat-factory/node-server': patch
 '@cat-factory/worker': patch
 ---
@@ -20,3 +22,19 @@ protection preflight now answers for real on GitHub installations, where it prev
 does not implement the method refuses with the new `VcsCapabilityUnsupportedError` rather than
 `undefined is not a function`; `GitHubService.checkDefaultBranchProtection` absorbs it and keeps
 reporting `unavailable`, which is exactly the fact it already models.
+
+Reflecting means deciding what counts as a member, and the first answer was too generous:
+membership was tested with `Reflect.has`, which walks into `Object.prototype`, so `toString`,
+`valueOf`, `constructor` and the rest were answered with installation-routing functions. Coercing
+the client to a string called `toString()` with no arguments, which routed on `undefined` as the
+installation id and returned a promise where a primitive was required, so a template literal or a
+logger touching the client threw `TypeError: Cannot convert object to primitive value` with an
+unawaited repository read rejecting behind it. Membership now stops at `Object.prototype` and
+anything that is not a port member is answered by the proxy target, so those names behave as they
+do on any object while an unimplemented optional method still reads as absent.
+
+`VcsCapabilityUnsupportedError`'s reason joins the shared `UNAVAILABLE_REASONS` vocabulary and
+gains translated SPA copy. Without it the refusal rendered as the generic 503 wording, "this
+deployment has not configured the capability", which is the misattribution the class exists to
+prevent: no operator wiring changes what a provider does not offer. Its sibling
+`vcs_client_unconfigured` deliberately stays on the generic copy, because that one IS a wiring gap.

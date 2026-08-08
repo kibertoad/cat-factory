@@ -126,7 +126,7 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
   from the CURRENT remote body or a concurrent human edit is clobbered.
 - **`getPullRequestBody` is a REQUIRED port method, not optional.** Both `FetchGitHubClient`
   and `FetchGitLabClient` implement it, `vcsBackedGitHubClient` bridges it, and
-  `ProviderRoutingGitHubClient` routes it: otherwise a GitLab deployment silently loses the
+  `providerRoutingGitHubClient` routes it: otherwise a GitLab deployment silently loses the
   feature (the "provider-neutral" rule in CLAUDE.md).
 - **File-size ratchets are split triggers.** `ExecutionService.ts` had 3 lines of headroom
   under its 2650 allowance, so this PR split the ~360-line `ExecutionServiceDependencies`

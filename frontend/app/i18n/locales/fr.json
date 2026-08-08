@@ -530,7 +530,8 @@
       "description": {
         "binary_generators_unreachable": "Les intégrations génératives de ce déploiement n'ont pas pu être lues pour l'instant, l'exécution n'a donc pas démarré. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie.",
         "foundational_builtins_unreachable": "Les services fondamentaux intégrés de ce déploiement n'ont pas pu être lus pour l'instant. Rien n'est mal configuré et aucune modification n'est nécessaire : réessayez une fois la connexion rétablie.",
-        "connection_credentials_unreadable": "Les identifiants enregistrés pour cette connexion n'ont pas pu être lus. Si ce déploiement peut joindre le service qui détient sa clé, reconnectez la source pour les remplacer ; sinon, réessayez une fois cette connexion rétablie."
+        "connection_credentials_unreadable": "Les identifiants enregistrés pour cette connexion n'ont pas pu être lus. Si ce déploiement peut joindre le service qui détient sa clé, reconnectez la source pour les remplacer ; sinon, réessayez une fois cette connexion rétablie.",
+        "vcs_capability_unsupported": "Le fournisseur de gestion de code source connecté à cet espace de travail ne propose pas cette opération. Rien n'est mal configuré et aucun réglage n'y changera quoi que ce soit : elle n'est pas disponible pour ce fournisseur."
       }
     },
     "action": {

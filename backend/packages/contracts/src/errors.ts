@@ -243,11 +243,27 @@ export type ConflictReason = (typeof CONFLICT_REASONS)[number]
  *                                        BOTH remedies rather than picking one: retry if the key
  *                                        service is unreachable, re-connect the source if the row
  *                                        itself has drifted.
+ *  - `vcs_capability_unsupported`      : the workspace's source-control provider does not offer
+ *                                        the operation at all (kernel's
+ *                                        `VcsCapabilityUnsupportedError`, raised by the
+ *                                        provider-routing VCS client when a call lands on the
+ *                                        provider whose client lacks it). A PERMANENT property of
+ *                                        the provider that was connected, which is why it cannot
+ *                                        ride the generic copy: no amount of operator wiring
+ *                                        changes it, so telling someone their deployment is
+ *                                        misconfigured sends them to a build with nothing wrong
+ *                                        in it. `details` carries `provider` and `operation`.
+ *
+ * Its sibling `vcs_client_unconfigured` (no client wired for the routed connection's provider) is
+ * deliberately NOT here. That one IS a wiring gap, so the generic copy states it correctly, and
+ * this list is a short set of exceptions to that copy rather than a second vocabulary mirroring
+ * every reason the backend emits.
  */
 export const UNAVAILABLE_REASONS = [
   'binary_generators_unreachable',
   'foundational_builtins_unreachable',
   'connection_credentials_unreadable',
+  'vcs_capability_unsupported',
 ] as const
 
 export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number]

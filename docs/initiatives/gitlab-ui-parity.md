@@ -184,15 +184,18 @@ Slice 2a landed the backend of the per-workspace GitLab PAT connect. Read this b
   a per-workspace token, never account-shared). `StoredGitLabTokenSource` (`@cat-factory/gitlab`)
   reads + decrypts it per call; `buildGitLabConnectClient` bridges a `FetchGitLabClient` over it to
   the `GitHubClient` port, so the whole `GitHubSyncService` seed path works unchanged for GitLab.
-- **Provider routing = `ProviderRoutingGitHubClient`** (`@cat-factory/server`). When BOTH a GitHub
+- **Provider routing = `providerRoutingGitHubClient`** (`@cat-factory/server`). When BOTH a GitHub
   App and GitLab connect are configured, the `github` module reads through a router that dispatches
   each installation-keyed call to the App or GitLab client by the connection's stored provider
-  (memoised per installation: an immutable identity, so no N+1 in the sync loops). It forwards
-  every required `GitHubClient` method + the two token-keyed optionals `GitHubSyncService` probes;
-  the installation-keyed optionals (PR-review threads, sub-issues, …) are consumed by the engine
-  through `engineVcsClient` and by the task sources through the App client directly, never through
-  the router, so they're intentionally not forwarded. The GitHub-issue/docs consumers keep the raw
-  App client (they must not gain the GitLab fallback).
+  (memoised per installation: an immutable identity, so no N+1 in the sync loops). It is a `Proxy`,
+  so the surface it presents is the UNION of what the configured backing clients implement: every
+  required method plus every optional one at least one client has. An optional method the routed
+  provider lacks refuses by name (`VcsCapabilityUnsupportedError`) rather than resolving to
+  `undefined`, because "this deployment wired no such capability" and "this provider does not offer
+  it" need different fixes. An earlier hand-written delegate forwarded the required methods and two
+  optionals only, which reported a capability the deployment HAD as absent; see the module header
+  for what that cost. The GitHub-issue/docs consumers still keep the raw App client (they must not
+  gain the GitLab fallback), so they never reach the router at all.
 - **Wiring is symmetric.** Both facades relax the `github` module gate to build when EITHER the App
   OR GitLab connect is enabled (`selectVcsConnectDeps` in Node's `container-github-deps.ts`,
   `selectWorkerVcsConnectDeps` in the Worker's `vcsConnect.ts`), feeding the module the router /

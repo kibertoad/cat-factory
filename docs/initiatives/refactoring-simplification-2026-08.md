@@ -154,6 +154,17 @@ pairs is possible but optional; the constants are the part that must not wait.
 
 - [x] `test/harness-contract.conformity.test.ts` pinning `safeDirSegment` and the sentinel paths
 - [x] `.cat-follow-ups.jsonl` lifted onto a named constant on the prompt side
+- [x] The bug the pinning surfaced: the `owner__name` join is NOT collision-free (below)
+
+**The "no image bump" property held for the test and not for what the test found.** Writing the
+contract down forced its claim to be stated precisely, and stating it precisely showed it was
+false. `owner__name` is collision-free only while owners contain no `_` and the sanitiser is
+injective; on GitLab neither holds, because `owner` is a namespace PATH (`grp/sub`, folded onto
+`grp-sub` beside a real group of that name) and GitLab paths allow `_` (`a__b` + `c` reads as
+`a` + `b__c`). Two legs of a multi-repo run then claim one directory and the second clone dies
+against a directory the first filled. The fix appends a digest of the unsanitised pair on both
+sides, which touches harness `src/**` and therefore DID bump the image. Item 14's "one image
+bump" batch is unaffected: this is a correctness fix, not dedup, and it landed first.
 
 Distinct from the three intentionally pinned kernel copies, two cross-package contracts
 claim byte-identity in comments with nothing enforcing it. `safeDirSegment` plus the
