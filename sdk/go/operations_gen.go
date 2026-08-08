@@ -61,6 +61,60 @@ func (q *DebugGetLlmCallQuery) values() map[string]string {
 	return out
 }
 
+// DebugGetLlmExportQuery holds the query parameters for DebugService.GetLlmExport.
+type DebugGetLlmExportQuery struct {
+	// Limit zero value means "not sent".
+	Limit *int
+	// Order zero value means "not sent".
+	Order *ListDebugLlmCallsOrder
+	// BodyChars zero value means "not sent".
+	BodyChars *int
+}
+
+func (q *DebugGetLlmExportQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Limit != nil {
+		out["limit"] = fmt.Sprintf("%v", *q.Limit)
+	}
+	if q.Order != nil {
+		out["order"] = fmt.Sprintf("%v", *q.Order)
+	}
+	if q.BodyChars != nil {
+		out["bodyChars"] = fmt.Sprintf("%v", *q.BodyChars)
+	}
+	return out
+}
+
+// UsageSpendQuery holds the query parameters for UsageService.Spend.
+type UsageSpendQuery struct {
+	// Dimension is REQUIRED: the deployment refuses a nil here with a 400 naming it.
+	Dimension *PublicSpendDimension
+	// Window zero value means "not sent".
+	Window *PublicSpendWindow
+	// Limit zero value means "not sent".
+	Limit *int
+}
+
+func (q *UsageSpendQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Dimension != nil {
+		out["dimension"] = fmt.Sprintf("%v", *q.Dimension)
+	}
+	if q.Window != nil {
+		out["window"] = fmt.Sprintf("%v", *q.Window)
+	}
+	if q.Limit != nil {
+		out["limit"] = fmt.Sprintf("%v", *q.Limit)
+	}
+	return out
+}
+
 // DebugListAgentContextQuery holds the query parameters for DebugService.ListAgentContext.
 type DebugListAgentContextQuery struct {
 	// StepIndex zero value means "not sent".
@@ -484,7 +538,10 @@ type ServicesService struct {
 // rather than duplicated; a monorepo service must name its subdirectory. The board lays the
 // service out itself: this surface publishes no coordinates. Requires an `admin` key.
 // POST /api/v1/services (operation createPublicService).
-func (s *ServicesService) Create(ctx context.Context, body CreatePublicServiceRequest) (*PublicService, error) {
+func (s *ServicesService) Create(ctx context.Context, body *CreatePublicServiceRequest) (*PublicService, error) {
+	if body == nil {
+		body = &CreatePublicServiceRequest{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   "/api/v1/services",
@@ -507,6 +564,40 @@ func (s *ServicesService) List(ctx context.Context) (*PublicServiceList, error) 
 		Path:   "/api/v1/services",
 	}
 	var out PublicServiceList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SpecService a service's in-repo specification: the structured requirement tree (modules → feature groups →
+// requirements, with their acceptance criteria and domain rules), the Gherkin rendered from it,
+// and the branch and commit the read describes. Read-only; the requirement ids are the join key
+// onto a run's report and outcome.
+type SpecService struct {
+	client *Client
+}
+
+// Get get a service's in-repo specification
+// The prescriptive specification stored in the service’s own repository under `spec/`: modules →
+// feature groups → requirement items, each with its MoSCoW priority, its
+// `aspirational`/`established` implementation state and its Given/When/Then acceptance criteria,
+// plus the domain rules scoped to each group and the Gherkin `.feature` files rendered from the
+// same tree. `provenance` names the branch and commit the read describes, because the default
+// branch is not what a run with an open pull request is working against. The requirement ids here
+// are the join key onto `requirements` on a run’s report and outcome, so criterion → evidence is
+// a map lookup. Four outcomes are kept apart rather than folded: `present: false` means the
+// default branch holds no spec, a `503` with `reason: "spec_read_failed"` means the repository
+// could not be read, a `503` with `reason: "vcs_not_configured"` means the deployment or
+// workspace wired no version control, and a partially readable spec is SERVED with `issues`
+// naming each file that did not survive. Read-only: the spec’s write path is a reviewed commit.
+// GET /api/v1/services/{serviceId}/spec (operation getPublicServiceSpec).
+func (s *SpecService) Get(ctx context.Context, serviceID string) (*PublicServiceSpec, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/services/%s/spec", pathEscape(serviceID)),
+	}
+	var out PublicServiceSpec
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}
@@ -769,7 +860,10 @@ func (s *TasksService) Retry(ctx context.Context, taskID string) (*PublicTask, e
 // individual-usage model cannot be started through the API (no headless personal-credential
 // unlock).
 // POST /api/v1/tasks/{taskId}/start (operation startPublicTask).
-func (s *TasksService) Start(ctx context.Context, taskID string, body StartPublicTask) (*PublicTask, error) {
+func (s *TasksService) Start(ctx context.Context, taskID string, body *StartPublicTask) (*PublicTask, error) {
+	if body == nil {
+		body = &StartPublicTask{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/tasks/%s/start", pathEscape(taskID)),
@@ -818,7 +912,10 @@ func (s *TasksService) Stream(ctx context.Context, taskID string) (*EventStream,
 // does not serve the bag back. This is what makes an input the pre-dispatch gate refused
 // repairable: supply the value it named, then recheck the parked run.
 // PATCH /api/v1/tasks/{taskId} (operation updatePublicTask).
-func (s *TasksService) Update(ctx context.Context, taskID string, body UpdatePublicTask) (*PublicTask, error) {
+func (s *TasksService) Update(ctx context.Context, taskID string, body *UpdatePublicTask) (*PublicTask, error) {
+	if body == nil {
+		body = &UpdatePublicTask{}
+	}
 	req := requestSpec{
 		Method: "PATCH",
 		Path:   fmt.Sprintf("/api/v1/tasks/%s", pathEscape(taskID)),
@@ -887,12 +984,19 @@ type NotificationsService struct {
 // it requires an admin-scoped key. Only these automated-action types are actionable through the
 // API — a notification that parks a run on an interactive human decision cannot be acted on
 // headlessly (dismiss it instead). A card that would retry a run on an individual-usage model
-// likewise cannot be acted on through the API.
+// likewise cannot be acted on through the API. To record how much review a merged pull request
+// needed, call `POST /api/v1/merge-records/{recordId}/effort` (a `write` key) before or after
+// this; a `merge_tag_request` card carries its record id on the payload and is resolved by
+// tagging that record and dismissing the card.
 // POST /api/v1/notifications/{id}/act (operation actPublicNotification).
-func (s *NotificationsService) Act(ctx context.Context, id string) (*Notification, error) {
+func (s *NotificationsService) Act(ctx context.Context, id string, body *ActPublicNotificationRequest) (*Notification, error) {
+	if body == nil {
+		body = &ActPublicNotificationRequest{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/notifications/%s/act", pathEscape(id)),
+		Body:   body,
 	}
 	var out Notification
 	if err := s.client.request(ctx, req, &out); err != nil {
@@ -1024,7 +1128,10 @@ func (s *WebhookService) List(ctx context.Context) (*PublicNotificationWebhookLi
 // `secret` rotates the signing secret; omitting it keeps the current one. The endpoint must be
 // `https:` and publicly routable unless the deployment widened its allow-list.
 // PUT /api/v1/notification-webhook (operation putPublicNotificationWebhook).
-func (s *WebhookService) Set(ctx context.Context, body PutNotificationWebhook) (*NotificationWebhook, error) {
+func (s *WebhookService) Set(ctx context.Context, body *PutNotificationWebhook) (*NotificationWebhook, error) {
+	if body == nil {
+		body = &PutNotificationWebhook{}
+	}
 	req := requestSpec{
 		Method: "PUT",
 		Path:   "/api/v1/notification-webhook",
@@ -1048,7 +1155,10 @@ func (s *WebhookService) Set(ctx context.Context, body PutNotificationWebhook) (
 // "webhook_limit_reached"` (409) when registering a NEW id would exceed the per-workspace cap;
 // editing an existing one is admitted either way.
 // PUT /api/v1/notification-webhooks/{webhookId} (operation putPublicNamedNotificationWebhook).
-func (s *WebhookService) SetNamed(ctx context.Context, webhookID string, body PutNotificationWebhook) (*NotificationWebhook, error) {
+func (s *WebhookService) SetNamed(ctx context.Context, webhookID string, body *PutNotificationWebhook) (*NotificationWebhook, error) {
+	if body == nil {
+		body = &PutNotificationWebhook{}
+	}
 	req := requestSpec{
 		Method: "PUT",
 		Path:   fmt.Sprintf("/api/v1/notification-webhooks/%s", pathEscape(webhookID)),
@@ -1061,7 +1171,9 @@ func (s *WebhookService) SetNamed(ctx context.Context, webhookID string, body Pu
 	return &out, nil
 }
 
-// UsageService the billing period's metered budget position and the per-model breakdown behind it.
+// UsageService the workspace's money, two ways: the billing period's metered budget position with the
+// per-model breakdown behind it, and spend over a window sliced by the dimension a budget is kept
+// against (a repository, a tracker ticket, one run).
 type UsageService struct {
 	client *Client
 }
@@ -1079,6 +1191,34 @@ func (s *UsageService) Get(ctx context.Context) (*PublicUsage, error) {
 		Path:   "/api/v1/usage",
 	}
 	var out PublicUsage
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Spend break the workspace's spend down by repository, ticket, run or step kind
+// Group the board’s spend over a window (`24h`, `7d`, `30d`, `90d`) by ONE dimension: `repo`,
+// `ticket` and `run` are the cost-attribution axes an organisation budgets against, and `model` /
+// `agentKind` / `service` / `taskType` slice the same money the other ways. `meteredCost` is real
+// money and `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage,
+// so never sum them. The EMPTY `key` is the unattributed bucket, a real slice rather than a
+// dropped row, never dropped from the breakdown. `rows` is the heaviest `limit` slices (default
+// 100, max 500) and `truncated` says when there was a tail, while `totals` aggregates the WHOLE
+// window either way, so a capped answer still reports what the board spent. `source` says which
+// store answered: the short windows scan the live ledger, which resolves a repository or a ticket
+// through today’s links, while the long ones read the durable daily rollup, which froze that
+// attribution while the money was spent and is never pruned. Read `rolledUpThrough` before
+// reporting a quiet quarter, since a rollup that has never run and a board that spent nothing
+// look identical. Workspace-scoped: the account-wide view is not reachable through this surface.
+// GET /api/v1/usage/spend (operation getPublicSpend).
+func (s *UsageService) Spend(ctx context.Context, query *UsageSpendQuery) (*PublicSpend, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/usage/spend",
+		Query:  query.values(),
+	}
+	var out PublicSpend
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}
@@ -1178,7 +1318,10 @@ func (s *DecisionsService) AnswerInterviewQuestion(ctx context.Context, runID st
 // integration resolve the same gate. Requires a `decide`-scope key.
 // POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/approve (operation
 // approvePublicRunStep).
-func (s *DecisionsService) ApproveStep(ctx context.Context, runID string, approvalID string, body PublicApproveStep) (*PublicDecisionList, error) {
+func (s *DecisionsService) ApproveStep(ctx context.Context, runID string, approvalID string, body *PublicApproveStep) (*PublicDecisionList, error) {
+	if body == nil {
+		body = &PublicApproveStep{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/approvals/%s/approve", pathEscape(runID), pathEscape(approvalID)),
@@ -1216,7 +1359,10 @@ func (s *DecisionsService) ApproveVisualConfirmation(ctx context.Context, runID 
 // re-parks carrying the verdict. Requires a `decide`-scope key.
 // POST /api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/challenge (operation
 // challengePublicRunPrReviewFinding).
-func (s *DecisionsService) ChallengePrReviewFinding(ctx context.Context, runID string, findingID string, body PublicChallengePrReviewFinding) (*PublicDecisionList, error) {
+func (s *DecisionsService) ChallengePrReviewFinding(ctx context.Context, runID string, findingID string, body *PublicChallengePrReviewFinding) (*PublicDecisionList, error) {
+	if body == nil {
+		body = &PublicChallengePrReviewFinding{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/pr-review/findings/%s/challenge", pathEscape(runID), pathEscape(findingID)),
@@ -1233,7 +1379,10 @@ func (s *DecisionsService) ChallengePrReviewFinding(ctx context.Context, runID s
 // Pick one of the proposed implementation forks (by id) or submit your own approach. The Coder
 // then runs with the choice folded in as a binding directive. Requires a `decide`-scope key.
 // POST /api/v1/runs/{runId}/decisions/fork/choose (operation choosePublicRunFork).
-func (s *DecisionsService) ChooseFork(ctx context.Context, runID string, body PublicChooseFork) (*PublicDecisionList, error) {
+func (s *DecisionsService) ChooseFork(ctx context.Context, runID string, body *PublicChooseFork) (*PublicDecisionList, error) {
+	if body == nil {
+		body = &PublicChooseFork{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/fork/choose", pathEscape(runID)),
@@ -1339,7 +1488,10 @@ func (s *DecisionsService) FileFollowUp(ctx context.Context, runID string, itemI
 // `decide`-scope key.
 // POST /api/v1/runs/{runId}/decisions/requirements/incorporate (operation
 // incorporatePublicRunRequirements).
-func (s *DecisionsService) Incorporate(ctx context.Context, runID string, body PublicIncorporate) (*PublicDecisionList, error) {
+func (s *DecisionsService) Incorporate(ctx context.Context, runID string, body *PublicIncorporate) (*PublicDecisionList, error) {
+	if body == nil {
+		body = &PublicIncorporate{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/requirements/incorporate", pathEscape(runID)),
@@ -1358,7 +1510,10 @@ func (s *DecisionsService) Incorporate(ctx context.Context, runID string, body P
 // `decide`-scope key.
 // POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/incorporate (operation
 // incorporatePublicRunBrainstorm).
-func (s *DecisionsService) IncorporateBrainstorm(ctx context.Context, runID string, stage string, body PublicIncorporate) (*PublicDecisionList, error) {
+func (s *DecisionsService) IncorporateBrainstorm(ctx context.Context, runID string, stage string, body *PublicIncorporate) (*PublicDecisionList, error) {
+	if body == nil {
+		body = &PublicIncorporate{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/brainstorm/%s/incorporate", pathEscape(runID), pathEscape(stage)),
@@ -1377,7 +1532,10 @@ func (s *DecisionsService) IncorporateBrainstorm(ctx context.Context, runID stri
 // Requires a `decide`-scope key.
 // POST /api/v1/runs/{runId}/decisions/clarity/incorporate (operation
 // incorporatePublicRunClarity).
-func (s *DecisionsService) IncorporateClarity(ctx context.Context, runID string, body PublicIncorporate) (*PublicDecisionList, error) {
+func (s *DecisionsService) IncorporateClarity(ctx context.Context, runID string, body *PublicIncorporate) (*PublicDecisionList, error) {
+	if body == nil {
+		body = &PublicIncorporate{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/clarity/incorporate", pathEscape(runID)),
@@ -1485,7 +1643,10 @@ func (s *DecisionsService) ProceedInterview(ctx context.Context, runID string) (
 // board can retry. Requires a `decide`-scope key.
 // POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/reject (operation
 // rejectPublicRunStep).
-func (s *DecisionsService) RejectStep(ctx context.Context, runID string, approvalID string, body PublicRejectStep) (*PublicDecisionList, error) {
+func (s *DecisionsService) RejectStep(ctx context.Context, runID string, approvalID string, body *PublicRejectStep) (*PublicDecisionList, error) {
+	if body == nil {
+		body = &PublicRejectStep{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/approvals/%s/reject", pathEscape(runID), pathEscape(approvalID)),
@@ -1756,7 +1917,10 @@ func (s *DecisionsService) ResolveJudge(ctx context.Context, runID string, body 
 // PR branch, `post` publishes them as inline PR review comments. `fix` and `post` need at least
 // one selected finding and act on the real pull request. Requires a `decide`-scope key.
 // POST /api/v1/runs/{runId}/decisions/pr-review/resolve (operation resolvePublicRunPrReview).
-func (s *DecisionsService) ResolvePrReview(ctx context.Context, runID string, body PublicResolvePrReview) (*PublicDecisionList, error) {
+func (s *DecisionsService) ResolvePrReview(ctx context.Context, runID string, body *PublicResolvePrReview) (*PublicDecisionList, error) {
+	if body == nil {
+		body = &PublicResolvePrReview{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/pr-review/resolve", pathEscape(runID)),
@@ -1861,7 +2025,7 @@ func (s *DecisionsService) SetFindingStatus(ctx context.Context, runID string, i
 }
 
 // DebugService a run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it
-// made, infra logs.
+// made, infra logs, and the whole model-activity bundle as one document.
 type DebugService struct {
 	client *Client
 }
@@ -1896,6 +2060,28 @@ func (s *DebugService) GetLlmCall(ctx context.Context, callID string, query *Deb
 		Query:  query.values(),
 	}
 	var out DebugLlmCall
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetLlmExport export a run's model activity as one bundle
+// The whole of a run’s model activity as one self-describing document, for handing straight to a
+// model asked why the run truncated, spent or stalled: the SQL rollups (run totals, per agent
+// kind, per phase, with the carry cost that says which slice burdened everything after it) plus a
+// bounded window of the individual calls behind them. The rollups cover EVERY recorded call and
+// do not move with `limit`, so a windowed bundle still reports what the run actually cost;
+// `truncated` says the calls are a window and `order` says which end was kept. Bodies are omitted
+// unless `bodyChars` asks, and the resumable call list is the way to walk a long run whole.
+// GET /api/v1/debug/runs/{runId}/llm-export (operation getDebugLlmExport).
+func (s *DebugService) GetLlmExport(ctx context.Context, runID string, query *DebugGetLlmExportQuery) (*GetDebugLlmExportResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/debug/runs/%s/llm-export", pathEscape(runID)),
+		Query:  query.values(),
+	}
+	var out GetDebugLlmExportResponse
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}
@@ -2311,6 +2497,97 @@ func (s *EvidenceService) ListArtifacts(ctx context.Context, runID string) (*Pub
 		Path:   fmt.Sprintf("/api/v1/runs/%s/artifacts", pathEscape(runID)),
 	}
 	var out PublicRunArtifactList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// MergeRecordsService the evidence behind the auto-merge policy: what kind of change each merged run made, what the
+// merger scored it, what happened to the pull request, and how much review a human actually
+// spent, plus the per-class rollups that justify widening a rule. Reading takes a `read` key and
+// recording an effort tag a `write` one: neither merges anything.
+type MergeRecordsService struct {
+	client *Client
+}
+
+// Get get one merge record
+// The same record addressed by its own id, for a caller that holds one without the run: the id a
+// `merge_tag_request` notification carries on its payload, for instance. Scoped to the calling
+// key’s workspace.
+// GET /api/v1/merge-records/{recordId} (operation getPublicMergeRecord).
+func (s *MergeRecordsService) Get(ctx context.Context, recordID string) (*GetPublicMergeRecordResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/merge-records/%s", pathEscape(recordID)),
+	}
+	var out GetPublicMergeRecordResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetForRun get the merge decision a run left behind
+// What kind of change the run’s pull request made (a change class derived on the backend from the
+// changed-file list, never from an agent’s opinion), what the merger scored it, which
+// merge-threshold preset the decision was compared against, what ultimately happened to the pull
+// request, and how much review a human spent if anybody has tagged it. The entry point of the
+// merge-evidence loop for a caller holding a run id: it also hands back the `recordId` the
+// effort-tag route takes. A run whose pipeline had no `merger` step made no merge decision and
+// answers `404` with `details.reason: "no_merge_record"`, distinct from the `"run_not_found"` a
+// run this key cannot read gets.
+// GET /api/v1/runs/{runId}/merge-record (operation getPublicRunMergeRecord).
+func (s *MergeRecordsService) GetForRun(ctx context.Context, runID string) (*GetPublicMergeRecordResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/merge-record", pathEscape(runID)),
+	}
+	var out GetPublicMergeRecordResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListRollups list the per-change-class merge rollups
+// Every change class’s accumulated track record for the workspace, as one aggregate: how many
+// records it holds, how many landed and by which route (auto-merged, merged through the app,
+// merged directly on the provider), how many were rejected or are still awaiting review, and the
+// distribution of reviewer-effort tags. This is the evidence that justifies widening a per-class
+// auto-merge rule; nothing widens one automatically. A class with no records is present as zeros
+// rather than absent, so "nothing has landed here yet" never reads as a class the response left
+// out. `unknown` is a real class (no changed-file list was available) and never matches a
+// per-class rule.
+// GET /api/v1/merge-records/rollups (operation listPublicMergeClassRollups).
+func (s *MergeRecordsService) ListRollups(ctx context.Context) (*ListPublicMergeClassRollupsResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/merge-records/rollups",
+	}
+	var out ListPublicMergeClassRollupsResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// TagEffort tag the reviewer effort a merge took
+// Record how much review a landed pull request actually needed (`none` for zero blocking
+// comments, `minor` for a nit pass, `major` for real rework), or `null` to clear the tag. This is
+// the ground truth the auto-merge score thresholds are trying to approximate, and it is never
+// mandatory: an untagged merge records a null tag and nothing downstream breaks. A `write` key,
+// not an `admin` one: the pull request already landed, so tagging it merges nothing. Idempotent,
+// and orthogonal to the decision, so a record can be tagged whenever the effort becomes known,
+// before or after the `act` that merged it.
+// POST /api/v1/merge-records/{recordId}/effort (operation tagPublicMergeReviewEffort).
+func (s *MergeRecordsService) TagEffort(ctx context.Context, recordID string, body TagPublicMergeReviewEffortRequest) (*GetPublicMergeRecordResponse, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/merge-records/%s/effort", pathEscape(recordID)),
+		Body:   body,
+	}
+	var out GetPublicMergeRecordResponse
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}

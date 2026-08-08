@@ -23,6 +23,10 @@ top-level files are the domain contracts.
 - `public-decisions.ts`: the external projection of every park a run can stop on, plus the bodies
   that answer them. The kind union is the surface's honesty check — a member with no route behind
   it is a promise `/api/v1` cannot keep.
+- `public-merge-evidence.ts`: the external projection of a merge track record (`mergeTrackRecord.ts`),
+  renaming its `blockId`/`executionId` to the `taskId`/`runId` the public surface addresses things
+  by. The ROLLUPS beside it are served verbatim from that module rather than re-projected, so the
+  preset editor and an integration cannot report different auto-merge shares for one workspace.
 - `events.ts`: the `WorkspaceEvent` union pushed to the SPA; `errors.ts`: the `reason`/`code`
   vocabulary the SPA maps to i18n keys. Both axes are declared here: `DOMAIN_ERROR_CODES` /
   `API_ERROR_CODES` are the STATUS CLASS on `error.code` (kernel's `DomainErrorCode` is derived

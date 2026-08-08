@@ -3,6 +3,7 @@ import {
   EFFORT_REPORT_FILE,
   FOLLOW_UPS_FILE,
   PR_DESCRIPTION_FILE,
+  REFERENCE_SCREENSHOT_DIR,
 } from '@cat-factory/agents'
 
 // ---------------------------------------------------------------------------
@@ -92,4 +93,6 @@ export const HARNESS_SENTINEL_PATHS = {
   contextDir: CONTEXT_DIR,
   /** The follow-up companion's append-only side channel, tailed live by the harness. */
   followUps: FOLLOW_UPS_FILE,
+  /** Where a capturing run's reference design images are downloaded to, and read from. */
+  referenceScreenshots: REFERENCE_SCREENSHOT_DIR,
 } as const

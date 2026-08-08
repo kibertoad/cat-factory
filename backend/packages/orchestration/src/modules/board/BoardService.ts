@@ -954,6 +954,11 @@ export class BoardService {
     return this.publicReads.assertTaskContainer(workspaceId, serviceId)
   }
 
+  /** Public-API: one visible service frame; null when the id names no service this key may read. */
+  getService(workspaceId: string, serviceId: string): Promise<Block | null> {
+    return this.publicReads.getService(workspaceId, serviceId)
+  }
+
   /** Public-API: a board task + its enclosing service frame; null when not externally visible. */
   getServiceTask(
     workspaceId: string,

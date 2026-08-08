@@ -9,6 +9,7 @@ import type {
   RunMode,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
+import { CHANGE_CLASSES, type PublicMergeRecord } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceApp, ConformanceHarness } from './harness.js'
 
@@ -68,6 +69,8 @@ type MergerRunDriver = (options: {
   preset?: Record<string, unknown>
   /** Requests a SANDBOXED run at start, exactly as the HTTP contract lets a caller. */
   mode?: RunMode
+  /** Places the board in an ORG account, which is what a public-API key can be minted for. */
+  org?: boolean
 }) => Promise<{
   app: ConformanceApp
   wsId: string
@@ -75,6 +78,13 @@ type MergerRunDriver = (options: {
   status: string
   decision: { outcome?: string; reason?: string; changeClass?: string }
 }>
+
+/** The half of a public notification card these cases address: which card, and its record id. */
+interface PublicNotificationCard {
+  id: string
+  type: string
+  payload?: { mergeTrackRecordId?: string } | null
+}
 
 /** Read back one change class's merge-track rollup. */
 type MergeRollupReader = (
@@ -99,6 +109,8 @@ export function defineMergeTrackRecordSuite(harness: ConformanceHarness): void {
       preset?: Record<string, unknown>
       /** Requests a SANDBOXED run at start, exactly as the HTTP contract lets a caller. */
       mode?: RunMode
+      /** Places the board in an ORG account, which is what a public-API key can be minted for. */
+      org?: boolean
     }): Promise<{
       app: ConformanceApp
       wsId: string
@@ -121,7 +133,12 @@ export function defineMergeTrackRecordSuite(harness: ConformanceHarness): void {
           }),
         },
       )
-      const { workspace } = await app.createWorkspace()
+      // A public-API key is ACCOUNT-scoped, so the cases that mint one need an org-owned board;
+      // everything else keeps the cheaper plain workspace. Both seed the same demo board, so
+      // `task_login` and the built-in pipelines are there either way.
+      const { workspace } = options.org
+        ? await app.createOrgWorkspace({ seed: true })
+        : await app.createWorkspace()
       const wsId = workspace.id
 
       if (options.preset) {
@@ -143,6 +160,7 @@ export function defineMergeTrackRecordSuite(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build + merger',
+        purpose: 'build',
         agentKinds: ['coder', 'merger'],
       })
       const start = await app.call<ExecutionInstance>(
@@ -273,6 +291,7 @@ export function defineMergeTrackRecordSuite(harness: ConformanceHarness): void {
     })
 
     registerMergeEffortTagTests(harness, driveMergerRun, rollupFor)
+    registerPublicMergeEvidenceTests(driveMergerRun)
     registerMergeClassFallbackTests(harness, driveMergerRun, rollupFor)
     registerRoleScopedPolicyTests(harness)
     registerDryRunTests(driveMergerRun)
@@ -467,6 +486,7 @@ function registerMergeClassFallbackTests(
     })
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Build + merger',
+      purpose: 'build',
       agentKinds: ['coder', 'merger'],
     })
     await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -510,6 +530,7 @@ function registerMergeClassFallbackTests(
     const wsId = workspace.id
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Build + merger',
+      purpose: 'build',
       agentKinds: ['coder', 'merger'],
     })
     // Two DIFFERENT seeded tasks, so one workspace accumulates two different classes.
@@ -807,7 +828,7 @@ function registerSubmissionAllowlistTests(harness: ConformanceHarness): void {
     const pipeline = await app.call<Pipeline>(
       'POST',
       `/workspaces/${wsId}/pipelines`,
-      { name: 'Build + merger', agentKinds: ['coder', 'merger'] },
+      { name: 'Build + merger', purpose: 'build', agentKinds: ['coder', 'merger'] },
       adminAuth,
     )
     const start = await app.call<ExecutionInstance>(
@@ -888,5 +909,380 @@ function registerSubmissionAllowlistTests(harness: ConformanceHarness): void {
     })
     expect(run.status).toBe('done')
     expect(run.decision.outcome).toBe('auto_merged')
+  })
+}
+
+/**
+ * The PUBLIC (`/api/v1`) half of the loop: reading a run's merge decision, reading the workspace's
+ * per-class rollups, and TAGGING the reviewer effort with a key that cannot merge anything.
+ *
+ * What this proves that a unit test cannot is the wiring on BOTH facades: that each mounts the
+ * merge-evidence controller, resolves the track-record module out of its own container, and reads
+ * the same rows through its own SQL. A facade that shipped the controller and forgot the module
+ * answers 503 here rather than shipping a surface a harness silently cannot use.
+ *
+ * The scope assertions are the point of the surface and not incidental: before this the only way
+ * to record an effort tag over the API was the `admin`-scoped notification `act`, so an
+ * integration whose whole job is collecting evidence had to hold a key that also merges pull
+ * requests and deletes tasks.
+ */
+function registerPublicMergeEvidenceTests(driveMergerRun: MergerRunDriver): void {
+  describe('public API: merge evidence', () => {
+    /** Mint a public-API key at a chosen rung and return its bearer header. */
+    async function mintKey(
+      app: ConformanceApp,
+      wsId: string,
+      scope: 'read' | 'write' | 'admin',
+    ): Promise<Record<string, string>> {
+      const created = await app.call<{ secret: string }>(
+        'POST',
+        `/workspaces/${wsId}/public-api-keys`,
+        { label: `conformance-merge-evidence-${scope}`, scope },
+      )
+      expect(created.status).toBe(201)
+      return { authorization: `Bearer ${created.body.secret}` }
+    }
+
+    /**
+     * Call a route expecting a REFUSAL, and surface its status beside the machine-readable
+     * `details.reason` a caller actually branches on.
+     *
+     * Reading the reason through one helper is what keeps these cases honest: a status-only
+     * assertion passes on a 404 whose `details` is absent entirely, which is exactly how the tag
+     * route came to answer without the reason its siblings publish.
+     */
+    async function refusal(
+      app: ConformanceApp,
+      method: 'GET' | 'POST',
+      path: string,
+      auth: Record<string, string>,
+      body?: unknown,
+    ): Promise<{ status: number; reason?: string }> {
+      const res = await app.call<{ error?: { details?: { reason?: string } } }>(
+        method,
+        path,
+        body,
+        auth,
+      )
+      return { status: res.status, reason: res.body?.error?.details?.reason }
+    }
+
+    /** A run parked on `merge_review`, in an ORG workspace so a key can be minted for it. */
+    async function pendingRun() {
+      const run = await driveMergerRun({
+        org: true,
+        changedFiles: ['src/login.ts'],
+        assessment: { complexity: 0.9, risk: 0.9, impact: 0.9, rationale: 'Risky refactor.' },
+      })
+      expect(run.status).toBe('pr_ready')
+      return run
+    }
+
+    it('serves a run’s merge decision to a read-scoped key', async () => {
+      const run = await pendingRun()
+      const auth = await mintKey(run.app, run.wsId, 'read')
+
+      const read = await run.app.call<PublicMergeRecord>(
+        'GET',
+        `/api/v1/runs/${run.executionId}/merge-record`,
+        undefined,
+        auth,
+      )
+      expect(read.status).toBe(200)
+      // The public id vocabulary, not the stored row's: a caller can address both of these.
+      expect(read.body.runId).toBe(run.executionId)
+      expect(read.body.taskId).toBe('task_login')
+      expect(read.body.changeClass).toBe('source')
+      expect(read.body.decision).toBe('pending_review')
+      // Untagged reads as null, never as `none`: nobody has said this needed no review.
+      expect(read.body.reviewEffort).toBeNull()
+      expect(read.body.taggedAt).toBeNull()
+      // The merger's scores travel with the decision, so a harness can see WHAT was judged rather
+      // than only what was decided.
+      expect(read.body.complexity).toBe(0.9)
+      expect(read.body.prNumber).toBe(FAKE_PR.number)
+      expect(read.body.repoId).toBe(FAKE_REPO_ID)
+
+      // The same record addressed by its own id, which is what a `merge_tag_request` card hands out.
+      const byId = await run.app.call<PublicMergeRecord>(
+        'GET',
+        `/api/v1/merge-records/${read.body.recordId}`,
+        undefined,
+        auth,
+      )
+      expect(byId.status).toBe(200)
+      expect(byId.body).toEqual(read.body)
+    })
+
+    it('tags the reviewer effort with a WRITE key, which can merge nothing', async () => {
+      const run = await pendingRun()
+      const readAuth = await mintKey(run.app, run.wsId, 'read')
+      const writeAuth = await mintKey(run.app, run.wsId, 'write')
+      const record = await run.app.call<PublicMergeRecord>(
+        'GET',
+        `/api/v1/runs/${run.executionId}/merge-record`,
+        undefined,
+        readAuth,
+      )
+      const effortPath = `/api/v1/merge-records/${record.body.recordId}/effort`
+
+      // A `read` key may look and not touch: the floor is enforced, not merely published.
+      const refused = await run.app.call('POST', effortPath, { reviewEffort: 'minor' }, readAuth)
+      expect(refused.status).toBe(403)
+
+      const tagged = await run.app.call<PublicMergeRecord>(
+        'POST',
+        effortPath,
+        { reviewEffort: 'major' },
+        writeAuth,
+      )
+      expect(tagged.status).toBe(200)
+      expect(tagged.body.reviewEffort).toBe('major')
+      expect(tagged.body.taggedAt).toBeGreaterThan(0)
+      // Tagging is orthogonal to the decision: the pull request is still awaiting its human.
+      expect(tagged.body.decision).toBe('pending_review')
+
+      // And it CLEARS with an explicit null, so a mistagged record is correctable by the same key
+      // that tagged it rather than needing someone in the app.
+      const cleared = await run.app.call<PublicMergeRecord>(
+        'POST',
+        effortPath,
+        { reviewEffort: null },
+        writeAuth,
+      )
+      expect(cleared.status).toBe(200)
+      expect(cleared.body.reviewEffort).toBeNull()
+      expect(cleared.body.taggedAt).toBeNull()
+    })
+
+    it('rolls every change class up in one request, including the ones with no records', async () => {
+      const run = await pendingRun()
+      const auth = await mintKey(run.app, run.wsId, 'read')
+
+      const rolled = await run.app.call<{ rollups: MergeClassRollup[] }>(
+        'GET',
+        '/api/v1/merge-records/rollups',
+        undefined,
+        auth,
+      )
+      expect(rolled.status).toBe(200)
+      // Derived from the same closed union the code reads rather than pinned to a count: adding a
+      // class must not fail this, and omitting one must.
+      expect(rolled.body.rollups.map((r) => r.changeClass).sort()).toEqual(
+        [...CHANGE_CLASSES].sort(),
+      )
+      const source = rolled.body.rollups.find((r) => r.changeClass === 'source')!
+      expect(source.pendingReview).toBe(1)
+      expect(source.merged).toBe(0)
+      // A class nobody has landed anything in is present as ZEROS: "nothing yet" and "left out of
+      // the response" are different facts, and only one of them is about the workspace.
+      expect(rolled.body.rollups.find((r) => r.changeClass === 'schema')!.total).toBe(0)
+    })
+
+    it('tells apart an unreadable run, a run that decided nothing, and an unknown record', async () => {
+      const run = await pendingRun()
+      const auth = await mintKey(run.app, run.wsId, 'read')
+
+      // An id naming no run this key may read. Its own reason, because the fix differs: stop
+      // asking, where `no_merge_record` below means keep watching a run that is genuinely there.
+      const noRun = await refusal(run.app, 'GET', '/api/v1/runs/exec_nope/merge-record', auth)
+      expect(noRun.status).toBe(404)
+      expect(noRun.reason).toBe('run_not_found')
+
+      // A run with no `merger` step reaches no merge decision. That is a fact about the run, so it
+      // gets its own reason: a caller must be able to tell it from an id it simply cannot see.
+      //
+      // On a FRESH task under the same service rather than a seeded sibling: `task_refresh`
+      // declares a dependency on `task_login`, which the parked run above left at `pr_ready`
+      // rather than `done`, so starting it is a 409 about ordering and not about this assertion.
+      const coderOnly = await run.app.call<Pipeline>('POST', `/workspaces/${run.wsId}/pipelines`, {
+        name: 'Coder only',
+        purpose: 'build',
+        agentKinds: ['coder'],
+      })
+      const task = await run.app.call<{ id: string }>(
+        'POST',
+        `/workspaces/${run.wsId}/blocks/blk_auth/tasks`,
+        { title: 'No merger here' },
+      )
+      expect(task.status).toBe(201)
+      const started = await run.app.call<ExecutionInstance>(
+        'POST',
+        `/workspaces/${run.wsId}/blocks/${task.body.id}/executions`,
+        { pipelineId: coderOnly.body.id },
+      )
+      expect(started.status).toBe(201)
+      const noRecord = await refusal(
+        run.app,
+        'GET',
+        `/api/v1/runs/${started.body.id}/merge-record`,
+        auth,
+      )
+      expect(noRecord.status).toBe(404)
+      expect(noRecord.reason).toBe('no_merge_record')
+
+      // An unknown record id is a 404 rather than a 200 with a nulled-out body, and the READ and
+      // the TAG answer it with the SAME reason, because from a caller's side they are one fact
+      // about one id. Driving both is what keeps them that way: the tag's 404 is raised deep in
+      // `MergeTrackRecordService`, so it is the one that silently loses its reason when the two
+      // are spelled independently.
+      const unknownRead = await refusal(run.app, 'GET', '/api/v1/merge-records/mtr_nope', auth)
+      expect(unknownRead.status).toBe(404)
+      expect(unknownRead.reason).toBe('merge_record_not_found')
+
+      const writeAuth = await mintKey(run.app, run.wsId, 'write')
+      const unknownTag = await refusal(
+        run.app,
+        'POST',
+        '/api/v1/merge-records/mtr_nope/effort',
+        writeAuth,
+        { reviewEffort: 'minor' },
+      )
+      expect(unknownTag.status).toBe(404)
+      expect(unknownTag.reason).toBe('merge_record_not_found')
+    })
+
+    it('confirms the merge and records the effort in ONE headless request', async () => {
+      // The whole point of giving `act` a body. Before it, a harness that merged through the API
+      // had to follow up with a second call to say what reviewing it cost, and the two could
+      // interleave with anything; now the tag lands in the same request that merges, which is
+      // what the app's one-tap confirm-and-tag has always done.
+      const run = await pendingRun()
+      const adminAuth = await mintKey(run.app, run.wsId, 'admin')
+      const readAuth = await mintKey(run.app, run.wsId, 'read')
+
+      const inbox = await run.app.call<{ notifications: PublicNotificationCard[] }>(
+        'GET',
+        '/api/v1/notifications',
+        undefined,
+        readAuth,
+      )
+      const card = inbox.body.notifications.find((n) => n.type === 'merge_review')
+      expect(card, 'merge_review card on the public inbox').toBeDefined()
+
+      const acted = await run.app.call<{ status: string }>(
+        'POST',
+        `/api/v1/notifications/${card!.id}/act`,
+        { reviewEffort: 'none' },
+        adminAuth,
+      )
+      expect(acted.status).toBe(200)
+      expect(acted.body.status).toBe('acted')
+
+      // BOTH halves landed off the one call: the pull request merged (the record settled as
+      // `human_merged`) and the effort is on the record rather than still null.
+      const record = await run.app.call<PublicMergeRecord>(
+        'GET',
+        `/api/v1/runs/${run.executionId}/merge-record`,
+        undefined,
+        readAuth,
+      )
+      expect(record.status).toBe(200)
+      expect(record.body.decision).toBe('human_merged')
+      expect(record.body.reviewEffort).toBe('none')
+      expect(record.body.taggedAt).toBeGreaterThan(0)
+    })
+
+    it('still acts on a request that sends NO body at all', async () => {
+      // The compatibility guarantee behind the body being additive. An integration that has
+      // called this route since 1.0 sends no body, and the contract validator reads
+      // `c.req.json()` before the schema, so without `optionalJsonBody` on the route the tag
+      // field would have turned every one of those callers into a 400 on upgrade.
+      const run = await pendingRun()
+      const adminAuth = await mintKey(run.app, run.wsId, 'admin')
+      const readAuth = await mintKey(run.app, run.wsId, 'read')
+      const inbox = await run.app.call<{ notifications: PublicNotificationCard[] }>(
+        'GET',
+        '/api/v1/notifications',
+        undefined,
+        readAuth,
+      )
+      const card = inbox.body.notifications.find((n) => n.type === 'merge_review')!
+
+      // `undefined` here is no body on the wire, not an empty one.
+      const acted = await run.app.call<{ status: string }>(
+        'POST',
+        `/api/v1/notifications/${card.id}/act`,
+        undefined,
+        adminAuth,
+      )
+      expect(acted.status).toBe(200)
+      expect(acted.body.status).toBe('acted')
+
+      // It merged, and left the tag unsaid rather than guessing at `none`.
+      const record = await run.app.call<PublicMergeRecord>(
+        'GET',
+        `/api/v1/runs/${run.executionId}/merge-record`,
+        undefined,
+        readAuth,
+      )
+      expect(record.body.decision).toBe('human_merged')
+      expect(record.body.reviewEffort).toBeNull()
+      expect(record.body.taggedAt).toBeNull()
+    })
+
+    it('refuses a REAL record to a key from another workspace, by run and by record id', async () => {
+      // The workspace predicate, driven against a record that genuinely EXISTS. An assertion that
+      // only ever asks for `mtr_nope` passes on a repository that dropped its workspace predicate
+      // entirely, which is the one bug this case is here to catch: the id is unknown everywhere,
+      // so the refusal proves nothing about scoping.
+      const run = await pendingRun()
+      const record = await run.app.call<PublicMergeRecord>(
+        'GET',
+        `/api/v1/runs/${run.executionId}/merge-record`,
+        undefined,
+        await mintKey(run.app, run.wsId, 'read'),
+      )
+      expect(record.status).toBe(200)
+
+      // A second org board on the SAME deployment, so both rows live in one store and only the
+      // workspace predicate stands between them.
+      const { workspace: other } = await run.app.createOrgWorkspace({ seed: true })
+      const foreignRead = await mintKey(run.app, other.id, 'read')
+      const foreignWrite = await mintKey(run.app, other.id, 'write')
+
+      // Every door onto the record, each refusing with the reason its own address implies: the
+      // run-scoped read never confirms the run exists, and the two record-addressed routes never
+      // confirm the record does.
+      const byRun = await refusal(
+        run.app,
+        'GET',
+        `/api/v1/runs/${run.executionId}/merge-record`,
+        foreignRead,
+      )
+      expect(byRun.status).toBe(404)
+      expect(byRun.reason).toBe('run_not_found')
+
+      const byId = await refusal(
+        run.app,
+        'GET',
+        `/api/v1/merge-records/${record.body.recordId}`,
+        foreignRead,
+      )
+      expect(byId.status).toBe(404)
+      expect(byId.reason).toBe('merge_record_not_found')
+
+      // And the WRITE cannot reach across either. A foreign key with the right rung is still the
+      // wrong workspace, and a tag that landed here would corrupt another board's rollups.
+      const tagged = await refusal(
+        run.app,
+        'POST',
+        `/api/v1/merge-records/${record.body.recordId}/effort`,
+        foreignWrite,
+        { reviewEffort: 'major' },
+      )
+      expect(tagged.status).toBe(404)
+      expect(tagged.reason).toBe('merge_record_not_found')
+
+      // The record itself is untouched: the refusals above refused, they did not half-apply.
+      const stillOwned = await run.app.call<PublicMergeRecord>(
+        'GET',
+        `/api/v1/merge-records/${record.body.recordId}`,
+        undefined,
+        await mintKey(run.app, run.wsId, 'read'),
+      )
+      expect(stillOwned.status).toBe(200)
+      expect(stillOwned.body.reviewEffort).toBeNull()
+    })
   })
 }

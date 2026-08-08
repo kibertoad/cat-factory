@@ -234,6 +234,24 @@ export async function readReviewAttempts(
   return (await res.json()) as ReviewAttempt[]
 }
 
+/**
+ * Add a bare service frame (the `POST /blocks` the palette drag-drop calls). The sample board
+ * seeds exactly ONE `type: 'service'` frame, so a spec about anything that offers the OTHER
+ * service frames has to create its own.
+ */
+export async function addFrame(
+  request: APIRequestContext,
+  workspaceId: string,
+  title: string,
+  type = 'service',
+): Promise<Block> {
+  return json<Block>(
+    await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/blocks`, {
+      data: { type, title },
+    }),
+  )
+}
+
 /** Import a repo as a board service frame (the `POST /blocks/from-repo` the add-service modal calls). */
 export async function addServiceFromRepo(
   request: APIRequestContext,
@@ -419,7 +437,7 @@ export async function createSimplePipeline(
 ): Promise<Pipeline> {
   return json<Pipeline>(
     await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/pipelines`, {
-      data: { name: 'E2E pipeline', agentKinds, ...(gates ? { gates } : {}) },
+      data: { name: 'E2E pipeline', purpose: 'build', agentKinds, ...(gates ? { gates } : {}) },
     }),
   )
 }

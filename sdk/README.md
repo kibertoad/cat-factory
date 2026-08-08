@@ -82,6 +82,19 @@ that same entry, with no second decision, except for an endpoint whose response 
 shape for (a STREAM, or a raw BYTE body), which must be named in `MCP_OMITTED_OPERATIONS` with the
 reason a caller should read. Generation fails on an unclassified one.
 
+**A request body with no required field is a parameter the caller may OMIT.** The IR reads that off
+the spec (`required: []` on the body schema) rather than from a per-operation list, and each emitter
+spells "omittable" in its own idiom: a `= {}` default in TypeScript, `| None = None` in Python, a
+`*T` pointer in Go, and a real forwarding OVERLOAD in Java, which has neither defaults nor a way for
+Kotlin to synthesise them. What is optional is the CALLER's obligation, never the wire: every client
+sends `{}` when the argument is left out, because the route's validator parses a body against the
+schema and rejects an absent one. A route that must ALSO tolerate a caller sending nothing (one that
+gained its first optional field after shipping body-less, like `POST /notifications/:id/act`) mounts
+the backend's `optionalJsonBody` middleware; that is a server-side decision, not something an emitter
+can see. Everything after the body is keyword-only in Python for the same reason the rule exists: an
+operation that later gains an optional body would otherwise rebind an existing positional `timeout`
+onto it and send the timeout as the payload.
+
 **A response body that is not JSON needs a branch in every emitter, not a default.** The IR marks
 each operation `stream` (SSE) or `binary` (an artifact download) from the spec's own media type,
 and each transport hands the body back in its language's idiom (`Uint8Array`, `bytes`, `[]byte`,

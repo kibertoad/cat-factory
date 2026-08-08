@@ -162,6 +162,7 @@ export function defineInputGateConformance(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<{ id: string }>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Nightly design',
+        purpose: 'build',
         agentKinds: ['architect'],
       })
       const schedule = await app.call<{ id: string; blockId: string }>(

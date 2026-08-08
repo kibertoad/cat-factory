@@ -256,6 +256,9 @@ export function registerIntroduceApiOperation(
     // non-builtin, so the org could never roll a fix out to the boards already holding it.
     builtin: true,
     version: 1,
+    // Designs, implements and tests an API: the classifier that keeps the operation's own task
+    // type offering it, and the palette showing the implementation kinds it is built from.
+    purpose: 'build',
     // The Deployer / Disposer pair rides along because the Tester runs against a provisioned
     // environment: a chain that tests without deploying, or deploys without reclaiming, is
     // refused when a workspace CLONES this template and saves its copy. The Deployer is a no-op

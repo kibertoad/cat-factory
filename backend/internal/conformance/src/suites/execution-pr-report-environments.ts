@@ -114,6 +114,7 @@ export function defineExecutionPrReportEnvironmentsConformance(harness: Conforma
           const pipelineId = await seedLegacyPipeline(app, wsId, {
             id: 'pl_deploy_test',
             name: 'Deploy + test',
+            purpose: 'build',
             agentKinds: ['deployer', 'tester-api'],
           })
           await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -199,6 +200,7 @@ export function defineExecutionPrReportEnvironmentsConformance(harness: Conforma
           const pipelineId = await seedLegacyPipeline(app, wsId, {
             id: 'pl_deploy_only',
             name: 'Deploy only',
+            purpose: 'build',
             agentKinds: ['deployer'],
           })
           await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -258,6 +260,7 @@ export function defineExecutionPrReportEnvironmentsConformance(harness: Conforma
           const pipelineId = await seedLegacyPipeline(app, wsId, {
             id: 'pl_deploy_only',
             name: 'Deploy only',
+            purpose: 'build',
             agentKinds: ['deployer'],
           })
           await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -315,6 +318,7 @@ export function defineExecutionPrReportEnvironmentsConformance(harness: Conforma
         const pipelineId = await seedLegacyPipeline(app, wsId, {
           id: 'pl_test_only',
           name: 'Test only',
+          purpose: 'build',
           agentKinds: ['tester-api'],
         })
         await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {

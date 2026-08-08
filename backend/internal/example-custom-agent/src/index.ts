@@ -961,6 +961,8 @@ export function registerExampleCustomAgents(registries: ExampleRegistries): void
   pipelineRegistry.register({
     id: ORG_AUDIT_PIPELINE_ID,
     name: 'Org compliance audit',
+    // Two reviewing kinds and no producer: it judges an existing change and opens nothing.
+    purpose: 'review',
     agentKinds: [ORG_REVIEWER_KIND, SECURITY_AUDITOR_KIND],
   })
   // The `preset_org_research` pipelines: a research producer + an apply coder, each on the universal
@@ -970,11 +972,14 @@ export function registerExampleCustomAgents(registries: ExampleRegistries): void
   pipelineRegistry.register({
     id: ORG_RESEARCH_PIPELINE_ID,
     name: 'Org feasibility research',
+    // A timeboxed investigation whose product is a committed report, merge tail and all.
+    purpose: 'research',
     agentKinds: [ORG_RESEARCH_KIND, 'conflicts', 'ci', 'merger'],
   })
   pipelineRegistry.register({
     id: ORG_APPLY_PIPELINE_ID,
     name: 'Org apply',
+    purpose: 'build',
     agentKinds: ['coder', 'conflicts', 'ci', 'merger'],
     stepOptions: [{ agentVariantId: ORG_CODER_TDD_VARIANT_ID }, null, null, null],
   })
@@ -1029,6 +1034,7 @@ export function registerExampleCustomAgents(registries: ExampleRegistries): void
   pipelineRegistry.register({
     id: ORG_SCOPE_PIPELINE_ID,
     name: 'Org build + scope review',
+    purpose: 'build',
     agentKinds: ['coder', SCOPE_JUDGE_KIND, 'conflicts', 'ci', 'merger'],
   })
   stepResolverRegistry.register(auditorSummaryResolver.kind, () => auditorSummaryResolver)

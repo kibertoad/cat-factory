@@ -33,6 +33,7 @@ async function seedWorkspaceWithCompanionFreePipeline() {
   const { workspace } = await app.createWorkspace()
   const pipeline = await app.call<{ id: string }>('POST', `/workspaces/${workspace.id}/pipelines`, {
     name: 'Plain build (no companion)',
+    purpose: 'build',
     agentKinds: ['coder', 'deployer', 'tester-api', 'conflicts', 'ci', 'merger', 'disposer'],
   })
   expect(pipeline.status).toBe(201)

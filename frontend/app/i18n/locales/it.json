@@ -4213,7 +4213,7 @@
       "strategy": "Strategia",
       "rounds": "Giri",
       "purposeLabel": "Scopo",
-      "purposePlaceholder": "Seleziona uno scopo",
+      "purposeUnrecognized": "Non riconosciuto ({purpose})",
       "purposeOption": {
         "build": "Sviluppo",
         "document": "Documentazione",
@@ -4231,6 +4231,10 @@
       "removeParticipant": "Rimuovi partecipante (min 2)",
       "addParticipant": "Aggiungi partecipante",
       "savedPipelines": "Pipeline salvate",
+      "purposeHiddenPipelines": "{count} pipeline salvata nascosta per questo scopo. | {count} pipeline salvate nascoste per questo scopo.",
+      "everyPurposeListed": "Sono elencate le pipeline salvate di ogni scopo.",
+      "listEveryPurpose": "Mostra tutti gli scopi",
+      "narrowToDraftPurpose": "Limita a questo scopo",
       "hideArchived": "Nascondi archiviate",
       "archivedCount": "Archiviate ({count})",
       "allLabels": "Tutte",
@@ -6737,7 +6741,8 @@
   },
   "palette": {
     "hint": "Clicca su un agente per aggiungerlo alla pipeline.",
-    "customAgents": "Agenti personalizzati"
+    "customAgents": "Agenti personalizzati",
+    "purposeHidden": "{count} agente nascosto per questo scopo. | {count} agenti nascosti per questo scopo."
   },
   "forkDecision": {
     "title": "Scegli un approccio di implementazione",

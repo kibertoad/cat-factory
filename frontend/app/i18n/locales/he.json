@@ -4652,7 +4652,7 @@
       "strategy": "אסטרטגיה",
       "rounds": "סבבים",
       "purposeLabel": "מטרה",
-      "purposePlaceholder": "בחר מטרה",
+      "purposeUnrecognized": "לא מזוהה ({purpose})",
       "purposeOption": {
         "build": "פיתוח",
         "document": "תיעוד",
@@ -4670,6 +4670,10 @@
       "removeParticipant": "הסר משתתף (מינימום 2)",
       "addParticipant": "הוסף משתתף",
       "savedPipelines": "צינורות שמורים",
+      "purposeHiddenPipelines": "צינור שמור אחד מוסתר עבור מטרה זו. | שני צינורות שמורים מוסתרים עבור מטרה זו. | {count} צינורות שמורים מוסתרים עבור מטרה זו.",
+      "everyPurposeListed": "מוצגים צינורות שמורים מכל המטרות.",
+      "listEveryPurpose": "הצג את כל המטרות",
+      "narrowToDraftPurpose": "צמצם למטרה זו",
       "hideArchived": "הסתר מאורכבים",
       "archivedCount": "מאורכבים ({count})",
       "allLabels": "הכל",
@@ -4906,7 +4910,8 @@
   },
   "palette": {
     "hint": "לחץ על סוכן כדי להוסיף אותו לצינור.",
-    "customAgents": "סוכנים מותאמים אישית"
+    "customAgents": "סוכנים מותאמים אישית",
+    "purposeHidden": "סוכן אחד מוסתר עבור מטרה זו. | שני סוכנים מוסתרים עבור מטרה זו. | {count} סוכנים מוסתרים עבור מטרה זו."
   },
   "gates": {
     "subtitle": {

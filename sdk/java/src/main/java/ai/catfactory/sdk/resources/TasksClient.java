@@ -177,6 +177,13 @@ public final class TasksClient {
     }
 
     /**
+     * Start (run) a task (no body).
+     */
+    public PublicTask start(String taskId) {
+        return start(taskId, StartPublicTask.builder().build());
+    }
+
+    /**
      * Start (run) a task
      * Start a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned pipeline. A
      * pipeline that can park on a human decision requires a `decide`-scope key. A task on an
@@ -207,6 +214,13 @@ public final class TasksClient {
      */
     public EventStream stream(String taskId) {
         return transport.stream("GET", "/api/v1/tasks/" + Transport.pathSegment(taskId) + "/events", Map.of());
+    }
+
+    /**
+     * Edit a task's inputs (no body).
+     */
+    public PublicTask update(String taskId) {
+        return update(taskId, UpdatePublicTask.builder().build());
     }
 
     /**

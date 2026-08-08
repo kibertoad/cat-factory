@@ -463,6 +463,7 @@ async function perTicketWorkspace(
   })
   const pipeline = await call<{ id: string }>('POST', `/workspaces/${ws}/pipelines`, {
     name: 'Feature intake',
+    purpose: 'build',
     agentKinds: ['architect'],
   })
   const schedule = await call('POST', `/workspaces/${ws}/recurring-pipelines`, {
@@ -521,6 +522,7 @@ function registerPerTicketDispatchTests(harness: ConformanceHarness): void {
       // ticket, so an intake step would go and pick a different one (and is refused at save).
       const pipeline = await call<{ id: string }>('POST', `/workspaces/${ws}/pipelines`, {
         name: 'Feature intake',
+        purpose: 'build',
         agentKinds: ['architect'],
       })
       expect(pipeline.status).toBe(201)
@@ -669,6 +671,7 @@ function registerPerTicketDispatchTests(harness: ConformanceHarness): void {
       })
       const pipeline = await call<{ id: string }>('POST', `/workspaces/${ws}/pipelines`, {
         name: 'Feature intake',
+        purpose: 'build',
         agentKinds: ['architect'],
       })
 

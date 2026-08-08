@@ -53,6 +53,7 @@ describe('deployer agent + environment discovery', () => {
     await new D1PipelineRepository({ db: env.DB }).insert(ws, {
       id: pipelineId,
       name: 'Deploy & test',
+      purpose: 'build',
       agentKinds: ['deployer', 'tester-api'],
     })
     await app.call('POST', `/workspaces/${ws}/blocks/${task.body.id}/executions`, { pipelineId })

@@ -240,6 +240,7 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
     // A minimal one-step pipeline (created over the RPC: pipelineRepository.insert).
     const pipeline = await local.call<Pipeline>('POST', `/workspaces/${workspaceId}/pipelines`, {
       name: 'Code only',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     expect(pipeline.status).toBe(201)

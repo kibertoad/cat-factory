@@ -92,6 +92,7 @@ function registerTesterPipelineTests(harness: ConformanceHarness): void {
     )
     const e2e = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'End-to-end tests',
+      purpose: 'build',
       agentKinds: ['coder', 'deployer', 'playwright', 'disposer'],
     })
     expect(e2e.status).toBe(201)
@@ -120,6 +121,7 @@ function registerTesterPipelineTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Code + test',
+      purpose: 'build',
       agentKinds: ['coder', 'deployer', 'tester-api', 'disposer'],
     })
 
@@ -181,6 +183,7 @@ function registerTesterPipelineTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Code + test loop',
+      purpose: 'build',
       agentKinds: ['coder', 'deployer', 'tester-api', 'disposer'],
     })
     const start = await app.call<ExecutionInstance>(
@@ -247,6 +250,7 @@ function registerTesterPipelineTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Code + test + QC',
+      purpose: 'build',
       agentKinds: ['coder', 'deployer', 'tester-api', 'disposer'],
     })
     const start = await app.call<ExecutionInstance>(
@@ -310,6 +314,7 @@ function registerTesterPipelineTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Code + test',
+      purpose: 'build',
       agentKinds: ['coder', 'deployer', 'tester-api', 'disposer'],
     })
     const start = await app.call<ExecutionInstance>(
@@ -396,6 +401,7 @@ function registerLocalInfraTesterTests(harness: ConformanceHarness): void {
       const deployPipelineId = await seedLegacyPipeline(app, wsId, {
         id: 'pl_deploy_auth',
         name: 'Deploy auth',
+        purpose: 'build',
         agentKinds: ['deployer'],
       })
       const startDeploy = await app.call(
@@ -444,6 +450,7 @@ function registerLocalInfraTesterTests(harness: ConformanceHarness): void {
       })
       const uiPipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build + UI test',
+        purpose: 'build',
         agentKinds: ['coder', 'deployer', 'tester-ui', 'disposer'],
       })
       const started = await app.call(
@@ -529,6 +536,7 @@ function registerLocalInfraTesterTests(harness: ConformanceHarness): void {
       const deployPipelineId = await seedLegacyPipeline(app, wsId, {
         id: 'pl_deploy_fanout',
         name: 'Deploy',
+        purpose: 'build',
         agentKinds: ['deployer'],
       })
       const started = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -597,6 +605,7 @@ function registerTesterVerdictTests(harness: ConformanceHarness): void {
     const wsId = workspace.id
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Code + test nit',
+      purpose: 'build',
       agentKinds: ['coder', 'deployer', 'tester-api', 'disposer'],
     })
     const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -640,6 +649,7 @@ function registerTesterVerdictTests(harness: ConformanceHarness): void {
     const wsId = workspace.id
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Code + test abort',
+      purpose: 'build',
       agentKinds: ['coder', 'deployer', 'tester-api', 'disposer'],
     })
     const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -686,6 +696,7 @@ function registerTesterVerdictTests(harness: ConformanceHarness): void {
     const wsId = workspace.id
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Code + test failed-outcome',
+      purpose: 'build',
       agentKinds: ['coder', 'deployer', 'tester-api', 'disposer'],
     })
     const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -725,6 +736,7 @@ function registerTesterVerdictTests(harness: ConformanceHarness): void {
     const wsId = workspace.id
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Test only',
+      purpose: 'build',
       agentKinds: ['deployer', 'tester-api', 'disposer'],
     })
     const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -787,6 +799,7 @@ function registerFrontendTesterGateTests(harness: ConformanceHarness): void {
     const taskId = task.body.id!
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Build + UI test',
+      purpose: 'build',
       agentKinds: ['coder', 'deployer', 'tester-ui', 'disposer'],
     })
     const blocked = await app.call<{
@@ -815,6 +828,7 @@ function registerFrontendTesterGateTests(harness: ConformanceHarness): void {
     const wsId = workspace.id
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Visual build',
+      purpose: 'build',
       agentKinds: ['coder', 'deployer', 'tester-ui', 'visual-confirmation', 'disposer'],
     })
 
@@ -941,6 +955,7 @@ function registerLocalComposeTesterTests(harness: ConformanceHarness): void {
       const deployPipelineId = await seedLegacyPipeline(app, wsId, {
         id: 'pl_deploy_auth_frontend',
         name: 'Deploy auth',
+        purpose: 'build',
         agentKinds: ['deployer'],
       })
       const startDeploy = await app.call(
@@ -962,6 +977,7 @@ function registerLocalComposeTesterTests(harness: ConformanceHarness): void {
       })
       const uiPipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build + UI test',
+        purpose: 'build',
         agentKinds: ['coder', 'deployer', 'tester-ui', 'disposer'],
       })
       const started = await app.call<{
@@ -1091,6 +1107,7 @@ function registerVisualConfirmationTests(harness: ConformanceHarness): void {
     })
     const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'UI test (no storage)',
+      purpose: 'build',
       agentKinds: ['coder', 'deployer', 'tester-ui', 'visual-confirmation', 'disposer'],
     })
     const blocked = await call<{
@@ -1140,6 +1157,7 @@ function registerVisualConfirmationTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'UI test + visual confirmation',
+      purpose: 'build',
       agentKinds: ['coder', 'deployer', 'tester-ui', 'visual-confirmation', 'disposer'],
     })
     const start = await app.call<ExecutionInstance>(
@@ -1204,6 +1222,7 @@ function registerVisualConfirmationTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'UI test + visual confirmation (fix)',
+      purpose: 'build',
       agentKinds: ['coder', 'deployer', 'tester-ui', 'visual-confirmation', 'disposer'],
     })
     const start = await app.call<ExecutionInstance>(

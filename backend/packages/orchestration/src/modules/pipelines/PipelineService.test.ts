@@ -73,7 +73,11 @@ describe('PipelineService — post-release-health observability gate', () => {
       // observabilityConnectionRepository intentionally absent → no integration possible.
     })
     await expect(
-      svc.create(WS, { name: 'Ship + watch', agentKinds: ['coder', 'post-release-health'] }),
+      svc.create(WS, {
+        name: 'Ship + watch',
+        purpose: 'build',
+        agentKinds: ['coder', 'post-release-health'],
+      }),
     ).rejects.toBeInstanceOf(ValidationError)
   })
 
@@ -85,7 +89,11 @@ describe('PipelineService — post-release-health observability gate', () => {
       observabilityConnectionRepository: observabilityRepo(false),
     })
     await expect(
-      svc.create(WS, { name: 'Ship + watch', agentKinds: ['coder', 'post-release-health'] }),
+      svc.create(WS, {
+        name: 'Ship + watch',
+        purpose: 'build',
+        agentKinds: ['coder', 'post-release-health'],
+      }),
     ).rejects.toBeInstanceOf(ValidationError)
   })
 
@@ -98,6 +106,7 @@ describe('PipelineService — post-release-health observability gate', () => {
     })
     const p = await svc.create(WS, {
       name: 'Ship + watch',
+      purpose: 'build',
       agentKinds: ['coder', 'post-release-health'],
     })
     expect(p.agentKinds).toEqual(['coder', 'post-release-health'])
@@ -112,6 +121,7 @@ describe('PipelineService — post-release-health observability gate', () => {
     })
     const p = await svc.create(WS, {
       name: 'Ship, watch later',
+      purpose: 'build',
       agentKinds: ['coder', 'post-release-health'],
       enabled: [true, false],
     })
@@ -126,7 +136,7 @@ describe('PipelineService — post-release-health observability gate', () => {
       idGenerator,
       observabilityConnectionRepository: observabilityRepo(false),
     })
-    const created = await svc.create(WS, { name: 'Plain', agentKinds: ['coder'] })
+    const created = await svc.create(WS, { name: 'Plain', purpose: 'build', agentKinds: ['coder'] })
     await expect(
       svc.update(WS, created.id, { agentKinds: ['coder', 'post-release-health'] }),
     ).rejects.toBeInstanceOf(ValidationError)
@@ -144,13 +154,14 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
 
   it('rejects a companion with no producer it can review', async () => {
     await expect(
-      svc().create(WS, { name: 'Lone reviewer', agentKinds: ['reviewer'] }),
+      svc().create(WS, { name: 'Lone reviewer', purpose: 'build', agentKinds: ['reviewer'] }),
     ).rejects.toBeInstanceOf(ValidationError)
   })
 
   it('accepts a companion placed immediately after its producer', async () => {
     const p = await svc().create(WS, {
       name: 'Build + adjacent companion',
+      purpose: 'build',
       agentKinds: ['coder', 'reviewer'],
     })
     expect(p.agentKinds).toEqual(['coder', 'reviewer'])
@@ -160,6 +171,7 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
     await expect(
       svc().create(WS, {
         name: 'Build + gap companion',
+        purpose: 'build',
         agentKinds: ['coder', 'tester-api', 'reviewer'],
       }),
     ).rejects.toBeInstanceOf(ValidationError)
@@ -169,6 +181,7 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
     await expect(
       svc().create(WS, {
         name: 'Gated, no estimator',
+        purpose: 'build',
         agentKinds: ['coder', 'reviewer'],
         gating: [null, { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' }],
       }),
@@ -178,6 +191,7 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
   it('accepts gating when a task-estimator runs earlier, persisting it', async () => {
     const p = await svc().create(WS, {
       name: 'Gated reviewer',
+      purpose: 'build',
       agentKinds: ['task-estimator', 'coder', 'reviewer'],
       gating: [null, null, { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' }],
     })
@@ -190,6 +204,7 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
     const service = svc()
     const p = await service.create(WS, {
       name: 'Build + test, no QC',
+      purpose: 'build',
       // The Tester rides the full environment lifecycle (deployer → tester → disposer), which the
       // authoring rules require of any chain that tests; the QC opt-out under test is orthogonal.
       agentKinds: ['coder', 'deployer', 'tester-api', 'disposer'],
@@ -206,6 +221,7 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
   it('does not persist a testerQuality array when every Tester step keeps the default', async () => {
     const p = await svc().create(WS, {
       name: 'Build + test, default QC',
+      purpose: 'build',
       agentKinds: ['coder', 'deployer', 'tester-api', 'disposer'],
       // Explicit "enabled, ungated" is the default — not worth an array.
       testerQuality: [null, null, { enabled: true }, null],
@@ -216,6 +232,7 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
   it('persists a Coder step opting OUT of the follow-up companion', async () => {
     const p = await svc().create(WS, {
       name: 'Build, no follow-ups',
+      purpose: 'build',
       agentKinds: ['coder', 'reviewer'],
       followUps: [false, null],
     })
@@ -227,6 +244,7 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
     await expect(
       svc().create(WS, {
         name: 'QC-gated, no estimator',
+        purpose: 'build',
         agentKinds: ['coder', 'tester-api'],
         testerQuality: [
           null,
@@ -240,6 +258,7 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
     await expect(
       svc().create(WS, {
         name: 'QC-gated, no threshold',
+        purpose: 'build',
         agentKinds: ['task-estimator', 'coder', 'tester-api'],
         testerQuality: [
           null,
@@ -253,6 +272,7 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
   it('accepts a QC-gated Tester step when a task-estimator runs earlier, persisting it', async () => {
     const p = await svc().create(WS, {
       name: 'QC-gated',
+      purpose: 'build',
       agentKinds: ['task-estimator', 'coder', 'deployer', 'tester-api', 'disposer'],
       testerQuality: [
         null,
@@ -273,6 +293,7 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
     store.set('pl_builtin', {
       id: 'pl_builtin',
       name: 'Curated',
+      purpose: 'build',
       agentKinds: ['coder'],
       builtin: true,
     })
@@ -296,6 +317,7 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
     const service = svc(store)
     const created = await service.create(WS, {
       name: 'Tagged',
+      purpose: 'build',
       agentKinds: ['coder'],
       labels: ['a'],
     })
@@ -380,7 +402,16 @@ describe('PipelineService — retirement (removing a built-in that is no longer 
   /** A workspace seeded with the pipeline BEFORE it was retired — the only state this feature acts on. */
   function storeWithRetiredCopy(): Map<string, Pipeline> {
     return new Map<string, Pipeline>([
-      [RETIRED, { id: RETIRED, name: 'Legacy org flow', agentKinds: ['coder'], builtin: true }],
+      [
+        RETIRED,
+        {
+          id: RETIRED,
+          name: 'Legacy org flow',
+          purpose: 'build',
+          agentKinds: ['coder'],
+          builtin: true,
+        },
+      ],
     ])
   }
 
@@ -454,7 +485,7 @@ describe('PipelineService — retirement (removing a built-in that is no longer 
 
   it('guards a CUSTOM pipeline against the same stranded schedule', async () => {
     const store = new Map<string, Pipeline>([
-      ['pl_1', { id: 'pl_1', name: 'Mine', agentKinds: ['coder'] }],
+      ['pl_1', { id: 'pl_1', name: 'Mine', purpose: 'build', agentKinds: ['coder'] }],
     ])
     await expect(
       svc(store, { pipelineScheduleRepository: scheduleRepo(['pl_1']) }).remove(WS, 'pl_1'),
@@ -494,25 +525,37 @@ describe('PipelineService: environment-lifecycle authoring rules', () => {
 
   it('refuses to create a chain whose tester has nothing to run against', async () => {
     await expect(
-      service().create(WS, { name: 'Untested', agentKinds: ['coder', 'tester-api'] }),
+      service().create(WS, {
+        name: 'Untested',
+        purpose: 'build',
+        agentKinds: ['coder', 'tester-api'],
+      }),
     ).rejects.toThrow(/no enabled 'deployer' step comes before it/)
   })
 
   it('refuses to create a chain that provisions an environment nothing reclaims', async () => {
     await expect(
-      service().create(WS, { name: 'Leaky', agentKinds: ['coder', 'deployer', 'tester-api'] }),
+      service().create(WS, {
+        name: 'Leaky',
+        purpose: 'build',
+        agentKinds: ['coder', 'deployer', 'tester-api'],
+      }),
     ).rejects.toThrow(/no enabled 'disposer' step comes after it/)
   })
 
   it('refuses a disposer with nothing to reclaim', async () => {
     await expect(
-      service().create(WS, { name: 'Reclaim what', agentKinds: ['coder', 'disposer'] }),
+      service().create(WS, {
+        name: 'Reclaim what',
+        purpose: 'build',
+        agentKinds: ['coder', 'disposer'],
+      }),
     ).rejects.toThrow(/would have nothing to reclaim/)
   })
 
   it('carries the fault on the error so a client reacts to it without matching the message', async () => {
     const error: unknown = await service()
-      .create(WS, { name: 'Untested', agentKinds: ['coder', 'tester-api'] })
+      .create(WS, { name: 'Untested', purpose: 'build', agentKinds: ['coder', 'tester-api'] })
       .catch((e: unknown) => e)
     expect(error).toBeInstanceOf(ValidationError)
     expect((error as ValidationError).details).toMatchObject({
@@ -524,6 +567,7 @@ describe('PipelineService: environment-lifecycle authoring rules', () => {
   it('accepts the full lifecycle', async () => {
     const p = await service().create(WS, {
       name: 'Complete',
+      purpose: 'build',
       agentKinds: ['coder', 'deployer', 'tester-api', 'merger', 'disposer'],
     })
     expect(p.agentKinds).toContain('disposer')
@@ -534,6 +578,7 @@ describe('PipelineService: environment-lifecycle authoring rules', () => {
     const svc = service(store)
     const created = await svc.create(WS, {
       name: 'Complete',
+      purpose: 'build',
       agentKinds: ['coder', 'deployer', 'tester-api', 'disposer'],
     })
     await expect(
@@ -551,7 +596,10 @@ describe('PipelineService: environment-lifecycle authoring rules', () => {
     // source, and neither does `organize` (labels and archive state). Both would otherwise strand
     // a workspace behind a rule it has no way to satisfy without first reseeding.
     const store = new Map<string, Pipeline>([
-      ['pl_legacy', { id: 'pl_legacy', name: 'Legacy', agentKinds: ['coder', 'deployer'] }],
+      [
+        'pl_legacy',
+        { id: 'pl_legacy', name: 'Legacy', purpose: 'build', agentKinds: ['coder', 'deployer'] },
+      ],
     ])
     const svc = service(store)
     const copy = await svc.clone(WS, 'pl_legacy', {})

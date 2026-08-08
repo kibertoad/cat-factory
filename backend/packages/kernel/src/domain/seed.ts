@@ -171,7 +171,12 @@ function definePipeline(spec: {
   id: string
   name: string
   description?: string
-  purpose?: Pipeline['purpose']
+  /**
+   * What this preset exists to do. Required, and required HERE rather than only asserted in the
+   * seed test: the catalog is ours, so every entry can say what it is for, and a preset that
+   * skipped it would fall silently out of a narrowed picker rather than fail anything.
+   */
+  purpose: Pipeline['purpose']
   steps: readonly SeedStep[]
   availability?: Pipeline['availability']
   labels?: string[]
@@ -207,7 +212,7 @@ function definePipeline(spec: {
     ...(gating.some((g) => g !== null) ? { gating } : {}),
     ...(stepOptions.some((o) => o !== null) ? { stepOptions } : {}),
     ...(spec.availability ? { availability: spec.availability } : {}),
-    ...(spec.purpose ? { purpose: spec.purpose } : {}),
+    purpose: spec.purpose,
     ...(spec.labels ? { labels: spec.labels } : {}),
     ...(spec.version !== undefined ? { version: spec.version } : {}),
     ...(spec.public ? { public: spec.public } : {}),

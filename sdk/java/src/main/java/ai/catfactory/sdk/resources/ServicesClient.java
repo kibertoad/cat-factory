@@ -25,6 +25,13 @@ public final class ServicesClient {
     }
 
     /**
+     * Create a service (no body).
+     */
+    public PublicService create() {
+        return create(CreatePublicServiceRequest.builder().build());
+    }
+
+    /**
      * Create a service
      * Create a board service, optionally backed by a repository from `GET /api/v1/repos`. The
      * repository link is what makes the service runnable: execution resolves a task’s repository

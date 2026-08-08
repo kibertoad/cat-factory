@@ -79,8 +79,15 @@ describe('RunEvidenceLoader', () => {
     const target = block({ pullRequest: { branch: PR_BRANCH } as never })
     const view = await loaderFor(target, repo).specViewForRun('ws_1', instance())
     expect(new Set(refs)).toEqual(new Set([PR_BRANCH]))
-    // A repo carrying no `spec/` is stated, never rendered as a clean empty section.
-    expect(view).toEqual({ present: false, spec: null, features: [] })
+    // A repo carrying no `spec/` is stated, never rendered as a clean empty section, and the
+    // reader says WHICH kind of nothing it found, so an outage can never be reported as a
+    // service that declared no requirements.
+    expect(view).toEqual({
+      present: false,
+      spec: null,
+      features: [],
+      diagnostics: { anchor: 'absent', issues: [] },
+    })
   })
 
   it('reads nothing at all until a tester has actually reported', async () => {
@@ -90,6 +97,51 @@ describe('RunEvidenceLoader', () => {
     const noTester = instance([{ agentKind: 'coder', state: 'done' } as unknown as PipelineStep])
     await loaderFor(block(), repo).load('ws_1', noTester)
     expect(refs).toEqual([])
+  })
+
+  it('re-reads after a FAILED read instead of memoising the outage as the run’s answer', async () => {
+    // The memo exists because the report hook fires on every settled step. The reader is TOTAL,
+    // though, so a provider outage arrives as a returned value rather than a throw: memoised, one
+    // flaky read pins "the spec could not be read" onto every later settlement of the run, when
+    // the very next one would have succeeded.
+    let attempts = 0
+    const repo = {
+      getFile: async (_path: string, _ref?: string) => {
+        attempts += 1
+        if (attempts === 1) throw new Error('GitHub 502')
+        return null
+      },
+      listDirectory: async () => [],
+      headSha: async () => null,
+    } as unknown as RepoFiles
+    const loader = loaderFor(block(), repo)
+
+    expect(await loader.specViewForRun('ws_1', instance())).toMatchObject({ present: false })
+    const second = await loader.specViewForRun('ws_1', instance())
+    expect(attempts).toBeGreaterThan(1)
+    // The retry found the real answer: this branch carries no spec, which is a fact rather than
+    // an outage, and THAT is what the memo is allowed to keep.
+    expect(second.diagnostics?.anchor).toBe('absent')
+  })
+
+  it('memoises a CORRUPT anchor, which re-reading cannot improve', async () => {
+    // The counterpart rule: `unparsed` is an answer about the repository, not about our luck
+    // reaching it, so re-walking on every settlement would buy nothing.
+    let reads = 0
+    const repo = {
+      getFile: async (path: string) => {
+        reads += 1
+        return path === 'spec/service.json' ? { content: '{ not json', sha: 's' } : null
+      },
+      listDirectory: async () => [],
+      headSha: async () => null,
+    } as unknown as RepoFiles
+    const loader = loaderFor(block(), repo)
+
+    expect((await loader.specViewForRun('ws_1', instance())).diagnostics?.anchor).toBe('unparsed')
+    const after = reads
+    await loader.specViewForRun('ws_1', instance())
+    expect(reads).toBe(after)
   })
 
   it('answers an unknown run with an empty view rather than throwing', async () => {

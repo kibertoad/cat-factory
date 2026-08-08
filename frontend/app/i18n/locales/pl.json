@@ -4652,7 +4652,7 @@
       "strategy": "Strategia",
       "rounds": "Rundy",
       "purposeLabel": "Cel",
-      "purposePlaceholder": "Wybierz cel",
+      "purposeUnrecognized": "Nierozpoznany ({purpose})",
       "purposeOption": {
         "build": "Programowanie",
         "document": "Dokumentacja",
@@ -4670,6 +4670,10 @@
       "removeParticipant": "Usuń uczestnika (min. 2)",
       "addParticipant": "Dodaj uczestnika",
       "savedPipelines": "Zapisane pipeline'y",
+      "purposeHiddenPipelines": "{count} zapisany pipeline ukryty dla tego celu. | {count} zapisane pipeline'y ukryte dla tego celu. | {count} zapisanych pipeline'ów ukrytych dla tego celu.",
+      "everyPurposeListed": "Wyświetlane są zapisane pipeline'y wszystkich celów.",
+      "listEveryPurpose": "Pokaż wszystkie cele",
+      "narrowToDraftPurpose": "Zawęź do tego celu",
       "hideArchived": "Ukryj zarchiwizowane",
       "archivedCount": "Zarchiwizowane ({count})",
       "allLabels": "Wszystkie",
@@ -4906,7 +4910,8 @@
   },
   "palette": {
     "hint": "Kliknij agenta, aby dodać go do pipeline'u.",
-    "customAgents": "Agenci niestandardowi"
+    "customAgents": "Agenci niestandardowi",
+    "purposeHidden": "{count} agent ukryty dla tego celu. | {count} agenci ukryci dla tego celu. | {count} agentów ukrytych dla tego celu."
   },
   "gates": {
     "subtitle": {

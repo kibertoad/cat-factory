@@ -12,8 +12,11 @@ import {
 export {
   GATEKEEPER_BINDINGS,
   PUBLIC_API_SCOPE_LADDER,
+  TELEMETRY_BINDINGS,
   type GatekeeperBinding,
+  type GatekeeperQueryParam,
   type PublicApiScope,
+  type TelemetrySink,
 } from './bindings.generated.js'
 
 /**

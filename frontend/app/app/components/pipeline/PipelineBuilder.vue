@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { pipelineEnvironmentProblems, purposeAllowsAgentCategory } from '@cat-factory/contracts'
-import type { AgentKind, Pipeline, PipelinePurpose } from '~/types/domain'
+import type { AgentKind, Pipeline } from '~/types/domain'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
 import AgentPromptEditor from '~/components/pipeline/AgentPromptEditor.vue'
@@ -11,6 +11,7 @@ import OutputBudgetInput from '~/components/pipeline/OutputBudgetInput.vue'
 import BinaryOutputStepPicker from '~/components/pipeline/BinaryOutputStepPicker.vue'
 import { ESTIMATE_AXES, ESTIMATE_AXIS_FIELD, type EstimateAxis } from '~/utils/estimateGating'
 import { showOverrideField } from '~/utils/uiMode'
+import { narrowPipelineLibrary } from '~/utils/pipelineLibrary'
 import {
   agentKindMeta,
   companionForProducer,
@@ -28,18 +29,6 @@ const CONSENSUS_STRATEGIES = computed<{ value: ConsensusStrategy; label: string 
   { value: 'specialist-panel', label: t('pipeline.builder.strategyOption.specialist-panel') },
   { value: 'debate', label: t('pipeline.builder.strategyOption.debate') },
   { value: 'ranked-voting', label: t('pipeline.builder.strategyOption.ranked-voting') },
-])
-
-// The use-case classifier options for the pipeline (its `purpose`). Static literal `t()` keys, one
-// per `PIPELINE_PURPOSES` member, so the typed-message-keys check sees them (a runtime-built key
-// wouldn't be checkable). A non-`build` purpose hides the Implementation/Testing agent kinds in
-// the palette below (see `AgentPalette`), and drives which task pickers offer the saved pipeline.
-const PURPOSE_OPTIONS = computed<{ value: PipelinePurpose; label: string }[]>(() => [
-  { value: 'build', label: t('pipeline.builder.purposeOption.build') },
-  { value: 'document', label: t('pipeline.builder.purposeOption.document') },
-  { value: 'review', label: t('pipeline.builder.purposeOption.review') },
-  { value: 'research', label: t('pipeline.builder.purposeOption.research') },
-  { value: 'planning', label: t('pipeline.builder.purposeOption.planning') },
 ])
 
 /** Add a blank participant to the draft step's consensus config. */
@@ -208,12 +197,16 @@ const skillStepNeedsPick = computed(() =>
   ),
 )
 
-// Steps whose agent category the chosen purpose forbids (a non-`build` purpose writes no code and
-// runs no tests, so the Implementation/Testing categories are disallowed — see
-// `purposeAllowsAgentCategory`). The palette hides those kinds, so this is only reachable by
-// switching an existing draft to a non-`build` purpose AFTER such steps were added. The backend has
-// no kind→category map to gate on, so the builder is the enforcement point: save is blocked until
-// the offending steps are removed (or the purpose set back to Build).
+// Steps whose agent category the chosen purpose CONTRADICTS (a non-`build` purpose writes no code
+// and runs no tests, so the Implementation/Testing categories are disallowed, see
+// `purposeAllowsAgentCategory`). Only reachable by switching an existing draft to a non-`build`
+// purpose AFTER such steps were added, since the palette offers neither. The backend has no
+// kind→category map to gate on, so the builder is the enforcement point: save is blocked until the
+// offending steps are removed (or the purpose set back to Build).
+//
+// Deliberately the compatibility predicate, not the palette's narrower relevance one: a purpose
+// that merely stops SUGGESTING a category must not turn a pipeline somebody already built into
+// one they cannot save.
 const stepsDisallowedByPurpose = computed(() =>
   pipelines.draft.filter((kind) => {
     const category = agentKindMeta(kind).category
@@ -426,14 +419,26 @@ const showArchived = ref(false)
 const allLabels = computed(() =>
   [...new Set(pipelines.pipelines.flatMap((p) => p.labels ?? []))].sort(),
 )
-const archivedCount = computed(() => pipelines.pipelines.filter((p) => p.archived).length)
-const visiblePipelines = computed(() =>
-  pipelines.pipelines.filter((p) => {
-    if (!showArchived.value && p.archived) return false
-    if (labelFilter.value && !(p.labels ?? []).includes(labelFilter.value)) return false
-    return true
+// The library is narrowed by the same purpose the palette is: browsing at `review` lists the
+// pipelines built for reviewing, not the whole workspace catalog. `narrowPipelineLibrary` owns the
+// reduction so the rule is unit-testable and each hint counts the population its own control can
+// actually reveal, rather than the rows another dial is hiding either way.
+//
+// It is a BROWSING dial of its own, not a read of `draftPurpose`. The draft's purpose is an
+// authoring field with no "unclassified" setting, so keying the library straight off it would
+// leave the only ways back through the hidden rows a re-classification of the pipeline being
+// edited (which persists) or discarding the draft. This ref is what "relax THIS dial alone" means
+// for the purpose: it defaults to following the draft and the hint below toggles it, changing what
+// is listed and nothing that gets saved.
+const browseEveryPurpose = ref(false)
+const library = computed(() =>
+  narrowPipelineLibrary(pipelines.pipelines, {
+    purpose: browseEveryPurpose.value ? null : pipelines.draftPurpose,
+    label: labelFilter.value,
+    showArchived: showArchived.value,
   }),
 )
+const visiblePipelines = computed(() => library.value.offered)
 async function toggleArchive(p: Pipeline) {
   try {
     if (p.archived) await pipelines.unarchive(p.id)
@@ -507,7 +512,7 @@ async function clone(p: Pipeline) {
             </UButton>
           </div>
           <div class="flex-1 pe-1 lg:min-h-0 lg:overflow-y-auto">
-            <AgentPalette :purpose="pipelines.draftPurpose" @add="add" />
+            <AgentPalette v-model:purpose="pipelines.draftPurpose" @add="add" />
           </div>
         </div>
 
@@ -538,24 +543,6 @@ async function clone(p: Pipeline) {
             class="mb-2"
             data-testid="pipeline-builder-name"
           />
-
-          <!-- Purpose: the pipeline's use-case classifier. Drives which task pickers offer it (a
-               document task offers only `document` pipelines) and narrows the palette below (a
-               non-build purpose hides the Implementation/Testing kinds). -->
-          <div class="mb-2 flex items-center gap-2">
-            <label class="shrink-0 text-[11px] font-medium text-slate-400">
-              {{ t('pipeline.builder.purposeLabel') }}
-            </label>
-            <USelect
-              :model-value="pipelines.draftPurpose ?? undefined"
-              :items="PURPOSE_OPTIONS"
-              value-key="value"
-              size="sm"
-              class="min-w-40"
-              :placeholder="t('pipeline.builder.purposePlaceholder')"
-              @update:model-value="pipelines.draftPurpose = $event"
-            />
-          </div>
 
           <!-- Description: the prose summary shown next to the step list in the pipeline pickers. -->
           <UTextarea
@@ -1182,7 +1169,7 @@ async function clone(p: Pipeline) {
               {{ t('pipeline.builder.savedPipelines') }}
             </h3>
             <UButton
-              v-if="archivedCount"
+              v-if="library.archivedInScope"
               :icon="showArchived ? 'i-lucide-archive-restore' : 'i-lucide-archive'"
               :color="showArchived ? 'primary' : 'neutral'"
               variant="ghost"
@@ -1196,7 +1183,7 @@ async function clone(p: Pipeline) {
               {{
                 showArchived
                   ? t('pipeline.builder.hideArchived')
-                  : t('pipeline.builder.archivedCount', { count: archivedCount })
+                  : t('pipeline.builder.archivedCount', { count: library.archivedInScope })
               }}
             </UButton>
           </div>
@@ -1223,6 +1210,40 @@ async function clone(p: Pipeline) {
             >
               {{ l }}
             </UBadge>
+          </div>
+
+          <!-- What the purpose is holding back, and the way past it. Stated here rather than
+               beside the palette's purpose control because this is where the absence is noticed:
+               a narrowed library must never read as the whole one, and a hint that only NAMES an
+               absence sends the reader to the authoring dial one column left, whose every setting
+               narrows and whose every change is saved. -->
+          <div
+            v-if="browseEveryPurpose || library.hiddenByPurpose"
+            class="mb-2 flex shrink-0 flex-wrap items-center gap-x-2 px-1 text-[10px] text-slate-500"
+          >
+            <span>
+              {{
+                browseEveryPurpose
+                  ? t('pipeline.builder.everyPurposeListed')
+                  : t(
+                      'pipeline.builder.purposeHiddenPipelines',
+                      { count: library.hiddenByPurpose },
+                      library.hiddenByPurpose,
+                    )
+              }}
+            </span>
+            <button
+              type="button"
+              class="underline underline-offset-2 hover:text-slate-300"
+              data-testid="pipeline-library-purpose-toggle"
+              @click="browseEveryPurpose = !browseEveryPurpose"
+            >
+              {{
+                browseEveryPurpose
+                  ? t('pipeline.builder.narrowToDraftPurpose')
+                  : t('pipeline.builder.listEveryPurpose')
+              }}
+            </button>
           </div>
 
           <ul class="flex-1 space-y-1.5 pe-1 lg:min-h-0 lg:overflow-y-auto">

@@ -4795,7 +4795,10 @@
       "strategy": "Strategy",
       "rounds": "Rounds",
       "purposeLabel": "Purpose",
-      "purposePlaceholder": "Select a purpose",
+      "purposeUnrecognized": "Unrecognized ({purpose})",
+      "@purposeUnrecognized": {
+        "description": "Shown on the pipeline-purpose control when the pipeline carries a purpose this build has no label for (a member added by a newer build, or one since retired). The raw stored value is quoted back so it can be recognised and re-picked."
+      },
       "purposeOption": {
         "build": "Build",
         "document": "Documentation",
@@ -4813,6 +4816,13 @@
       "removeParticipant": "Remove participant (min 2)",
       "addParticipant": "Add participant",
       "savedPipelines": "Saved pipelines",
+      "purposeHiddenPipelines": "{count} saved pipeline hidden for this purpose. | {count} saved pipelines hidden for this purpose.",
+      "everyPurposeListed": "Listing saved pipelines for every purpose.",
+      "listEveryPurpose": "Show every purpose",
+      "narrowToDraftPurpose": "Narrow to this purpose",
+      "@purposeHiddenPipelines": {
+        "description": "Shown above the saved-pipeline list in the pipeline builder: how many saved pipelines are not listed because they were built for a different purpose than the one being edited."
+      },
       "hideArchived": "Hide archived",
       "archivedCount": "Archived ({count})",
       "allLabels": "All",
@@ -5132,7 +5142,11 @@
   },
   "palette": {
     "hint": "Click an agent to append it to the pipeline.",
-    "customAgents": "Custom agents"
+    "customAgents": "Custom agents",
+    "purposeHidden": "{count} agent hidden for this purpose. | {count} agents hidden for this purpose.",
+    "@purposeHidden": {
+      "description": "Shown under the pipeline-purpose control in the agent palette: how many agents are not offered because they are irrelevant to the pipeline's purpose (e.g. a coder in a documentation pipeline)."
+    }
   },
   "gates": {
     "subtitle": {

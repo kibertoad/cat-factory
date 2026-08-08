@@ -4652,7 +4652,7 @@
       "strategy": "戦略",
       "rounds": "ラウンド",
       "purposeLabel": "目的",
-      "purposePlaceholder": "目的を選択",
+      "purposeUnrecognized": "認識できません ({purpose})",
       "purposeOption": {
         "build": "開発",
         "document": "ドキュメント",
@@ -4670,6 +4670,10 @@
       "removeParticipant": "参加者を削除(最低2)",
       "addParticipant": "参加者を追加",
       "savedPipelines": "保存済みパイプライン",
+      "purposeHiddenPipelines": "この目的では {count} 件の保存済みパイプラインが非表示です。",
+      "everyPurposeListed": "すべての目的の保存済みパイプラインを表示しています。",
+      "listEveryPurpose": "すべての目的を表示",
+      "narrowToDraftPurpose": "この目的に絞り込む",
       "hideArchived": "アーカイブを非表示",
       "archivedCount": "アーカイブ済み({count})",
       "allLabels": "すべて",
@@ -4906,7 +4910,8 @@
   },
   "palette": {
     "hint": "エージェントをクリックするとパイプラインに追加されます。",
-    "customAgents": "カスタムエージェント"
+    "customAgents": "カスタムエージェント",
+    "purposeHidden": "この目的では {count} 件のエージェントが非表示です。"
   },
   "gates": {
     "subtitle": {

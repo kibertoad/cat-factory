@@ -4213,7 +4213,7 @@
       "strategy": "Strategie",
       "rounds": "Runden",
       "purposeLabel": "Zweck",
-      "purposePlaceholder": "Zweck auswählen",
+      "purposeUnrecognized": "Nicht erkannt ({purpose})",
       "purposeOption": {
         "build": "Entwicklung",
         "document": "Dokumentation",
@@ -4231,6 +4231,10 @@
       "removeParticipant": "Teilnehmer entfernen (min. 2)",
       "addParticipant": "Teilnehmer hinzufügen",
       "savedPipelines": "Gespeicherte Pipelines",
+      "purposeHiddenPipelines": "{count} gespeicherte Pipeline ist für diesen Zweck ausgeblendet. | {count} gespeicherte Pipelines sind für diesen Zweck ausgeblendet.",
+      "everyPurposeListed": "Gespeicherte Pipelines aller Zwecke werden aufgelistet.",
+      "listEveryPurpose": "Alle Zwecke anzeigen",
+      "narrowToDraftPurpose": "Auf diesen Zweck eingrenzen",
       "hideArchived": "Archivierte ausblenden",
       "archivedCount": "Archiviert ({count})",
       "allLabels": "Alle",
@@ -6737,7 +6741,8 @@
   },
   "palette": {
     "hint": "Klicke auf einen Agenten, um ihn an die Pipeline anzuhängen.",
-    "customAgents": "Benutzerdefinierte Agenten"
+    "customAgents": "Benutzerdefinierte Agenten",
+    "purposeHidden": "{count} Agent ist für diesen Zweck ausgeblendet. | {count} Agenten sind für diesen Zweck ausgeblendet."
   },
   "forkDecision": {
     "title": "Implementierungsansatz wählen",

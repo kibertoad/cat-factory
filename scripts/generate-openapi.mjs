@@ -213,7 +213,48 @@ const API_PREFIX = '/api/v1'
 // which it is. A consumer counting rows off that list to mean "screenshots this run captured" must
 // filter on `scope: 'run'`; one comparing a screenshot against the design it was judged against
 // finally has both, which is why the list was half the truth before.
-const API_VERSION = '1.31.0'
+//
+// 1.32.0: the two cost/telemetry reads that were reachable only from a browser session. Two new
+// operations (`GET /api/v1/usage/spend`, `GET /api/v1/debug/runs/{runId}/llm-export`), no change
+// to anything already served. Additive on every axis, so a consumer built against 1.31.0 keeps
+// parsing every response it already understood.
+//
+// Worth stating for a reader comparing the new spend read against `GET /api/v1/usage`: the two
+// answer different questions off the same ledger and will not tie out. `/usage` is the current
+// calendar month against the budget; `/usage/spend` is a rolling window snapped to a bucket edge,
+// and on `30d`/`90d` it is served from the durable rollup, whose attribution was frozen while the
+// money was spent. `source` and `since` on the response are what say which is talking.
+//
+// 1.33.0: the MERGE-EVIDENCE loop (ADR 0046) reaches `/api/v1`. Four new operations
+// (`GET /api/v1/runs/:runId/merge-record`, `GET /api/v1/merge-records/rollups`,
+// `GET /api/v1/merge-records/:recordId`, `POST /api/v1/merge-records/:recordId/effort`) plus an
+// all-optional body on `POST /api/v1/notifications/:id/act`. Purely additive: no existing path,
+// shape, scope floor or error vocabulary moves.
+//
+// The scope split is the part worth stating. Recording how much review a merged pull request
+// needed is `write`, not the `admin` that `act` carries: `act` MERGES a pull request, where
+// tagging one that already landed merges nothing. An integration whose job is collecting evidence
+// therefore no longer needs a key that can also delete tasks and merge.
+//
+// `act`'s new body is what gives the app's one-tap confirm-and-tag a headless equivalent, and it
+// reaches four published clients without breaking a caller because the emitters now render an
+// all-optional body as a parameter that may be OMITTED. Sending no body at all still works
+// (the route mounts `optionalJsonBody`), so an integration calling it since 1.0 is untouched.
+//
+// 1.34.0, not 1.32.0: `GET /api/v1/services/:serviceId/spec`, the service's in-repo requirement
+// tree. One new operation and its schemas; nothing existing is renamed, retyped or re-scoped, so a
+// consumer built against 1.33.0 is unaffected. This branch first claimed 1.32.0, which main then
+// published for the spend/export reads above while the branch was in flight, and then 1.33.0 went
+// to the merge-evidence loop: the THIRD number to move under a branch in flight, which is what the
+// note higher up is warning about.
+//
+// One consequence is worth stating rather than leaving for a reader to discover, because it is a
+// commitment rather than an addition: the response serves `SpecDoc` and everything under it
+// (`SpecModule`, `RequirementGroup`, `RequirementItem`, `AcceptanceCriterion`, `DomainRule`) as the
+// SAME shapes the app's requirements window consumes, deliberately, so the two surfaces cannot
+// drift about one artifact. Those schemas were internal and freely breakable until this version;
+// from here they are part of the stable `/api/v1` surface and change on its terms.
+const API_VERSION = '1.34.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -274,6 +315,14 @@ const COMPONENT_SCHEMAS = {
   PublicUsageRow: 'publicUsageRowSchema',
   PublicUsageBudget: 'publicUsageBudgetSchema',
   PublicUsage: 'publicUsageSchema',
+  // The spend breakdown, hoisted beside its budget sibling and for the same reason. Left inline
+  // it ships as `GetPublicSpendResponse` / `…ResponseRow` / `…ResponseTotals` in four languages:
+  // names derived from an operationId rather than from the resource, which is what an integrator
+  // ends up writing its code against. The picklists these carry are NOT hoisted (a bare enum
+  // renders as an empty `interface`); they are pinned by value-set in `scripts/sdk/ir.mjs`.
+  PublicSpendRow: 'publicSpendRowSchema',
+  PublicSpendTotals: 'publicSpendTotalsSchema',
+  PublicSpend: 'publicSpendSchema',
   PublicIdentity: 'publicIdentitySchema',
   // Parked decisions. `PublicDecisionList` is the response of EVERY decision route, and it
   // transitively carries the full finding + fork-option + PR-finding shapes — hoisting it (and the
@@ -353,6 +402,28 @@ const COMPONENT_SCHEMAS = {
   // an inline enum named after the first path that reaches it, which is what every other
   // vocabulary on this surface does (`PublicTaskSourceDocumentSource`, `PrReportCiStatus`).
   // `sdk/typescript/test/contract-conformance.test.ts` is what refuses the empty interface.
+  // The service SPEC read. The tree is served as the SAME shapes the app's requirements window
+  // consumes rather than a re-projection, so every level of it is hoisted: un-hoisted, a
+  // requirement item ships as `PublicServiceSpecSpecModulesItemGroupsItemRequirementsItem` in four
+  // languages, which is not a type an integrator should have to write code against. The bare
+  // picklists under them (priority, kind, state, issue kind, truncation section) stay INLINE, for
+  // the reason `DocumentFreshness`'s note gives: the SDK emitter renders a hoisted picklist as an
+  // empty interface.
+  PublicServiceSpec: 'publicServiceSpecSchema',
+  PublicSpecProvenance: 'publicSpecProvenanceSchema',
+  PublicSpecFeatureFile: 'publicSpecFeatureFileSchema',
+  PublicSpecTruncation: 'publicSpecTruncationSchema',
+  SpecReadIssue: 'specReadIssueSchema',
+  // The READ doc, not the strict authoring one. They differ in a single field (`service` may be
+  // empty, because a half-written `spec/service.json` is a state a repository can be in) and only
+  // this one is ever served, so hoisting the other would publish a component nothing references
+  // beside an inlined `PublicServiceSpecSpec` that is the shape callers actually receive.
+  SpecDoc: 'readSpecDocSchema',
+  SpecModule: 'specModuleSchema',
+  RequirementGroup: 'requirementGroupSchema',
+  RequirementItem: 'requirementItemSchema',
+  AcceptanceCriterion: 'acceptanceCriterionSchema',
+  DomainRule: 'domainRuleSchema',
   PrReportRequirements: 'prReportRequirementsSchema',
   PrReportEnvironments: 'prReportEnvironmentsSchema',
   PrReportMerge: 'prReportMergeSchema',
@@ -517,7 +588,7 @@ const OPERATION_DOCS = {
     tag: 'Notifications',
     summary: 'Act on a notification',
     description:
-      'Run a notification’s typed side-effect and resolve it: merge the PR (merge_review / pipeline_complete) or retry the run (ci_failed / test_failed). Performs a real GitHub merge, so it requires an admin-scoped key. Only these automated-action types are actionable through the API — a notification that parks a run on an interactive human decision cannot be acted on headlessly (dismiss it instead). A card that would retry a run on an individual-usage model likewise cannot be acted on through the API.',
+      'Run a notification’s typed side-effect and resolve it: merge the PR (merge_review / pipeline_complete) or retry the run (ci_failed / test_failed). Performs a real GitHub merge, so it requires an admin-scoped key. Only these automated-action types are actionable through the API — a notification that parks a run on an interactive human decision cannot be acted on headlessly (dismiss it instead). A card that would retry a run on an individual-usage model likewise cannot be acted on through the API. To record how much review a merged pull request needed, call `POST /api/v1/merge-records/{recordId}/effort` (a `write` key) before or after this; a `merge_tag_request` card carries its record id on the payload and is resolved by tagging that record and dismissing the card.',
   },
   dismissPublicNotification: {
     tag: 'Notifications',
@@ -570,6 +641,12 @@ const OPERATION_DOCS = {
     summary: "Read the workspace's usage for the current period",
     description:
       'Read this billing period’s METERED spend against the workspace budget (including whether it is exceeded, which pauses runs) plus the per-(billing, vendor, provider, model) token breakdown behind it. Costs on `subscription` rows are illustrative — a flat-rate plan bills nothing per token — so branch on `billing` before summing. Workspace-scoped: the account- and user-tier budgets are not reachable through this surface.',
+  },
+  getPublicSpend: {
+    tag: 'Usage',
+    summary: "Break the workspace's spend down by repository, ticket, run or step kind",
+    description:
+      'Group the board\u2019s spend over a window (`24h`, `7d`, `30d`, `90d`) by ONE dimension: `repo`, `ticket` and `run` are the cost-attribution axes an organisation budgets against, and `model` / `agentKind` / `service` / `taskType` slice the same money the other ways. `meteredCost` is real money and `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage, so never sum them. The EMPTY `key` is the unattributed bucket, a real slice rather than a dropped row, never dropped from the breakdown. `rows` is the heaviest `limit` slices (default 100, max 500) and `truncated` says when there was a tail, while `totals` aggregates the WHOLE window either way, so a capped answer still reports what the board spent. `source` says which store answered: the short windows scan the live ledger, which resolves a repository or a ticket through today\u2019s links, while the long ones read the durable daily rollup, which froze that attribution while the money was spent and is never pruned. Read `rolledUpThrough` before reporting a quiet quarter, since a rollup that has never run and a board that spent nothing look identical. Workspace-scoped: the account-wide view is not reachable through this surface.',
   },
   getPublicIdentity: {
     tag: 'Identity',
@@ -847,6 +924,12 @@ const OPERATION_DOCS = {
     description:
       'One recorded model call with its budgeted prompt delta, response and reasoning. `bodyOffset`/`bodyChars` window the bodies, so an arbitrarily long transcript is readable in bounded pages.',
   },
+  getDebugLlmExport: {
+    tag: 'Debug',
+    summary: "Export a run's model activity as one bundle",
+    description:
+      'The whole of a run\u2019s model activity as one self-describing document, for handing straight to a model asked why the run truncated, spent or stalled: the SQL rollups (run totals, per agent kind, per phase, with the carry cost that says which slice burdened everything after it) plus a bounded window of the individual calls behind them. The rollups cover EVERY recorded call and do not move with `limit`, so a windowed bundle still reports what the run actually cost; `truncated` says the calls are a window and `order` says which end was kept. Bodies are omitted unless `bodyChars` asks, and the resumable call list is the way to walk a long run whole.',
+  },
   listDebugAgentContext: {
     tag: 'Debug',
     summary: "List a run's agent-context dispatches",
@@ -888,6 +971,36 @@ const OPERATION_DOCS = {
     summary: "List a run's captured artifacts",
     description:
       'The binary artifacts the run captured (UI screenshots) plus the reference images they were reviewed against: id, kind, view, content type, exact byte size and content hash. Unpaged: the capture path caps how many one run may store, so the response size is bounded before the request. Fetch the bytes with the blob endpoint.',
+  },
+  getPublicRunMergeRecord: {
+    tag: 'Merge records',
+    summary: 'Get the merge decision a run left behind',
+    description:
+      'What kind of change the run’s pull request made (a change class derived on the backend from the changed-file list, never from an agent’s opinion), what the merger scored it, which merge-threshold preset the decision was compared against, what ultimately happened to the pull request, and how much review a human spent if anybody has tagged it. The entry point of the merge-evidence loop for a caller holding a run id: it also hands back the `recordId` the effort-tag route takes. A run whose pipeline had no `merger` step made no merge decision and answers `404` with `details.reason: "no_merge_record"`, distinct from the `"run_not_found"` a run this key cannot read gets.',
+  },
+  getPublicMergeRecord: {
+    tag: 'Merge records',
+    summary: 'Get one merge record',
+    description:
+      'The same record addressed by its own id, for a caller that holds one without the run: the id a `merge_tag_request` notification carries on its payload, for instance. Scoped to the calling key’s workspace.',
+  },
+  listPublicMergeClassRollups: {
+    tag: 'Merge records',
+    summary: 'List the per-change-class merge rollups',
+    description:
+      'Every change class’s accumulated track record for the workspace, as one aggregate: how many records it holds, how many landed and by which route (auto-merged, merged through the app, merged directly on the provider), how many were rejected or are still awaiting review, and the distribution of reviewer-effort tags. This is the evidence that justifies widening a per-class auto-merge rule; nothing widens one automatically. A class with no records is present as zeros rather than absent, so "nothing has landed here yet" never reads as a class the response left out. `unknown` is a real class (no changed-file list was available) and never matches a per-class rule.',
+  },
+  tagPublicMergeReviewEffort: {
+    tag: 'Merge records',
+    summary: 'Tag the reviewer effort a merge took',
+    description:
+      'Record how much review a landed pull request actually needed (`none` for zero blocking comments, `minor` for a nit pass, `major` for real rework), or `null` to clear the tag. This is the ground truth the auto-merge score thresholds are trying to approximate, and it is never mandatory: an untagged merge records a null tag and nothing downstream breaks. A `write` key, not an `admin` one: the pull request already landed, so tagging it merges nothing. Idempotent, and orthogonal to the decision, so a record can be tagged whenever the effort becomes known, before or after the `act` that merged it.',
+  },
+  getPublicServiceSpec: {
+    tag: 'Spec',
+    summary: "Get a service's in-repo specification",
+    description:
+      'The prescriptive specification stored in the service’s own repository under `spec/`: modules → feature groups → requirement items, each with its MoSCoW priority, its `aspirational`/`established` implementation state and its Given/When/Then acceptance criteria, plus the domain rules scoped to each group and the Gherkin `.feature` files rendered from the same tree. `provenance` names the branch and commit the read describes, because the default branch is not what a run with an open pull request is working against. The requirement ids here are the join key onto `requirements` on a run’s report and outcome, so criterion → evidence is a map lookup. Four outcomes are kept apart rather than folded: `present: false` means the default branch holds no spec, a `503` with `reason: "spec_read_failed"` means the repository could not be read, a `503` with `reason: "vcs_not_configured"` means the deployment or workspace wired no version control, and a partially readable spec is SERVED with `issues` naming each file that did not survive. Read-only: the spec’s write path is a reviewed commit.',
   },
   listPublicKeys: {
     tag: 'Keys',

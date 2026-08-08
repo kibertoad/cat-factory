@@ -11,7 +11,11 @@
 // The tier names and the actor ids match the shipped example on purpose: they are what the specs
 // read, and a reader comparing the two should see one shape rather than two vocabularies.
 
-import { DECISION_BINDINGS, type GatekeeperPolicy } from '../src/policy/index.js'
+import {
+  DECISION_BINDINGS,
+  TELEMETRY_BINDINGS,
+  type GatekeeperPolicy,
+} from '../src/policy/index.js'
 
 const DELIVERY_LOOP = [
   'services_list',
@@ -42,15 +46,7 @@ export const FIXTURE_POLICY: GatekeeperPolicy = {
       description: 'Read the board, runs, notifications and telemetry. Changes nothing.',
       keyScope: 'read',
       allow: '*',
-      deny: [
-        'debug_get_agent_context',
-        'debug_get_llm_call',
-        'debug_list_agent_context',
-        'debug_list_llm_calls',
-        'debug_list_logs',
-        'debug_list_search_queries',
-        'debug_list_tool_calls',
-      ],
+      deny: [...TELEMETRY_BINDINGS],
     },
 
     operator: {
