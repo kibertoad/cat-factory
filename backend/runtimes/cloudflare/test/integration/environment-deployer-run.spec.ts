@@ -48,7 +48,7 @@ describe('deployer agent + environment discovery', () => {
 
     // No disposer: the assertions below read the environment AFTER the run, so it has to still be
     // standing. That shape is refused at save (`validatePipelineAuthoring`), so the row is written
-    // straight to the store — the legacy state the rule deliberately leaves runnable.
+    // straight to the store: the legacy state the rule deliberately leaves runnable.
     const pipelineId = 'pl_deploy_test_legacy'
     await new D1PipelineRepository({ db: env.DB }).insert(ws, {
       id: pipelineId,

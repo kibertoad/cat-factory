@@ -394,7 +394,7 @@ const gatingNeedsEstimator = computed(() => {
   return false
 })
 
-// Surfaced as inline hints: the environment lifecycle a draft has to spell out — provision
+// Surfaced as inline hints: the environment lifecycle a draft has to spell out: provision
 // (Deployer) → consume (a tester / acceptance / human-test step) → reclaim (Disposer). The rule
 // itself lives in `@cat-factory/contracts` and is the SAME function the save boundary refuses on,
 // rather than a second hand-written copy that could disagree about which draft is savable. One

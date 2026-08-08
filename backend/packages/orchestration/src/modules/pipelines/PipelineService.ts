@@ -223,7 +223,7 @@ export class PipelineService {
       gateRegistry: this.gateRegistry,
     })
     // Authoring-only correctness (see `validatePipelineAuthoring`): the environment lifecycle a
-    // composed chain has to spell out — provision, consume, reclaim. Not part of the shared shape
+    // composed chain has to spell out: provision, consume, reclaim. Not part of the shared shape
     // validation, because a pipeline authored before this rule still RUNS.
     validatePipelineAuthoring({ agentKinds: input.agentKinds, enabled: input.enabled })
     // Launch-constraint validation (no origin — a save, not a launch): a `bug-intake` step

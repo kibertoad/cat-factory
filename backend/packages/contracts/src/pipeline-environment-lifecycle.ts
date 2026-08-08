@@ -22,7 +22,7 @@ import { UI_TESTER_AGENT_KIND } from './visual-pipeline.js'
 // ---------------------------------------------------------------------------
 
 /**
- * The agent kind that PROVISIONS a run's ephemeral environments — the sole provisioner, which
+ * The agent kind that PROVISIONS a run's ephemeral environments, the sole provisioner, which
  * is why every consumer below is stated relative to it. The canonical slug also backs
  * integrations' `DEPLOYER_AGENT_KIND` (re-exported there).
  */
@@ -66,12 +66,12 @@ export const ENV_CONSUMER_AGENT_KINDS: readonly string[] = [
  * maps each to translated copy and the backend's refusal carries it on `details.reason` rather
  * than making a client string-match the message.
  *
- *  - `consumer_without_deployer` — a tester / acceptance / human-test step with no enabled
+ *  - `consumer_without_deployer`: a tester / acceptance / human-test step with no enabled
  *    `deployer` before it. Nothing provisions what it reads.
- *  - `deployer_without_disposer` — an enabled `deployer` with no enabled `disposer` after it.
+ *  - `deployer_without_disposer`: an enabled `deployer` with no enabled `disposer` after it.
  *    The environment it stands up outlives the run, reclaimed (if at all) by the TTL sweep long
  *    after the run settled, which is a backstop and cannot close the run's own teardown proof.
- *  - `disposer_without_deployer` — an enabled `disposer` with no enabled `deployer` before it.
+ *  - `disposer_without_deployer`: an enabled `disposer` with no enabled `deployer` before it.
  *    It reclaims by the ids the deployer recorded, so with none it can only report that there
  *    was nothing to reclaim, which is indistinguishable from a clean teardown.
  */

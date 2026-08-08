@@ -237,7 +237,7 @@ export interface ConformanceApp {
    * The suite needs this for the shapes those rules refuse but the ENGINE must still handle,
    * because they remain reachable as stored state: a pipeline authored before the rule existed,
    * or a workspace's seeded copy of a built-in that predates it. The environment-lifecycle
-   * behaviours are exactly that set — a deploy-only run whose environment outlives it and is
+   * behaviours are exactly that set: a deploy-only run whose environment outlives it and is
    * torn down by hand afterwards, and a test-only run whose PR report has to say that no
    * deployer ever stood anything up. Driving those through the authoring door would assert the
    * refusal instead of the behaviour, and adding the missing steps to make the save legal would

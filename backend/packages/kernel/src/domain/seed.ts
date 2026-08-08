@@ -380,7 +380,7 @@ function buildDeliveryPipelines(): Pipeline[] {
         // Terminal, for the same reason it is terminal in `pl_bug_triage`: every earlier slot
         // would reclaim the environment while a later step might still want it, and the merge is
         // the last thing in this chain that can. Unconditional even though its provider (the
-        // tester) is estimate-gated — the Deployer above is unconditional too, so a trivial task
+        // tester) is estimate-gated: the Deployer above is unconditional too, so a trivial task
         // still stands an environment up and still has to give it back.
         'disposer',
       ],

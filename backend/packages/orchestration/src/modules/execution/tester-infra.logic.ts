@@ -76,8 +76,8 @@ export function decideTesterInfra(input: TesterInfraInput): TesterInfraDecision 
  *
  * Re-exported from `@cat-factory/contracts`, which owns the list: the SPA's pipeline builder warns
  * about the same set while a draft is being composed, and the save boundary refuses it. This
- * module's remaining job is the SERVICE-AWARE half — whether the service under test stands an
- * environment up at all — which only the run door can answer.
+ * module's remaining job is the SERVICE-AWARE half, whether the service under test stands an
+ * environment up at all, which only the run door can answer.
  */
 export { ENV_CONSUMER_AGENT_KINDS as ENV_CONSUMER_KINDS } from '@cat-factory/contracts'
 

@@ -484,7 +484,7 @@ describe('PipelineService — retirement (removing a built-in that is no longer 
 // (a tester / acceptance / human-test step) → reclaim (`disposer`). Enforced at the AUTHORING
 // boundary only (see `validatePipelineAuthoring`), so these pin both that a save refuses the dead
 // ends and that the rule stays off the paths that merely copy or re-file an existing chain.
-describe('PipelineService — environment-lifecycle authoring rules', () => {
+describe('PipelineService: environment-lifecycle authoring rules', () => {
   const service = (store = new Map<string, Pipeline>()) =>
     new PipelineService({
       workspaceRepository: workspaceRepo(),

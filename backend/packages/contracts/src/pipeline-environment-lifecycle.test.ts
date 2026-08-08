@@ -4,7 +4,7 @@ import {
   pipelineEnvironmentProblems,
 } from './pipeline-environment-lifecycle.js'
 
-/** The reasons a step list produced, in step order — the shape every assertion below reads. */
+/** The reasons a step list produced, in step order: the shape every assertion below reads. */
 const reasons = (agentKinds: string[], enabled?: boolean[]) =>
   pipelineEnvironmentProblems(agentKinds, enabled).map((p) => p.reason)
 
@@ -43,7 +43,7 @@ describe('pipelineEnvironmentProblems', () => {
   })
 
   it('reasons over the ENABLED subset, which is the chain a run is built from', () => {
-    // A disabled deployer provisions nothing, so the tester after it is unserved — the exact
+    // A disabled deployer provisions nothing, so the tester after it is unserved: the exact
     // shape a half-edited draft reaches.
     expect(reasons(['deployer', 'tester-api', 'disposer'], [false, true, true])).toEqual([
       'consumer_without_deployer',

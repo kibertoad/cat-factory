@@ -13,7 +13,7 @@ import type { PipelineEnvironmentProblem } from '@cat-factory/contracts'
  * Deliberately a layer ABOVE `validatePipelineShape` rather than part of it, and the split is
  * about which door each rule may stand in:
  *
- *  - `validatePipelineShape` states what is BROKEN — a companion reviewing nothing, a skill step
+ *  - `validatePipelineShape` states what is BROKEN: a companion reviewing nothing, a skill step
  *    with no skill, an estimate gate with no estimator. A run built from such a chain cannot do
  *    the thing it says it does, so both the save boundary and the RUN door refuse it.
  *  - These rules state what is INCOMPLETE. Each names a real dead end, but a pipeline authored
@@ -57,7 +57,7 @@ function describeEnvironmentProblem(problem: PipelineEnvironmentProblem): string
       return (
         `Step '${problem.agentKind}' runs against a provisioned environment, but no enabled ` +
         `'${DEPLOYER_AGENT_KIND}' step comes before it, so nothing would stand one up. Add a ` +
-        `Deployer earlier in the pipeline — it is a no-op on a service that provisions nothing, ` +
+        `Deployer earlier in the pipeline. It is a no-op on a service that provisions nothing, ` +
         `so one pipeline still covers every kind of service.`
       )
     case 'deployer_without_disposer':
