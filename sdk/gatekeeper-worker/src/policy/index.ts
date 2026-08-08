@@ -42,4 +42,15 @@ export { applyMask, MASKED } from '../masking.js'
 // Re-exported rather than re-declared: a policy names operations and scopes, and the table it
 // names them from is the generated one, so a deployment should be reading the same types the
 // compiler checks its policy against.
-export type { GatekeeperBinding, PublicApiScope } from '@cat-factory/gatekeeper-bindings'
+export type {
+  GatekeeperBinding,
+  GatekeeperQueryParam,
+  PublicApiScope,
+  TelemetrySink,
+} from '@cat-factory/gatekeeper-bindings'
+
+// The derived deny set a policy withholds captured run telemetry with. Re-exported rather than
+// restated for the same reason `DECISION_BINDINGS` is derived rather than transcribed: a policy
+// naming these by hand stops covering the surface the day an operation joins it, and the failure
+// is an oversight tier that can read a run's transcript.
+export { TELEMETRY_BINDINGS } from '@cat-factory/gatekeeper-bindings'

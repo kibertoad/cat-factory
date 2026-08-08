@@ -172,12 +172,24 @@ function returnType(operation) {
   return tsType(operation.result)
 }
 
+/**
+ * Whether the query bag may be omitted entirely: only when every parameter in it is optional.
+ * An endpoint with a REQUIRED query param (`GET /api/v1/usage/spend` needs a `dimension`) must
+ * not default its bag to `{}`, which emits a signature promising a call the server refuses with
+ * a 400, and TypeScript rejects the default outright, which is how the first such endpoint
+ * surfaced this rather than shipping a broken method.
+ */
+function queryIsOmittable(operation) {
+  return (operation.queryParams ?? []).every((param) => !param.required)
+}
+
 function emitMethod(operation) {
   const query = queryTypeName(operation)
+  const optionalQuery = queryIsOmittable(operation)
   const params = [
     ...operation.pathParams.map((p) => `${camel(p.wireName)}: string`),
     operation.body ? `body: ${tsType(operation.body)}` : null,
-    query ? `query: ${query} = {}` : null,
+    query ? `query: ${query}${optionalQuery ? ' = {}' : ''}` : null,
     'options: RequestOptions = {}',
   ].filter(Boolean)
 
@@ -221,7 +233,7 @@ function emitPager(operation) {
   const listTypeName = tsType(operation.result)
   const params = [
     ...operation.pathParams.map((p) => `${camel(p.wireName)}: string`),
-    query ? `query: ${query} = {}` : null,
+    query ? `query: ${query}${queryIsOmittable(operation) ? ' = {}' : ''}` : null,
     'options: RequestOptions = {}',
   ].filter(Boolean)
   const callArgs = [

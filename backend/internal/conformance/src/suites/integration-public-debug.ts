@@ -1,5 +1,5 @@
 import type { ExecutionInstance, Pipeline } from '@cat-factory/kernel'
-import type { DebugRunList, DebugRunOverview } from '@cat-factory/contracts'
+import type { DebugLlmExport, DebugRunList, DebugRunOverview } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 
@@ -121,6 +121,46 @@ async function assertToolCallReads(
   expect(failureRead.body.failed).toBeLessThanOrEqual(failureRead.body.total)
   expect(failureRead.body.failures.length).toBeLessThanOrEqual(failureRead.body.failed)
   expect(failureRead.body.failuresTruncated).toBe(false)
+}
+
+/**
+ * The one-document LLM export: mounted, run-scoped, and bounded by the SAME contract ceilings its
+ * neighbours are.
+ *
+ * Its own function for the reason `assertToolCallReads` is: the detail-list test sits at the
+ * statement budget, and the ratchet's intended answer to that is an extraction rather than a
+ * raised number.
+ */
+async function assertLlmExportRead(
+  app: Awaited<ReturnType<ConformanceHarness['makeApp']>>,
+  opts: { runId: string; auth: Record<string, string> },
+): Promise<void> {
+  const { runId, auth } = opts
+  const exported = await app.call<DebugLlmExport>(
+    'GET',
+    `/api/v1/debug/runs/${runId}/llm-export?limit=5&order=newest`,
+    undefined,
+    auth,
+  )
+  expect(exported.status).toBe(200)
+  expect(exported.body.kind).toBe('cat-factory.run-llm-export')
+  expect(exported.body.runId).toBe(runId)
+  expect(exported.body.order).toBe('newest')
+  expect(exported.body.calls).toEqual([])
+  // A bundle nothing was dropped from says so, rather than leaving a reader to infer completeness
+  // from a row count against a cap it does not know.
+  expect(exported.body.truncated).toBe(false)
+  // The rollup half is present for a run with no calls at all, which is what makes a TRUNCATED
+  // bundle able to state what the whole run cost rather than what its window held.
+  expect(exported.body.llm.totals.calls).toBe(0)
+  expect(exported.body.llm.byAgentKind).toEqual([])
+  const overExport = await app.call(
+    'GET',
+    `/api/v1/debug/runs/${runId}/llm-export?limit=5000`,
+    undefined,
+    auth,
+  )
+  expect(overExport.status).toBe(400)
 }
 
 export function definePublicDebugConformance(harness: ConformanceHarness): void {
@@ -351,6 +391,7 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       expect(resumedRecent.status).toBe(200)
 
       await assertToolCallReads(app, { wsId, runId, auth })
+      await assertLlmExportRead(app, { runId, auth })
 
       // The search and ordering narrowings ride the same route (their SQL semantics are pinned
       // by the per-store suite; what only this can see is that each facade wired the params).
@@ -446,9 +487,10 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       const overview = await app.call('GET', `/api/v1/debug/runs/${foreignRunId}`, undefined, auth)
       expect(overview.status).toBe(404)
       // The detail lists resolve the run first for exactly this reason: an unscoped list would
-      // answer 200-with-nothing and quietly leak that the id is unknown to this key. All four
-      // repeat the same guard, so all four are pinned.
-      for (const path of ['llm-calls', 'agent-context', 'search-queries', 'logs']) {
+      // answer 200-with-nothing and quietly leak that the id is unknown to this key. Every
+      // run-scoped read repeats the same guard, so every one of them is pinned, the export
+      // most of all, since its rollup half answers 200 with a run-shaped document of zeros.
+      for (const path of ['llm-calls', 'agent-context', 'search-queries', 'logs', 'llm-export']) {
         const res = await app.call(
           'GET',
           `/api/v1/debug/runs/${foreignRunId}/${path}`,

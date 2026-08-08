@@ -1,6 +1,8 @@
 import type {
   ReportSpendDimension,
+  ReportSpendRow,
   ReportSpendSource,
+  ReportTotals,
   ReportWindow,
   ReportsView,
 } from '@cat-factory/contracts'
@@ -32,6 +34,30 @@ interface SpendSource {
   trend(scope: ReportScope, range: ReportRange, bucketMs: number): Promise<ReportSpendTrendBucket[]>
   /** The sweep's coverage, on the rollup path; null on the ledger path (nothing to be behind). */
   watermark(): Promise<number | null>
+}
+
+/**
+ * One dimension's spend over a window, with the window's own facts beside it: which store
+ * answered, how far its sweep has covered, and the span the numbers cover.
+ *
+ * Deliberately NOT the wire shape of any surface that serves it. The public API projects this
+ * into its own frozen resource, exactly as it does for the usage breakdown, so an internal
+ * analytics shape stays free to change.
+ */
+export interface ReportsBreakdown {
+  dimension: ReportSpendDimension
+  window: ReportWindow
+  generatedAt: number
+  since: number
+  currency: string
+  source: ReportSpendSource
+  rolledUpThrough: number | null
+  /** Over the window's WHOLE population, never only the rows returned beside it. */
+  totals: ReportTotals
+  /** The heaviest slices by metered cost, capped by the caller's `limit` when it named one. */
+  rows: ReportSpendRow[]
+  /** True when the window held more slices than `limit`, so `rows` is a prefix of them. */
+  truncated: boolean
 }
 
 export interface ReportsServiceDependencies {
@@ -150,6 +176,61 @@ export class ReportsService {
         byTaskType: activityByTaskType.map(toActivityRow),
       },
       trend: { bucketMs, points: buildSpendTrend(trend, since, until, bucketMs) },
+    }
+  }
+
+  /**
+   * ONE spend dimension over the same window routing {@link ReportsService.summarize} uses:
+   * what the public `GET /api/v1/usage/spend` serves, and what a caller asking a single
+   * question (what did this repository cost, what did that ticket cost) actually needs.
+   *
+   * A separate method rather than a `dimension` option on `summarize`, because the two differ
+   * in what they COST: the panel renders every slice together and pays for eleven aggregates,
+   * where this is one `GROUP BY` and returning the other ten would be work nobody asked for.
+   * Everything else about it is deliberately the same read, so a number here and the same
+   * number in the panel come from one code path.
+   *
+   * `limit` bounds what is RETURNED, not what is aggregated: `totals` folds the window's whole
+   * population either way, so a capped breakdown still reports what was spent and only loses
+   * the identity of the tail. That is why the cap is applied here rather than pushed into the
+   * `GROUP BY` as a SQL `LIMIT`, which would take the totals down with it.
+   */
+  async breakdown(
+    accountId: string,
+    dimension: ReportSpendDimension,
+    window: ReportWindow,
+    workspaceId?: string | null,
+    limit?: number,
+  ): Promise<ReportsBreakdown> {
+    const { windowMs, bucketMs, source: preferred } = REPORT_WINDOWS[window]
+    const until = this.deps.clock.now()
+    // The same snapped start the panel aggregates over, so a slice read here and the same
+    // slice read there cover the identical span rather than differing by a partial bucket.
+    const since = alignWindowStart(until, windowMs, bucketMs)
+    const { source, spend } = this.spendSource(preferred)
+    const [groups, rolledUpThrough] = await Promise.all([
+      spend.byDimension({ accountId, workspaceId: workspaceId ?? null }, dimension, {
+        since,
+        until,
+      }),
+      spend.watermark(),
+    ])
+    const rows = groups.map(toSpendRow)
+    return {
+      dimension,
+      window,
+      generatedAt: until,
+      since,
+      currency: this.deps.currency,
+      source,
+      rolledUpThrough,
+      // Folded from ALL the rows rather than queried again: this breakdown partitions the
+      // window's whole ledger, so the two cannot disagree by construction. Folded BEFORE the
+      // cap for the same reason: a total over the returned prefix would under-report the
+      // window while still reading as the window's total.
+      totals: foldTotals(rows),
+      truncated: limit !== undefined && rows.length > limit,
+      rows: limit !== undefined ? rows.slice(0, limit) : rows,
     }
   }
 

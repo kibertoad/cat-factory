@@ -70,6 +70,7 @@ const SURFACE = {
 
   // ---- Usage ----------------------------------------------------------------------------
   getPublicUsage: { group: 'usage', method: 'get' },
+  getPublicSpend: { group: 'usage', method: 'spend' },
 
   // ---- Key introspection (`read` scope; the startup self-check) --------------------------
   getPublicIdentity: { group: 'me', method: 'get' },
@@ -133,6 +134,7 @@ const SURFACE = {
   getDebugRun: { group: 'debug', method: 'getRun' },
   listDebugLlmCalls: { group: 'debug', method: 'listLlmCalls', paginates: 'calls' },
   getDebugLlmCall: { group: 'debug', method: 'getLlmCall' },
+  getDebugLlmExport: { group: 'debug', method: 'getLlmExport' },
   listDebugAgentContext: { group: 'debug', method: 'listAgentContext', paginates: 'snapshots' },
   getDebugAgentContext: { group: 'debug', method: 'getAgentContext' },
   listDebugToolCalls: { group: 'debug', method: 'listToolCalls', paginates: 'toolCalls' },
@@ -142,6 +144,40 @@ const SURFACE = {
     method: 'listSearchQueries',
     paginates: 'queries',
   },
+}
+
+/**
+ * Which telemetry SINK each `/api/v1/debug/*` read draws its rows from, or `null` for the two
+ * that project the run itself.
+ *
+ * This is the one policy fact about this API that a name cannot carry and a scope floor does not
+ * express. The five sinks are where the platform keeps CAPTURED TEXT: model prompts and replies,
+ * tool arguments and results, agent search terms, provisioning command output. All of it sits
+ * inside a `read` key's floor, because it is a read, so the only thing standing between a
+ * read-only Gatekeeper tier and a run's full transcript is a policy that names these operations.
+ * A hand-typed list of those names is how `debug_get_llm_export` shipped granted to an observer
+ * tier that denied every one of its siblings.
+ *
+ * The two `null` entries are the run's own lifecycle projection (ids, status, step shape,
+ * aggregates and derived signals). They are the reads a status dashboard is built from, they
+ * carry no captured text, and keeping them readable is why the classification is per-operation
+ * rather than "the whole `/debug` prefix".
+ *
+ * Generation FAILS on a `debug` operation with no entry here and on an entry the spec no longer
+ * has, so a new telemetry read cannot ship un-classified: it either names its sink and joins the
+ * derived deny set, or states that it carries none.
+ */
+export const DEBUG_TELEMETRY_SINKS = {
+  listDebugRuns: null,
+  getDebugRun: null,
+  listDebugLlmCalls: 'llmCalls',
+  getDebugLlmCall: 'llmCalls',
+  getDebugLlmExport: 'llmCalls',
+  listDebugAgentContext: 'agentContext',
+  getDebugAgentContext: 'agentContext',
+  listDebugToolCalls: 'toolCalls',
+  listDebugLogs: 'provisioningLog',
+  listDebugSearchQueries: 'searchQueries',
 }
 
 /**
@@ -226,12 +262,13 @@ export const GROUP_DOCS = {
   notifications: "The workspace's human-actionable inbox: list, act on, or dismiss a run tail.",
   webhook:
     "The workspace's outbound endpoints: register, inspect or remove the receivers that notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address the `default` endpoint; the named ones let an integration enroll its own receiver, with its own signing secret and filters, beside whatever else is registered.",
-  usage: "The billing period's metered budget position and the per-model breakdown behind it.",
+  usage:
+    "The workspace's money, two ways: the billing period's metered budget position with the per-model breakdown behind it, and spend over a window sliced by the dimension a budget is kept against (a repository, a tracker ticket, one run).",
   me: 'What the calling key is and what it may do — the self-check an integration runs at startup.',
   decisions:
     'Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates.',
   debug:
-    "A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs.",
+    "A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs, and the whole model-activity bundle as one document.",
   evidence:
     "What a run proved: the engine's verification report, the outcome summary behind it, and the artifacts it captured, bytes included.",
   keys: "The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted).",

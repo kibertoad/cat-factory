@@ -61,6 +61,60 @@ func (q *DebugGetLlmCallQuery) values() map[string]string {
 	return out
 }
 
+// DebugGetLlmExportQuery holds the query parameters for DebugService.GetLlmExport.
+type DebugGetLlmExportQuery struct {
+	// Limit zero value means "not sent".
+	Limit *int
+	// Order zero value means "not sent".
+	Order *ListDebugLlmCallsOrder
+	// BodyChars zero value means "not sent".
+	BodyChars *int
+}
+
+func (q *DebugGetLlmExportQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Limit != nil {
+		out["limit"] = fmt.Sprintf("%v", *q.Limit)
+	}
+	if q.Order != nil {
+		out["order"] = fmt.Sprintf("%v", *q.Order)
+	}
+	if q.BodyChars != nil {
+		out["bodyChars"] = fmt.Sprintf("%v", *q.BodyChars)
+	}
+	return out
+}
+
+// UsageSpendQuery holds the query parameters for UsageService.Spend.
+type UsageSpendQuery struct {
+	// Dimension is REQUIRED: the deployment refuses a nil here with a 400 naming it.
+	Dimension *PublicSpendDimension
+	// Window zero value means "not sent".
+	Window *PublicSpendWindow
+	// Limit zero value means "not sent".
+	Limit *int
+}
+
+func (q *UsageSpendQuery) values() map[string]string {
+	out := map[string]string{}
+	if q == nil {
+		return out
+	}
+	if q.Dimension != nil {
+		out["dimension"] = fmt.Sprintf("%v", *q.Dimension)
+	}
+	if q.Window != nil {
+		out["window"] = fmt.Sprintf("%v", *q.Window)
+	}
+	if q.Limit != nil {
+		out["limit"] = fmt.Sprintf("%v", *q.Limit)
+	}
+	return out
+}
+
 // DebugListAgentContextQuery holds the query parameters for DebugService.ListAgentContext.
 type DebugListAgentContextQuery struct {
 	// StepIndex zero value means "not sent".
@@ -1061,7 +1115,9 @@ func (s *WebhookService) SetNamed(ctx context.Context, webhookID string, body Pu
 	return &out, nil
 }
 
-// UsageService the billing period's metered budget position and the per-model breakdown behind it.
+// UsageService the workspace's money, two ways: the billing period's metered budget position with the
+// per-model breakdown behind it, and spend over a window sliced by the dimension a budget is kept
+// against (a repository, a tracker ticket, one run).
 type UsageService struct {
 	client *Client
 }
@@ -1079,6 +1135,34 @@ func (s *UsageService) Get(ctx context.Context) (*PublicUsage, error) {
 		Path:   "/api/v1/usage",
 	}
 	var out PublicUsage
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Spend break the workspace's spend down by repository, ticket, run or step kind
+// Group the board’s spend over a window (`24h`, `7d`, `30d`, `90d`) by ONE dimension: `repo`,
+// `ticket` and `run` are the cost-attribution axes an organisation budgets against, and `model` /
+// `agentKind` / `service` / `taskType` slice the same money the other ways. `meteredCost` is real
+// money and `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage,
+// so never sum them. The EMPTY `key` is the unattributed bucket, a real slice rather than a
+// dropped row, never dropped from the breakdown. `rows` is the heaviest `limit` slices (default
+// 100, max 500) and `truncated` says when there was a tail, while `totals` aggregates the WHOLE
+// window either way, so a capped answer still reports what the board spent. `source` says which
+// store answered: the short windows scan the live ledger, which resolves a repository or a ticket
+// through today’s links, while the long ones read the durable daily rollup, which froze that
+// attribution while the money was spent and is never pruned. Read `rolledUpThrough` before
+// reporting a quiet quarter, since a rollup that has never run and a board that spent nothing
+// look identical. Workspace-scoped: the account-wide view is not reachable through this surface.
+// GET /api/v1/usage/spend (operation getPublicSpend).
+func (s *UsageService) Spend(ctx context.Context, query *UsageSpendQuery) (*PublicSpend, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/usage/spend",
+		Query:  query.values(),
+	}
+	var out PublicSpend
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}
@@ -1861,7 +1945,7 @@ func (s *DecisionsService) SetFindingStatus(ctx context.Context, runID string, i
 }
 
 // DebugService a run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it
-// made, infra logs.
+// made, infra logs, and the whole model-activity bundle as one document.
 type DebugService struct {
 	client *Client
 }
@@ -1896,6 +1980,28 @@ func (s *DebugService) GetLlmCall(ctx context.Context, callID string, query *Deb
 		Query:  query.values(),
 	}
 	var out DebugLlmCall
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetLlmExport export a run's model activity as one bundle
+// The whole of a run’s model activity as one self-describing document, for handing straight to a
+// model asked why the run truncated, spent or stalled: the SQL rollups (run totals, per agent
+// kind, per phase, with the carry cost that says which slice burdened everything after it) plus a
+// bounded window of the individual calls behind them. The rollups cover EVERY recorded call and
+// do not move with `limit`, so a windowed bundle still reports what the run actually cost;
+// `truncated` says the calls are a window and `order` says which end was kept. Bodies are omitted
+// unless `bodyChars` asks, and the resumable call list is the way to walk a long run whole.
+// GET /api/v1/debug/runs/{runId}/llm-export (operation getDebugLlmExport).
+func (s *DebugService) GetLlmExport(ctx context.Context, runID string, query *DebugGetLlmExportQuery) (*GetDebugLlmExportResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/debug/runs/%s/llm-export", pathEscape(runID)),
+		Query:  query.values(),
+	}
+	var out GetDebugLlmExportResponse
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}

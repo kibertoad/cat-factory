@@ -16,6 +16,7 @@ import {
   bindingsWithinScope,
   resolveConsequence,
   type GatekeeperBinding,
+  type GatekeeperQueryParam,
   type PublicApiScope,
 } from '@cat-factory/gatekeeper-bindings'
 import { PolicyError } from '../errors.js'
@@ -252,6 +253,11 @@ export function tierForActor(policy: CompiledPolicy, actorId: string): CompiledT
 /**
  * What the OS needs to run its own approval governance over a call: the consequence the platform
  * annotates, with the cautious default already applied.
+ *
+ * `queryParams` carries each parameter's REQUIREDNESS along with its name, because a front-end
+ * that renders a call or validates an argument bag cannot tell "narrow this" from "say which
+ * question you are asking" by name, and without it the only way to find out is to make the call
+ * and read the 400.
  */
 export function describeBinding(binding: GatekeeperBinding): {
   name: string
@@ -261,7 +267,7 @@ export function describeBinding(binding: GatekeeperBinding): {
   destructive: boolean
   idempotent: boolean
   pathParams: readonly string[]
-  queryParams: readonly string[]
+  queryParams: readonly GatekeeperQueryParam[]
   hasBody: boolean
 } {
   const consequence = resolveConsequence(binding)

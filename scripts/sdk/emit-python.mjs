@@ -428,11 +428,18 @@ function methodParams(operation) {
   const params = ['self', ...operation.pathParams.map((p) => `${attr(p.wireName)}: str`)]
   if (operation.body) params.push(`body: ${pyType(operation.body)}`)
   if (operation.queryParams.length > 0) {
-    // Query parameters are keyword-only: they are all optional and unordered, and a positional
-    // call site would silently re-bind if the spec ever reorders them.
+    // Query parameters are keyword-only: they are unordered, and a positional call site would
+    // silently re-bind if the spec ever reorders them. Keyword-only is also what lets a REQUIRED
+    // one keep its required-ness without dictating where it sits in the signature: it is emitted
+    // with no default, so omitting it is a TypeError at the call site rather than a 400 from the
+    // deployment several layers away.
     params.push('*')
     for (const param of operation.queryParams) {
-      params.push(`${attr(param.wireName)}: ${pyType(param.type)} | None = None`)
+      params.push(
+        param.required
+          ? `${attr(param.wireName)}: ${pyType(param.type)}`
+          : `${attr(param.wireName)}: ${pyType(param.type)} | None = None`,
+      )
     }
   }
   params.push('timeout: float | None = None')

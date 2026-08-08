@@ -113,6 +113,7 @@ workspace is a `404`, indistinguishable from one that never existed.
 | `GET /api/v1/debug/runs/:runId/search-queries` | Web searches the run's agents performed                                                                                    |
 | `GET /api/v1/debug/runs/:runId/tool-calls`     | Tool calls the run's agents made, bodies included. `?order=`, `?jobId=`, `?outcome=`, `?limit=`, `?cursor=`                |
 | `GET /api/v1/debug/runs/:runId/logs`           | The run's provisioning event log                                                                                           |
+| `GET /api/v1/debug/runs/:runId/llm-export`     | The run's model activity as ONE bundle. `?limit=`, `?order=`, `?bodyChars=`                                                |
 
 The tool-call list is the one that returns its rows WHOLE, bodies and all, and it can do so under
 the size rule because a tool call's `args`/`result` are capped at CAPTURE time rather than stored
@@ -312,6 +313,40 @@ tool name, tool calls with their arguments, content), each budgeted **independen
 `bodyChars`. In the raw view a 100 kB leading tool result must be paid for in full before anything
 after it is visible; in the messages view every message shows its head. An unparseable delta
 degrades to the raw window with `promptMessages: null`: stated, never guessed at.
+
+### 5. Hand the whole thing to a model (`/llm-export`)
+
+The steps above are a drill-down: cheap map, then targeted reads. When the caller IS a model and
+the question is open ("why did this run spend/truncate/stall"), the round trips are the cost.
+`GET /debug/runs/:runId/llm-export` is the same telemetry as one self-describing document, which is
+what the app's own export button produces for a human doing the same thing:
+
+```
+GET /debug/runs/:runId/llm-export?limit=40&order=oldest&bodyChars=500
+```
+
+`{ kind, version, runId, generatedAt, available, llm: { totals, byAgentKind, byPhase,
+costCurrency }, order, truncated, calls }`. Three properties are the whole design:
+
+- **The rollups cover the run; the call rows are a window.** `llm` is the SAME SQL fold the
+  overview publishes (so the two documents cannot report different money), computed over every
+  recorded call whatever `limit` says. `calls` is the bounded slice. So a bundle budgeted down to
+  20 rows still states what the run actually cost, which the app's internal export cannot, because
+  it folds its numbers from the rows it holds and stops pricing them once they are a slice.
+- **`truncated` and `order` are stated, never inferred.** A reader who does not know the cap cannot
+  tell a complete bundle from a windowed one, and this is exactly the document where a partial sum
+  gets quoted as a whole. `order` says which END was kept: `oldest` (the default) reads the run
+  forwards, `newest` keeps the tail a run that died late says why in.
+- **`available` separates "nothing recorded" from "nothing happened".** The same repository-presence
+  fact the overview publishes as `sinks.llmCalls.available`, and it matters more here: with no sink
+  wired, the rollups fold empty and the call rows are absent, so the bundle is byte-identical to a
+  run that made no model calls. Read it first; a model handed the document without it will diagnose
+  the silence.
+
+It obeys the same size rule as everything else here: bodies are omitted unless `bodyChars` asks, so
+the default bundle never reads a text column out of the store, and its worst case is
+`limit x 3 x bodyChars`. It is deliberately NOT resumable: a bundle answers a question about one
+end of a run, and `/llm-calls` is the resumable walk for a run you need whole.
 
 ## Sizing a request
 
