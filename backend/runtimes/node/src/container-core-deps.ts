@@ -327,11 +327,14 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     // …and where that tier is READ from when it is not the registry above (mothership mode).
     foundationalBuiltinSource: options.foundationalBuiltinSource,
-    // The app-owned registry of the deployment's GENERATIVE BINARY INTEGRATIONS (what a
-    // binary-generating step produces WITH, as the catalog above is where its output GOES);
-    // createCore threads it into the execution service and re-exposes it on Core for boot-time
-    // validation.
+    // Two app-owned binary registries, siblings and not the same thing: the GENERATIVE
+    // INTEGRATIONS a binary-generating step produces WITH (the catalog above is where that output
+    // GOES), and the deployment's own artifact STORES, where a screenshot's bytes land. createCore
+    // threads the first into the execution service; the second is read by the per-account store
+    // resolver in `buildNodeAccountDeps`. Both are re-exposed on Core, for boot validation and to
+    // make a boot's offered set readable.
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
+    binaryStoreRegistry: options.binaryStoreRegistry,
     // …and where those integrations are READ from when it is not the registry above (mothership
     // mode), for the same reason its foundational sibling exists.
     binaryGeneratorSource: options.binaryGeneratorSource,

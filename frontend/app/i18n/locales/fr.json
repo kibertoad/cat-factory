@@ -2020,8 +2020,11 @@
           "fs": "Système de fichiers local",
           "s3": "Amazon S3 / compatible S3",
           "r2": "Cloudflare R2",
-          "db": "Base de données Postgres"
+          "db": "Base de données Postgres",
+          "custom": "Stockage personnalisé (ce déploiement)"
         },
+        "unregisteredStore": "{store} (non enregistré sur ce déploiement)",
+        "unregisteredStoreWarning": "Ce compte stocke ses artefacts dans « {store} », que ce déploiement n'enregistre pas. Rien n'est stocké tant que vous n'avez pas choisi un stockage enregistré ou réenregistré celui-ci dans le code.",
         "basePath": "Chemin de base (par défaut : .file-storage)",
         "region": "Région (p. ex. us-east-1)",
         "bucket": "Bucket",

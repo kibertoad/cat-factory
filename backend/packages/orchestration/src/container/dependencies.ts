@@ -40,6 +40,7 @@ import type {
   AuditRecorder,
   BinaryGeneratorRegistry,
   BinaryGeneratorSource,
+  BinaryStoreRegistry,
   BlockRepository,
   BootstrapJobRepository,
   BootstrapRunner,
@@ -1059,6 +1060,21 @@ export interface CoreDependencies {
    * is expected to build ON, while an integration is an instrument a specific step is pointed at.
    */
   binaryGeneratorRegistry?: BinaryGeneratorRegistry
+  /**
+   * The app-owned registry of BINARY ARTIFACT STORES a DEPLOYMENT ships in CODE: its own
+   * implementations of the `BinaryBlobBackend` port, selectable per account beside the platform's
+   * `fs` / `db` / `s3` / `r2` backends. Optional + defaulted to `defaultBinaryStoreRegistry()`
+   * (EMPTY: the platform's own stores are not registry entries), so every existing construction
+   * site behaves exactly as before.
+   *
+   * Unlike its generative sibling above this one does NOT get a mothership `Source`, and the
+   * asymmetry is the point: a generator definition is DATA a run resolves, so a node reading its
+   * own copy can disagree with the picker the mothership fed; a store is a live client that only
+   * the process about to write the bytes can construct, so the process that answers the settings
+   * picker is by construction the one that stores. There is nothing here for a machine API to
+   * carry, and a `Source` would only invite pointing one node at another's credentials.
+   */
+  binaryStoreRegistry?: BinaryStoreRegistry
   /**
    * Where those integrations are READ from, when that is not this process's own registry.
    * Defaulted to `registryBinaryGeneratorSource(binaryGeneratorRegistry)` — i.e. exactly the

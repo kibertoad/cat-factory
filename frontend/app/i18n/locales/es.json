@@ -2020,8 +2020,11 @@
           "fs": "Sistema de archivos local",
           "s3": "Amazon S3 / compatible con S3",
           "r2": "Cloudflare R2",
-          "db": "Base de datos Postgres"
+          "db": "Base de datos Postgres",
+          "custom": "Almacén propio (este despliegue)"
         },
+        "unregisteredStore": "{store} (no registrado en este despliegue)",
+        "unregisteredStoreWarning": "Esta cuenta guarda los artefactos en «{store}», que este despliegue no registra. No se guarda nada hasta que elijas un almacén registrado o vuelvas a registrarlo en el código.",
         "basePath": "Ruta base (predeterminada: .file-storage)",
         "region": "Región (p. ej. us-east-1)",
         "bucket": "Bucket",

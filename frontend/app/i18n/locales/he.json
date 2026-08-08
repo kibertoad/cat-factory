@@ -2020,8 +2020,11 @@
           "fs": "מערכת קבצים מקומית",
           "s3": "Amazon S3 / תואם S3",
           "r2": "Cloudflare R2",
-          "db": "מסד נתונים Postgres"
+          "db": "מסד נתונים Postgres",
+          "custom": "אחסון מותאם (בפריסה זו)"
         },
+        "unregisteredStore": "{store} (לא רשום בפריסה זו)",
+        "unregisteredStoreWarning": "חשבון זה שומר פריטים ב־«{store}», שאינו רשום בפריסה זו. דבר אינו נשמר עד שתבחרו אחסון רשום או שהאחסון יירשם מחדש בקוד.",
         "basePath": "נתיב בסיס (ברירת מחדל: .file-storage)",
         "region": "אזור (לדוגמה us-east-1)",
         "bucket": "Bucket",

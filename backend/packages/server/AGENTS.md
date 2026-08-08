@@ -196,6 +196,11 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `child`-bound fields folded in and behind the same level gate. Patterns and rules:
   [`backend/docs/logging.md`](../../docs/logging.md).
 - `persistence/mappers.ts`: the dialect-agnostic row↔domain mappers shared by **both** stores.
+- `persistence/binaryArtifactStore.ts`: per-ACCOUNT binary-artifact store resolution, composing the
+  runtime's metadata store with the backend an account selected. Both facades' factories serve only
+  the platform's own backends; a store the DEPLOYMENT registered is resolved here, so custom stores
+  work identically on every runtime with neither facade knowing about them
+  ([`custom-binary-stores.md`](../../docs/custom-binary-stores.md)).
 - `test/coverageScan.ts` + the `*.coverage.spec.ts` beside it: the guards for the rules a
   typecheck cannot hold, where a field must stay OPTIONAL because one caller is entitled to the
   default (`initiatedByRole`, `intakeOrigin`). Each classifies every call site and fails on a new

@@ -2127,8 +2127,11 @@
           "fs": "Local filesystem",
           "s3": "Amazon S3 / S3-compatible",
           "r2": "Cloudflare R2",
-          "db": "Postgres database"
+          "db": "Postgres database",
+          "custom": "Custom store (this deployment)"
         },
+        "unregisteredStore": "{store} (not registered on this deployment)",
+        "unregisteredStoreWarning": "This account stores artifacts in “{store}”, which this deployment does not register. Nothing is being stored until you pick a registered store or the store is registered again in code.",
         "basePath": "Base path (default: .file-storage)",
         "region": "Region (e.g. us-east-1)",
         "bucket": "Bucket",

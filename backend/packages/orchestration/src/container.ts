@@ -115,6 +115,7 @@ import type {
 import type {
   BinaryGeneratorRegistry,
   BinaryGeneratorSource,
+  BinaryStoreRegistry,
   FoundationalServiceRegistry,
   GateRegistry,
   JudgeRegistry,
@@ -385,6 +386,14 @@ export interface CoreSpine {
    * integration fails the deployment instead of a dispatch that can generate nothing.
    */
   binaryGeneratorRegistry: BinaryGeneratorRegistry
+  /**
+   * The app-owned registry of the deployment's OWN binary artifact stores (the facade's injected
+   * instance, else the empty default). Re-exposed so the instance a boot resolved is READABLE:
+   * the per-account resolver and the account-settings picker are composed from it in the facade,
+   * and "which stores does this process actually offer" otherwise has no answer short of writing
+   * an artifact and looking at where it landed.
+   */
+  binaryStoreRegistry: BinaryStoreRegistry
   /**
    * Where a RUN's generative integrations are READ from — this process's own registry above,
    * unless a mothership-mode node injected the remote source. Re-exposed because the HTTP layer
@@ -668,6 +677,7 @@ export function createCore(injected: CoreDependencies): Core {
     taskTypeRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
+    binaryStoreRegistry,
     promptFragmentRegistry,
     promptFragments,
     binaryGenerators,
@@ -884,6 +894,7 @@ export function createCore(injected: CoreDependencies): Core {
     taskTypeRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
+    binaryStoreRegistry,
     promptFragmentRegistry,
     promptFragments,
     deploymentDocumentResolver: injected.deploymentDocumentResolver,

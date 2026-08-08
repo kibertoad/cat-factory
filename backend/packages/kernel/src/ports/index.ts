@@ -287,6 +287,7 @@ export type {
   BinaryArtifactKind,
   BinaryArtifactRecord,
   BinaryArtifactStorageKind,
+  BuiltinBinaryArtifactStorageKind,
   BinaryArtifactStore,
   BinaryArtifactMetadataStore,
   BinaryBlobBackend,
@@ -294,7 +295,11 @@ export type {
   ResolveBinaryArtifactStore,
   StoreBinaryArtifactInput,
 } from './binary-artifacts.js'
-export { createBinaryArtifactStore, dedupeDocumentRefs } from './binary-artifacts.js'
+export {
+  BUILTIN_BINARY_ARTIFACT_STORAGE_KINDS,
+  createBinaryArtifactStore,
+  dedupeDocumentRefs,
+} from './binary-artifacts.js'
 export type {
   AgentCloneSpec,
   AgentDispatchContext,

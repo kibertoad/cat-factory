@@ -356,6 +356,19 @@ export {
   defaultBinaryGeneratorRegistry,
 } from './domain/binary-generator-registry.js'
 
+// Where a binary artifact's BYTES may go: the app-owned registry a DEPLOYMENT registers its own
+// stores on, each an implementation of the `BinaryBlobBackend` port, selected per account beside
+// the platform's own `fs` / `db` / `s3` / `r2` backends. Per-process by design (a store is a live
+// client, not data a run resolves); see `domain/binary-store-registry.ts`.
+export {
+  type BinaryStoreContext,
+  type BinaryStoreDefinition,
+  type BinaryStoreView,
+  BinaryStoreRegistrationError,
+  BinaryStoreRegistry,
+  defaultBinaryStoreRegistry,
+} from './domain/binary-store-registry.js'
+
 // Where those integrations are READ from: the in-process registry by default, the MOTHERSHIP's
 // over `/internal/binary-generators` on a mothership-mode node (whose own build can only hold a
 // second, drifting copy of what the builder's picker offered). See

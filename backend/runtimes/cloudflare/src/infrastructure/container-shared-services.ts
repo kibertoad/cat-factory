@@ -9,6 +9,7 @@ import {
 } from '@cat-factory/orchestration'
 import { createAppCaches } from '@cat-factory/caching'
 import { makeResolveBinaryArtifactStore } from '@cat-factory/server'
+import type { BinaryStoreRegistry } from '@cat-factory/kernel'
 import type { AppConfig } from './config'
 import type { Env } from './env'
 import { CryptoIdGenerator, SystemClock } from './runtime'
@@ -50,6 +51,8 @@ export interface WorkerSharedServicesInput {
   userSecretKindRegistry: ReturnType<typeof resolveWorkerRegistries>['userSecretKindRegistry']
   contentStorageCapability: ReturnType<typeof cloudflareContentStorage>['capability']
   buildCfBlobBackend: ReturnType<typeof cloudflareContentStorage>['buildBlobBackend']
+  /** The deployment's own binary artifact stores, built per account when one selects them. */
+  binaryStoreRegistry: BinaryStoreRegistry
   cloudflareModelsEnabledOverride: boolean | undefined
 }
 
@@ -180,6 +183,7 @@ export function buildWorkerSharedServices(input: WorkerSharedServicesInput) {
     clock,
     buildBlobBackend: buildCfBlobBackend,
     defaultBackend: contentStorageCapability.defaultBackend,
+    binaryStoreRegistry: input.binaryStoreRegistry,
     logger,
   })
 
