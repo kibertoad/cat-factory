@@ -68,6 +68,7 @@ describe.skipIf(!databaseUrl)('node durable execution (pg-boss)', () => {
         jobPollFailureTolerance: 6,
         ciPollIntervalMs: 50,
         ciMaxPolls: 40,
+        advanceTimeoutMs: 0,
       },
       logger,
     )

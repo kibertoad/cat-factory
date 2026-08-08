@@ -20,11 +20,18 @@ import { withWorkflowLogExport } from './logExport'
 import { buildWorkflowRuntime } from './runtime'
 import type { ExecutionWorkflowParams } from './WorkflowsWorkRunner'
 
-/** Per-step retry policy: failures retry a few times before the run is failed. */
-const STEP_CONFIG = {
-  retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' },
-  timeout: '5 minutes',
-} satisfies WorkflowStepConfig
+/**
+ * Per-step retry policy: failures retry a few times before the run is failed. The timeout is the
+ * engine's hang bound on one advance (`ExecutionConfig.advanceTimeout`) rather than a constant,
+ * because Node races the SAME value in `driveExecution`: one knob, so the two facades cannot
+ * drift apart on how long a wedged advance is waited out (stuck-run audit F9).
+ */
+function buildStepConfig(timeout: string): WorkflowStepConfig {
+  return {
+    retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' },
+    timeout: timeout as WorkflowStepConfig['timeout'],
+  }
+}
 
 /** Outcome of one durable status read: a settled result, or a tolerated transient read error. */
 type PollAttempt = { kind: 'ok'; result: AdvanceResult } | { kind: 'read_failed'; message: string }
@@ -44,6 +51,8 @@ interface PollLoopDeps {
   failureTolerance: number
   /** The durable sleep between polls. */
   pollInterval: WorkflowSleepDuration
+  /** The per-durable-step retry/timeout policy (see {@link buildStepConfig}). */
+  stepConfig: WorkflowStepConfig
   pollOnce: (label: string, read: () => Promise<AdvanceResult>) => Promise<PollAttempt>
   failRun: (i: number, failure: RunFailure) => Promise<void>
   /** One status read (`pollAgentJob` / `pollGate`), already bound to the run. */
@@ -159,7 +168,7 @@ async function driveGatePollLoop(
     // timeout the checks below funnel through `failRun`. One policy, both runtimes.
     result = (await step.do(
       `gate-exhausted-${i}`,
-      STEP_CONFIG,
+      deps.stepConfig,
       deps.resolveExhaustion,
     )) as AdvanceResult
   }
@@ -203,6 +212,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
     const decisionTimeout = execConfig.decisionTimeout as WorkflowSleepDuration
     const jobPollInterval = execConfig.jobPollInterval as WorkflowSleepDuration
     const ciPollInterval = execConfig.ciPollInterval as WorkflowSleepDuration
+    const stepConfig = buildStepConfig(execConfig.advanceTimeout)
     // Chunk length for a spend-paused run's budget re-check (see the `paused` branch below).
     // Reuses the decision-wait cadence (default 24h), NOT the short gate-poll cadence: the run
     // parks on `waitForEvent`, so `/spend/resume` wakes it immediately via `signalResume` and
@@ -244,7 +254,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
       read: () => Promise<AdvanceResult>,
     ): Promise<PollAttempt> => {
       try {
-        return { kind: 'ok', result: (await step.do(label, STEP_CONFIG, read)) as AdvanceResult }
+        return { kind: 'ok', result: (await step.do(label, stepConfig, read)) as AdvanceResult }
       } catch (error) {
         // Scrubbed HERE, once, because this message is both logged and folded into the run's
         // user-visible failure text — and a poll error surfaced from `fetch` routinely echoes
@@ -263,6 +273,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
       maxPolls: execConfig.jobMaxPolls,
       failureTolerance: execConfig.jobPollFailureTolerance,
       pollInterval: jobPollInterval,
+      stepConfig,
       pollOnce,
       failRun,
       poll: () => container.executionService.pollAgentJob(workspaceId, executionId),
@@ -279,7 +290,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
     for (let i = 0; ; i++) {
       let result: AdvanceResult
       try {
-        result = (await step.do(`advance-${i}`, STEP_CONFIG, () =>
+        result = (await step.do(`advance-${i}`, stepConfig, () =>
           container.executionService.advanceInstance(workspaceId, executionId, {
             rethrowAgentErrors: true,
           }),

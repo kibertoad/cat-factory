@@ -20,6 +20,9 @@ export const CONFORMANCE_DRIVE_CONFIG: DriveConfig = {
   jobPollFailureTolerance: 3,
   ciPollIntervalMs: 0,
   ciMaxPolls: 50,
+  // No hang ceiling: the harness owns no clock (instant sleeps), and an advance that never
+  // settles against a deterministic fake is a test bug, not the production hang F9 bounds.
+  advanceTimeoutMs: 0,
 }
 
 const noWait = (): Promise<void> => Promise.resolve()

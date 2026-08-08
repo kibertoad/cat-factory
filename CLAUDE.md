@@ -1075,10 +1075,10 @@ AND that a gated controller leaves no route of its own uncovered.
   [`frontend-extension-mechanism.md`](./docs/initiatives/frontend-extension-mechanism.md); adoption:
   [ADR 0049](./backend/docs/adr/0049-modular-vue-adoption.md).
 - **Tests**: Worker integration tests use real `workerd` + real local D1; Node tests use real Postgres
-  (`DATABASE_URL`); only the LLM is faked. **Running the WHOLE tree locally is BANNED: that is CI's lane.** Run
-  the narrowest scope that covers the change (`pnpm test:changed`, `pnpm test:quick` for what needs neither
-  Postgres nor `workerd`, or one `--filter`ed package or vitest file) and let CI prove the rest. A green run
-  printing the app's OWN log lines is a SUITE bug: silence the gate, or inject a silent logger.
+  (`DATABASE_URL`); only the LLM is faked. **Run the FILES your change touched, NAMED on the command line**
+  (`pnpm exec vitest run <file>`). A `--filter`ed package, `test:changed`, `test:quick` and the whole tree are
+  LANES: CI's to run, and reaching for one to check nothing else broke is the banned habit, not thoroughness.
+  A green run printing the app's OWN log lines is a SUITE bug: silence the gate, or inject a silent logger.
 - **Count what the test OWNS; assert a RELATION over what it does not.** Seed two rows and assert two:
   the test made that population, so the count is a local fact. A total over a population it does NOT
   control (a generated table, a registry, a catalog, the spec) is the opposite: `toBe(42)` fails on
