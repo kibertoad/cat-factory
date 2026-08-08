@@ -382,19 +382,28 @@ export const MCP_TOOL_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
  * reached the container by any other route is held to the rule too.
  */
 export function isAllowedMcpHttpUrl(raw: string): boolean {
-  const match = /^(https?):\/\/([^/?#]*)/i.exec(raw)
-  if (!match) return false
-  if (match[1]!.toLowerCase() === 'https') return true
-  // Plain http from here: the host must be loopback. Strip userinfo FIRST and from the LAST `@`,
-  // or `http://127.0.0.1@evil.example` reads as loopback while the request goes to evil.example.
-  const authority = match[2]!
-  const hostPort = authority.slice(authority.lastIndexOf('@') + 1)
-  const closingBracket = hostPort.indexOf(']')
-  const host = (
-    hostPort.startsWith('[') && closingBracket !== -1
-      ? hostPort.slice(1, closingBracket) // IPv6 literal, e.g. [::1]:8080
-      : (hostPort.split(':')[0] ?? '')
-  ).toLowerCase()
+  // ASCII control characters and the space are refused ANYWHERE rather than canonicalised: the
+  // WHATWG parser trims leading/trailing C0-and-space and removes tab, LF and CR from anywhere, so
+  // a url carrying one parses to something other than what it reads as, and this url is written
+  // VERBATIM into the CLI's MCP config below.
+  for (let i = 0; i < raw.length; i += 1) if (raw.charCodeAt(i) <= 0x20) return false
+  let parsed: URL
+  try {
+    parsed = new URL(raw)
+  } catch {
+    // silent-catch-ok: an unparseable url is exactly what this predicate refuses.
+    return false
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+  if (parsed.protocol === 'https:') return true
+  // Plain http from here: the host must be loopback. `new URL` rather than a hand-written parse
+  // because it is the parser the CLI resolves the request with, so the host ruled on is the host
+  // the credential header travels to. It strips userinfo from the LAST `@` (or
+  // `http://127.0.0.1@evil.example` reads as loopback while the request goes to evil.example), and
+  // it terminates the authority at a backslash as well as at `/?#` (or
+  // `http://evil.example\@127.0.0.1` reads as loopback the same way).
+  const hostname = parsed.hostname
+  const host = hostname.startsWith('[') ? hostname.slice(1, -1) : hostname
   return host === 'localhost' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host)
 }
 

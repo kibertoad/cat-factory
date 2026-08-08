@@ -76,8 +76,16 @@ would be joining.
 Inside the packages already in scope, kernel's remaining `NoCoverage` is now concentrated in
 `domain/catalog.ts`'s and `domain/seed.ts`'s data (the disposition for which is nothing) and in
 `gates.ts`'s notification-card copy. The app-owned registry seams a deployment extends the platform
-through are done: every one of them scores 100% except `pipeline-registry`, whose survivors are the
-`findIndex` bounds inside its merge helpers.
+through now all have a test sibling; `pipeline-registry` is the only one still carrying survivors,
+the `findIndex` bounds inside its merge helpers.
+
+`gate-registry` and `binary-generator-registry` were the last two without one, and how they got
+counted as done is worth keeping: the claim was read off the registry seams' AGGREGATE score, which
+a file with no test file at all raises rather than lowers when its mutants land in a bucket the
+headline number hides. That is the same reading error the per-file discipline above exists to
+prevent, applied to this document instead of to a report. A claim that a set is complete is worth
+only the enumeration behind it, so enumerate: `*-registry.ts` under `domain/` against its
+`*-registry.test.ts` sibling.
 
 ## Reading the numbers
 

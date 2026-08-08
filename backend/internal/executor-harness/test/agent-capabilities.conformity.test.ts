@@ -59,6 +59,21 @@ const URL_CORPUS: string[] = [
   // Userinfo that dresses a public host up as loopback (and the reverse).
   'http://127.0.0.1@evil.example/mcp',
   'http://evil.example@127.0.0.1/mcp',
+  'http://user@evil.example@127.0.0.1/mcp',
+  // Delimiters that end the authority. The backslash is the one a hand-written `[^/?#]*` scan
+  // misses, and missing it is what turns the userinfo rule into the spoof it exists to refuse.
+  'http://evil.example\\@127.0.0.1/mcp',
+  'http://evil.example/@127.0.0.1',
+  'http://evil.example#@127.0.0.1',
+  // Spellings of loopback the URL parser normalises before dialling.
+  'http://127.1/mcp',
+  'http://0177.0.0.1/mcp',
+  'http://2130706433/mcp',
+  'http://[0:0:0:0:0:0:0:1]/mcp',
+  // Strings the parser would canonicalise rather than read as written.
+  ' https://mcp.example.com/sse',
+  'https://mcp.example.com/sse ',
+  'http://127.0.0.1\t@evil.example/mcp',
   'HTTPS://MCP.EXAMPLE.COM/sse',
   'HTTP://LOCALHOST/mcp',
   'ws://mcp.example.com/sse',
@@ -88,6 +103,29 @@ describe('harness HTTP transport rule conforms to kernel', () => {
   it('is not fooled by loopback in the userinfo, nor by a loopback-prefixed hostname', () => {
     expect(harnessIsAllowedMcpHttpUrl('http://127.0.0.1@evil.example/mcp')).toBe(false)
     expect(harnessIsAllowedMcpHttpUrl('http://127.0.0.1.evil.example/mcp')).toBe(false)
+    // The same spoof spelled with the delimiter a hand-written authority scan does not stop at.
+    expect(harnessIsAllowedMcpHttpUrl('http://evil.example\\@127.0.0.1/mcp')).toBe(false)
+  })
+
+  // Agreement between the two copies is only worth having if what they agree ON is right, and a
+  // hand-maintained table of expected verdicts cannot say that: a spoof neither side had thought
+  // of is absent from it, so both sides pass while both are wrong (which is exactly how the
+  // backslash survived). So derive the expectation from the AUTHORITY instead: the same WHATWG
+  // parser `fetch` and the agent CLI resolve the request with. Whatever else the rule does, a
+  // cleartext url it admits must reach a host that really is loopback.
+  it('grants the cleartext exemption only to urls the REQUEST resolves to a loopback host', () => {
+    const cleartext = URL_CORPUS.filter(
+      (url) => url.toLowerCase().startsWith('http://') && harnessIsAllowedMcpHttpUrl(url),
+    )
+    // Guard the guard: an empty filter would pass this vacuously.
+    expect(cleartext.length).toBeGreaterThan(0)
+    for (const url of cleartext) {
+      const hostname = new URL(url).hostname
+      expect(
+        hostname === 'localhost' || hostname === '[::1]' || /^127\.\d+\.\d+\.\d+$/.test(hostname),
+        `${url} was admitted for cleartext but really reaches ${hostname}`,
+      ).toBe(true)
+    }
   })
 
   it('refuses every non-http(s) scheme', () => {

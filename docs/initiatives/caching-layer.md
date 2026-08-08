@@ -73,8 +73,8 @@ The pilot validated the pattern below with four corrections a later slice must c
   the account's workspaces would need a new `WorkspaceRepository` port method whose only
   consumer is invalidation: over-invalidation is safe and cheaper).
 - **The in-memory staleness probe is fully supported since layered-loader `14.5.3`**
-  (upstreamed per `docs/proposals/layered-loader-in-memory-staleness-probe.md`; earlier
-  14.5.x hard-gated `isEntryStillCurrentFn` on an async cache tier). The seam exposes it
+  (we filed the gap upstream and 14.5.3 closed it; earlier 14.5.x hard-gated
+  `isEntryStillCurrentFn` on an async cache tier). The seam exposes it
   ready for slices 2/4: a cache profile sets `ttlLeftBeforeRefreshInMsecs`, and the OWNING
   service passes its cheap probe per read (`handle.get(key, group, load, isStillCurrent)`
   ) mirroring how the load closure rides the read. An entry hit inside the window probes in

@@ -427,6 +427,10 @@ export type {
   // Visual-confirmation gate shapes (screenshot review + fix loop).
   VisualConfirmStepState,
   VisualConfirmPair,
+  VisualConfirmReferenceOrigin,
+  VisualConfirmDesignGap,
+  VisualConfirmDesignGapReason,
+  VisualConfirmDesignReferences,
   VisualConfirmRound,
   MergeAssessment,
   MergeAxis,

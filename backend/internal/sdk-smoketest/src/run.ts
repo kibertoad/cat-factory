@@ -4,6 +4,7 @@
 //   node --experimental-strip-types src/run.ts --only=go           (one SDK, while iterating)
 //   node --experimental-strip-types src/run.ts --only=mcp          (just the published MCP server)
 //   node --experimental-strip-types src/run.ts --only=mcp-hosted   (just the hosted MCP endpoint)
+//   node --experimental-strip-types src/run.ts --only=gatekeeper   (the Gatekeeper Worker, in workerd)
 //
 // Boots a real Node backend (real Postgres, real pg-boss, fake agents), seeds a workspace, mints
 // an `admin` and a `read` public-API key, then drives the SAME scenario through each SDK and
@@ -18,12 +19,20 @@
 // summary and, in CI, treated as a failure — because a silent skip is indistinguishable from a
 // pass, and "the Go SDK is fine" is exactly the wrong thing to conclude from "Go was not
 // installed".
+//
+// The GATEKEEPER phase is the one that is not in the "everything" run, and the summary says so
+// rather than leaving it to be inferred. It boots a second runtime (workerd, through the Gatekeeper
+// package's own pool) and drives a real run to a real park, so it is both the slowest phase and the
+// only one whose subject is a CONSUMER of the surface rather than the surface itself. CI runs it in
+// the Gatekeeper's own non-blocking lane, where a partner-side protocol still in motion cannot turn
+// this repo's required checks red; `--only=gatekeeper` is how that lane asks for it.
 
 import { existsSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { seedWorkspace, startBackend } from './backend.ts'
+import { compareGatekeeperReport, runGatekeeperPhase } from './gatekeeper.ts'
 import { compareMcpReport, MCP_BIN, runMcpPhase } from './mcp.ts'
 import { compareHostedMcpReport, runHostedMcpPhase } from './mcpHosted.ts'
 import { compareReports, type ParityProblem, type SdkReport } from './parity.ts'
@@ -31,6 +40,7 @@ import { RUNNERS, runSdk, toolchainAvailable } from './runners.ts'
 
 const MCP_PHASE = 'mcp'
 const HOSTED_PHASE = 'mcp-hosted'
+const GATEKEEPER_PHASE = 'gatekeeper'
 
 const only = process.argv.find((arg) => arg.startsWith('--only='))?.slice('--only='.length)
 const port = Number(process.env.SDK_SMOKETEST_PORT ?? 8899)
@@ -44,9 +54,12 @@ const requireAll = process.env.CI === 'true' || process.env.SDK_SMOKETEST_REQUIR
 const selected = only ? RUNNERS.filter((r) => r.name === only) : RUNNERS
 const runMcp = !only || only === MCP_PHASE
 const runHosted = !only || only === HOSTED_PHASE
-if (selected.length === 0 && !runMcp && !runHosted) {
+// ASKED FOR BY NAME, never part of the everything run: see the header. It is reported as not run
+// rather than omitted, because a section that is simply absent reads as a section that passed.
+const runGatekeeper = only === GATEKEEPER_PHASE
+if (selected.length === 0 && !runMcp && !runHosted && !runGatekeeper) {
   console.error(
-    `sdk-smoketest: no SDK named '${only}'. Known: ${[...RUNNERS.map((r) => r.name), MCP_PHASE, HOSTED_PHASE].join(', ')}`,
+    `sdk-smoketest: no SDK named '${only}'. Known: ${[...RUNNERS.map((r) => r.name), MCP_PHASE, HOSTED_PHASE, GATEKEEPER_PHASE].join(', ')}`,
   )
   process.exit(2)
 }
@@ -58,8 +71,11 @@ const skipped: string[] = []
 const errored: string[] = []
 const mcpProblems: ParityProblem[] = []
 const hostedProblems: ParityProblem[] = []
+const gatekeeperProblems: ParityProblem[] = []
 let mcpRan = false
 let hostedRan = false
+let gatekeeperRan = false
+let gatekeeperSpecs = 0
 
 try {
   console.log(`sdk-smoketest: backend up at ${backend.baseUrl}`)
@@ -106,6 +122,25 @@ try {
       ),
     )
     hostedRan = true
+  }
+
+  if (runGatekeeper) {
+    // A FRESH workspace, like every other phase, and with one difference of its own: it is asked to
+    // park its runs on the first agent step, which is the case the Gatekeeper exists for.
+    const seeded = await seedWorkspace(backend.baseUrl, backend.controlPort)
+    console.log(
+      `sdk-smoketest: driving the Gatekeeper Worker against workspace ${seeded.workspaceId}`,
+    )
+    const report = await runGatekeeperPhase({
+      baseUrl: backend.baseUrl,
+      controlPort: backend.controlPort,
+      workspaceId: seeded.workspaceId,
+      adminKey: seeded.adminKey,
+      workDir,
+    })
+    gatekeeperProblems.push(...compareGatekeeperReport(report))
+    gatekeeperSpecs = Number(report.observations.suiteSpecCount ?? 0)
+    gatekeeperRan = true
   }
 
   for (const runner of selected) {
@@ -199,13 +234,38 @@ if (runHosted) {
   }
 }
 
+console.log('')
+console.log('=== Cloudflare OS Gatekeeper (the Worker, in workerd) ===')
+if (runGatekeeper) {
+  for (const problem of gatekeeperProblems) {
+    console.error(`  ${problem.kind.toUpperCase()}: ${problem.detail}`)
+  }
+  if (gatekeeperProblems.length === 0) {
+    console.log(
+      `  ${gatekeeperSpecs} spec(s): the Gatekeeper enrolled, minted, forwarded and answered a ` +
+        'real park.',
+    )
+  }
+} else {
+  // Stated rather than omitted: a heading with nothing under it reads as a section that passed, and
+  // this is the one phase the everything run leaves out.
+  console.log('  NOT RUN. It is asked for by name: `--only=gatekeeper` (its own CI lane does).')
+}
+
 const failed =
   problems.length > 0 ||
   mcpProblems.length > 0 ||
   hostedProblems.length > 0 ||
+  gatekeeperProblems.length > 0 ||
   errored.length > 0 ||
   (requireAll && skipped.length > 0) ||
   // A phase that reported nothing at all is not a pass. With `--only=<phase>` the SDK reports are
   // legitimately empty, so each phase vouches for itself rather than one count standing for all.
-  (only === MCP_PHASE ? !mcpRan : only === HOSTED_PHASE ? !hostedRan : reports.length === 0)
+  (only === MCP_PHASE
+    ? !mcpRan
+    : only === HOSTED_PHASE
+      ? !hostedRan
+      : only === GATEKEEPER_PHASE
+        ? !gatekeeperRan
+        : reports.length === 0)
 process.exit(failed ? 1 : 0)
