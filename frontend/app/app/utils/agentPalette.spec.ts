@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentArchetype } from '~/types/domain'
-import { narrowAgentPalette } from '~/utils/agentPalette'
+import { groupAgentPalette, narrowAgentPalette } from '~/utils/agentPalette'
 
 const archetype = (
   kind: string,
@@ -101,5 +101,45 @@ describe('narrowAgentPalette', () => {
     const { offered, hiddenByPurpose } = narrowAgentPalette(CATALOG, purpose, 'advanced')
     expect(offered.map((a) => a.kind)).toEqual(CATALOG.map((a) => a.kind))
     expect(hiddenByPurpose).toBe(0)
+  })
+})
+
+// The rendered sections, mirroring `utils/catalog.ts` shape (id + display label).
+const SECTIONS = [
+  { id: 'design', label: 'Design & research' },
+  { id: 'build', label: 'Implementation' },
+  { id: 'test', label: 'Testing' },
+  { id: 'docs', label: 'Documentation' },
+]
+
+describe('groupAgentPalette', () => {
+  it('fills the sections in their given order and drops the empty ones', () => {
+    const groups = groupAgentPalette(CATALOG, SECTIONS, 'Custom agents')
+    expect(groups.map((g) => [g.id, g.agents.map((a) => a.kind)])).toEqual([
+      ['design', ['architect', 'researcher']],
+      ['build', ['coder']],
+      ['test', ['tester']],
+      ['docs', ['documenter']],
+      // The uncategorized kind, in the trailing bucket. `review` and `gates` have no members
+      // here, so neither section is rendered at all.
+      ['custom', ['acme-auditor']],
+    ])
+  })
+
+  it('files a kind whose category has no section under custom rather than deleting it', () => {
+    // The regression: every section filter misses it AND so does a bare `!a.category`, so it
+    // vanished from a palette whose save gate accepts it. Reachable from both sides (a
+    // deployment-registered kind naming a category this build retired, and this list drifting
+    // behind the schema), which is why the leftover bucket is derived from the sections.
+    const registered = archetype('acme-auditor', 'observability' as never, 'basic')
+    const groups = groupAgentPalette([registered], SECTIONS, 'Custom agents')
+    expect(groups).toEqual([{ id: 'custom', label: 'Custom agents', agents: [registered] }])
+  })
+
+  it('renders no custom section when every kind was claimed', () => {
+    const claimed = CATALOG.filter((a) => a.category)
+    const groups = groupAgentPalette(claimed, SECTIONS, 'Custom agents')
+    expect(groups.map((g) => g.id)).not.toContain('custom')
+    expect(groups.flatMap((g) => g.agents)).toHaveLength(claimed.length)
   })
 })

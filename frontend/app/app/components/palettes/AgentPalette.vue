@@ -4,7 +4,7 @@ import { useLocalStorage } from '@vueuse/core'
 import type { AgentKind, PipelinePurpose } from '~/types/domain'
 import AgentTierSelect from '~/components/palettes/AgentTierSelect.vue'
 import PipelinePurposeSelect from '~/components/palettes/PipelinePurposeSelect.vue'
-import { narrowAgentPalette } from '~/utils/agentPalette'
+import { groupAgentPalette, narrowAgentPalette } from '~/utils/agentPalette'
 import { AGENT_CATEGORIES, OBSERVABILITY_GATE_ARCHETYPE } from '~/utils/catalog'
 
 const { t } = useI18n()
@@ -34,19 +34,13 @@ const connected = computed(() =>
 const narrowed = computed(() => narrowAgentPalette(connected.value, props.purpose, agentTier.tier))
 const palette = computed(() => narrowed.value.offered)
 
-// Group the palette into the ordered catalog categories, plus a trailing "Custom" bucket
-// for runtime-added agents that carry no category. Empty groups are dropped.
-const groups = computed(() => {
-  const ordered = AGENT_CATEGORIES.map((cat) => ({
-    id: cat.id as string,
-    label: cat.label,
-    agents: palette.value.filter((a) => a.category === cat.id),
-  }))
-  const custom = palette.value.filter((a) => !a.category)
-  if (custom.length)
-    ordered.push({ id: 'custom', label: t('palette.customAgents'), agents: custom })
-  return ordered.filter((g) => g.agents.length)
-})
+// Group the palette into the ordered catalog categories, plus a trailing "Custom" bucket for
+// whatever none of them claimed. `groupAgentPalette` owns the placement rule for the same reason
+// `narrowAgentPalette` owns the counting one: it decides what is VISIBLE, and the version living
+// here as an inline computed dropped a kind whose category had no section outright.
+const groups = computed(() =>
+  groupAgentPalette(palette.value, AGENT_CATEGORIES, t('palette.customAgents')),
+)
 
 // Persist which category sections are collapsed across builder opens.
 const collapsed = useLocalStorage<string[]>('cf.pipelineBuilder.collapsedAgentCategories', [])

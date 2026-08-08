@@ -53,3 +53,37 @@ export function narrowAgentPalette<T extends Pick<AgentArchetype, 'tier' | 'cate
     hiddenByTier: archetypes.filter((a) => relevant(a) && !inTier(a)).length,
   }
 }
+
+/** One rendered palette section: an ordered category, or the trailing custom bucket. */
+export interface AgentPaletteGroup<T> {
+  id: string
+  label: string
+  agents: T[]
+}
+
+/**
+ * Group what the palette offers into `sections` in their given order, with everything left over
+ * in a trailing bucket under `customLabel`. Empty sections are dropped.
+ *
+ * The leftover bucket is what no section CLAIMED, not what carries no `category`, and the two are
+ * different populations: an archetype whose category has no section here belongs to neither, so
+ * testing for the absent one alone silently DELETED it from the palette. A `presentation.category`
+ * comes from a kind a DEPLOYMENT registered and `sections` is the SPA's own mirror of the schema,
+ * so the gap opens from either side, and the save gate accepts such a kind either way. Showing it
+ * under "custom" says what is true: nothing here knows where to file it.
+ */
+export function groupAgentPalette<T extends Pick<AgentArchetype, 'category'>>(
+  offered: readonly T[],
+  sections: readonly { id: string; label: string }[],
+  customLabel: string,
+): AgentPaletteGroup<T>[] {
+  const claimed = new Set<string>(sections.map((s) => s.id))
+  const groups: AgentPaletteGroup<T>[] = sections.map((s) => ({
+    id: s.id,
+    label: s.label,
+    agents: offered.filter((a) => a.category === s.id),
+  }))
+  const custom = offered.filter((a) => !a.category || !claimed.has(a.category))
+  if (custom.length) groups.push({ id: 'custom', label: customLabel, agents: custom })
+  return groups.filter((g) => g.agents.length)
+}

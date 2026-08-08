@@ -309,6 +309,11 @@ recognises is exactly the subset violation above. On the control itself an unrec
 NAMED and quoted back rather than left to render blank, which would read as a pipeline nobody
 classified while the saved row says otherwise.
 
+Offering such a kind is only half of keeping it: `groupAgentPalette` puts whatever no section
+CLAIMED into the trailing custom bucket, derived from the sections rather than from an absent
+`category`. A kind whose category has no section matches neither test, so filtering on the absent
+one alone deleted it from a palette its own save gate accepts.
+
 ## In-app tutorial tours
 
 On first launch (once the board is up and no other startup advisory is open) the app asks
