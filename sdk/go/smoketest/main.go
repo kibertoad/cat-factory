@@ -175,7 +175,7 @@ func main() {
 
 	step("tasks.update", func() error {
 		title := "SDK smoketest task (edited)"
-		task, err := client.Tasks.Update(ctx, taskID, catfactory.UpdatePublicTask{Title: &title})
+		task, err := client.Tasks.Update(ctx, taskID, &catfactory.UpdatePublicTask{Title: &title})
 		if err != nil {
 			return err
 		}
@@ -262,7 +262,7 @@ func main() {
 		// which is the same reason `Secret` is one.
 		url := "https://hooks.example.com/cat-factory-smoketest"
 		secret := "smoketest-signing-secret"
-		saved, err := client.Webhook.Set(ctx, catfactory.PutNotificationWebhook{
+		saved, err := client.Webhook.Set(ctx, &catfactory.PutNotificationWebhook{
 			URL:       &url,
 			Secret:    &secret,
 			RunEvents: []catfactory.NotificationWebhookRunEvent{catfactory.NotificationWebhookRunEventRunCompleted},
@@ -281,7 +281,7 @@ func main() {
 		// Omitting a field must send NO field, not an empty one: a `url: ""` here would blank the
 		// endpoint on a call that only meant to add an alert subscription, and still answer 200.
 		// Go is the client where that is a live risk, since a non-pointer string cannot express it.
-		edited, err := client.Webhook.Set(ctx, catfactory.PutNotificationWebhook{
+		edited, err := client.Webhook.Set(ctx, &catfactory.PutNotificationWebhook{
 			AlertEvents: []catfactory.NotificationWebhookAlertEvent{catfactory.NotificationWebhookAlertEventPlatformHealthFiring},
 		})
 		if err != nil {
@@ -358,7 +358,7 @@ func main() {
 		if pipelineID != "" {
 			body.PipelineID = &pipelineID
 		}
-		task, err := client.Tasks.Start(ctx, taskID, body)
+		task, err := client.Tasks.Start(ctx, taskID, &body)
 		if err != nil {
 			return err
 		}

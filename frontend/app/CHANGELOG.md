@@ -1,5 +1,63 @@
 # @cat-factory/app
 
+## 0.254.1
+
+### Patch Changes
+
+- Updated dependencies [11f9efa]
+  - @cat-factory/contracts@0.278.0
+
+## 0.254.0
+
+### Minor Changes
+
+- c44e9d7: Pipeline builder: the purpose selector moves onto the palette's control row, beside the agent tier,
+  and narrows the catalog per purpose.
+
+  The two dials that decide what the palette offers now sit together above it, each stating what it is
+  holding back ("n hidden for this purpose" / "n hidden at this tier"). The purpose is still saved on
+  the pipeline, so nothing about the stored shape changes.
+
+  The filtering behind it splits into two predicates in `@cat-factory/contracts`.
+  `purposeSuggestsAgentCategory` is new and is what the palette OFFERS: a review pipeline reviews an
+  existing pull request, so the design kinds go; a planning pipeline writes no repo documentation and
+  opens no pull request, so the documentation and gate kinds go. `purposeAllowsAgentCategory` keeps its
+  current meaning and is what the builder will SAVE, so a stored pipeline never becomes unsaveable in
+  the editor it was built in because the relevance table gained an opinion it did not have when that
+  pipeline was built. Relevance is a subset of compatibility, asserted over the whole grid.
+
+  Both vocabularies are closed but persisted, so `@cat-factory/contracts` also gains the
+  schema-derived `isPipelinePurpose` and `isAgentCategory` guards. A `Pipeline.purpose` or a
+  registered kind's `presentation.category` outlives the build that wrote it, and both predicates now
+  narrow through them before indexing their table: an unrecognised value means this build has nothing
+  to narrow by, which is what an absent one already meant. The purpose control names such a value
+  instead of rendering a blank label.
+
+### Patch Changes
+
+- Updated dependencies [c44e9d7]
+  - @cat-factory/contracts@0.277.0
+
+## 0.253.2
+
+### Patch Changes
+
+- 79a873c: Stop the toaster's safe-area rule from slicing the first option off every dropdown.
+
+  The inspector's pickers (service connections, and every other menu in the SPA) drew their first
+  option half outside the popover's top edge. The cause is not in any of those components: `main.css`
+  carried `[data-slot='viewport'] { bottom: calc(1rem + env(safe-area-inset-bottom)) }`, written to
+  keep the toaster clear of a phone's home indicator. Nuxt UI names the scroll region of eleven
+  components `viewport`, and the item list of every menu one (Select, SelectMenu, InputMenu,
+  CommandPalette, DropdownMenu, ContextMenu, NavigationMenu) is `position: relative`, so that rule
+  offset all of them a rem upward while the popover box stayed put.
+
+  The toaster's viewport now carries an `app-toaster` marker class from `app.config.ts` and both
+  app-level toaster rules hang on that instead, so nothing app-side names a `data-slot` value the
+  component library shares. A new e2e spec opens a picker and asserts no option is drawn above its
+  own popover: this class of defect needs the assembled product to be visible at all, since a
+  component unit test renders without the app stylesheet and with no layout engine.
+
 ## 0.253.1
 
 ### Patch Changes

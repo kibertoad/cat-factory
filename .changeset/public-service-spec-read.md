@@ -8,7 +8,7 @@
 '@cat-factory/gatekeeper-bindings': minor
 ---
 
-Public API (`/api/v1`, spec 1.32.0): serve a service's in-repo specification. Additive.
+Public API (`/api/v1`, spec 1.34.0): serve a service's in-repo specification. Additive.
 
 One new operation, `GET /api/v1/services/:serviceId/spec` at `read` scope: the prescriptive
 requirement tree stored under `spec/` in the service's repository (modules → feature groups →

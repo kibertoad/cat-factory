@@ -126,6 +126,12 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.publicUsageBudgetSchema>
 >()
 expectMutuallyAssignable<sdk.PublicUsage, v.InferOutput<typeof contracts.publicUsageSchema>>()
+expectMutuallyAssignable<sdk.PublicSpendRow, v.InferOutput<typeof contracts.publicSpendRowSchema>>()
+expectMutuallyAssignable<
+  sdk.PublicSpendTotals,
+  v.InferOutput<typeof contracts.publicSpendTotalsSchema>
+>()
+expectMutuallyAssignable<sdk.PublicSpend, v.InferOutput<typeof contracts.publicSpendSchema>>()
 expectMutuallyAssignable<sdk.PublicIdentity, v.InferOutput<typeof contracts.publicIdentitySchema>>()
 expectMutuallyAssignable<
   sdk.PublicUnanswerableWait,
@@ -438,6 +444,9 @@ const ASSERTED_COMPONENTS = [
   'PublicUsageRow',
   'PublicUsageBudget',
   'PublicUsage',
+  'PublicSpendRow',
+  'PublicSpendTotals',
+  'PublicSpend',
   'PublicIdentity',
   'PublicUnanswerableWait',
   'PublicReviewFinding',

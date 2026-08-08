@@ -8,11 +8,13 @@ import { logger } from '../../observability/logger.js'
 import {
   MAX_REQUEST_BYTES,
   MAX_UPLOAD_BYTES,
+  blobResponseHeaders,
   exceedsRequestSizeLimit,
   normalizeImageContentType,
 } from './imageArtifacts.js'
 import type { BinaryArtifactStore } from '@cat-factory/kernel'
-import { UnavailableError, UnauthorizedError } from '@cat-factory/kernel'
+import { NotFoundError, UnavailableError, UnauthorizedError } from '@cat-factory/kernel'
+import type { ContainerSession } from '../../containers/ContainerSessionService.js'
 import { reclaimArtifactOverflow, reserveArtifactSlot } from './artifactSetCap.js'
 
 /**
@@ -58,6 +60,45 @@ function resolveScreenshotContentType(declaredType: string | undefined): string 
 }
 
 /**
+ * Verify the container session token on a harness request and resolve the store its run may use.
+ *
+ * One helper for both directions of the seam (the tester's screenshot ingest and the reference
+ * download beside it), so the two can never end up disagreeing about what authenticates a
+ * container: the SAME short-lived, workspace- and execution-pinned token the agent already holds
+ * for the LLM proxy, and a store resolved from the token's workspace rather than from anything the
+ * request says.
+ */
+async function requireHarnessSession(
+  c: Context<AppEnv>,
+  scope: string,
+): Promise<{ session: ContainerSession; store: BinaryArtifactStore }> {
+  const container = c.get('container')
+  const resolveStore = container.resolveBinaryArtifactStore
+  if (!resolveStore) {
+    throw new UnavailableError('Artifact storage not configured')
+  }
+  const secret = container.config.auth.sessionSecret
+  if (!secret) {
+    logger.error('harness artifacts: session secret not configured', { scope })
+    throw new UnavailableError('Artifact ingest not configured')
+  }
+  const sessions = new ContainerSessionService({ secret })
+  const session = await sessions.verify(bearerToken(c))
+  if (!session) {
+    logger.warn('harness artifacts: invalid or expired session token', { scope })
+    throw new UnauthorizedError('Invalid or expired token')
+  }
+  // The store is the run's ACCOUNT's configured backend, resolved from the token's workspace
+  // (never the request), so a container only ever reaches its own account's storage. Null means the
+  // account configured no storage.
+  const store = await resolveStore(session.workspaceId)
+  if (!store) {
+    throw new UnavailableError('Artifact storage not configured')
+  }
+  return { session, store }
+}
+
+/**
  * The in-container screenshot ingest endpoint for the UI tester (`tester-ui`). It lives on
  * the harness path (mounted at `/`, reachable at `${proxyBaseUrl}/artifacts/ingest`) and is
  * authed by the SAME short-lived container session token the agent already carries for the
@@ -80,32 +121,7 @@ export function harnessArtifactController(): Hono<AppEnv> {
         c.json({ error: { code: 'too_large', message: 'Artifact exceeds size limit' } }, 413),
     }),
     async (c) => {
-      const container = c.get('container')
-      const resolveStore = container.resolveBinaryArtifactStore
-      if (!resolveStore) {
-        throw new UnavailableError('Artifact storage not configured')
-      }
-      const secret = container.config.auth.sessionSecret
-      if (!secret) {
-        logger.error('artifact ingest: session secret not configured', { scope: 'artifactIngest' })
-        throw new UnavailableError('Artifact ingest not configured')
-      }
-      const sessions = new ContainerSessionService({ secret })
-      const session = await sessions.verify(bearerToken(c))
-      if (!session) {
-        logger.warn('artifact ingest: invalid or expired session token', {
-          scope: 'artifactIngest',
-        })
-        throw new UnauthorizedError('Invalid or expired token')
-      }
-
-      // The store is the run's ACCOUNT's configured backend, resolved from the token's
-      // workspace (never the request body) — so a container can only write to its own
-      // account's storage. Null ⇒ the account configured no storage.
-      const store = await resolveStore(session.workspaceId)
-      if (!store) {
-        throw new UnavailableError('Artifact storage not configured')
-      }
+      const { session, store } = await requireHarnessSession(c, 'artifactIngest')
 
       // Refuse a grossly oversized body from Content-Length before it is buffered into memory; the
       // exact per-file ceiling is still enforced after parsing below.
@@ -177,6 +193,39 @@ export function harnessArtifactController(): Hono<AppEnv> {
       return c.json({ artifactId: record.id }, 201)
     },
   )
+
+  // Stream one REFERENCE design image back into a container: the other direction of the ingest
+  // seam above, and what turns the manifest in a capturing job's body into the files under
+  // `.cat-context/reference-screenshots/`. Same auth (the run's own container session token),
+  // same store resolution (from the token's workspace, never the request).
+  //
+  // Two things bound what this can serve. It is scoped to the token's WORKSPACE, so a container
+  // can never read another board's designs; and it serves only `kind:'reference'`, so this route
+  // cannot become a way for one run to read another run's captured SCREENSHOTS, which is the
+  // asymmetry that matters, since references are design material the run was handed on purpose
+  // while a screenshot is another run's output. Anything outside that is a 404 rather than a 403:
+  // a container has no business learning which artifact ids exist.
+  app.get('/v1/artifacts/reference/:id', async (c) => {
+    const { session, store } = await requireHarnessSession(c, 'artifactReference')
+    const id = c.req.param('id')
+    const got = await store.getBlobWithMetadata(session.workspaceId, id)
+    // Same two REASONS the public blob route separates, for the same reason: "not yours (or not a
+    // reference)" is something to stop asking for, where a metadata row that outlived its bytes is
+    // a storage fault. The harness reports either as a reference it could not fetch.
+    if (!got || got.record.kind !== 'reference') {
+      throw new NotFoundError('Artifact', id, { reason: 'artifact_not_found' })
+    }
+    if (!got.bytes) {
+      throw new NotFoundError('Artifact', id, { reason: 'artifact_blob_missing' })
+    }
+    // Same headers as the workspace-scoped serve path: the content type is clamped to the image
+    // allow-list and `nosniff` is sent, so bytes stored before a tightening can never be served
+    // as active content.
+    return new Response(got.bytes as unknown as BodyInit, {
+      status: 200,
+      headers: blobResponseHeaders(got.record.contentType),
+    })
+  })
 
   return app
 }

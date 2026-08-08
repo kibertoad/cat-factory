@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  agentCategorySchema,
+  isAgentCategory,
+  isPipelinePurpose,
+  PIPELINE_PURPOSES,
   pipelineAllowedForBlockLevel,
   pipelineAllowedForTaskType,
   purposeAllowsAgentCategory,
+  purposeSuggestsAgentCategory,
 } from '@cat-factory/contracts'
 import type { Block, Pipeline } from '~/types/domain'
 import {
@@ -11,6 +16,17 @@ import {
   pipelineDisplaySteps,
   pipelineGateCount,
 } from '~/utils/pipeline'
+
+// The palette categories, read off the schema the predicates themselves are typed against, so a
+// new category joins these sweeps instead of quietly going unasserted behind a hand-listed tuple.
+const AGENT_CATEGORIES = agentCategorySchema.options
+
+// A `purpose` typed as a member and only DECLARED to be one: `Pipeline.purpose` is persisted and
+// no boundary re-checks it against the union this build compiled, so a browser on a cached bundle
+// sees a member shipped after it and a retired member goes on living in saved rows. Same story for
+// a `presentation.category`, which arrives in the snapshot from a deployment-registered kind.
+const UNKNOWN_PURPOSE = 'acme-migration' as never
+const UNKNOWN_CATEGORY = 'observability' as never
 
 // A minimal pipeline: only the fields the launch/task-type filters read matter here.
 function pipeline(over: Partial<Pipeline> = {}): Pipeline {
@@ -134,23 +150,88 @@ describe('pipelineAllowedForBlockLevel (initiative binding)', () => {
   })
 })
 
-describe('purposeAllowsAgentCategory (builder palette gate)', () => {
+describe('purposeAllowsAgentCategory (builder save gate)', () => {
   it('a build (or unclassified) pipeline may use every category', () => {
     for (const purpose of ['build', null, undefined] as const) {
-      for (const cat of ['review', 'design', 'build', 'test', 'docs', 'gates'] as const) {
+      for (const cat of AGENT_CATEGORIES) {
         expect(purposeAllowsAgentCategory(purpose, cat)).toBe(true)
       }
     }
   })
 
-  it('a non-build pipeline hides the Implementation (build) and Testing (test) categories', () => {
+  it('a non-build pipeline refuses the Implementation (build) and Testing (test) categories', () => {
     for (const purpose of ['document', 'review', 'research', 'planning'] as const) {
       expect(purposeAllowsAgentCategory(purpose, 'build')).toBe(false)
       expect(purposeAllowsAgentCategory(purpose, 'test')).toBe(false)
-      // Non-code categories stay visible.
+      // Everything else stays SAVEABLE even where the palette stops offering it (below), so a
+      // stored pipeline never becomes unsaveable because the relevance table gained an opinion.
       expect(purposeAllowsAgentCategory(purpose, 'docs')).toBe(true)
       expect(purposeAllowsAgentCategory(purpose, 'review')).toBe(true)
       expect(purposeAllowsAgentCategory(purpose, 'gates')).toBe(true)
+    }
+  })
+})
+
+describe('purposeSuggestsAgentCategory (builder palette filter)', () => {
+  it('offers the whole catalog to a build pipeline and to an unclassified one', () => {
+    for (const purpose of ['build', null, undefined] as const) {
+      for (const cat of AGENT_CATEGORIES) {
+        expect(purposeSuggestsAgentCategory(purpose, cat)).toBe(true)
+      }
+    }
+  })
+
+  it('narrows each purpose to the categories it has a use for', () => {
+    // A PR review designs nothing and builds nothing; the plan an initiative pipeline produces
+    // is its own in-repo tracker, with no pull request to gate and no repo docs to write.
+    expect(purposeSuggestsAgentCategory('review', 'design')).toBe(false)
+    expect(purposeSuggestsAgentCategory('review', 'review')).toBe(true)
+    expect(purposeSuggestsAgentCategory('planning', 'gates')).toBe(false)
+    expect(purposeSuggestsAgentCategory('planning', 'docs')).toBe(false)
+    expect(purposeSuggestsAgentCategory('planning', 'design')).toBe(true)
+    // Authoring a document and running a spike are researched and reviewed like any change.
+    for (const purpose of ['document', 'research'] as const) {
+      expect(purposeSuggestsAgentCategory(purpose, 'design')).toBe(true)
+      expect(purposeSuggestsAgentCategory(purpose, 'docs')).toBe(true)
+    }
+  })
+
+  it('never offers what the save gate would refuse', () => {
+    // The invariant that keeps the two tables honest, over the whole grid rather than the cells
+    // that happen to differ today: relevance may hide more than compatibility, never less, or
+    // the palette would offer a kind whose step then blocks the save. The unknown purpose rides
+    // the same sweep because it is the case where the two could most easily read the same value
+    // in opposite directions, one narrowing by it and the other not.
+    for (const purpose of [...PIPELINE_PURPOSES, UNKNOWN_PURPOSE]) {
+      for (const cat of AGENT_CATEGORIES) {
+        if (purposeSuggestsAgentCategory(purpose, cat)) {
+          expect(purposeAllowsAgentCategory(purpose, cat)).toBe(true)
+        }
+      }
+    }
+  })
+})
+
+describe('a purpose or category this build does not recognise', () => {
+  it('is recognised as unknown rather than trusted', () => {
+    for (const purpose of PIPELINE_PURPOSES) expect(isPipelinePurpose(purpose)).toBe(true)
+    for (const cat of AGENT_CATEGORIES) expect(isAgentCategory(cat)).toBe(true)
+    expect(isPipelinePurpose('acme-migration')).toBe(false)
+    expect(isPipelinePurpose('')).toBe(false)
+    expect(isAgentCategory('observability')).toBe(false)
+  })
+
+  it('narrows nothing, in the palette or the save gate', () => {
+    // Both predicates index a table by these values, so before the guards an unknown purpose threw
+    // inside the palette's computed and white-screened the builder, while an unknown category read
+    // as `undefined` and silently dropped a registered kind the save gate would have accepted.
+    // Unknown means this build has nothing to narrow by, which is exactly what absent already means.
+    for (const cat of AGENT_CATEGORIES) {
+      expect(purposeSuggestsAgentCategory(UNKNOWN_PURPOSE, cat)).toBe(true)
+      expect(purposeAllowsAgentCategory(UNKNOWN_PURPOSE, cat)).toBe(true)
+    }
+    for (const purpose of PIPELINE_PURPOSES) {
+      expect(purposeSuggestsAgentCategory(purpose, UNKNOWN_CATEGORY)).toBe(true)
     }
   })
 })

@@ -355,8 +355,9 @@ Each capability has a deeper write-up; start here and follow the link.
   Google OAuth and email-password sign-in. Every method resolves to one canonical
   user. [`docs/auth.md`](./backend/docs/auth.md).
 - **Public API**: mint a workspace-scoped key and drive the board headlessly:
-  tasks, runs, parked decisions, notifications, usage, plus signed outbound
-  webhooks. Official clients ship for TypeScript, Python, Go and Java/Kotlin.
+  tasks, runs, parked decisions, notifications, usage (including spend broken
+  down by repository, ticket or run), plus signed outbound webhooks. Official
+  clients ship for TypeScript, Python, Go and Java/Kotlin.
   [Setup & reference](./backend/docs/public-api.md) ·
   [SDK clients](./sdk/README.md) ·
   [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).

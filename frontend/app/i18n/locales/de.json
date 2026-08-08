@@ -4214,6 +4214,7 @@
       "rounds": "Runden",
       "purposeLabel": "Zweck",
       "purposePlaceholder": "Zweck auswählen",
+      "purposeUnrecognized": "Nicht erkannt ({purpose})",
       "purposeOption": {
         "build": "Entwicklung",
         "document": "Dokumentation",
@@ -6734,7 +6735,8 @@
   },
   "palette": {
     "hint": "Klicke auf einen Agenten, um ihn an die Pipeline anzuhängen.",
-    "customAgents": "Benutzerdefinierte Agenten"
+    "customAgents": "Benutzerdefinierte Agenten",
+    "purposeHidden": "{count} Agent ist für diesen Zweck ausgeblendet. | {count} Agenten sind für diesen Zweck ausgeblendet."
   },
   "forkDecision": {
     "title": "Implementierungsansatz wählen",

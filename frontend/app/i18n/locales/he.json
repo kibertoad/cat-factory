@@ -4653,6 +4653,7 @@
       "rounds": "סבבים",
       "purposeLabel": "מטרה",
       "purposePlaceholder": "בחר מטרה",
+      "purposeUnrecognized": "לא מזוהה ({purpose})",
       "purposeOption": {
         "build": "פיתוח",
         "document": "תיעוד",
@@ -4903,7 +4904,8 @@
   },
   "palette": {
     "hint": "לחץ על סוכן כדי להוסיף אותו לצינור.",
-    "customAgents": "סוכנים מותאמים אישית"
+    "customAgents": "סוכנים מותאמים אישית",
+    "purposeHidden": "סוכן אחד מוסתר עבור מטרה זו. | שני סוכנים מוסתרים עבור מטרה זו. | {count} סוכנים מוסתרים עבור מטרה זו."
   },
   "gates": {
     "subtitle": {

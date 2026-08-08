@@ -63,7 +63,7 @@ function makeExecutor(depsOverride: Partial<ContainerAgentExecutorDependencies> 
   return { executor: new ContainerAgentExecutor(deps), bodies }
 }
 
-const context = (agentKind: string): AgentRunContext =>
+const context = (agentKind: string, over: Partial<AgentRunContext> = {}): AgentRunContext =>
   ({
     agentKind,
     pipelineName: 'Standard build',
@@ -75,6 +75,7 @@ const context = (agentKind: string): AgentRunContext =>
     resolvedDecision: null,
     priorOutputs: [],
     decisions: [],
+    ...over,
   }) as unknown as AgentRunContext
 
 describe('ContainerAgentExecutor artifact-upload seam', () => {
@@ -91,6 +92,51 @@ describe('ContainerAgentExecutor artifact-upload seam', () => {
     const { executor, bodies } = makeExecutor()
     await executor.startJob(context('tester-api'))
     expect(bodies[0]!.artifactUpload).toBeUndefined()
+  })
+
+  it('carries the reference-design manifest the engine resolved, ids only', async () => {
+    const { executor, bodies } = makeExecutor()
+    await executor.startJob(
+      context('tester-ui', {
+        referenceScreenshots: {
+          files: [{ view: 'Checkout', artifactId: 'art_1', fileName: 'Checkout.png' }],
+          omitted: [],
+        },
+      }),
+    )
+    // The bytes never ride the body: a design frame is a full-page PNG and this JSON crosses
+    // every transport and is persisted with the dispatch.
+    expect(bodies[0]!.referenceScreenshots).toEqual({
+      url: 'https://proxy.test/v1/artifacts/reference',
+      token: 'SESSION-TOKEN',
+      files: [{ artifactId: 'art_1', fileName: 'Checkout.png', view: 'Checkout' }],
+    })
+  })
+
+  it('sends no manifest when the task holds no reference', async () => {
+    // The engine ASKED and found none (an empty set), which is a real answer, but an empty
+    // manifest would have the harness create a directory that reads as designs giving nothing.
+    const { executor, bodies } = makeExecutor()
+    await executor.startJob(
+      context('tester-ui', { referenceScreenshots: { files: [], omitted: [] } }),
+    )
+    expect(bodies[0]!.referenceScreenshots).toBeUndefined()
+  })
+
+  it('sends the CAPPED views even when no file survived the cap', async () => {
+    // A set the cap emptied is not a task with no references: the agent still has to capture
+    // those views, and on disk "nobody mentioned it" and "the design has no such screen" are the
+    // same absence. So this manifest carries names and no files.
+    const { executor, bodies } = makeExecutor()
+    await executor.startJob(
+      context('tester-ui', { referenceScreenshots: { files: [], omitted: ['Settings'] } }),
+    )
+    expect(bodies[0]!.referenceScreenshots).toEqual({
+      url: 'https://proxy.test/v1/artifacts/reference',
+      token: 'SESSION-TOKEN',
+      files: [],
+      omitted: ['Settings'],
+    })
   })
 
   it('is withheld when the deployment wired no proxy for the token to reach', async () => {

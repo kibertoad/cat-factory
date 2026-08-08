@@ -4653,6 +4653,7 @@
       "rounds": "Tours",
       "purposeLabel": "Objectif",
       "purposePlaceholder": "Sélectionner un objectif",
+      "purposeUnrecognized": "Non reconnu ({purpose})",
       "purposeOption": {
         "build": "Développement",
         "document": "Documentation",
@@ -4903,7 +4904,8 @@
   },
   "palette": {
     "hint": "Cliquez sur un agent pour l'ajouter au pipeline.",
-    "customAgents": "Agents personnalisés"
+    "customAgents": "Agents personnalisés",
+    "purposeHidden": "{count} agent masqué pour cet objectif. | {count} agents masqués pour cet objectif."
   },
   "gates": {
     "subtitle": {

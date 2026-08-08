@@ -314,6 +314,24 @@ allow-listed repository `upsert`. It exists so a secret the NODE produces is sea
 the ORG can read, rather than under a laptop key that would make the row unopenable by the
 mothership's own teardown.
 
+### What a CONTAINER token reaches beyond the model: two artifact routes
+
+The container session token is minted per run, pinned to one workspace, execution, provider and
+model, and its whole purpose is the LLM proxy. Two routes on the same base URL accept it, and
+between them they are the only way a container reads or writes platform state without a repo
+credential: `POST /v1/artifacts/ingest` (a browser-driven kind stores its captured screenshots) and
+`GET /v1/artifacts/reference/:id` (that same kind downloads the task's reference designs into
+`.cat-context/reference-screenshots/`).
+
+Both resolve the account's store from the TOKEN's workspace rather than from the request, so a
+container reaches only its own board's storage. The read route is bounded twice more, and the
+second bound is the one worth stating: it serves `kind:'reference'` ONLY. A reference is design
+material the platform deliberately handed this run; a `screenshot` is another run's output, and a
+route that served both would turn one compromised container into a reader of every capture in the
+workspace. Anything outside that is a 404 rather than a 403: a container has no business learning which
+artifact ids exist. What remains inside the boundary is the workspace's own reference images, which
+is the same class of data the run was dispatched with.
+
 ## Layer 4: no agent DECISION merges to the default branch (mechanism + configuration, given Layer 2)
 
 Pushing a malicious commit to a `work` branch is, by design, _allowed_: that is what a PR is for.

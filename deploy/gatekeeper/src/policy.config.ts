@@ -17,7 +17,11 @@
 
 // The `/policy` entry point rather than the package root: it carries the same vocabulary without
 // pulling in the Worker runtime, so this file (and the test beside it) loads anywhere.
-import { DECISION_BINDINGS, type GatekeeperPolicy } from '@cat-factory/gatekeeper-worker/policy'
+import {
+  DECISION_BINDINGS,
+  TELEMETRY_BINDINGS,
+  type GatekeeperPolicy,
+} from '@cat-factory/gatekeeper-worker/policy'
 
 /**
  * The everyday delivery loop: file work, start it, watch it, stop it.
@@ -64,17 +68,15 @@ export const POLICY: GatekeeperPolicy = {
       // Half the debug surface answers with model prompts, captured command output and search
       // text. All of it is within a `read` key's floor, so nothing but this list stops an OS
       // workspace agent paging through it. The run OVERVIEWS (`debug_get_run`, `debug_list_runs`)
-      // stay granted deliberately: they carry lifecycle and failure shape, which is what a status
-      // Gadget is for, and no body.
-      deny: [
-        'debug_get_agent_context',
-        'debug_get_llm_call',
-        'debug_list_agent_context',
-        'debug_list_llm_calls',
-        'debug_list_logs',
-        'debug_list_search_queries',
-        'debug_list_tool_calls',
-      ],
+      // stay granted deliberately: they read no telemetry sink, so they carry lifecycle and
+      // failure shape and no body.
+      //
+      // `TELEMETRY_BINDINGS`, not a transcribed list. Every one of those names is a read, so
+      // `allow: '*'` above grants it and only this line takes it back; a hand-typed copy stops
+      // covering the surface the day an operation joins it, and nothing fails when it does. That
+      // is not hypothetical: the LLM export shipped granted here while every sibling read of the
+      // same sink was denied.
+      deny: [...TELEMETRY_BINDINGS],
     },
 
     // The everyday delivery loop: file work, start it, watch it, stop it. It cannot answer a
