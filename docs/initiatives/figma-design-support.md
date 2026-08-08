@@ -67,10 +67,11 @@ design under active iteration it meant the agent routinely built the previous re
 ### 4. Pixels exist upstream and reach nobody
 
 **Closed on the RETENTION half by Track D slice 1** (an import downloads the frames and keeps them
-as `reference` artifacts) **and on the GATE half by slice 2** (a linked design populates the
-actual-vs-reference gallery itself). What remains is delivery INTO a container: the reference files
-the UI tester reads, then the pixels the model sees. The survey finding is kept below because it is
-what those slices are measured against.
+as `reference` artifacts), on the GATE half by slice 2 (a linked design populates the
+actual-vs-reference gallery itself), and on the CHECKOUT half by slice 3 (a capturing run reads the
+frames off disk under `.cat-context/reference-screenshots/`). What remains is the pixels the MODEL
+sees: multimodal delivery. The survey finding is kept below because it is what those slices are
+measured against.
 
 The provider asks Figma for a rendered PNG URL, stores the URL as a `### References` line, and
 never downloads the bytes (`fetchPreviewUrl`); the `design.context` fragment then explicitly
@@ -454,10 +455,43 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
       The reads are LIVE at gather time (one batched `listByDocuments`, never a read per design),
       so **recapture** picks up a design linked while the gate is parked, exactly as it already
       does for an upload.
-- [ ] **Write the references INTO the container.** `.cat-context/reference-screenshots/`, which
-      the UI-tester prompt already names and nothing writes (the handover doc's "What's left"
-      item 3). Needs a binary + subdirectory-capable context-file channel through the harness, so
-      it is an image-bumping slice with the pinned-tag rollout recipe.
+- [x] **Write the references INTO the container.** `.cat-context/reference-screenshots/`, which the
+      UI-tester prompt has always named and nothing wrote (the handover doc's "What's left" item 3).
+      A dispatch of a kind declaring the `ui` image resolves the task's reference set onto
+      `AgentRunContext.referenceScreenshots`, the job body carries it, and the harness downloads the
+      images into the checkout before the agent's first turn.
+      **The bytes do not ride the job body, which is the decision the plan above skipped.** The plan
+      called for "a binary context-file channel", and widening `InjectedContextFile` past UTF-8 would
+      have put megabytes of PNG into JSON that crosses every transport and is persisted with the
+      dispatch. What travels is a MANIFEST of ids and file names, and the harness fetches the bytes
+      back through `GET ${proxyBaseUrl}/artifacts/reference/:id` on the SAME container session token
+      the run already holds for the LLM proxy: the mirror image of the screenshot ingest route beside
+      it, so no new credential and no publicly reachable URL. That route serves `kind:'reference'`
+      only, within the token's own workspace, because a route that also served `screenshot` would
+      turn one compromised container into a reader of every capture on the board.
+      **The reference SET is now read by TWO callers, so it moved into one module.** The gate pairs
+      captures against it and a dispatch hands it to the container, and the view name is exactly the
+      join the gate performs: derived twice, the two halves would disagree about a name and the
+      pairing would come apart with both looking correct on their own. `block-reference-set.ts`
+      answers "which artifact is the reference for each view" once, uploads outranking design frames
+      as they always did.
+      **The file NAME is the engine's answer, not the container's**, because the name is how the
+      agent learns the view name: derived in the harness, a sanitiser change in an image a deployment
+      has not rolled out yet would silently rename every view a run reports. Two views that slug to
+      one name are SUFFIXED rather than deduped, since dropping one hands the agent a directory
+      quietly missing a screen it was asked to compare, and the extension follows the stored content
+      type rather than assuming PNG.
+      **A reference that could not be fetched is NAMED to the agent.** On disk an absent file and a
+      screen the design does not have are the same thing, so a miss is listed beside the files with
+      its cause and the agent is told to capture that view anyway, under the same name. The whole
+      pass is best-effort and time-bounded well under `JOB_INACTIVITY_MS`: downloading is
+      activity-silent, and a wedged blob backend must cost the run its references, never the run.
+      **An empty set sends no manifest.** "This kind captures nothing" (absent) and "the task has no
+      reference" (an empty array) stay different facts on the context, but neither may produce an
+      empty directory in the checkout, which reads to the agent as designs that gave nothing.
+      Image-bumping slice: `@cat-factory/executor-harness` and the pinned tags move together, and the
+      directory joins `HARNESS_SENTINEL_PATHS` so the two independent copies of its name are pinned
+      byte-for-byte by the harness contract suite.
 - [ ] **Multimodal delivery to agents.** Hand the stored render to image-capable harness/model
       pairs as an image content part (job body + proxy + prompt assembly; the OpenAI-shape
       `image_url` translation already exists on the Workers AI upstream with no producer).

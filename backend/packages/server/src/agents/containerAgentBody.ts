@@ -99,6 +99,36 @@ export function buildCommonBody(
     typeof auth.sessionToken === 'string'
       ? { url: `${auth.proxyBaseUrl}/artifacts/ingest`, token: auth.sessionToken }
       : undefined
+  // The other direction of the same seam: the reference design images the engine resolved for
+  // this task, as a MANIFEST the harness downloads into `.cat-context/reference-screenshots/`.
+  // Only identities travel (a run's frames are megabytes of PNG and a job body is JSON that
+  // crosses every transport and is persisted with the dispatch), and the bytes come back through
+  // the container's own session token, so no extra credential and no public URL is involved.
+  //
+  // Gated on a set that says SOMETHING: the engine already answered "this kind captures nothing"
+  // by resolving nothing at all, and a manifest of zero files would have the harness create an
+  // empty directory, which reads to the agent as designs that gave nothing rather than as a task
+  // with none linked. `omitted` counts as something to say on its own, because a set the cap
+  // emptied entirely still owes the agent the view names it is expected to capture.
+  const references = context.referenceScreenshots
+  const referenceScreenshots =
+    (references?.files.length || references?.omitted.length) &&
+    typeof auth.proxyBaseUrl === 'string' &&
+    typeof auth.sessionToken === 'string'
+      ? {
+          url: `${auth.proxyBaseUrl}/artifacts/reference`,
+          token: auth.sessionToken,
+          files: references.files.map((reference) => ({
+            artifactId: reference.artifactId,
+            fileName: reference.fileName,
+            view: reference.view,
+          })),
+          // The views the engine's cap dropped, carried so the harness can state them beside the
+          // ones that failed to transfer: from the agent's side both are a view it must capture
+          // with no image to compare against, and only the CAUSE differs.
+          ...(references.omitted.length ? { omitted: references.omitted } : {}),
+        }
+      : undefined
   return {
     jobId,
     // The run's correlation ids, carried purely so the container's own log lines can be joined
@@ -144,6 +174,7 @@ export function buildCommonBody(
     // exactly the coupling the trait exists to avoid.
     ...(generatorSecrets?.length ? { generatorSecrets } : {}),
     ...(artifactUpload ? { artifactUpload } : {}),
+    ...(referenceScreenshots ? { referenceScreenshots } : {}),
     ...(guardLimits ? { guardLimits } : {}),
   }
 }
