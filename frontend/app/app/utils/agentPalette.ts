@@ -2,7 +2,7 @@ import {
   type AgentTier,
   agentTierVisibleAt,
   type PipelinePurpose,
-  purposeSuggestsAgentCategory,
+  purposeSuggestsAgentKind,
 } from '@cat-factory/contracts'
 import type { AgentArchetype } from '~/types/domain'
 
@@ -36,16 +36,17 @@ export interface NarrowedAgentPalette<T> {
  * Reduce `archetypes` to what the palette offers at `purpose` + `tier`, with each dial's hint
  * count (see {@link NarrowedAgentPalette} for what the counts promise).
  *
- * An archetype carrying no `category` has nothing for the purpose dial to judge, so it is always
- * relevant; an absent `tier` is `DEFAULT_AGENT_TIER`. Both are how a deployment-registered kind
- * that declares neither behaves, and neither is a reason to drop it from the catalog.
+ * Relevance is asked of the KIND (`purposeSuggestsAgentKind`), which reads the kind's own
+ * `purposes` when it declares one and falls back to its `category`'s row otherwise, so a kind
+ * that belongs to one use-case can leave a section its siblings still belong in. An archetype
+ * carrying neither has nothing for the purpose dial to judge and is always relevant; an absent
+ * `tier` is `DEFAULT_AGENT_TIER`. All three are how a deployment-registered kind that declares
+ * nothing behaves, and none of them is a reason to drop it from the catalog.
  */
-export function narrowAgentPalette<T extends Pick<AgentArchetype, 'tier' | 'category'>>(
-  archetypes: readonly T[],
-  purpose: PipelinePurpose,
-  tier: AgentTier,
-): NarrowedAgentPalette<T> {
-  const relevant = (a: T) => !a.category || purposeSuggestsAgentCategory(purpose, a.category)
+export function narrowAgentPalette<
+  T extends Pick<AgentArchetype, 'tier' | 'category' | 'purposes'>,
+>(archetypes: readonly T[], purpose: PipelinePurpose, tier: AgentTier): NarrowedAgentPalette<T> {
+  const relevant = (a: T) => purposeSuggestsAgentKind(purpose, a)
   const inTier = (a: T) => agentTierVisibleAt(a.tier, tier)
   return {
     offered: archetypes.filter((a) => relevant(a) && inTier(a)),

@@ -286,9 +286,13 @@ browser older than a new member, a row older than a retired one).
 Purpose is filtered by three predicates in `@cat-factory/contracts`, and the difference between
 the first two is the point:
 
-- `purposeSuggestsAgentCategory` is **relevance**: what the palette OFFERS. Opinionated (a
+- `purposeSuggestsAgentKind` is **relevance**: what the palette OFFERS. Opinionated (a
   review pipeline designs nothing; a planning pipeline has no pull request to gate), because a
-  wrong guess costs one purpose switch.
+  wrong guess costs one purpose switch. It reads the kind's `category` through
+  `purposeSuggestsAgentCategory` and then the kind's OWN `presentation.purposes`, and the two
+  INTERSECT: a declaration may only hide more, never buy a kind back into a purpose its section
+  is not offered to, which is what keeps relevance inside compatibility whatever a deployment
+  declares.
 - `purposeAllowsAgentCategory` is **compatibility**: what the builder will SAVE. It states only
   what is contradictory (a pipeline that writes no code carrying an implementation step) and
   drives the draft's conflict warning.
@@ -310,6 +314,16 @@ Relevance is a subset of compatibility, asserted over the whole grid in `pipelin
 it that way: the palette may hide what the save gate tolerates, so tightening the relevance table
 never turns a stored pipeline into one its own editor refuses, but offering a kind the save gate
 then rejects would be a dead end with the refusal arriving after the work.
+
+**A category is a shelf label, not a statement of what a kind does**, which is why relevance is
+asked of the KIND. Keeping `docs` for a `review` pipeline so the Domain Rules Reviewer survives
+also handed it the two kinds that WRITE documentation into the repo, and `document` and `research`
+had identical rows, so moving the dial between them narrowed nothing at all. A kind that belongs
+to one use-case says so in `presentation.purposes` and leaves a section its siblings stay in; the
+section keeps deciding for every kind that declares nothing, which is the normal case and the one
+a deployment-registered kind falls into for free. Declare it only to opt OUT: it can never widen,
+and a list naming only purposes this build cannot name is read as no declaration at all rather
+than as excluding everything, the same default-open reading the unknown `purpose` gets.
 
 **Each hint counts what relaxing THAT dial alone would reveal**, which is why each reduction is one
 function (`utils/agentPalette.ts` for the catalog, `utils/pipelineLibrary.ts` for the library)

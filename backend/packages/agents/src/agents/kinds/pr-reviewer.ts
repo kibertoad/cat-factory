@@ -280,6 +280,8 @@ export const PR_REVIEWER_AGENT_KINDS: AgentKindDefinition[] = [
         'Deep, token-bounded review of an open pull request: slices a large diff into cohesive ' +
         'chunks, reviews each, and returns prioritized findings.',
       category: 'review',
+      // Reviews an EXISTING open pull request (mirrors the SPA's static archetype).
+      purposes: ['build', 'review'],
       tier: 'basic',
       // Opens the dedicated PR-review window (findings grouped by slice + multi-select →
       // resolve) instead of the generic read-only JSON viewer. See PrReviewWindow.vue.

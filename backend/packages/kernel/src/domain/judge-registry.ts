@@ -208,6 +208,11 @@ export interface JudgeDefinition {
     color: string
     description: string
     category?: 'review' | 'design' | 'build' | 'test' | 'docs' | 'gates'
+    /**
+     * The pipeline purposes the palette offers this judge to, WITHIN the ones its category
+     * already admits (`purposeSuggestsAgentKind`). Omitted ⇒ the category alone decides.
+     */
+    purposes?: ('build' | 'document' | 'review' | 'research' | 'planning')[]
     /** Defaults to the built-in `judge` window; a deployment may name its own namespaced view. */
     resultView?: string
   }

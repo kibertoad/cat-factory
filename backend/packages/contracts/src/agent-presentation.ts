@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { pipelinePurposeSchema } from './pipeline-purpose-vocabulary.js'
 import { agentKindSchema, namespacedIdSchema } from './primitives.js'
 import { RESULT_VIEW_IDS } from './result-views.js'
 
@@ -97,6 +98,17 @@ export const agentPresentationSchema = v.object({
   description: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
   /** Palette section; omitted ⇒ the kind is not a standalone palette block (e.g. a companion). */
   category: v.optional(agentCategorySchema),
+  /**
+   * The pipeline PURPOSES the palette should offer this kind to, WITHIN the ones its
+   * {@link category} already admits (`purposeSuggestsAgentKind`). Omitted ⇒ the category alone
+   * decides, which is the normal case. Declare it to opt OUT of a purpose the category would
+   * admit: a documentation AUTHOR has no business in a pipeline whose whole job is reviewing
+   * someone else's pull request, and its category cannot say so without also taking the Domain
+   * Rules Reviewer down with it. It never widens anything, in the palette or in what the
+   * builder will SAVE (`purposeAllowsAgentCategory`), so a kind that opts out of a purpose
+   * stays editable in a stored pipeline that already uses it.
+   */
+  purposes: v.optional(v.array(pipelinePurposeSchema)),
   /**
    * How specialist this kind is ({@link AGENT_TIERS}). The palette and the model-preset
    * override list show the selected tier and everything below it, so a kind declared

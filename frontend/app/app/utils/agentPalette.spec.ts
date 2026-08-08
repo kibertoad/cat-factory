@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { PipelinePurpose } from '@cat-factory/contracts'
 import type { AgentArchetype } from '~/types/domain'
 import { groupAgentPalette, narrowAgentPalette } from '~/utils/agentPalette'
 
@@ -6,6 +7,7 @@ const archetype = (
   kind: string,
   category?: AgentArchetype['category'],
   tier?: AgentArchetype['tier'],
+  purposes?: AgentArchetype['purposes'],
 ): AgentArchetype => ({
   kind: kind as AgentArchetype['kind'],
   label: kind,
@@ -14,6 +16,7 @@ const archetype = (
   description: kind,
   ...(category ? { category } : {}),
   ...(tier ? { tier } : {}),
+  ...(purposes ? { purposes } : {}),
 })
 
 // Spread across both dials on purpose: every combination of relevant/irrelevant to a `planning`
@@ -98,6 +101,33 @@ describe('narrowAgentPalette', () => {
     )
     const hiddenByBoth = CATALOG.length - offered.length - hiddenByPurpose - hiddenByTier
     expect(hiddenByBoth).toBe(1)
+  })
+
+  it('narrows WITHIN a category when a kind declares the purposes it is for', () => {
+    // The reason relevance is asked of the KIND: a category is a shelf label, so `documenter` and
+    // `doc-reviewer` sit on the same shelf while only one of them belongs in a pipeline that
+    // reviews someone else's pull request. Both dials still apply to the declaring kind.
+    const catalog = [
+      archetype('documenter', 'docs', 'basic', ['build', 'document']),
+      archetype('doc-reviewer', 'docs', 'basic', ['build', 'review']),
+      archetype('house-style', 'docs', 'basic'),
+    ]
+    const offered = (purpose: PipelinePurpose) =>
+      narrowAgentPalette(catalog, purpose, 'advanced').offered.map((a) => a.kind)
+    expect(offered('review')).toEqual(['doc-reviewer', 'house-style'])
+    expect(offered('document')).toEqual(['documenter', 'house-style'])
+    // `planning` drops the whole `docs` category, and the declarations do not override that for
+    // the kinds that named it: a declared list is the kind's own answer, not an exemption.
+    expect(offered('planning')).toEqual([])
+    expect(narrowAgentPalette(catalog, 'review', 'advanced').hiddenByPurpose).toBe(1)
+  })
+
+  it('falls back to the category when a declared list names nothing this build knows', () => {
+    // The mirror of the unknown-purpose rule: a kind whose entire list was retired has told this
+    // build nothing, so its section decides rather than the kind vanishing from every palette.
+    const stale = archetype('acme-doc', 'docs', 'basic', ['acme-migration' as never])
+    expect(narrowAgentPalette([stale], 'document', 'advanced').offered).toEqual([stale])
+    expect(narrowAgentPalette([stale], 'planning', 'advanced').offered).toEqual([])
   })
 
   it('keeps a purpose this build does not recognise from narrowing anything', () => {

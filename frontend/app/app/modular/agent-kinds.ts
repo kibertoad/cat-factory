@@ -27,6 +27,9 @@ export function customKindToArchetype(kind: CustomAgentKind): AgentArchetype {
     color: p.color,
     description: p.description,
     ...(p.category ? { category: p.category } : {}),
+    // Carried verbatim, INCLUDING a list this build cannot fully name: `purposeSuggestsAgentKind`
+    // owns the reading of an unrecognised member, so filtering here would fork that rule.
+    ...(p.purposes?.length ? { purposes: p.purposes } : {}),
     // A kind that declares no tier is left WITHOUT one rather than stamped with the default
     // here, so the single fallback stays in `agentTierVisibleAt` — filling it in at the
     // projection would fork the rule the moment the default changes.

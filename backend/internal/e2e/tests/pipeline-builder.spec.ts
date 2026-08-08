@@ -127,4 +127,37 @@ test.describe('pipeline builder (author a pipeline by hand, then run it)', () =>
       .poll(async () => await card.getAttribute('data-status'), { timeout: RUN_TERMINAL_TIMEOUT })
       .toMatch(/^(pr_ready|done)$/)
   })
+
+  // The other half of the same surface: what the palette OFFERS before anything is drawn.
+  //
+  // The purpose dial narrows the catalog live, and its reduction is unit-tested — but only the
+  // assembled product shows that moving the dial reaches the rendered list at all, which is the
+  // regression this pins: a control whose every setting looked the same.
+  test('picking a purpose narrows the palette to the kinds that purpose has a use for', async ({
+    page,
+    seededBoard: _seededBoard,
+  }) => {
+    await page.getByTestId('nav-build-pipeline').click()
+    const palette = page.getByTestId('pipeline-builder-palette')
+    await expect(palette).toBeVisible({ timeout: LIVE_TIMEOUT })
+
+    // A new draft opens at `build`, the purpose that offers the whole catalog. All three are
+    // `basic`-tier kinds, so the tier dial is not what decides any of this.
+    await expect(palette.getByTestId('palette-agent-pr-reviewer')).toBeVisible()
+    await expect(palette.getByTestId('palette-agent-coder')).toBeVisible()
+    await expect(palette.getByTestId('palette-agent-documenter')).toBeVisible()
+
+    await palette.getByTestId('pipeline-purpose-select').click()
+    await page.getByRole('menuitem', { name: 'Review', exact: true }).click()
+
+    // LIVE, with no reload: a pipeline that reviews an existing pull request writes no code, so
+    // the Implementation section goes with its whole category — and `documenter` goes on its OWN,
+    // because it authors documentation into the repo while its section-mate the Domain Rules
+    // Reviewer belongs here. That second one is the assertion worth having: it is exactly what a
+    // filter keyed on the display category cannot express, so it fails if relevance regresses to
+    // being decided by the section alone.
+    await expect(palette.getByTestId('palette-agent-pr-reviewer')).toBeVisible()
+    await expect(palette.getByTestId('palette-agent-coder')).toHaveCount(0)
+    await expect(palette.getByTestId('palette-agent-documenter')).toHaveCount(0)
+  })
 })

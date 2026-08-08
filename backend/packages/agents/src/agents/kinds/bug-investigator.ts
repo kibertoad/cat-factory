@@ -110,6 +110,8 @@ export const BUG_INVESTIGATOR_AGENT_KINDS: AgentKindDefinition[] = [
         'Read-only, multi-repo codebase investigation that traces a bug to its root cause and ' +
         'decides whether the report is fixable as-is or needs the reporter to clarify.',
       category: 'review',
+      // Traces a bug to its root cause (mirrors the SPA's static archetype).
+      purposes: ['build'],
       tier: 'intermediate',
       // The structured finding opens in the shared generic viewer (no bespoke window); the
       // clarity gate consumes `clarity`/`questions` server-side.

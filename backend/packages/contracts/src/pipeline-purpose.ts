@@ -1,42 +1,20 @@
-import * as v from 'valibot'
 import { type AgentCategory, isAgentCategory } from './agent-presentation.js'
 import type { Pipeline } from './entities.js'
+import { isPipelinePurpose, type PipelinePurpose } from './pipeline-purpose-vocabulary.js'
 import type { BlockLevel, TaskType } from './primitives.js'
 
 /**
- * The USE-CASE of a pipeline — what kind of work it exists to do. Chosen in the pipeline
- * builder and stamped on every built-in preset, it is the classifier the SPA filters on:
- *
- *   - `build`      — produces or changes application code (the default for engineering
- *                    pipelines: full builds, bug fixes, refactors, dependency updates, …).
- *   - `document`   — authors or updates documentation (a PRD/RFC/runbook, business rules, …);
- *                    a `document` task offers ONLY these.
- *   - `review`     — reviews existing code / a pull request and reports findings; writes no code.
- *   - `research`   — timeboxed investigation / analysis that delivers findings (a spike, an
- *                    environment analysis).
- *   - `planning`   — decomposes and plans an initiative (no code, no repo write of its own).
+ * The pipeline-purpose vocabulary itself ({@link PipelinePurpose} and what each member means)
+ * lives in `pipeline-purpose-vocabulary.ts` and is re-exported here, so every consumer keeps
+ * importing the classifier and the predicates that read it from one place.
  *
  * A non-`build` purpose hides the Implementation/Testing agent kinds in the builder
  * ({@link purposeAllowsAgentCategory}), narrows what its palette offers
- * ({@link purposeSuggestsAgentCategory}) and its saved-pipeline library lists
+ * ({@link purposeSuggestsAgentKind}) and its saved-pipeline library lists
  * ({@link pipelineMatchesPurpose}), and scopes the pipeline in the task pickers
  * ({@link pipelineAllowedForTaskType}). The `Pipeline.purpose` field references this schema.
  */
-export const PIPELINE_PURPOSES = ['build', 'document', 'review', 'research', 'planning'] as const
-export const pipelinePurposeSchema = v.picklist(PIPELINE_PURPOSES)
-export type PipelinePurpose = v.InferOutput<typeof pipelinePurposeSchema>
-
-const PIPELINE_PURPOSE_SET: ReadonlySet<string> = new Set(pipelinePurposeSchema.options)
-
-/**
- * Whether a value is a purpose THIS BUILD knows, DERIVED from the picklist for the same reason
- * {@link isAgentCategory} is: the vocabulary is closed but PERSISTED, on `Pipeline.purpose`, so a
- * member retired from the union goes on living in stored rows and in the SPA bundle a browser
- * cached before a new member shipped. Narrow with this before indexing anything by a purpose.
- */
-export function isPipelinePurpose(value: string): value is PipelinePurpose {
-  return PIPELINE_PURPOSE_SET.has(value)
-}
+export * from './pipeline-purpose-vocabulary.js'
 
 // ---------------------------------------------------------------------------
 // Pipeline-purpose gating (shared by the SPA pickers + the builder palette).
@@ -166,6 +144,52 @@ export function purposeSuggestsAgentCategory(
   const classifier = classifierFor(purpose)
   if (classifier === null || !isAgentCategory(category)) return true
   return PURPOSE_SUGGESTED_CATEGORIES[classifier][category]
+}
+
+/**
+ * What a palette entry declares for the purpose dial to judge it by: the section it groups under
+ * and, when it knows better than its section does, the purposes it is worth offering to.
+ */
+export interface AgentPurposeRelevance {
+  /** The palette section, i.e. what {@link purposeSuggestsAgentCategory} reads. */
+  category?: AgentCategory
+  /** The kind's OWN answer, from `AgentPresentation.purposes`. */
+  purposes?: readonly PipelinePurpose[]
+}
+
+/**
+ * Whether an agent KIND is worth OFFERING to a pipeline of `purpose` — what the builder palette
+ * actually filters on.
+ *
+ * A category is a SHELF LABEL, not a statement of what a kind does, so
+ * {@link purposeSuggestsAgentCategory} can only ever remove whole sections: keeping `docs` for a
+ * `review` pipeline so the Domain Rules Reviewer survives also offered it the two agents that
+ * WRITE documentation into the repo, and `document` and `research` had identical rows, so moving
+ * the dial between them narrowed nothing at all. A kind that knows it belongs to one use-case says
+ * so itself, and the section keeps deciding for every kind that does not.
+ *
+ * The two narrowings INTERSECT: a declaration may only ever hide MORE than the section already
+ * does, never buy a kind back into a purpose its section is not offered to. That is not a
+ * convenience, it is what keeps relevance a SUBSET of compatibility
+ * ({@link purposeAllowsAgentCategory}) no matter what a deployment declares — a kind offered
+ * outside its category's row would be a palette entry whose step then blocks the save, the one
+ * dead end this pair of tables exists to prevent.
+ *
+ * Declaring nothing is the normal case and stays exactly as permissive as before. A declared list
+ * naming only purposes this build cannot NAME is read as declaring nothing rather than as
+ * excluding everything, the same default-open reading its siblings give an unrecognised value: a
+ * kind whose entire list was retired would otherwise vanish from every palette in the build that
+ * has to fix it.
+ */
+export function purposeSuggestsAgentKind(
+  purpose: Pipeline['purpose'],
+  kind: AgentPurposeRelevance,
+): boolean {
+  const classifier = classifierFor(purpose)
+  if (classifier === null) return true
+  if (kind.category && !purposeSuggestsAgentCategory(purpose, kind.category)) return false
+  const declared = kind.purposes?.filter((p) => isPipelinePurpose(p)) ?? []
+  return declared.length === 0 || declared.includes(classifier)
 }
 
 /**
