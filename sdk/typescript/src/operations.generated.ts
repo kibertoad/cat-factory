@@ -10,6 +10,7 @@ import type { RequestOptions, Transport } from './http.ts'
 import { encodePathSegment } from './http.ts'
 import { repeatedCursorError } from './errors.ts'
 import type {
+  ActPublicNotificationRequest,
   AddPublicTaskDependencyRequest,
   AttachPublicTaskDocumentRequest,
   CreateHeadlessPublicApiKey,
@@ -265,7 +266,7 @@ export class ServicesResource {
    * Create a board service, optionally backed by a repository from `GET /api/v1/repos`. The repository link is what makes the service runnable: execution resolves a task’s repository by walking up to its enclosing service frame, so a service with none holds tasks and can start none of them. A whole-repo repository that already backs a service in this account is MOUNTED rather than duplicated; a monorepo service must name its subdirectory. The board lays the service out itself: this surface publishes no coordinates. Requires an `admin` key.
    * `POST /api/v1/services` — operation `createPublicService`.
    */
-  create(body: CreatePublicServiceRequest, options: RequestOptions = {}): Promise<PublicService> {
+  create(body: CreatePublicServiceRequest = {}, options: RequestOptions = {}): Promise<PublicService> {
     return this.#transport.request<PublicService>({
       method: 'POST',
       path: `/api/v1/services`,
@@ -488,7 +489,7 @@ export class TasksResource {
    * Start a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned pipeline. A pipeline that can park on a human decision requires a `decide`-scope key. A task on an individual-usage model cannot be started through the API (no headless personal-credential unlock).
    * `POST /api/v1/tasks/{taskId}/start` — operation `startPublicTask`.
    */
-  start(taskId: string, body: StartPublicTask, options: RequestOptions = {}): Promise<PublicTask> {
+  start(taskId: string, body: StartPublicTask = {}, options: RequestOptions = {}): Promise<PublicTask> {
     return this.#transport.request<PublicTask>({
       method: 'POST',
       path: `/api/v1/tasks/${encodePathSegment(taskId)}/start`,
@@ -528,7 +529,7 @@ export class TasksResource {
    * Edit a task’s human-authored inputs before it runs: its title, its description, and `fields`, the per-case values for its own task type (checked against the descriptors `GET /api/v1/task-types` serves). All are optional. `fields` is MERGED over what the task already carries — a key you send is written, a key you omit keeps its stored value — because this API does not serve the bag back. This is what makes an input the pre-dispatch gate refused repairable: supply the value it named, then recheck the parked run.
    * `PATCH /api/v1/tasks/{taskId}` — operation `updatePublicTask`.
    */
-  update(taskId: string, body: UpdatePublicTask, options: RequestOptions = {}): Promise<PublicTask> {
+  update(taskId: string, body: UpdatePublicTask = {}, options: RequestOptions = {}): Promise<PublicTask> {
     return this.#transport.request<PublicTask>({
       method: 'PATCH',
       path: `/api/v1/tasks/${encodePathSegment(taskId)}`,
@@ -595,10 +596,11 @@ export class NotificationsResource {
    * Run a notification’s typed side-effect and resolve it: merge the PR (merge_review / pipeline_complete) or retry the run (ci_failed / test_failed). Performs a real GitHub merge, so it requires an admin-scoped key. Only these automated-action types are actionable through the API — a notification that parks a run on an interactive human decision cannot be acted on headlessly (dismiss it instead). A card that would retry a run on an individual-usage model likewise cannot be acted on through the API. To record how much review a merged pull request needed, call `POST /api/v1/merge-records/{recordId}/effort` (a `write` key) before or after this; a `merge_tag_request` card carries its record id on the payload and is resolved by tagging that record and dismissing the card.
    * `POST /api/v1/notifications/{id}/act` — operation `actPublicNotification`.
    */
-  act(id: string, options: RequestOptions = {}): Promise<Notification> {
+  act(id: string, body: ActPublicNotificationRequest = {}, options: RequestOptions = {}): Promise<Notification> {
     return this.#transport.request<Notification>({
       method: 'POST',
       path: `/api/v1/notifications/${encodePathSegment(id)}/act`,
+      body,
       options,
     })
   }
@@ -708,7 +710,7 @@ export class WebhookResource {
    * Register the HTTPS endpoint deliveries are POSTed to, or update the one already registered. Every omitted field keeps its stored value, so subscribing to run events is a one-field call that re-sends neither the URL nor the secret. `url` is required only on the first call, when there is nothing registered to keep; omitting it otherwise leaves the endpoint alone. Supplying `secret` rotates the signing secret; omitting it keeps the current one. The endpoint must be `https:` and publicly routable unless the deployment widened its allow-list.
    * `PUT /api/v1/notification-webhook` — operation `putPublicNotificationWebhook`.
    */
-  set(body: PutNotificationWebhook, options: RequestOptions = {}): Promise<NotificationWebhook> {
+  set(body: PutNotificationWebhook = {}, options: RequestOptions = {}): Promise<NotificationWebhook> {
     return this.#transport.request<NotificationWebhook>({
       method: 'PUT',
       path: `/api/v1/notification-webhook`,
@@ -722,7 +724,7 @@ export class WebhookResource {
    * Register an endpoint under an id YOU choose (1-63 characters of lowercase letters, digits, `-` or `_`), or update the one already there. Idempotent by id, so an integration can enroll its own receiver on every cold start without tracking whether it has enrolled before, and without displacing anything else the workspace registered. Every field follows the same keep-on-omit rule as the unnamed route, `url` being required only when there is nothing under this id to keep, and a supplied `secret` rotating this endpoint's own signing secret. Refused with `reason: "invalid_webhook_id"` for an id that is not a slug, and `reason: "webhook_limit_reached"` (409) when registering a NEW id would exceed the per-workspace cap; editing an existing one is admitted either way.
    * `PUT /api/v1/notification-webhooks/{webhookId}` — operation `putPublicNamedNotificationWebhook`.
    */
-  setNamed(webhookId: string, body: PutNotificationWebhook, options: RequestOptions = {}): Promise<NotificationWebhook> {
+  setNamed(webhookId: string, body: PutNotificationWebhook = {}, options: RequestOptions = {}): Promise<NotificationWebhook> {
     return this.#transport.request<NotificationWebhook>({
       method: 'PUT',
       path: `/api/v1/notification-webhooks/${encodePathSegment(webhookId)}`,
@@ -831,7 +833,7 @@ export class DecisionsResource {
    * Approve the proposal a gated step is holding up, optionally replacing it with an edited one (the edit is what flows to every downstream step), and advance the run. The `approvalId` comes from the run's decision list; passing it back is what makes a racing app user and a racing integration resolve the same gate. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/approve` — operation `approvePublicRunStep`.
    */
-  approveStep(runId: string, approvalId: string, body: PublicApproveStep, options: RequestOptions = {}): Promise<PublicDecisionList> {
+  approveStep(runId: string, approvalId: string, body: PublicApproveStep = {}, options: RequestOptions = {}): Promise<PublicDecisionList> {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/approvals/${encodePathSegment(approvalId)}/approve`,
@@ -858,7 +860,7 @@ export class DecisionsResource {
    * Dispatch a read-only investigator to re-examine one finding against the full source, optionally with a specific concern. It upholds, strengthens or retracts the finding, and the review re-parks carrying the verdict. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/challenge` — operation `challengePublicRunPrReviewFinding`.
    */
-  challengePrReviewFinding(runId: string, findingId: string, body: PublicChallengePrReviewFinding, options: RequestOptions = {}): Promise<PublicDecisionList> {
+  challengePrReviewFinding(runId: string, findingId: string, body: PublicChallengePrReviewFinding = {}, options: RequestOptions = {}): Promise<PublicDecisionList> {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/pr-review/findings/${encodePathSegment(findingId)}/challenge`,
@@ -872,7 +874,7 @@ export class DecisionsResource {
    * Pick one of the proposed implementation forks (by id) or submit your own approach. The Coder then runs with the choice folded in as a binding directive. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/fork/choose` — operation `choosePublicRunFork`.
    */
-  chooseFork(runId: string, body: PublicChooseFork, options: RequestOptions = {}): Promise<PublicDecisionList> {
+  chooseFork(runId: string, body: PublicChooseFork = {}, options: RequestOptions = {}): Promise<PublicDecisionList> {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/fork/choose`,
@@ -951,7 +953,7 @@ export class DecisionsResource {
    * Fold the recorded answers into one standardized requirements document. Asynchronous — the run re-reviews in the background, so the response shows the review `incorporating`. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/requirements/incorporate` — operation `incorporatePublicRunRequirements`.
    */
-  incorporate(runId: string, body: PublicIncorporate, options: RequestOptions = {}): Promise<PublicDecisionList> {
+  incorporate(runId: string, body: PublicIncorporate = {}, options: RequestOptions = {}): Promise<PublicDecisionList> {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/requirements/incorporate`,
@@ -965,7 +967,7 @@ export class DecisionsResource {
    * Fold the picks into one converged direction. ASYNCHRONOUS: the response shows the session `incorporating` while the durable driver folds and re-runs in the background. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/incorporate` — operation `incorporatePublicRunBrainstorm`.
    */
-  incorporateBrainstorm(runId: string, stage: string, body: PublicIncorporate, options: RequestOptions = {}): Promise<PublicDecisionList> {
+  incorporateBrainstorm(runId: string, stage: string, body: PublicIncorporate = {}, options: RequestOptions = {}): Promise<PublicDecisionList> {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/brainstorm/${encodePathSegment(stage)}/incorporate`,
@@ -979,7 +981,7 @@ export class DecisionsResource {
    * Fold the recorded answers into one standardized bug report. ASYNCHRONOUS: the response shows the review `incorporating` while the durable driver folds and re-reviews in the background. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/clarity/incorporate` — operation `incorporatePublicRunClarity`.
    */
-  incorporateClarity(runId: string, body: PublicIncorporate, options: RequestOptions = {}): Promise<PublicDecisionList> {
+  incorporateClarity(runId: string, body: PublicIncorporate = {}, options: RequestOptions = {}): Promise<PublicDecisionList> {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/clarity/incorporate`,
@@ -1058,7 +1060,7 @@ export class DecisionsResource {
    * Reject the gated proposal: the run stops entirely, recording a terminal `rejected` failure the board can retry. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/reject` — operation `rejectPublicRunStep`.
    */
-  rejectStep(runId: string, approvalId: string, body: PublicRejectStep, options: RequestOptions = {}): Promise<PublicDecisionList> {
+  rejectStep(runId: string, approvalId: string, body: PublicRejectStep = {}, options: RequestOptions = {}): Promise<PublicDecisionList> {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/approvals/${encodePathSegment(approvalId)}/reject`,
@@ -1265,7 +1267,7 @@ export class DecisionsResource {
    * Record the curated finding selection and say what to do with it: `finish` completes the read-only review, `fix` hands the selected findings to a fixer that commits onto the reviewed PR branch, `post` publishes them as inline PR review comments. `fix` and `post` need at least one selected finding and act on the real pull request. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/pr-review/resolve` — operation `resolvePublicRunPrReview`.
    */
-  resolvePrReview(runId: string, body: PublicResolvePrReview, options: RequestOptions = {}): Promise<PublicDecisionList> {
+  resolvePrReview(runId: string, body: PublicResolvePrReview = {}, options: RequestOptions = {}): Promise<PublicDecisionList> {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/pr-review/resolve`,

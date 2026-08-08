@@ -11,6 +11,12 @@ package catfactory
 
 import "encoding/json"
 
+// ActPublicNotificationRequest is the `ActPublicNotificationRequest` wire model.
+type ActPublicNotificationRequest struct {
+	// ReviewEffort may be absent entirely.
+	ReviewEffort *GetPublicMergeRecordResponseReviewEffort `json:"reviewEffort,omitempty"`
+}
+
 // AddPublicTaskDependencyRequest is the `AddPublicTaskDependencyRequest` wire model.
 type AddPublicTaskDependencyRequest struct {
 	DependsOnTaskID string `json:"dependsOnTaskId"`

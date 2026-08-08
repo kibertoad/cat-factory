@@ -153,7 +153,7 @@ machine-readable; `message` is operator prose. Codes fall in two families:
   | `individual_model_unsupported`   | 409     | start / retry / notification `act` that would run an individual-usage (personal-credential) model headlessly  |
   | `no_run`                         | 404/409 | task run reads (404: never started) and stop/retry (409: nothing to act on)                                   |
   | `no_review`                      | 404     | an iterative-review decision route (requirements / clarity / brainstorm): the run carries no such live entity |
-  | `notification_not_actionable`    | 409     | `POST /notifications/:id/act` on a card with no automated headless action                                     |
+  | `notification_not_actionable`    | 409     | `POST /notifications/:id/act`: `details.reason` is `no_automated_action` or `review_effort_required`          |
 
 ### Pagination
 
@@ -1115,20 +1115,31 @@ The workspace's open notification cards: the human-gated run tails (a PR awaitin
 run whose CI could not be fixed). `act` runs the card's typed side-effect; on a `merge_review` /
 `pipeline_complete` card that is a **real merge** of the PR, which is why it sits at `admin`.
 
-| Method / path                            | Scope   | Behaviour                                                                                                                                                                                                                        |
-| ---------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/notifications`              | `read`  | All **open** cards (unpaginated; humans keep this list short).                                                                                                                                                                   |
-| `POST /api/v1/notifications/:id/act`     | `admin` | Run the side-effect, resolve the card: `merge_review` / `pipeline_complete` → merge the PR; `ci_failed` / `test_failed` → retry the run. Any other type → `409 notification_not_actionable` (resolve it in the app, or dismiss). |
-| `POST /api/v1/notifications/:id/dismiss` | `write` | Resolve the card with no side-effect (idempotent).                                                                                                                                                                               |
+| Method / path                            | Scope   | Behaviour                                                                                                                                                                                                                         |
+| ---------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/notifications`              | `read`  | All **open** cards (unpaginated; humans keep this list short).                                                                                                                                                                    |
+| `POST /api/v1/notifications/:id/act`     | `admin` | Run the side-effect, resolve the card: `merge_review` / `pipeline_complete` → merge the PR; `ci_failed` / `test_failed` → retry the run; `merge_tag_request` → record the tag. Anything else → `409 notification_not_actionable`. |
+| `POST /api/v1/notifications/:id/dismiss` | `write` | Resolve the card with no side-effect (idempotent).                                                                                                                                                                                |
 
-`act` takes **no body**, deliberately: every SDK emitter renders a request body as a required
-positional parameter, so giving this route the app's `reviewEffort` field would rewrite `act(id)` as
-`act(id, body)` in four published clients. Record the tag through
-[`POST /api/v1/merge-records/:recordId/effort`](#merge-evidence-apiv1merge-records) instead, before
-or after the `act` that merged: the tag is idempotent and orthogonal to the decision, and that route
-is a rung LOWER (`write`) since it merges nothing. A `merge_tag_request` card (a pull request a human
-merged directly on the provider) is not `act`-able for the same reason, its only action being the tag
-itself, so resolve it by tagging the record its payload names and dismissing the card.
+`act` takes an **all-optional body**: `{ "reviewEffort": "none" | "minor" | "major" | null }`. On a
+`merge_review` / `pipeline_complete` card it records how much review the pull request needed in the
+SAME request that merges it, which is what the app's one-tap confirm-and-tag does. Sending no body at
+all is still the historical no-tag act, and stays supported; the four SDK clients render an
+all-optional body as a parameter you may omit, so `act(id)` is unchanged and `act(id, { reviewEffort })`
+is the new form.
+
+Tagging LATER through [`POST /api/v1/merge-records/:recordId/effort`](#merge-evidence-apiv1merge-records)
+remains the right call when the effort becomes known after the fact: the tag is idempotent and
+orthogonal to the decision, and that route is a rung LOWER (`write`) since it merges nothing.
+
+A `merge_tag_request` card (a pull request a human merged directly on the provider) is actionable
+**only with a `reviewEffort`**, because recording one is its entire side-effect: acting on it with
+nothing to record would resolve the nudge and write nothing, so a bare `act` answers `409` with
+`details.reason: "review_effort_required"` rather than silently losing the reminder. An explicit
+`null` counts as supplied (clearing a tag is a decision somebody made). Dismiss the card instead to
+wave it off. The two `409`s on this route are told apart by `details.reason`:
+`no_automated_action` (the card parks a run on an interactive human decision and can never be acted
+on headlessly) and `review_effort_required` (one field away from working).
 
 ### Discovery: the key and the spec
 

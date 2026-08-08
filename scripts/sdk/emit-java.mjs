@@ -688,6 +688,20 @@ function typeReference(ref) {
   return `new TypeReference<${javaType(ref)}>() {}`
 }
 
+/** Every non-empty subset of `items`, longest first so the widest overload is emitted last. */
+function subsets(items) {
+  const out = []
+  for (let mask = 1; mask < 1 << items.length; mask++) {
+    out.push(items.filter((_item, index) => (mask >> index) & 1))
+  }
+  return out.sort((a, b) => b.length - a.length)
+}
+
+/** The expression a dropped parameter is filled in with when an overload forwards. */
+function dropFill(droppable, param) {
+  return droppable.find((d) => d.param === param).fill
+}
+
 function emitMethod(operation) {
   const name = operation.method === 'delete' ? 'delete' : operation.method
   const query = queryTypeName(operation)
@@ -719,18 +733,40 @@ function emitMethod(operation) {
         ? `        return transport.request(${argsForTransport.join(', ')}, ${typeReference(operation.result)});\n`
         : `        transport.requestNoContent(${argsForTransport.join(', ')});\n`
 
-  const overload =
-    query && operation.pathParams.length >= 0
-      ? // Kotlin cannot see Java default arguments, and Java has none, so the no-query call has
-        // to be a real overload or every caller in both languages writes `Query.none()`.
-        `${javadoc([`${operation.summary} (no query parameters).`], '    ')}` +
-        `    public ${returns} ${name}(${params.filter((p) => !p.startsWith(query)).join(', ')}) {\n` +
-        `        ${returns === 'void' ? '' : 'return '}${name}(${[...operation.pathParams.map((p) => member(p.wireName)), operation.body ? 'body' : null, `${query}.none()`].filter(Boolean).join(', ')});\n` +
+  // Java has no default arguments and Kotlin cannot synthesise them for a Java method, so every
+  // trailing thing a caller may leave out has to be a real OVERLOAD or nobody can leave it out.
+  // Two are droppable and they compose: a query parameter set (always optional) and a body whose
+  // every field is optional. Emitting the cross-product rather than the one combination that
+  // exists today is what keeps `act(id)` and `start(taskId)` reading the same as their siblings
+  // when an operation later gains the other half.
+  const droppable = [
+    operation.body && operation.bodyOptional
+      ? { param: 'body', fill: `${javaType(operation.body)}.builder().build()`, note: 'no body' }
+      : null,
+    query ? { param: 'query', fill: `${query}.none()`, note: 'no query parameters' } : null,
+  ].filter(Boolean)
+
+  /** Every non-empty subset of the droppable params, as one forwarding overload each. */
+  const overloads = subsets(droppable)
+    .map((dropped) => {
+      const names = new Set(dropped.map((d) => d.param))
+      const kept = params.filter((p) => !names.has(p.split(' ').at(-1)))
+      const args = [
+        ...operation.pathParams.map((p) => member(p.wireName)),
+        operation.body ? (names.has('body') ? dropFill(droppable, 'body') : 'body') : null,
+        query ? (names.has('query') ? dropFill(droppable, 'query') : 'query') : null,
+      ].filter(Boolean)
+      return (
+        javadoc([`${operation.summary} (${dropped.map((d) => d.note).join(', ')}).`], '    ') +
+        `    public ${returns} ${name}(${kept.join(', ')}) {\n` +
+        `        ${returns === 'void' ? '' : 'return '}${name}(${args.join(', ')});\n` +
         '    }\n\n'
-      : ''
+      )
+    })
+    .join('')
 
   return (
-    overload +
+    overloads +
     javadoc(
       [
         operation.summary,

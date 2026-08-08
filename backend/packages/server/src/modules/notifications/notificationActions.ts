@@ -8,22 +8,60 @@ import type { ServerContainer } from '../../http/env.js'
  * run on an interactive human decision (choose a fork, pick review findings, resolve a
  * decision), so `act`-ing it does nothing but flip the card to `acted`. That is fine for an
  * interactive SPA user, but for a HEADLESS API caller it is a footgun: it would silently hide
- * the reminder while the run stays parked. The public `/api/v1` `act` route therefore admits
- * only this set and steers everything else to `dismiss`. Keep it in step with the `switch`
- * below — a type with a `case` here belongs in this set, and vice versa.
+ * the reminder while the run stays parked. Keep it in step with the `switch` below: a type with
+ * a `case` here belongs in this set, and vice versa.
+ *
+ * `merge_tag_request` is the ONE type not decidable from the type alone, so it is absent here
+ * and handled by {@link headlessActRefusal} instead: its whole side-effect is recording the tag
+ * the request carries, which makes it actionable exactly when one is supplied.
  */
 export const HEADLESS_ACTIONABLE_NOTIFICATION_TYPES: ReadonlySet<NotificationType> = new Set([
   'merge_review',
   'pipeline_complete',
   'ci_failed',
   'test_failed',
-  // `merge_tag_request` is deliberately ABSENT: its whole action is recording a reviewer-effort
-  // tag the human chose, and the headless `act` route carries no tag — so admitting it would
-  // resolve the nudge while recording nothing. A headless caller tags through
-  // `POST /api/v1/merge-records/:recordId/effort` (the record id is on the card's payload), then
-  // dismisses the card. That route is `write`, a rung BELOW the `admin` this one needs, since
-  // tagging a pull request that already landed merges nothing.
 ])
+
+/** Why a headless `act` on this card is refused, or null when it is admissible. */
+export interface HeadlessActRefusal {
+  /** The machine-readable cause, under `error.details.reason`. */
+  reason: 'no_automated_action' | 'review_effort_required'
+  message: string
+}
+
+/**
+ * Whether `POST /api/v1/notifications/:id/act` may act on a card, given what the request carries.
+ *
+ * Two refusals rather than one, because they need different fixes and only a `reason` tells them
+ * apart. A card with no automated action can never be acted on headlessly and the caller should
+ * `dismiss` it; a `merge_tag_request` with no tag is one field away from working, and saying so
+ * is the difference between an API a caller can correct and one it gives up on.
+ *
+ * The tag rule is what keeps the second from becoming a silent loss. A tag-request card's entire
+ * side-effect is recording the effort a human picked, so acting on one with nothing to record
+ * would resolve the nudge and write nothing: the reminder gone, the evidence never collected. An
+ * EXPLICIT `null` counts as supplied, because clearing is a decision somebody made; only an
+ * absent field is nothing to say.
+ */
+export function headlessActRefusal(
+  type: NotificationType,
+  reviewEffort: ReviewEffort | null | undefined,
+): HeadlessActRefusal | null {
+  if (HEADLESS_ACTIONABLE_NOTIFICATION_TYPES.has(type)) return null
+  if (type === 'merge_tag_request') {
+    if (reviewEffort !== undefined) return null
+    return {
+      reason: 'review_effort_required',
+      message:
+        'This notification records how much review a merged pull request needed. Send a `reviewEffort` to act on it (null clears the tag), or dismiss the card to wave it off.',
+    }
+  }
+  return {
+    reason: 'no_automated_action',
+    message:
+      'This notification has no automated action; it parks a run on an interactive human decision. Resolve it in the app, or dismiss the card through the API.',
+  }
+}
 
 /**
  * The typed side-effect of ACTING on a notification, shared by the SPA notification

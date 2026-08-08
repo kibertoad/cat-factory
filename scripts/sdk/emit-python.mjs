@@ -426,14 +426,24 @@ ${blocks.join('\n\n')}`
 /** The Python method signature parameters for an operation. */
 function methodParams(operation) {
   const params = ['self', ...operation.pathParams.map((p) => `${attr(p.wireName)}: str`)]
-  if (operation.body) params.push(`body: ${pyType(operation.body)}`)
-  if (operation.queryParams.length > 0) {
-    // Query parameters are keyword-only: they are all optional and unordered, and a positional
-    // call site would silently re-bind if the spec ever reorders them.
-    params.push('*')
-    for (const param of operation.queryParams) {
-      params.push(`${attr(param.wireName)}: ${pyType(param.type)} | None = None`)
-    }
+  if (operation.body) {
+    // A body with no required field defaults to `None` and is sent as `{}`, so a caller with
+    // nothing to say writes `start(task_id)`.
+    params.push(
+      operation.bodyOptional
+        ? `body: ${pyType(operation.body)} | None = None`
+        : `body: ${pyType(operation.body)}`,
+    )
+  }
+  // EVERYTHING after the positional path params and the body is keyword-only. Query parameters
+  // are all optional and unordered, so a positional call site would silently re-bind if the spec
+  // reordered them; `timeout` sits behind the same bar for a sharper reason. It used to be
+  // positional on any operation with no query parameters, which meant an operation that LATER
+  // gained an optional body would rebind an existing `act(id, 30.0)` onto the body and send the
+  // timeout as the payload. A keyword-only `timeout` makes that call a loud TypeError instead.
+  params.push('*')
+  for (const param of operation.queryParams) {
+    params.push(`${attr(param.wireName)}: ${pyType(param.type)} | None = None`)
   }
   params.push('timeout: float | None = None')
   return params
@@ -474,7 +484,9 @@ function emitMethod(operation) {
     `        ${prefix}self._transport.${transportCall}(\n` +
     `            ${lit(operation.httpMethod)},\n` +
     `            f"${pathExpr}",\n` +
-    (operation.body ? '            body=_encode(body),\n' : '') +
+    (operation.body
+      ? `            body=${operation.bodyOptional ? '{} if body is None else _encode(body)' : '_encode(body)'},\n`
+      : '') +
     `            query=${queryDict},\n` +
     '            timeout=timeout,\n' +
     '        )\n' +

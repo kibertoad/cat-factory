@@ -46,6 +46,35 @@ def _encode(value: Any) -> Any:
 
 
 @dataclass(frozen=True, slots=True)
+class ActPublicNotificationRequest:
+    """`ActPublicNotificationRequest`, as carried on the wire."""
+
+    #: May be absent entirely.
+    review_effort: GetPublicMergeRecordResponseReviewEffort | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "ActPublicNotificationRequest":
+        """Decode a `ActPublicNotificationRequest` from its JSON object."""
+        known = {"reviewEffort"}
+        return cls(
+            review_effort=None if data.get("reviewEffort") is None else _enum(GetPublicMergeRecordResponseReviewEffort, data.get("reviewEffort")),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        if self.review_effort is not None:
+            out["reviewEffort"] = _encode(self.review_effort)
+        return out
+
+
+@dataclass(frozen=True, slots=True)
 class AddPublicTaskDependencyRequest:
     """`AddPublicTaskDependencyRequest`, as carried on the wire."""
 

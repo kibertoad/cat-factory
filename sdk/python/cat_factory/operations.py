@@ -18,6 +18,7 @@ from .errors import _repeated_cursor
 from .models import (
     _encode,
     _enum,
+    ActPublicNotificationRequest,
     AddPublicTaskDependencyRequest,
     AttachPublicTaskDocumentRequest,
     CreateHeadlessPublicApiKey,
@@ -111,7 +112,7 @@ class JobsResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def cancel(self, id: str, timeout: float | None = None) -> PublicJob:
+    def cancel(self, id: str, *, timeout: float | None = None) -> PublicJob:
         """Cancel a job
         Stop a headless job run, freeing its concurrency slot. Idempotent — an
         already-finished job is returned as-is. Use this to abandon a run parked on a
@@ -126,7 +127,7 @@ class JobsResource:
         )
         return PublicJob.from_dict(raw)
 
-    def create(self, body: CreatePublicJob, timeout: float | None = None) -> PublicJobAccepted:
+    def create(self, body: CreatePublicJob, *, timeout: float | None = None) -> PublicJobAccepted:
         """Start a headless job
         Start a public, inline pipeline headlessly against a supplied brief. Returns a job
         id to poll or stream. Nothing is pushed to GitHub.
@@ -141,7 +142,7 @@ class JobsResource:
         )
         return PublicJobAccepted.from_dict(raw)
 
-    def get(self, id: str, timeout: float | None = None) -> PublicJob:
+    def get(self, id: str, *, timeout: float | None = None) -> PublicJob:
         """Get a job
         Poll a headless job started through this surface: its status and, once finished, its
         result.
@@ -187,7 +188,7 @@ class JobsResource:
                 raise _repeated_cursor()
             page_cursor = page.next_cursor
 
-    def stream(self, id: str, timeout: float | None = None) -> EventStream:
+    def stream(self, id: str, *, timeout: float | None = None) -> EventStream:
         """Stream a job (SSE)
         Server-sent events for a headless job run: `progress` frames until a terminal
         `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.
@@ -209,7 +210,7 @@ class ServicesResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def create(self, body: CreatePublicServiceRequest, timeout: float | None = None) -> PublicService:
+    def create(self, body: CreatePublicServiceRequest | None = None, *, timeout: float | None = None) -> PublicService:
         """Create a service
         Create a board service, optionally backed by a repository from `GET /api/v1/repos`.
         The repository link is what makes the service runnable: execution resolves a task’s
@@ -223,13 +224,13 @@ class ServicesResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/services",
-            body=_encode(body),
+            body={} if body is None else _encode(body),
             query=None,
             timeout=timeout,
         )
         return PublicService.from_dict(raw)
 
-    def list(self, timeout: float | None = None) -> PublicServiceList:
+    def list(self, *, timeout: float | None = None) -> PublicServiceList:
         """List the workspace's services
         List the board service frames in the key’s workspace, so a caller can discover the
         serviceId to create/list tasks under.
@@ -252,7 +253,7 @@ class ReposResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def list(self, timeout: float | None = None) -> ListPublicReposResponse:
+    def list(self, *, timeout: float | None = None) -> ListPublicReposResponse:
         """List the repositories a service can be created against
         List the repositories the key’s workspace has connected, each with the service that
         already backs it (null when nothing does, and always null for a monorepo, which can
@@ -278,7 +279,7 @@ class TasksResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def add_dependency(self, task_id: str, body: AddPublicTaskDependencyRequest, timeout: float | None = None) -> PublicTask:
+    def add_dependency(self, task_id: str, body: AddPublicTaskDependencyRequest, *, timeout: float | None = None) -> PublicTask:
         """Declare that a task waits for another
         Record that this task cannot start until `dependsOnTaskId` is done. Both ends must
         be tasks in this workspace, and an edge that would close a cycle is refused.
@@ -296,7 +297,7 @@ class TasksResource:
         )
         return PublicTask.from_dict(raw)
 
-    def attach_document(self, task_id: str, body: AttachPublicTaskDocumentRequest, timeout: float | None = None) -> ListPublicTaskDocumentsResponseDocument:
+    def attach_document(self, task_id: str, body: AttachPublicTaskDocumentRequest, *, timeout: float | None = None) -> ListPublicTaskDocumentsResponseDocument:
         """Attach a document to a task
         Attach a requirements document to a task that already exists, in either of the two
         forms creation takes: NAME a page in a connected document source, or CARRY the text
@@ -315,7 +316,7 @@ class TasksResource:
         )
         return ListPublicTaskDocumentsResponseDocument.from_dict(raw)
 
-    def create(self, service_id: str, body: CreatePublicTask, timeout: float | None = None) -> PublicTask:
+    def create(self, service_id: str, body: CreatePublicTask, *, timeout: float | None = None) -> PublicTask:
         """Create a task under a service
         Create a task inside a service frame the key’s workspace owns. The task starts in
         the `planned` state; start it with the start endpoint. Optionally file it FROM a
@@ -333,7 +334,7 @@ class TasksResource:
         )
         return PublicTask.from_dict(raw)
 
-    def delete(self, task_id: str, timeout: float | None = None) -> None:
+    def delete(self, task_id: str, *, timeout: float | None = None) -> None:
         """Delete a task
         Delete a task and its run history. Destructive, so it sits at the top of the scope
         ladder: requires an `admin`-scoped key.
@@ -346,7 +347,7 @@ class TasksResource:
             timeout=timeout,
         )
 
-    def detach_document(self, task_id: str, body: DetachPublicTaskDocumentRequest, timeout: float | None = None) -> None:
+    def detach_document(self, task_id: str, body: DetachPublicTaskDocumentRequest, *, timeout: float | None = None) -> None:
         """Detach a document from a task
         Detach a document, naming it by the `(source, externalId)` pair the list serves. The
         document itself survives in the workspace, so re-attaching it later costs no
@@ -362,7 +363,7 @@ class TasksResource:
             timeout=timeout,
         )
 
-    def get(self, task_id: str, timeout: float | None = None) -> PublicTask:
+    def get(self, task_id: str, *, timeout: float | None = None) -> PublicTask:
         """Get a task's status
         Read a task’s current lifecycle status, run progress, run id, and PR URL (once one
         exists).
@@ -376,7 +377,7 @@ class TasksResource:
         )
         return PublicTask.from_dict(raw)
 
-    def get_run(self, task_id: str, timeout: float | None = None) -> PublicRun:
+    def get_run(self, task_id: str, *, timeout: float | None = None) -> PublicRun:
         """Get a task's run (rich projection)
         Read a task’s run in detail: per-step status/progress/subtasks, the failure kind and
         message, and the PR (url + branch).
@@ -421,7 +422,7 @@ class TasksResource:
                 raise _repeated_cursor()
             page_cursor = page.next_cursor
 
-    def list_documents(self, task_id: str, timeout: float | None = None) -> ListPublicTaskDocumentsResponse:
+    def list_documents(self, task_id: str, *, timeout: float | None = None) -> ListPublicTaskDocumentsResponse:
         """List a task's attached documents
         The requirements documents attached to the task, in the order the agents read them.
         Each is identified by the `(source, externalId)` pair the attach and detach calls
@@ -436,7 +437,7 @@ class TasksResource:
         )
         return ListPublicTaskDocumentsResponse.from_dict(raw)
 
-    def remove_dependency(self, task_id: str, body: AddPublicTaskDependencyRequest, timeout: float | None = None) -> PublicTask:
+    def remove_dependency(self, task_id: str, body: AddPublicTaskDependencyRequest, *, timeout: float | None = None) -> PublicTask:
         """Drop a dependency edge
         Remove the ordering between this task and `dependsOnTaskId`. Idempotent: an edge
         that is not there is a no-op.
@@ -452,7 +453,7 @@ class TasksResource:
         )
         return PublicTask.from_dict(raw)
 
-    def retry(self, task_id: str, timeout: float | None = None) -> PublicTask:
+    def retry(self, task_id: str, *, timeout: float | None = None) -> PublicTask:
         """Retry a task's failed run
         Retry a task’s failed run. A task on an individual-usage model cannot be retried
         through the API (no headless personal-credential unlock).
@@ -466,7 +467,7 @@ class TasksResource:
         )
         return PublicTask.from_dict(raw)
 
-    def start(self, task_id: str, body: StartPublicTask, timeout: float | None = None) -> PublicTask:
+    def start(self, task_id: str, body: StartPublicTask | None = None, *, timeout: float | None = None) -> PublicTask:
         """Start (run) a task
         Start a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned
         pipeline. A pipeline that can park on a human decision requires a `decide`-scope
@@ -477,13 +478,13 @@ class TasksResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/tasks/{_quote(task_id)}/start",
-            body=_encode(body),
+            body={} if body is None else _encode(body),
             query=None,
             timeout=timeout,
         )
         return PublicTask.from_dict(raw)
 
-    def stop(self, task_id: str, timeout: float | None = None) -> PublicTask:
+    def stop(self, task_id: str, *, timeout: float | None = None) -> PublicTask:
         """Stop a task's run
         Stop a task’s in-flight run. Records a `cancelled` terminal state, leaving the run
         retryable.
@@ -497,7 +498,7 @@ class TasksResource:
         )
         return PublicTask.from_dict(raw)
 
-    def stream(self, task_id: str, timeout: float | None = None) -> EventStream:
+    def stream(self, task_id: str, *, timeout: float | None = None) -> EventStream:
         """Stream a task run (SSE)
         Server-sent events for a board task run: `progress` frames (the rich run projection)
         until a terminal `done`/`error` event, or a `timeout` when the connection cap is
@@ -511,7 +512,7 @@ class TasksResource:
             timeout=timeout,
         )
 
-    def update(self, task_id: str, body: UpdatePublicTask, timeout: float | None = None) -> PublicTask:
+    def update(self, task_id: str, body: UpdatePublicTask | None = None, *, timeout: float | None = None) -> PublicTask:
         """Edit a task's inputs
         Edit a task’s human-authored inputs before it runs: its title, its description, and
         `fields`, the per-case values for its own task type (checked against the descriptors
@@ -525,7 +526,7 @@ class TasksResource:
         raw = self._transport.request(
             "PATCH",
             f"/api/v1/tasks/{_quote(task_id)}",
-            body=_encode(body),
+            body={} if body is None else _encode(body),
             query=None,
             timeout=timeout,
         )
@@ -538,7 +539,7 @@ class PipelinesResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def list(self, timeout: float | None = None) -> PublicPipelineList:
+    def list(self, *, timeout: float | None = None) -> PublicPipelineList:
         """List the workspace's pipelines
         List the pipelines in the key’s workspace — id/name/steps plus whether each is
         public and safe to run headlessly — so a caller can pick a pipelineId to start a
@@ -562,7 +563,7 @@ class TaskTypesResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def list(self, timeout: float | None = None) -> ListPublicTaskTypesResponse:
+    def list(self, *, timeout: float | None = None) -> ListPublicTaskTypesResponse:
         """List the task types this workspace may create
         List the task types a task can be created as in the key’s workspace (the built-in
         ones plus any the deployment registered), each with the fields it accepts. Fill
@@ -586,7 +587,7 @@ class NotificationsResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def act(self, id: str, timeout: float | None = None) -> Notification:
+    def act(self, id: str, body: ActPublicNotificationRequest | None = None, *, timeout: float | None = None) -> Notification:
         """Act on a notification
         Run a notification’s typed side-effect and resolve it: merge the PR (merge_review /
         pipeline_complete) or retry the run (ci_failed / test_failed). Performs a real
@@ -603,12 +604,13 @@ class NotificationsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/notifications/{_quote(id)}/act",
+            body={} if body is None else _encode(body),
             query=None,
             timeout=timeout,
         )
         return Notification.from_dict(raw)
 
-    def dismiss(self, id: str, timeout: float | None = None) -> Notification:
+    def dismiss(self, id: str, *, timeout: float | None = None) -> Notification:
         """Dismiss a notification
         Dismiss a notification without acting on it.
         `POST /api/v1/notifications/{id}/dismiss` (operation `dismissPublicNotification`).
@@ -621,7 +623,7 @@ class NotificationsResource:
         )
         return Notification.from_dict(raw)
 
-    def list(self, timeout: float | None = None) -> PublicNotificationList:
+    def list(self, *, timeout: float | None = None) -> PublicNotificationList:
         """List the workspace's open notifications
         List the open, human-actionable notifications in the key’s workspace (merge reviews,
         pipeline-complete confirmations, CI/test failures, and informational cards).
@@ -646,7 +648,7 @@ class WebhookResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def delete(self, timeout: float | None = None) -> None:
+    def delete(self, *, timeout: float | None = None) -> None:
         """Remove the outbound webhook
         Deregister the endpoint; deliveries stop. Idempotent.
         `DELETE /api/v1/notification-webhook` (operation `deletePublicNotificationWebhook`).
@@ -658,7 +660,7 @@ class WebhookResource:
             timeout=timeout,
         )
 
-    def delete_named(self, webhook_id: str, timeout: float | None = None) -> None:
+    def delete_named(self, webhook_id: str, *, timeout: float | None = None) -> None:
         """Remove one named outbound webhook
         Deregister this endpoint; its deliveries stop and the workspace's other endpoints
         are untouched. Idempotent.
@@ -672,7 +674,7 @@ class WebhookResource:
             timeout=timeout,
         )
 
-    def get(self, timeout: float | None = None) -> PublicNotificationWebhook:
+    def get(self, *, timeout: float | None = None) -> PublicNotificationWebhook:
         """Read the workspace's outbound webhook
         The endpoint this workspace delivers notifications, run-lifecycle events and
         platform-health alerts to, or `{ "webhook": null }` when none is registered. The
@@ -687,7 +689,7 @@ class WebhookResource:
         )
         return PublicNotificationWebhook.from_dict(raw)
 
-    def get_named(self, webhook_id: str, timeout: float | None = None) -> PublicNotificationWebhook:
+    def get_named(self, webhook_id: str, *, timeout: float | None = None) -> PublicNotificationWebhook:
         """Read one named outbound webhook
         The endpoint registered under this id, or `{ "webhook": null }` when there is none —
         the same shape the unnamed read answers, so an integration's startup self-check does
@@ -703,7 +705,7 @@ class WebhookResource:
         )
         return PublicNotificationWebhook.from_dict(raw)
 
-    def list(self, timeout: float | None = None) -> PublicNotificationWebhookList:
+    def list(self, *, timeout: float | None = None) -> PublicNotificationWebhookList:
         """List the workspace's outbound webhooks
         Every endpoint this workspace delivers to, ordered by id. The endpoint the unnamed
         routes address appears here under the id `default`. Not paginated: the number of
@@ -719,7 +721,7 @@ class WebhookResource:
         )
         return PublicNotificationWebhookList.from_dict(raw)
 
-    def set(self, body: PutNotificationWebhook, timeout: float | None = None) -> NotificationWebhook:
+    def set(self, body: PutNotificationWebhook | None = None, *, timeout: float | None = None) -> NotificationWebhook:
         """Register or update the outbound webhook
         Register the HTTPS endpoint deliveries are POSTed to, or update the one already
         registered. Every omitted field keeps its stored value, so subscribing to run events
@@ -733,13 +735,13 @@ class WebhookResource:
         raw = self._transport.request(
             "PUT",
             f"/api/v1/notification-webhook",
-            body=_encode(body),
+            body={} if body is None else _encode(body),
             query=None,
             timeout=timeout,
         )
         return NotificationWebhook.from_dict(raw)
 
-    def set_named(self, webhook_id: str, body: PutNotificationWebhook, timeout: float | None = None) -> NotificationWebhook:
+    def set_named(self, webhook_id: str, body: PutNotificationWebhook | None = None, *, timeout: float | None = None) -> NotificationWebhook:
         """Register or update one named outbound webhook
         Register an endpoint under an id YOU choose (1-63 characters of lowercase letters,
         digits, `-` or `_`), or update the one already there. Idempotent by id, so an
@@ -757,7 +759,7 @@ class WebhookResource:
         raw = self._transport.request(
             "PUT",
             f"/api/v1/notification-webhooks/{_quote(webhook_id)}",
-            body=_encode(body),
+            body={} if body is None else _encode(body),
             query=None,
             timeout=timeout,
         )
@@ -770,7 +772,7 @@ class UsageResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def get(self, timeout: float | None = None) -> PublicUsage:
+    def get(self, *, timeout: float | None = None) -> PublicUsage:
         """Read the workspace's usage for the current period
         Read this billing period’s METERED spend against the workspace budget (including
         whether it is exceeded, which pauses runs) plus the per-(billing, vendor, provider,
@@ -797,7 +799,7 @@ class MeResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def get(self, timeout: float | None = None) -> PublicIdentity:
+    def get(self, *, timeout: float | None = None) -> PublicIdentity:
         """Describe the calling key
         Report what the key on this request is and what it may do: its id, its account, the
         ONE workspace every call under it acts within, its scope, and the label it was
@@ -825,7 +827,7 @@ class DecisionsResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def answer_agent_decision(self, run_id: str, decision_id: str, body: PublicResolveAgentDecision, timeout: float | None = None) -> PublicDecisionList:
+    def answer_agent_decision(self, run_id: str, decision_id: str, body: PublicResolveAgentDecision, *, timeout: float | None = None) -> PublicDecisionList:
         """Answer an agent-raised decision
         Answer a question an agent raised mid-work. Resolving RE-RUNS the asking step with
         the choice folded in, rather than advancing past it. The choice is taken verbatim,
@@ -843,7 +845,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def answer_follow_up(self, run_id: str, item_id: str, body: PublicAnswerFollowUp, timeout: float | None = None) -> PublicDecisionList:
+    def answer_follow_up(self, run_id: str, item_id: str, body: PublicAnswerFollowUp, *, timeout: float | None = None) -> PublicDecisionList:
         """Answer a follow-up question
         Answer one `question` item the Coder raised mid-run; the answer steers its next
         pass. Refused for a `follow_up` item, which is filed, sent back or dismissed
@@ -860,7 +862,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def answer_interview_question(self, run_id: str, body: PublicAnswerInterview, timeout: float | None = None) -> PublicDecisionList:
+    def answer_interview_question(self, run_id: str, body: PublicAnswerInterview, *, timeout: float | None = None) -> PublicDecisionList:
         """Answer an interview question
         Record an answer to one question the parked interviewer asked. Does NOT resume the
         run: answer the batch, then `continue` or `proceed`. Requires a `decide`-scope key.
@@ -876,7 +878,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def approve_step(self, run_id: str, approval_id: str, body: PublicApproveStep, timeout: float | None = None) -> PublicDecisionList:
+    def approve_step(self, run_id: str, approval_id: str, body: PublicApproveStep | None = None, *, timeout: float | None = None) -> PublicDecisionList:
         """Approve a parked step
         Approve the proposal a gated step is holding up, optionally replacing it with an
         edited one (the edit is what flows to every downstream step), and advance the run.
@@ -889,13 +891,13 @@ class DecisionsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/approvals/{_quote(approval_id)}/approve",
-            body=_encode(body),
+            body={} if body is None else _encode(body),
             query=None,
             timeout=timeout,
         )
         return PublicDecisionList.from_dict(raw)
 
-    def approve_visual_confirmation(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
+    def approve_visual_confirmation(self, run_id: str, *, timeout: float | None = None) -> PublicDecisionList:
         """Approve a visual-confirmation gate
         Approve the captured screenshots against the reference designs and advance the run.
         The images themselves are not readable over this API — the decision carries only
@@ -912,7 +914,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def challenge_pr_review_finding(self, run_id: str, finding_id: str, body: PublicChallengePrReviewFinding, timeout: float | None = None) -> PublicDecisionList:
+    def challenge_pr_review_finding(self, run_id: str, finding_id: str, body: PublicChallengePrReviewFinding | None = None, *, timeout: float | None = None) -> PublicDecisionList:
         """Challenge a PR review finding
         Dispatch a read-only investigator to re-examine one finding against the full source,
         optionally with a specific concern. It upholds, strengthens or retracts the finding,
@@ -923,13 +925,13 @@ class DecisionsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/pr-review/findings/{_quote(finding_id)}/challenge",
-            body=_encode(body),
+            body={} if body is None else _encode(body),
             query=None,
             timeout=timeout,
         )
         return PublicDecisionList.from_dict(raw)
 
-    def choose_fork(self, run_id: str, body: PublicChooseFork, timeout: float | None = None) -> PublicDecisionList:
+    def choose_fork(self, run_id: str, body: PublicChooseFork | None = None, *, timeout: float | None = None) -> PublicDecisionList:
         """Choose an implementation approach
         Pick one of the proposed implementation forks (by id) or submit your own approach.
         The Coder then runs with the choice folded in as a binding directive. Requires a
@@ -939,13 +941,13 @@ class DecisionsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/fork/choose",
-            body=_encode(body),
+            body={} if body is None else _encode(body),
             query=None,
             timeout=timeout,
         )
         return PublicDecisionList.from_dict(raw)
 
-    def confirm_human_test(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
+    def confirm_human_test(self, run_id: str, *, timeout: float | None = None) -> PublicDecisionList:
         """Confirm a human-test gate
         Confirm the change works in the ephemeral environment: it is torn down and the run
         advances. The decision carries the environment URL to exercise; confirming without
@@ -961,7 +963,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def continue_interview(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
+    def continue_interview(self, run_id: str, *, timeout: float | None = None) -> PublicDecisionList:
         """Continue a parked interview
         Submit the recorded answers and resume: the interviewer runs again and may ask
         follow-up questions. ASYNCHRONOUS: the pass runs in the durable driver, so the next
@@ -977,7 +979,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def dismiss_follow_up(self, run_id: str, item_id: str, timeout: float | None = None) -> PublicDecisionList:
+    def dismiss_follow_up(self, run_id: str, item_id: str, *, timeout: float | None = None) -> PublicDecisionList:
         """Dismiss a follow-up item
         Wave one item off without acting on it. Valid for either item kind, and (like every
         other verb here) releases the park once it is the last undecided item. Requires a
@@ -993,7 +995,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def dismiss_pr_review_finding(self, run_id: str, finding_id: str, timeout: float | None = None) -> PublicDecisionList:
+    def dismiss_pr_review_finding(self, run_id: str, finding_id: str, *, timeout: float | None = None) -> PublicDecisionList:
         """Dismiss a PR review finding
         Drop one finding from the parked review entirely. Curation rather than a resolution:
         the run stays parked. Requires a `decide`-scope key.
@@ -1008,7 +1010,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def file_follow_up(self, run_id: str, item_id: str, timeout: float | None = None) -> PublicDecisionList:
+    def file_follow_up(self, run_id: str, item_id: str, *, timeout: float | None = None) -> PublicDecisionList:
         """File a follow-up item as an issue
         File one `follow_up` item on the workspace's issue tracker, recording the ticket ref
         on the item. Refused for a `question` item, and for a workspace with no tracker
@@ -1025,7 +1027,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def incorporate(self, run_id: str, body: PublicIncorporate, timeout: float | None = None) -> PublicDecisionList:
+    def incorporate(self, run_id: str, body: PublicIncorporate | None = None, *, timeout: float | None = None) -> PublicDecisionList:
         """Incorporate the answers
         Fold the recorded answers into one standardized requirements document. Asynchronous
         — the run re-reviews in the background, so the response shows the review
@@ -1036,13 +1038,13 @@ class DecisionsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/requirements/incorporate",
-            body=_encode(body),
+            body={} if body is None else _encode(body),
             query=None,
             timeout=timeout,
         )
         return PublicDecisionList.from_dict(raw)
 
-    def incorporate_brainstorm(self, run_id: str, stage: str, body: PublicIncorporate, timeout: float | None = None) -> PublicDecisionList:
+    def incorporate_brainstorm(self, run_id: str, stage: str, body: PublicIncorporate | None = None, *, timeout: float | None = None) -> PublicDecisionList:
         """Incorporate brainstorm picks
         Fold the picks into one converged direction. ASYNCHRONOUS: the response shows the
         session `incorporating` while the durable driver folds and re-runs in the
@@ -1053,13 +1055,13 @@ class DecisionsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/brainstorm/{_quote(stage)}/incorporate",
-            body=_encode(body),
+            body={} if body is None else _encode(body),
             query=None,
             timeout=timeout,
         )
         return PublicDecisionList.from_dict(raw)
 
-    def incorporate_clarity(self, run_id: str, body: PublicIncorporate, timeout: float | None = None) -> PublicDecisionList:
+    def incorporate_clarity(self, run_id: str, body: PublicIncorporate | None = None, *, timeout: float | None = None) -> PublicDecisionList:
         """Incorporate clarity answers
         Fold the recorded answers into one standardized bug report. ASYNCHRONOUS: the
         response shows the review `incorporating` while the durable driver folds and
@@ -1070,13 +1072,13 @@ class DecisionsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/clarity/incorporate",
-            body=_encode(body),
+            body={} if body is None else _encode(body),
             query=None,
             timeout=timeout,
         )
         return PublicDecisionList.from_dict(raw)
 
-    def list(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
+    def list(self, run_id: str, *, timeout: float | None = None) -> PublicDecisionList:
         """List a run's parked decisions
         Read what a run is currently asking a human. Each entry names its `kind`, and every
         kind this surface can answer is listed: `requirements-review`, `clarity-review`,
@@ -1099,7 +1101,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def proceed(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
+    def proceed(self, run_id: str, *, timeout: float | None = None) -> PublicDecisionList:
         """Proceed with the current requirements
         Settle the requirements phase and advance the parked run (used when nothing is
         outstanding). Requires a `decide`-scope key.
@@ -1114,7 +1116,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def proceed_brainstorm(self, run_id: str, stage: str, timeout: float | None = None) -> PublicDecisionList:
+    def proceed_brainstorm(self, run_id: str, stage: str, *, timeout: float | None = None) -> PublicDecisionList:
         """Proceed past a brainstorm
         Settle the brainstorm with the last converged direction and advance the parked run.
         Requires a `decide`-scope key.
@@ -1129,7 +1131,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def proceed_clarity(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
+    def proceed_clarity(self, run_id: str, *, timeout: float | None = None) -> PublicDecisionList:
         """Proceed past the clarity review
         Settle the clarity phase with the last clarified report and advance the parked run.
         Requires a `decide`-scope key.
@@ -1144,7 +1146,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def proceed_interview(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
+    def proceed_interview(self, run_id: str, *, timeout: float | None = None) -> PublicDecisionList:
         """Proceed past a parked interview
         Stop the questions: the interviewer converges on the answers so far and the run
         advances. Also asynchronous, since converging is itself an interviewer pass.
@@ -1160,7 +1162,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def reject_step(self, run_id: str, approval_id: str, body: PublicRejectStep, timeout: float | None = None) -> PublicDecisionList:
+    def reject_step(self, run_id: str, approval_id: str, body: PublicRejectStep | None = None, *, timeout: float | None = None) -> PublicDecisionList:
         """Reject a parked step
         Reject the gated proposal: the run stops entirely, recording a terminal `rejected`
         failure the board can retry. Requires a `decide`-scope key.
@@ -1170,13 +1172,13 @@ class DecisionsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/approvals/{_quote(approval_id)}/reject",
-            body=_encode(body),
+            body={} if body is None else _encode(body),
             query=None,
             timeout=timeout,
         )
         return PublicDecisionList.from_dict(raw)
 
-    def reply_to_brainstorm_option(self, run_id: str, stage: str, item_id: str, body: PublicReplyFinding, timeout: float | None = None) -> PublicDecisionList:
+    def reply_to_brainstorm_option(self, run_id: str, stage: str, item_id: str, body: PublicReplyFinding, *, timeout: float | None = None) -> PublicDecisionList:
         """Respond to a brainstorm option
         Pick or steer one of the options the brainstorm agent proposed, for the named stage
         (`requirements` or `architecture`). A task may hold one live session per stage at
@@ -1193,7 +1195,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def reply_to_clarity_finding(self, run_id: str, item_id: str, body: PublicReplyFinding, timeout: float | None = None) -> PublicDecisionList:
+    def reply_to_clarity_finding(self, run_id: str, item_id: str, body: PublicReplyFinding, *, timeout: float | None = None) -> PublicDecisionList:
         """Answer a clarity (bug-triage) finding
         Record an answer to one clarity-review finding — the bug-report twin of the
         requirements loop. Returns the run's updated decision list. Requires a
@@ -1210,7 +1212,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def reply_to_finding(self, run_id: str, item_id: str, body: PublicReplyFinding, timeout: float | None = None) -> PublicDecisionList:
+    def reply_to_finding(self, run_id: str, item_id: str, body: PublicReplyFinding, *, timeout: float | None = None) -> PublicDecisionList:
         """Answer a review finding
         Record an answer to one reviewer finding. Returns the run's updated decision list.
         Requires a `decide`-scope key.
@@ -1226,7 +1228,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def request_human_test_fix(self, run_id: str, body: PublicRequestGateFix, timeout: float | None = None) -> PublicDecisionList:
+    def request_human_test_fix(self, run_id: str, body: PublicRequestGateFix, *, timeout: float | None = None) -> PublicDecisionList:
         """Request a fix from a human-test gate
         Submit findings against the tested environment and dispatch a fixer, which commits
         onto the PR branch before the environment is rebuilt. The findings ARE the fixer
@@ -1243,7 +1245,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def request_step_changes(self, run_id: str, approval_id: str, body: PublicRequestStepChanges, timeout: float | None = None) -> PublicDecisionList:
+    def request_step_changes(self, run_id: str, approval_id: str, body: PublicRequestStepChanges, *, timeout: float | None = None) -> PublicDecisionList:
         """Request changes on a parked step
         Send the gated step back to re-run with your guidance folded in. Unlike the in-app
         twin this takes freeform feedback only: anchored per-block comments address source
@@ -1261,7 +1263,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def request_visual_confirmation_fix(self, run_id: str, body: PublicRequestGateFix, timeout: float | None = None) -> PublicDecisionList:
+    def request_visual_confirmation_fix(self, run_id: str, body: PublicRequestGateFix, *, timeout: float | None = None) -> PublicDecisionList:
         """Request a fix from a visual-confirmation gate
         Submit findings against the captured screenshots and dispatch a fixer. The findings
         ARE the fixer prompt, so they cannot be blank. Requires a `decide`-scope key.
@@ -1277,7 +1279,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def re_review(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
+    def re_review(self, run_id: str, *, timeout: float | None = None) -> PublicDecisionList:
         """Re-review the incorporated document
         Run one more reviewer pass over the incorporated document. On convergence the parked
         run advances. Requires a `decide`-scope key.
@@ -1292,7 +1294,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def re_review_brainstorm(self, run_id: str, stage: str, timeout: float | None = None) -> PublicDecisionList:
+    def re_review_brainstorm(self, run_id: str, stage: str, *, timeout: float | None = None) -> PublicDecisionList:
         """Re-run a brainstorm pass
         Run one more brainstorm pass against the converged direction. Requires a
         `decide`-scope key.
@@ -1307,7 +1309,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def re_review_clarity(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
+    def re_review_clarity(self, run_id: str, *, timeout: float | None = None) -> PublicDecisionList:
         """Re-triage the clarified report
         Run one more triage pass over the incorporated bug report. On convergence the parked
         run advances. Requires a `decide`-scope key.
@@ -1322,7 +1324,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def resolve_brainstorm_exceeded(self, run_id: str, stage: str, body: PublicResolveExceeded, timeout: float | None = None) -> PublicDecisionList:
+    def resolve_brainstorm_exceeded(self, run_id: str, stage: str, body: PublicResolveExceeded, *, timeout: float | None = None) -> PublicDecisionList:
         """Resolve a brainstorm at its iteration cap
         Pick how a brainstorm that exhausted its pass budget proceeds: one more round,
         proceed with the last converged direction, or stop and reset the task. Requires a
@@ -1339,7 +1341,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def resolve_clarity_exceeded(self, run_id: str, body: PublicResolveExceeded, timeout: float | None = None) -> PublicDecisionList:
+    def resolve_clarity_exceeded(self, run_id: str, body: PublicResolveExceeded, *, timeout: float | None = None) -> PublicDecisionList:
         """Resolve a clarity review at its iteration cap
         Pick how a clarity review that exhausted its pass budget proceeds: one more round,
         proceed with the last clarified report, or stop and reset the task. Requires a
@@ -1356,7 +1358,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def resolve_exceeded(self, run_id: str, body: PublicResolveExceeded, timeout: float | None = None) -> PublicDecisionList:
+    def resolve_exceeded(self, run_id: str, body: PublicResolveExceeded, *, timeout: float | None = None) -> PublicDecisionList:
         """Resolve a review at its iteration cap
         Pick how a review that exhausted its reviewer-pass budget proceeds: one more round,
         proceed with the last incorporated document, or stop and reset the task. Requires a
@@ -1373,7 +1375,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def resolve_input_gate(self, run_id: str, body: PublicResolveInputGate, timeout: float | None = None) -> PublicDecisionList:
+    def resolve_input_gate(self, run_id: str, body: PublicResolveInputGate, *, timeout: float | None = None) -> PublicDecisionList:
         """Resolve a run parked on the task's input check
         Settle a run the pre-dispatch input gate parked before its first agent step because
         the task states nothing an agent could act on. `recheck` re-evaluates the task as it
@@ -1394,7 +1396,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def resolve_judge(self, run_id: str, body: PublicResolveJudge, timeout: float | None = None) -> PublicDecisionList:
+    def resolve_judge(self, run_id: str, body: PublicResolveJudge, *, timeout: float | None = None) -> PublicDecisionList:
         """Resolve a parked judge verdict
         Settle a run parked on a judge verdict: proceed anyway, bounce the producing step
         for rework, or stop the run. Requires a `decide`-scope key.
@@ -1410,7 +1412,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def resolve_pr_review(self, run_id: str, body: PublicResolvePrReview, timeout: float | None = None) -> PublicDecisionList:
+    def resolve_pr_review(self, run_id: str, body: PublicResolvePrReview | None = None, *, timeout: float | None = None) -> PublicDecisionList:
         """Resolve a parked PR deep review
         Record the curated finding selection and say what to do with it: `finish` completes
         the read-only review, `fix` hands the selected findings to a fixer that commits onto
@@ -1423,13 +1425,13 @@ class DecisionsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/pr-review/resolve",
-            body=_encode(body),
+            body={} if body is None else _encode(body),
             query=None,
             timeout=timeout,
         )
         return PublicDecisionList.from_dict(raw)
 
-    def resolve_step_exceeded(self, run_id: str, approval_id: str, body: PublicResolveExceeded, timeout: float | None = None) -> PublicDecisionList:
+    def resolve_step_exceeded(self, run_id: str, approval_id: str, body: PublicResolveExceeded, *, timeout: float | None = None) -> PublicDecisionList:
         """Resolve a companion gate at its rework cap
         Pick how a quality companion that spent its automatic rework budget proceeds: one
         more round, proceed with the output as it stands, or stop and reset the task. A gate
@@ -1447,7 +1449,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def send_back_follow_up(self, run_id: str, item_id: str, timeout: float | None = None) -> PublicDecisionList:
+    def send_back_follow_up(self, run_id: str, item_id: str, *, timeout: float | None = None) -> PublicDecisionList:
         """Send a follow-up item back to the Coder
         Fold one `follow_up` item into another Coder pass (the item records as `queued`).
         Once every item is decided the run loops the Coder for the ones sent back, within
@@ -1463,7 +1465,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def set_brainstorm_option_status(self, run_id: str, stage: str, item_id: str, body: PublicSetFindingStatus, timeout: float | None = None) -> PublicDecisionList:
+    def set_brainstorm_option_status(self, run_id: str, stage: str, item_id: str, body: PublicSetFindingStatus, *, timeout: float | None = None) -> PublicDecisionList:
         """Dismiss or reopen a brainstorm option
         Dismiss a proposed option, or reopen one dismissed by mistake. Only `open` options
         block incorporation. Requires a `decide`-scope key.
@@ -1479,7 +1481,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def set_clarity_finding_status(self, run_id: str, item_id: str, body: PublicSetFindingStatus, timeout: float | None = None) -> PublicDecisionList:
+    def set_clarity_finding_status(self, run_id: str, item_id: str, body: PublicSetFindingStatus, *, timeout: float | None = None) -> PublicDecisionList:
         """Dismiss or reopen a clarity finding
         Dismiss a clarity finding as not applicable, or reopen one dismissed by mistake.
         Only `open` findings block incorporation. Requires a `decide`-scope key.
@@ -1495,7 +1497,7 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
-    def set_finding_status(self, run_id: str, item_id: str, body: PublicSetFindingStatus, timeout: float | None = None) -> PublicDecisionList:
+    def set_finding_status(self, run_id: str, item_id: str, body: PublicSetFindingStatus, *, timeout: float | None = None) -> PublicDecisionList:
         """Dismiss or reopen a finding
         Dismiss a finding as not applicable, or reopen one dismissed by mistake. Requires a
         `decide`-scope key.
@@ -1551,7 +1553,7 @@ class DebugResource:
         )
         return DebugLlmCall.from_dict(raw)
 
-    def get_run(self, run_id: str, timeout: float | None = None) -> DebugRunOverview:
+    def get_run(self, run_id: str, *, timeout: float | None = None) -> DebugRunOverview:
         """Get a run's diagnostic map
         One run’s diagnostic overview: its steps, which telemetry sinks this deployment
         retains (and how much each holds), the LLM cost/latency rollups, and the derived
@@ -1766,7 +1768,7 @@ class EvidenceResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def download_artifact(self, artifact_id: str, timeout: float | None = None) -> bytes:
+    def download_artifact(self, artifact_id: str, *, timeout: float | None = None) -> bytes:
         """Download an artifact's bytes
         The stored bytes of one artifact listed by the run-artifacts endpoint, served with
         the recorded image content type (`nosniff`, never inline active content).
@@ -1783,7 +1785,7 @@ class EvidenceResource:
             timeout=timeout,
         )
 
-    def get_outcome(self, run_id: str, timeout: float | None = None) -> GetPublicRunOutcomeResponse:
+    def get_outcome(self, run_id: str, *, timeout: float | None = None) -> GetPublicRunOutcomeResponse:
         """Get a run's outcome summary
         What the run changed and what backs that up, in product language, for a reader who
         will not open the diff: the run’s disposition, the pull requests it opened,
@@ -1806,7 +1808,7 @@ class EvidenceResource:
         )
         return GetPublicRunOutcomeResponse.from_dict(raw)
 
-    def get_report(self, run_id: str, timeout: float | None = None) -> PrVerificationReport:
+    def get_report(self, run_id: str, *, timeout: float | None = None) -> PrVerificationReport:
         """Get a run's verification report
         The engine’s bundle of CAPTURED FACTS about a run: the CI gate’s verdict and failing
         checks, the platform’s own run of the service’s lint/test/build commands (with the
@@ -1826,7 +1828,7 @@ class EvidenceResource:
         )
         return PrVerificationReport.from_dict(raw)
 
-    def list_artifacts(self, run_id: str, timeout: float | None = None) -> PublicRunArtifactList:
+    def list_artifacts(self, run_id: str, *, timeout: float | None = None) -> PublicRunArtifactList:
         """List a run's captured artifacts
         The binary artifacts the run captured (UI screenshots) plus the reference images
         they were reviewed against: id, kind, view, content type, exact byte size and
@@ -1853,7 +1855,7 @@ class MergeRecordsResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def get(self, record_id: str, timeout: float | None = None) -> GetPublicMergeRecordResponse:
+    def get(self, record_id: str, *, timeout: float | None = None) -> GetPublicMergeRecordResponse:
         """Get one merge record
         The same record addressed by its own id, for a caller that holds one without the
         run: the id a `merge_tag_request` notification carries on its payload, for instance.
@@ -1868,7 +1870,7 @@ class MergeRecordsResource:
         )
         return GetPublicMergeRecordResponse.from_dict(raw)
 
-    def get_for_run(self, run_id: str, timeout: float | None = None) -> GetPublicMergeRecordResponse:
+    def get_for_run(self, run_id: str, *, timeout: float | None = None) -> GetPublicMergeRecordResponse:
         """Get the merge decision a run left behind
         What kind of change the run’s pull request made (a change class derived on the
         backend from the changed-file list, never from an agent’s opinion), what the merger
@@ -1889,7 +1891,7 @@ class MergeRecordsResource:
         )
         return GetPublicMergeRecordResponse.from_dict(raw)
 
-    def list_rollups(self, timeout: float | None = None) -> ListPublicMergeClassRollupsResponse:
+    def list_rollups(self, *, timeout: float | None = None) -> ListPublicMergeClassRollupsResponse:
         """List the per-change-class merge rollups
         Every change class’s accumulated track record for the workspace, as one aggregate:
         how many records it holds, how many landed and by which route (auto-merged, merged
@@ -1910,7 +1912,7 @@ class MergeRecordsResource:
         )
         return ListPublicMergeClassRollupsResponse.from_dict(raw)
 
-    def tag_effort(self, record_id: str, body: TagPublicMergeReviewEffortRequest, timeout: float | None = None) -> GetPublicMergeRecordResponse:
+    def tag_effort(self, record_id: str, body: TagPublicMergeReviewEffortRequest, *, timeout: float | None = None) -> GetPublicMergeRecordResponse:
         """Tag the reviewer effort a merge took
         Record how much review a landed pull request actually needed (`none` for zero
         blocking comments, `minor` for a nit pass, `major` for real rework), or `null` to
@@ -1941,7 +1943,7 @@ class KeysResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
-    def create(self, body: CreateHeadlessPublicApiKey, timeout: float | None = None) -> CreatedPublicApiKey:
+    def create(self, body: CreateHeadlessPublicApiKey, *, timeout: float | None = None) -> CreatedPublicApiKey:
         """Provision an API key
         Mint a key for the calling key’s own workspace and return its raw secret EXACTLY
         ONCE, so store it now: it is not recoverable. Omitting `scope` mints a `write` key.
@@ -1958,7 +1960,7 @@ class KeysResource:
         )
         return CreatedPublicApiKey.from_dict(raw)
 
-    def list(self, timeout: float | None = None) -> PublicApiKeyList:
+    def list(self, *, timeout: float | None = None) -> PublicApiKeyList:
         """List the workspace's API keys
         The live (non-revoked) keys for the calling key’s workspace, metadata only; a secret
         is never readable back. `createdByKeyId` names the key that provisioned a key
@@ -1973,7 +1975,7 @@ class KeysResource:
         )
         return PublicApiKeyList.from_dict(raw)
 
-    def revoke(self, key_id: str, timeout: float | None = None) -> None:
+    def revoke(self, key_id: str, *, timeout: float | None = None) -> None:
         """Revoke an API key
         Revoke a key AND every key it minted, so a leaked provisioning key cannot outlive
         its own revocation through the credentials it left behind. Idempotent, and it may

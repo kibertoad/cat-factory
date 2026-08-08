@@ -528,8 +528,8 @@ export const GATEKEEPER_BINDINGS: readonly GatekeeperBinding[] = [
     consequence: {"destructive":true,"idempotent":false},
     pathParams: ['id'],
     queryParams: [],
-    hasBody: false,
-    invoke: async (client, args) => client.notifications.act(str(args, 'id')),
+    hasBody: true,
+    invoke: async (client, args) => client.notifications.act(str(args, 'id'), args.body as Parameters<CatFactoryClient['notifications']['act']>[1]),
   },
   {
     name: 'notifications_dismiss',

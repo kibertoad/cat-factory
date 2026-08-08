@@ -24,6 +24,13 @@ public final class NotificationsClient {
     }
 
     /**
+     * Act on a notification (no body).
+     */
+    public Notification act(String id) {
+        return act(id, ActPublicNotificationRequest.builder().build());
+    }
+
+    /**
      * Act on a notification
      * Run a notification’s typed side-effect and resolve it: merge the PR (merge_review /
      * pipeline_complete) or retry the run (ci_failed / test_failed). Performs a real GitHub merge,
@@ -36,8 +43,8 @@ public final class NotificationsClient {
      * resolved by tagging that record and dismissing the card.
      * {@code POST /api/v1/notifications/{id}/act} (operation {@code actPublicNotification}).
      */
-    public Notification act(String id) {
-        return transport.request("POST", "/api/v1/notifications/" + Transport.pathSegment(id) + "/act", null, Map.of(), new TypeReference<Notification>() {});
+    public Notification act(String id, ActPublicNotificationRequest body) {
+        return transport.request("POST", "/api/v1/notifications/" + Transport.pathSegment(id) + "/act", body, Map.of(), new TypeReference<Notification>() {});
     }
 
     /**

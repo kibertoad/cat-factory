@@ -79,6 +79,13 @@ type MergerRunDriver = (options: {
   decision: { outcome?: string; reason?: string; changeClass?: string }
 }>
 
+/** The half of a public notification card these cases address: which card, and its record id. */
+interface PublicNotificationCard {
+  id: string
+  type: string
+  payload?: { mergeTrackRecordId?: string } | null
+}
+
 /** Read back one change class's merge-track rollup. */
 type MergeRollupReader = (
   app: ConformanceApp,
@@ -1129,6 +1136,85 @@ function registerPublicMergeEvidenceTests(driveMergerRun: MergerRunDriver): void
       )
       expect(unknownTag.status).toBe(404)
       expect(unknownTag.reason).toBe('merge_record_not_found')
+    })
+
+    it('confirms the merge and records the effort in ONE headless request', async () => {
+      // The whole point of giving `act` a body. Before it, a harness that merged through the API
+      // had to follow up with a second call to say what reviewing it cost, and the two could
+      // interleave with anything; now the tag lands in the same request that merges, which is
+      // what the app's one-tap confirm-and-tag has always done.
+      const run = await pendingRun()
+      const adminAuth = await mintKey(run.app, run.wsId, 'admin')
+      const readAuth = await mintKey(run.app, run.wsId, 'read')
+
+      const inbox = await run.app.call<{ notifications: PublicNotificationCard[] }>(
+        'GET',
+        '/api/v1/notifications',
+        undefined,
+        readAuth,
+      )
+      const card = inbox.body.notifications.find((n) => n.type === 'merge_review')
+      expect(card, 'merge_review card on the public inbox').toBeDefined()
+
+      const acted = await run.app.call<{ status: string }>(
+        'POST',
+        `/api/v1/notifications/${card!.id}/act`,
+        { reviewEffort: 'none' },
+        adminAuth,
+      )
+      expect(acted.status).toBe(200)
+      expect(acted.body.status).toBe('acted')
+
+      // BOTH halves landed off the one call: the pull request merged (the record settled as
+      // `human_merged`) and the effort is on the record rather than still null.
+      const record = await run.app.call<PublicMergeRecord>(
+        'GET',
+        `/api/v1/runs/${run.executionId}/merge-record`,
+        undefined,
+        readAuth,
+      )
+      expect(record.status).toBe(200)
+      expect(record.body.decision).toBe('human_merged')
+      expect(record.body.reviewEffort).toBe('none')
+      expect(record.body.taggedAt).toBeGreaterThan(0)
+    })
+
+    it('still acts on a request that sends NO body at all', async () => {
+      // The compatibility guarantee behind the body being additive. An integration that has
+      // called this route since 1.0 sends no body, and the contract validator reads
+      // `c.req.json()` before the schema, so without `optionalJsonBody` on the route the tag
+      // field would have turned every one of those callers into a 400 on upgrade.
+      const run = await pendingRun()
+      const adminAuth = await mintKey(run.app, run.wsId, 'admin')
+      const readAuth = await mintKey(run.app, run.wsId, 'read')
+      const inbox = await run.app.call<{ notifications: PublicNotificationCard[] }>(
+        'GET',
+        '/api/v1/notifications',
+        undefined,
+        readAuth,
+      )
+      const card = inbox.body.notifications.find((n) => n.type === 'merge_review')!
+
+      // `undefined` here is no body on the wire, not an empty one.
+      const acted = await run.app.call<{ status: string }>(
+        'POST',
+        `/api/v1/notifications/${card.id}/act`,
+        undefined,
+        adminAuth,
+      )
+      expect(acted.status).toBe(200)
+      expect(acted.body.status).toBe('acted')
+
+      // It merged, and left the tag unsaid rather than guessing at `none`.
+      const record = await run.app.call<PublicMergeRecord>(
+        'GET',
+        `/api/v1/runs/${run.executionId}/merge-record`,
+        undefined,
+        readAuth,
+      )
+      expect(record.body.decision).toBe('human_merged')
+      expect(record.body.reviewEffort).toBeNull()
+      expect(record.body.taggedAt).toBeNull()
     })
 
     it('refuses a REAL record to a key from another workspace, by run and by record id', async () => {

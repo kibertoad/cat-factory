@@ -6,7 +6,7 @@ import {
   HEADLESS_KEY_MINT_SCOPE,
   publicApiKeyListResultSchema,
 } from '../public-api-keys.js'
-import { notificationSchema } from '../notifications.js'
+import { actNotificationSchema, notificationSchema } from '../notifications.js'
 import {
   createPublicJobSchema,
   createPublicTaskSchema,
@@ -302,14 +302,18 @@ export const listPublicNotificationsContract = withMinScope(
 /**
  * Act on a notification (run its typed side-effect, then resolve it). Requires an `admin` key.
  *
- * Body-LESS, deliberately, where the session-authed twin carries an optional `reviewEffort`
- * (`routes/notifications.ts`). Every emitter renders a request body as a REQUIRED positional
- * parameter, so giving this route the tag field would rewrite `act(id)` as `act(id, body)` in
- * four published clients: a compile break for every existing caller, which is exactly what
- * CLAUDE.md's "the public API does not break" refuses. A headless caller records the tag through
- * `POST /api/v1/merge-records/:recordId/effort` instead (`./public-merge-evidence.ts`), which is
- * a rung LOWER than this route rather than a workaround for it: tagging a landed pull request
- * merges nothing.
+ * All-optional body, matching the session-authed twin (`routes/notifications.ts`): on a
+ * `merge_review` / `pipeline_complete` card, `reviewEffort` records how much review the pull
+ * request needed in the SAME request that confirms the merge, so the app's one-tap
+ * confirm-and-tag has a headless equivalent rather than a two-call approximation of one.
+ *
+ * Additive on every axis. The route mounts `optionalJsonBody`, so a caller that has always sent
+ * no body at all still gets the historical behaviour; the four SDK clients render an all-optional
+ * body as an OMITTABLE parameter, so `act(id)` keeps compiling and `act(id, { reviewEffort })` is
+ * the new form. Tagging LATER through `POST /api/v1/merge-records/:recordId/effort`
+ * (`./public-merge-evidence.ts`) stays the right call for a caller that learns the effort after
+ * the fact, and remains a rung LOWER than this route: tagging a landed pull request merges
+ * nothing, where this merges one for real.
  */
 export const actPublicNotificationContract = withMinScope(
   'admin',
@@ -317,7 +321,7 @@ export const actPublicNotificationContract = withMinScope(
     method: 'post',
     requestPathParamsSchema: idParams,
     pathResolver: ({ id }) => `/api/v1/notifications/${id}/act`,
-    requestBodySchema: ContractNoBody,
+    requestBodySchema: actNotificationSchema,
     responsesByStatusCode: { 200: notificationSchema, ...errorResponses },
   }),
 )

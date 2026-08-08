@@ -397,7 +397,17 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
     expect((await call('DELETE', `/api/v1/tasks/${taskId}`, undefined, adminAuth)).status).toBe(404)
   })
 
-  it('serves the notification inbox (list / dismiss / act), scope-gated + workspace-scoped', async () => {
+  /**
+   * The arrangement both notification cases share: an org board (the only kind a public-API key
+   * can be minted for), a key at each rung, and a seeder for OPEN cards.
+   *
+   * Seeded directly rather than raised by a run: the engine raises these mid-run, and driving one
+   * would point the test at the run machinery instead of the public routes. A seeded card is a
+   * `merge_review` with a null `blockId`, so `act` admits the type (it has an automated merge
+   * side-effect) while the null block short-circuits the merge itself, and the card settles
+   * `acted` with no real block/run/PR behind it.
+   */
+  async function notificationFixture() {
     const app = harness.makeApp()
     const { call, createOrgWorkspace } = app
     const { workspace } = await createOrgWorkspace({ seed: true })
@@ -411,16 +421,10 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
       expect(res.status).toBe(201)
       return { authorization: `Bearer ${res.body.secret}` }
     }
-    const readAuth = await mint('read')
-    const writeAuth = await mint('write')
-    const adminAuth = await mint('admin')
-
-    // Seed OPEN notifications directly (the engine raises these mid-run; seeding the
-    // persisted rows keeps the test targeted at the public routes, not the run machinery).
-    // The actionable cards are `merge_review` with a null `blockId`: `act` admits the type
-    // (it has an automated merge side-effect) but the null block short-circuits the merge, so
-    // the card settles `acted` without needing a real block/run/PR.
-    const seed = (id: string, type: 'merge_review' | 'requirement_review' = 'merge_review') =>
+    const seed = (
+      id: string,
+      type: 'merge_review' | 'requirement_review' | 'merge_tag_request' = 'merge_review',
+    ) =>
       app.notificationRepository().upsert(wsId, {
         id,
         type,
@@ -434,6 +438,22 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
         createdAt: 1,
         resolvedAt: null,
       })
+
+    return {
+      app,
+      call,
+      createOrgWorkspace,
+      wsId,
+      seed,
+      readAuth: await mint('read'),
+      writeAuth: await mint('write'),
+      adminAuth: await mint('admin'),
+    }
+  }
+
+  it('serves the notification inbox (list / dismiss / act), scope-gated + workspace-scoped', async () => {
+    const { call, createOrgWorkspace, seed, readAuth, writeAuth, adminAuth } =
+      await notificationFixture()
     await seed('ntf_dismiss')
     await seed('ntf_act')
 
@@ -492,7 +512,7 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
 
     // `act` refuses an informational card (no automated action) with 409, even for an admin
     // key — it must be dismissed, not acted — while `dismiss` resolves it normally.
-    const actInfo = await call<{ error: { code: string } }>(
+    const actInfo = await call<{ error: { code: string; details?: { reason?: string } } }>(
       'POST',
       '/api/v1/notifications/ntf_info/act',
       undefined,
@@ -500,6 +520,10 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
     )
     expect(actInfo.status).toBe(409)
     expect(actInfo.body.error.code).toBe('notification_not_actionable')
+    // The REASON, not just the status: "this card can never be acted on headlessly" and "this
+    // one is a field away from working" need different fixes, and the shared 409 code cannot
+    // tell a caller which it hit.
+    expect(actInfo.body.error.details?.reason).toBe('no_automated_action')
     const dismissInfo = await call<{ status: string }>(
       'POST',
       '/api/v1/notifications/ntf_info/dismiss',
@@ -542,6 +566,50 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
       (await call('POST', '/api/v1/notifications/ntf_foreign/dismiss', undefined, otherAuth))
         .status,
     ).toBe(404)
+  })
+
+  it('acts on a merge_tag_request only when the request carries a tag', async () => {
+    // The one card whose actionability is decided by the REQUEST rather than by its type.
+    // Recording the effort a human spent IS its entire side-effect, so acting on one with
+    // nothing to record would flip the nudge to `acted` and write nothing: the reminder gone
+    // and the evidence it asked for never collected.
+    const { call, seed, adminAuth, writeAuth } = await notificationFixture()
+    await seed('ntf_tag', 'merge_tag_request')
+
+    const bare = await call<{ error: { code: string; details?: { reason?: string } } }>(
+      'POST',
+      '/api/v1/notifications/ntf_tag/act',
+      undefined,
+      adminAuth,
+    )
+    expect(bare.status).toBe(409)
+    expect(bare.body.error.code).toBe('notification_not_actionable')
+    // Its OWN reason: this card is one field away from working, where an informational card can
+    // never be acted on headlessly at all. The shared 409 code cannot tell a caller which it hit.
+    expect(bare.body.error.details?.reason).toBe('review_effort_required')
+
+    // Dismissing is always available as the way to wave it off without recording anything.
+    await seed('ntf_tag_waved', 'merge_tag_request')
+    const waved = await call<{ status: string }>(
+      'POST',
+      '/api/v1/notifications/ntf_tag_waved/dismiss',
+      undefined,
+      writeAuth,
+    )
+    expect(waved.status).toBe(200)
+    expect(waved.body.status).toBe('dismissed')
+
+    // Supply a tag and the same card resolves. This row carries no record id, so nothing is
+    // written; what this asserts is ADMISSION, which is what the request decides. The tag
+    // actually landing on a record is the merge-track-record suite's own case.
+    const tagged = await call<{ status: string }>(
+      'POST',
+      '/api/v1/notifications/ntf_tag/act',
+      { reviewEffort: 'minor' },
+      adminAuth,
+    )
+    expect(tagged.status).toBe(200)
+    expect(tagged.body.status).toBe('acted')
   })
 
   it('serves the workspace usage + budget read to a read-scoped key', async () => {

@@ -484,7 +484,10 @@ type ServicesService struct {
 // rather than duplicated; a monorepo service must name its subdirectory. The board lays the
 // service out itself: this surface publishes no coordinates. Requires an `admin` key.
 // POST /api/v1/services (operation createPublicService).
-func (s *ServicesService) Create(ctx context.Context, body CreatePublicServiceRequest) (*PublicService, error) {
+func (s *ServicesService) Create(ctx context.Context, body *CreatePublicServiceRequest) (*PublicService, error) {
+	if body == nil {
+		body = &CreatePublicServiceRequest{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   "/api/v1/services",
@@ -769,7 +772,10 @@ func (s *TasksService) Retry(ctx context.Context, taskID string) (*PublicTask, e
 // individual-usage model cannot be started through the API (no headless personal-credential
 // unlock).
 // POST /api/v1/tasks/{taskId}/start (operation startPublicTask).
-func (s *TasksService) Start(ctx context.Context, taskID string, body StartPublicTask) (*PublicTask, error) {
+func (s *TasksService) Start(ctx context.Context, taskID string, body *StartPublicTask) (*PublicTask, error) {
+	if body == nil {
+		body = &StartPublicTask{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/tasks/%s/start", pathEscape(taskID)),
@@ -818,7 +824,10 @@ func (s *TasksService) Stream(ctx context.Context, taskID string) (*EventStream,
 // does not serve the bag back. This is what makes an input the pre-dispatch gate refused
 // repairable: supply the value it named, then recheck the parked run.
 // PATCH /api/v1/tasks/{taskId} (operation updatePublicTask).
-func (s *TasksService) Update(ctx context.Context, taskID string, body UpdatePublicTask) (*PublicTask, error) {
+func (s *TasksService) Update(ctx context.Context, taskID string, body *UpdatePublicTask) (*PublicTask, error) {
+	if body == nil {
+		body = &UpdatePublicTask{}
+	}
 	req := requestSpec{
 		Method: "PATCH",
 		Path:   fmt.Sprintf("/api/v1/tasks/%s", pathEscape(taskID)),
@@ -892,10 +901,14 @@ type NotificationsService struct {
 // this; a `merge_tag_request` card carries its record id on the payload and is resolved by
 // tagging that record and dismissing the card.
 // POST /api/v1/notifications/{id}/act (operation actPublicNotification).
-func (s *NotificationsService) Act(ctx context.Context, id string) (*Notification, error) {
+func (s *NotificationsService) Act(ctx context.Context, id string, body *ActPublicNotificationRequest) (*Notification, error) {
+	if body == nil {
+		body = &ActPublicNotificationRequest{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/notifications/%s/act", pathEscape(id)),
+		Body:   body,
 	}
 	var out Notification
 	if err := s.client.request(ctx, req, &out); err != nil {
@@ -1027,7 +1040,10 @@ func (s *WebhookService) List(ctx context.Context) (*PublicNotificationWebhookLi
 // `secret` rotates the signing secret; omitting it keeps the current one. The endpoint must be
 // `https:` and publicly routable unless the deployment widened its allow-list.
 // PUT /api/v1/notification-webhook (operation putPublicNotificationWebhook).
-func (s *WebhookService) Set(ctx context.Context, body PutNotificationWebhook) (*NotificationWebhook, error) {
+func (s *WebhookService) Set(ctx context.Context, body *PutNotificationWebhook) (*NotificationWebhook, error) {
+	if body == nil {
+		body = &PutNotificationWebhook{}
+	}
 	req := requestSpec{
 		Method: "PUT",
 		Path:   "/api/v1/notification-webhook",
@@ -1051,7 +1067,10 @@ func (s *WebhookService) Set(ctx context.Context, body PutNotificationWebhook) (
 // "webhook_limit_reached"` (409) when registering a NEW id would exceed the per-workspace cap;
 // editing an existing one is admitted either way.
 // PUT /api/v1/notification-webhooks/{webhookId} (operation putPublicNamedNotificationWebhook).
-func (s *WebhookService) SetNamed(ctx context.Context, webhookID string, body PutNotificationWebhook) (*NotificationWebhook, error) {
+func (s *WebhookService) SetNamed(ctx context.Context, webhookID string, body *PutNotificationWebhook) (*NotificationWebhook, error) {
+	if body == nil {
+		body = &PutNotificationWebhook{}
+	}
 	req := requestSpec{
 		Method: "PUT",
 		Path:   fmt.Sprintf("/api/v1/notification-webhooks/%s", pathEscape(webhookID)),
@@ -1181,7 +1200,10 @@ func (s *DecisionsService) AnswerInterviewQuestion(ctx context.Context, runID st
 // integration resolve the same gate. Requires a `decide`-scope key.
 // POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/approve (operation
 // approvePublicRunStep).
-func (s *DecisionsService) ApproveStep(ctx context.Context, runID string, approvalID string, body PublicApproveStep) (*PublicDecisionList, error) {
+func (s *DecisionsService) ApproveStep(ctx context.Context, runID string, approvalID string, body *PublicApproveStep) (*PublicDecisionList, error) {
+	if body == nil {
+		body = &PublicApproveStep{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/approvals/%s/approve", pathEscape(runID), pathEscape(approvalID)),
@@ -1219,7 +1241,10 @@ func (s *DecisionsService) ApproveVisualConfirmation(ctx context.Context, runID 
 // re-parks carrying the verdict. Requires a `decide`-scope key.
 // POST /api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/challenge (operation
 // challengePublicRunPrReviewFinding).
-func (s *DecisionsService) ChallengePrReviewFinding(ctx context.Context, runID string, findingID string, body PublicChallengePrReviewFinding) (*PublicDecisionList, error) {
+func (s *DecisionsService) ChallengePrReviewFinding(ctx context.Context, runID string, findingID string, body *PublicChallengePrReviewFinding) (*PublicDecisionList, error) {
+	if body == nil {
+		body = &PublicChallengePrReviewFinding{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/pr-review/findings/%s/challenge", pathEscape(runID), pathEscape(findingID)),
@@ -1236,7 +1261,10 @@ func (s *DecisionsService) ChallengePrReviewFinding(ctx context.Context, runID s
 // Pick one of the proposed implementation forks (by id) or submit your own approach. The Coder
 // then runs with the choice folded in as a binding directive. Requires a `decide`-scope key.
 // POST /api/v1/runs/{runId}/decisions/fork/choose (operation choosePublicRunFork).
-func (s *DecisionsService) ChooseFork(ctx context.Context, runID string, body PublicChooseFork) (*PublicDecisionList, error) {
+func (s *DecisionsService) ChooseFork(ctx context.Context, runID string, body *PublicChooseFork) (*PublicDecisionList, error) {
+	if body == nil {
+		body = &PublicChooseFork{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/fork/choose", pathEscape(runID)),
@@ -1342,7 +1370,10 @@ func (s *DecisionsService) FileFollowUp(ctx context.Context, runID string, itemI
 // `decide`-scope key.
 // POST /api/v1/runs/{runId}/decisions/requirements/incorporate (operation
 // incorporatePublicRunRequirements).
-func (s *DecisionsService) Incorporate(ctx context.Context, runID string, body PublicIncorporate) (*PublicDecisionList, error) {
+func (s *DecisionsService) Incorporate(ctx context.Context, runID string, body *PublicIncorporate) (*PublicDecisionList, error) {
+	if body == nil {
+		body = &PublicIncorporate{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/requirements/incorporate", pathEscape(runID)),
@@ -1361,7 +1392,10 @@ func (s *DecisionsService) Incorporate(ctx context.Context, runID string, body P
 // `decide`-scope key.
 // POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/incorporate (operation
 // incorporatePublicRunBrainstorm).
-func (s *DecisionsService) IncorporateBrainstorm(ctx context.Context, runID string, stage string, body PublicIncorporate) (*PublicDecisionList, error) {
+func (s *DecisionsService) IncorporateBrainstorm(ctx context.Context, runID string, stage string, body *PublicIncorporate) (*PublicDecisionList, error) {
+	if body == nil {
+		body = &PublicIncorporate{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/brainstorm/%s/incorporate", pathEscape(runID), pathEscape(stage)),
@@ -1380,7 +1414,10 @@ func (s *DecisionsService) IncorporateBrainstorm(ctx context.Context, runID stri
 // Requires a `decide`-scope key.
 // POST /api/v1/runs/{runId}/decisions/clarity/incorporate (operation
 // incorporatePublicRunClarity).
-func (s *DecisionsService) IncorporateClarity(ctx context.Context, runID string, body PublicIncorporate) (*PublicDecisionList, error) {
+func (s *DecisionsService) IncorporateClarity(ctx context.Context, runID string, body *PublicIncorporate) (*PublicDecisionList, error) {
+	if body == nil {
+		body = &PublicIncorporate{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/clarity/incorporate", pathEscape(runID)),
@@ -1488,7 +1525,10 @@ func (s *DecisionsService) ProceedInterview(ctx context.Context, runID string) (
 // board can retry. Requires a `decide`-scope key.
 // POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/reject (operation
 // rejectPublicRunStep).
-func (s *DecisionsService) RejectStep(ctx context.Context, runID string, approvalID string, body PublicRejectStep) (*PublicDecisionList, error) {
+func (s *DecisionsService) RejectStep(ctx context.Context, runID string, approvalID string, body *PublicRejectStep) (*PublicDecisionList, error) {
+	if body == nil {
+		body = &PublicRejectStep{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/approvals/%s/reject", pathEscape(runID), pathEscape(approvalID)),
@@ -1759,7 +1799,10 @@ func (s *DecisionsService) ResolveJudge(ctx context.Context, runID string, body 
 // PR branch, `post` publishes them as inline PR review comments. `fix` and `post` need at least
 // one selected finding and act on the real pull request. Requires a `decide`-scope key.
 // POST /api/v1/runs/{runId}/decisions/pr-review/resolve (operation resolvePublicRunPrReview).
-func (s *DecisionsService) ResolvePrReview(ctx context.Context, runID string, body PublicResolvePrReview) (*PublicDecisionList, error) {
+func (s *DecisionsService) ResolvePrReview(ctx context.Context, runID string, body *PublicResolvePrReview) (*PublicDecisionList, error) {
+	if body == nil {
+		body = &PublicResolvePrReview{}
+	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/pr-review/resolve", pathEscape(runID)),

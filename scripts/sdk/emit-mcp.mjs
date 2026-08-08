@@ -279,10 +279,13 @@ function inputSchema(operation, ir) {
       ...jsonSchema(operation.body, ir, { mode: INPUT, stack: [] }),
       description: 'The request body.',
     }
-    // A body is required whenever the operation declares one: the spec's request bodies on this
-    // surface are all required, and `{}` is a legitimate body (every field optional) rather than
-    // an absent one, so leaving it out would send no body at all.
-    required.push('body')
+    // Required unless every field of it is optional. `{}` is a legitimate body rather than an
+    // absent one, so an operation that genuinely needs values must ask for them: a model that
+    // omitted the body would otherwise send nothing at all and get a validation error back
+    // instead of a prompt to supply it. Where there is nothing a caller MUST say, requiring the
+    // property only makes a model compose an empty object to satisfy the schema; the SDK method
+    // fills that in.
+    if (!operation.bodyOptional) required.push('body')
   }
   const schema = { type: 'object', properties, additionalProperties: false }
   if (required.length > 0) schema.required = required

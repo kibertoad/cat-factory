@@ -84,6 +84,13 @@ public final class WebhookClient {
     }
 
     /**
+     * Register or update the outbound webhook (no body).
+     */
+    public NotificationWebhook set() {
+        return set(PutNotificationWebhook.builder().build());
+    }
+
+    /**
      * Register or update the outbound webhook
      * Register the HTTPS endpoint deliveries are POSTed to, or update the one already registered.
      * Every omitted field keeps its stored value, so subscribing to run events is a one-field call
@@ -96,6 +103,13 @@ public final class WebhookClient {
      */
     public NotificationWebhook set(PutNotificationWebhook body) {
         return transport.request("PUT", "/api/v1/notification-webhook", body, Map.of(), new TypeReference<NotificationWebhook>() {});
+    }
+
+    /**
+     * Register or update one named outbound webhook (no body).
+     */
+    public NotificationWebhook setNamed(String webhookId) {
+        return setNamed(webhookId, PutNotificationWebhook.builder().build());
     }
 
     /**

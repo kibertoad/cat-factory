@@ -8,6 +8,10 @@
 // said nothing" are different facts, and a caller that cannot tell them apart cannot report
 // either one honestly.
 
+export interface ActPublicNotificationRequest {
+  reviewEffort?: GetPublicMergeRecordResponseReviewEffort | null
+}
+
 export interface AddPublicTaskDependencyRequest {
   /** Length 1..120. */
   dependsOnTaskId: string
