@@ -4903,7 +4903,8 @@
   },
   "palette": {
     "hint": "Bir agent'ı pipeline'a eklemek için tıklayın.",
-    "customAgents": "Özel agent'lar"
+    "customAgents": "Özel agent'lar",
+    "purposeHidden": "Bu amaç için {count} ajan gizli."
   },
   "gates": {
     "subtitle": {

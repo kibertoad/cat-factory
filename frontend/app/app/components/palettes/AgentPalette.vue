@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
-import { purposeAllowsAgentCategory } from '@cat-factory/contracts'
+import { purposeSuggestsAgentCategory } from '@cat-factory/contracts'
 import type { AgentKind, PipelinePurpose } from '~/types/domain'
 import AgentTierSelect from '~/components/palettes/AgentTierSelect.vue'
+import PipelinePurposeSelect from '~/components/palettes/PipelinePurposeSelect.vue'
 import { filterByAgentTier } from '~/utils/agentTier'
 import { AGENT_CATEGORIES, OBSERVABILITY_GATE_ARCHETYPE } from '~/utils/catalog'
 
@@ -11,27 +12,36 @@ const { t } = useI18n()
 const agents = useAgentsStore()
 const agentTier = useAgentTierStore()
 const releaseHealth = useReleaseHealthStore()
-defineEmits<{ (e: 'add', kind: AgentKind): void }>()
-// The purpose of the pipeline being built. When set to a non-`build` classifier, the
-// Implementation (`build`) and Testing (`test`) categories are hidden — such a pipeline writes
-// no product code and runs no tests (see `purposeAllowsAgentCategory`). `null`/`build` shows all.
+defineEmits<{
+  (e: 'add', kind: AgentKind): void
+  (e: 'update:purpose', purpose: PipelinePurpose): void
+}>()
+// The purpose of the pipeline being built, edited right here by the control above the catalog.
+// It narrows the palette to the categories that purpose has any use for (a review pipeline
+// designs nothing and builds nothing, see `purposeSuggestsAgentCategory`); `null` shows all.
 const props = defineProps<{ purpose?: PipelinePurpose | null }>()
 
 // The post-release-health gate is only meaningful — and only accepted by the backend —
 // with an observability integration connected, so it appears in the palette ONLY then.
-const offered = computed(() => {
-  const all = releaseHealth.connection.connected
+const connected = computed(() =>
+  releaseHealth.connection.connected
     ? [...agents.archetypes, OBSERVABILITY_GATE_ARCHETYPE]
-    : agents.archetypes
-  // Hide the categories the pipeline's purpose doesn't build from (an uncategorized custom kind
-  // has no category to gate, so it always shows).
-  return all.filter((a) => !a.category || purposeAllowsAgentCategory(props.purpose, a.category))
-})
+    : agents.archetypes,
+)
 
-// Then narrow to the selected tier. Applied AFTER the purpose gate so the "n hidden" hint
-// counts only what the TIER is holding back — a kind the pipeline's purpose rules out is not
-// something a wider tier would reveal, so counting it would send the user chasing a control
-// that cannot help them.
+// Then hide the categories the pipeline's purpose has no use for (an uncategorized custom kind
+// has no category to judge, so it always shows).
+const offered = computed(() =>
+  connected.value.filter(
+    (a) => !a.category || purposeSuggestsAgentCategory(props.purpose, a.category),
+  ),
+)
+const hiddenByPurpose = computed(() => connected.value.length - offered.value.length)
+
+// Then narrow to the selected tier. Applied AFTER the purpose gate so each hint counts what its
+// OWN dial is holding back and the two never double-count: a kind the purpose rules out is not
+// something a wider tier would reveal, so counting it there would send the user chasing a
+// control that cannot help them.
 const palette = computed(() => filterByAgentTier(offered.value, agentTier.tier))
 const hiddenByTier = computed(() => offered.value.length - palette.value.length)
 
@@ -64,7 +74,19 @@ function toggle(id: string) {
 <template>
   <div class="space-y-2">
     <p class="px-1 text-[11px] text-slate-500">{{ t('palette.hint') }}</p>
-    <AgentTierSelect :hidden-count="hiddenByTier" />
+    <!-- The two catalog dials, one above the other: what this pipeline is for, and how deep into
+         the agent catalog to look. Both narrow the sections below, and each states its own count.
+         Stacked rather than side by side because the palette column is a third of the slideover:
+         two half-width buttons truncate to "Purpose: Doc…", which is the one thing a filter
+         control may not do. -->
+    <div class="space-y-2">
+      <PipelinePurposeSelect
+        :purpose="props.purpose"
+        :hidden-count="hiddenByPurpose"
+        @update:purpose="$emit('update:purpose', $event)"
+      />
+      <AgentTierSelect :hidden-count="hiddenByTier" />
+    </div>
     <div class="space-y-2">
       <section v-for="g in groups" :key="g.id">
         <button

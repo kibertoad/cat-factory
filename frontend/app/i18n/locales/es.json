@@ -4903,7 +4903,8 @@
   },
   "palette": {
     "hint": "Haz clic en un agente para añadirlo al pipeline.",
-    "customAgents": "Agentes personalizados"
+    "customAgents": "Agentes personalizados",
+    "purposeHidden": "{count} agente oculto para este propósito. | {count} agentes ocultos para este propósito."
   },
   "gates": {
     "subtitle": {

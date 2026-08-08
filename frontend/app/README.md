@@ -265,6 +265,31 @@ picking what each of them runs on are halves of the same job.
   whatever the tier: the same rule `showOverrideField` states for a single field: a row the
   user can neither read nor clear is worse than a longer list.
 
+### The palette's second dial: the pipeline's purpose
+
+The builder's palette narrows on two axes, and both controls sit on one row above the catalog
+(`PipelinePurposeSelect` above `AgentTierSelect`), each with its own "n hidden" hint so neither
+narrowing reads as an empty catalog. The tier says how deep to look; the **purpose** says what
+the pipeline is for (`build` / `document` / `review` / `research` / `planning`), and the palette
+drops the categories that purpose has no use for. The purpose is not a view preference: it is
+saved on the pipeline and also decides which task pickers offer it, which is why the control
+writes through to the draft while the tier writes to its own store.
+
+Purpose is filtered by two predicates in `@cat-factory/contracts`, and the difference between
+them is the point:
+
+- `purposeSuggestsAgentCategory` is **relevance**: what the palette OFFERS. Opinionated (a
+  review pipeline designs nothing; a planning pipeline has no pull request to gate), because a
+  wrong guess costs one purpose switch.
+- `purposeAllowsAgentCategory` is **compatibility**: what the builder will SAVE. It states only
+  what is contradictory (a pipeline that writes no code carrying an implementation step) and
+  drives the draft's conflict warning.
+
+Relevance is a subset of compatibility, asserted over the whole grid in `pipeline.spec.ts`. Keep
+it that way: the palette may hide what the save gate tolerates, so tightening the relevance table
+never turns a stored pipeline into one its own editor refuses, but offering a kind the save gate
+then rejects would be a dead end with the refusal arriving after the work.
+
 ## In-app tutorial tours
 
 On first launch (once the board is up and no other startup advisory is open) the app asks

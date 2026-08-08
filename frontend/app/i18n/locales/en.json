@@ -5129,7 +5129,11 @@
   },
   "palette": {
     "hint": "Click an agent to append it to the pipeline.",
-    "customAgents": "Custom agents"
+    "customAgents": "Custom agents",
+    "purposeHidden": "{count} agent hidden for this purpose. | {count} agents hidden for this purpose.",
+    "@purposeHidden": {
+      "description": "Shown under the pipeline-purpose control in the agent palette: how many agents are not offered because they are irrelevant to the pipeline's purpose (e.g. a coder in a documentation pipeline)."
+    }
   },
   "gates": {
     "subtitle": {

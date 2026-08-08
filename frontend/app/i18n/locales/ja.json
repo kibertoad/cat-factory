@@ -4903,7 +4903,8 @@
   },
   "palette": {
     "hint": "エージェントをクリックするとパイプラインに追加されます。",
-    "customAgents": "カスタムエージェント"
+    "customAgents": "カスタムエージェント",
+    "purposeHidden": "この目的では {count} 件のエージェントが非表示です。"
   },
   "gates": {
     "subtitle": {

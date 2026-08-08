@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  agentCategorySchema,
+  PIPELINE_PURPOSES,
   pipelineAllowedForBlockLevel,
   pipelineAllowedForTaskType,
   purposeAllowsAgentCategory,
+  purposeSuggestsAgentCategory,
 } from '@cat-factory/contracts'
 import type { Block, Pipeline } from '~/types/domain'
 import {
@@ -11,6 +14,10 @@ import {
   pipelineDisplaySteps,
   pipelineGateCount,
 } from '~/utils/pipeline'
+
+// The palette categories, read off the schema the predicates themselves are typed against, so a
+// new category joins these sweeps instead of quietly going unasserted behind a hand-listed tuple.
+const AGENT_CATEGORIES = agentCategorySchema.options
 
 // A minimal pipeline: only the fields the launch/task-type filters read matter here.
 function pipeline(over: Partial<Pipeline> = {}): Pipeline {
@@ -134,23 +141,62 @@ describe('pipelineAllowedForBlockLevel (initiative binding)', () => {
   })
 })
 
-describe('purposeAllowsAgentCategory (builder palette gate)', () => {
+describe('purposeAllowsAgentCategory (builder save gate)', () => {
   it('a build (or unclassified) pipeline may use every category', () => {
     for (const purpose of ['build', null, undefined] as const) {
-      for (const cat of ['review', 'design', 'build', 'test', 'docs', 'gates'] as const) {
+      for (const cat of AGENT_CATEGORIES) {
         expect(purposeAllowsAgentCategory(purpose, cat)).toBe(true)
       }
     }
   })
 
-  it('a non-build pipeline hides the Implementation (build) and Testing (test) categories', () => {
+  it('a non-build pipeline refuses the Implementation (build) and Testing (test) categories', () => {
     for (const purpose of ['document', 'review', 'research', 'planning'] as const) {
       expect(purposeAllowsAgentCategory(purpose, 'build')).toBe(false)
       expect(purposeAllowsAgentCategory(purpose, 'test')).toBe(false)
-      // Non-code categories stay visible.
+      // Everything else stays SAVEABLE even where the palette stops offering it (below), so a
+      // stored pipeline never becomes unsaveable because the relevance table gained an opinion.
       expect(purposeAllowsAgentCategory(purpose, 'docs')).toBe(true)
       expect(purposeAllowsAgentCategory(purpose, 'review')).toBe(true)
       expect(purposeAllowsAgentCategory(purpose, 'gates')).toBe(true)
+    }
+  })
+})
+
+describe('purposeSuggestsAgentCategory (builder palette filter)', () => {
+  it('offers the whole catalog to a build pipeline and to an unclassified one', () => {
+    for (const purpose of ['build', null, undefined] as const) {
+      for (const cat of AGENT_CATEGORIES) {
+        expect(purposeSuggestsAgentCategory(purpose, cat)).toBe(true)
+      }
+    }
+  })
+
+  it('narrows each purpose to the categories it has a use for', () => {
+    // A PR review designs nothing and builds nothing; the plan an initiative pipeline produces
+    // is its own in-repo tracker, with no pull request to gate and no repo docs to write.
+    expect(purposeSuggestsAgentCategory('review', 'design')).toBe(false)
+    expect(purposeSuggestsAgentCategory('review', 'review')).toBe(true)
+    expect(purposeSuggestsAgentCategory('planning', 'gates')).toBe(false)
+    expect(purposeSuggestsAgentCategory('planning', 'docs')).toBe(false)
+    expect(purposeSuggestsAgentCategory('planning', 'design')).toBe(true)
+    // Authoring a document and running a spike are researched and reviewed like any change.
+    for (const purpose of ['document', 'research'] as const) {
+      expect(purposeSuggestsAgentCategory(purpose, 'design')).toBe(true)
+      expect(purposeSuggestsAgentCategory(purpose, 'docs')).toBe(true)
+    }
+  })
+
+  it('never offers what the save gate would refuse', () => {
+    // The invariant that keeps the two tables honest, over the whole grid rather than the cells
+    // that happen to differ today: relevance may hide more than compatibility, never less, or
+    // the palette would offer a kind whose step then blocks the save.
+    for (const purpose of PIPELINE_PURPOSES) {
+      for (const cat of AGENT_CATEGORIES) {
+        if (purposeSuggestsAgentCategory(purpose, cat)) {
+          expect(purposeAllowsAgentCategory(purpose, cat)).toBe(true)
+        }
+      }
     }
   })
 })
