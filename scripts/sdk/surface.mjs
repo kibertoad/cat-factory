@@ -24,6 +24,10 @@ const SURFACE = {
 
   // ---- Services -------------------------------------------------------------------------
   listPublicServices: { group: 'services', method: 'list' },
+  createPublicService: { group: 'services', method: 'create' },
+
+  // ---- Repositories: what a service can be created against --------------------------------
+  listPublicRepos: { group: 'repos', method: 'list' },
 
   // ---- Tasks ----------------------------------------------------------------------------
   createPublicTask: { group: 'tasks', method: 'create' },
@@ -36,6 +40,11 @@ const SURFACE = {
   retryPublicTask: { group: 'tasks', method: 'retry' },
   getPublicRun: { group: 'tasks', method: 'getRun' },
   streamPublicTaskRun: { group: 'tasks', method: 'stream' },
+  addPublicTaskDependency: { group: 'tasks', method: 'addDependency' },
+  removePublicTaskDependency: { group: 'tasks', method: 'removeDependency' },
+  listPublicTaskDocuments: { group: 'tasks', method: 'listDocuments' },
+  attachPublicTaskDocument: { group: 'tasks', method: 'attachDocument' },
+  detachPublicTaskDocument: { group: 'tasks', method: 'detachDocument' },
 
   // ---- Pipelines ------------------------------------------------------------------------
   listPublicPipelines: { group: 'pipelines', method: 'list' },
@@ -205,8 +214,12 @@ export const MCP_TOOL_HINTS = {
 /** One-line descriptions of each resource client, rendered into every SDK's docs. */
 export const GROUP_DOCS = {
   jobs: 'Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one.',
-  services: "The workspace's board services — the frames tasks are created under.",
-  tasks: "A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete.",
+  services:
+    "The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository).",
+  repos:
+    'The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation.',
+  tasks:
+    "A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete, plus the two relationships that outlive a create: the tasks it waits for, and the requirements documents it is built against.",
   pipelines: 'The pipelines a task can be started with, and whether each is headless-startable.',
   taskTypes:
     'What a task can be created AS in this workspace (the built-in kinds plus the operations the deployment registered), and the fields each one accepts.',

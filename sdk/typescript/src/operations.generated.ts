@@ -10,13 +10,17 @@ import type { RequestOptions, Transport } from './http.ts'
 import { encodePathSegment } from './http.ts'
 import { repeatedCursorError } from './errors.ts'
 import type {
+  AddPublicTaskDependencyRequest,
+  AttachPublicTaskDocumentRequest,
   CreateHeadlessPublicApiKey,
   CreatePublicJob,
+  CreatePublicServiceRequest,
   CreatePublicTask,
   CreatedPublicApiKey,
   DebugAgentContextSnapshot,
   DebugLlmCall,
   DebugRunOverview,
+  DetachPublicTaskDocumentRequest,
   GetDebugLlmCallView,
   GetPublicRunOutcomeResponse,
   ListDebugAgentContextResponse,
@@ -29,6 +33,9 @@ import type {
   ListDebugToolCallsOutcome,
   ListDebugToolCallsResponse,
   ListPublicJobsResponse,
+  ListPublicReposResponse,
+  ListPublicTaskDocumentsResponse,
+  ListPublicTaskDocumentsResponseDocument,
   ListPublicTaskTypesResponse,
   LlmCallOutcome,
   Notification,
@@ -61,6 +68,7 @@ import type {
   PublicResolvePrReview,
   PublicRun,
   PublicRunArtifactList,
+  PublicService,
   PublicServiceList,
   PublicSetFindingStatus,
   PublicTask,
@@ -241,12 +249,26 @@ export class JobsResource {
   }
 }
 
-/** The workspace's board services — the frames tasks are created under. */
+/** The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository). */
 export class ServicesResource {
   readonly #transport: Transport
 
   constructor(transport: Transport) {
     this.#transport = transport
+  }
+
+  /**
+   * Create a service
+   * Create a board service, optionally backed by a repository from `GET /api/v1/repos`. The repository link is what makes the service runnable: execution resolves a task’s repository by walking up to its enclosing service frame, so a service with none holds tasks and can start none of them. A whole-repo repository that already backs a service in this account is MOUNTED rather than duplicated; a monorepo service must name its subdirectory. The board lays the service out itself: this surface publishes no coordinates. Requires an `admin` key.
+   * `POST /api/v1/services` — operation `createPublicService`.
+   */
+  create(body: CreatePublicServiceRequest, options: RequestOptions = {}): Promise<PublicService> {
+    return this.#transport.request<PublicService>({
+      method: 'POST',
+      path: `/api/v1/services`,
+      body,
+      options,
+    })
   }
 
   /**
@@ -263,12 +285,62 @@ export class ServicesResource {
   }
 }
 
-/** A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete. */
+/** The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation. */
+export class ReposResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * List the repositories a service can be created against
+   * List the repositories the key’s workspace has connected, each with the service that already backs it (null when nothing does, and always null for a monorepo, which can back several). The discovery half of service creation: the create takes a repoId, and this is where one comes from.
+   * `GET /api/v1/repos` — operation `listPublicRepos`.
+   */
+  list(options: RequestOptions = {}): Promise<ListPublicReposResponse> {
+    return this.#transport.request<ListPublicReposResponse>({
+      method: 'GET',
+      path: `/api/v1/repos`,
+      options,
+    })
+  }
+}
+
+/** A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete, plus the two relationships that outlive a create: the tasks it waits for, and the requirements documents it is built against. */
 export class TasksResource {
   readonly #transport: Transport
 
   constructor(transport: Transport) {
     this.#transport = transport
+  }
+
+  /**
+   * Declare that a task waits for another
+   * Record that this task cannot start until `dependsOnTaskId` is done. Both ends must be tasks in this workspace, and an edge that would close a cycle is refused. Idempotent: an edge that already exists is returned as-is rather than toggled off, so a provisioning integration re-running its own setup converges. Pair it with `autoStartDependents` on the BLOCKER (the task patch) to have the chain run itself.
+   * `POST /api/v1/tasks/{taskId}/dependencies` — operation `addPublicTaskDependency`.
+   */
+  addDependency(taskId: string, body: AddPublicTaskDependencyRequest, options: RequestOptions = {}): Promise<PublicTask> {
+    return this.#transport.request<PublicTask>({
+      method: 'POST',
+      path: `/api/v1/tasks/${encodePathSegment(taskId)}/dependencies`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Attach a document to a task
+   * Attach a requirements document to a task that already exists, in either of the two forms creation takes: NAME a page in a connected document source, or CARRY the text inline. A task’s spec routinely arrives after the task does, and before this the only way to attach one was to delete the task and file it again, losing the id every stored reference points at, its ticket claim and the documents it already carried. A document a different live task already holds is refused rather than moved.
+   * `POST /api/v1/tasks/{taskId}/documents` — operation `attachPublicTaskDocument`.
+   */
+  attachDocument(taskId: string, body: AttachPublicTaskDocumentRequest, options: RequestOptions = {}): Promise<ListPublicTaskDocumentsResponseDocument> {
+    return this.#transport.request<ListPublicTaskDocumentsResponseDocument>({
+      method: 'POST',
+      path: `/api/v1/tasks/${encodePathSegment(taskId)}/documents`,
+      body,
+      options,
+    })
   }
 
   /**
@@ -294,6 +366,20 @@ export class TasksResource {
     return this.#transport.requestNoContent({
       method: 'DELETE',
       path: `/api/v1/tasks/${encodePathSegment(taskId)}`,
+      options,
+    })
+  }
+
+  /**
+   * Detach a document from a task
+   * Detach a document, naming it by the `(source, externalId)` pair the list serves. The document itself survives in the workspace, so re-attaching it later costs no re-import. Idempotent: detaching one the task does not hold is a no-op.
+   * `POST /api/v1/tasks/{taskId}/documents/detach` — operation `detachPublicTaskDocument`.
+   */
+  detachDocument(taskId: string, body: DetachPublicTaskDocumentRequest, options: RequestOptions = {}): Promise<void> {
+    return this.#transport.requestNoContent({
+      method: 'POST',
+      path: `/api/v1/tasks/${encodePathSegment(taskId)}/documents/detach`,
+      body,
       options,
     })
   }
@@ -352,6 +438,33 @@ export class TasksResource {
       if (page.nextCursor === cursor) throw repeatedCursorError()
       cursor = page.nextCursor
     }
+  }
+
+  /**
+   * List a task's attached documents
+   * The requirements documents attached to the task, in the order the agents read them. Each is identified by the `(source, externalId)` pair the attach and detach calls take.
+   * `GET /api/v1/tasks/{taskId}/documents` — operation `listPublicTaskDocuments`.
+   */
+  listDocuments(taskId: string, options: RequestOptions = {}): Promise<ListPublicTaskDocumentsResponse> {
+    return this.#transport.request<ListPublicTaskDocumentsResponse>({
+      method: 'GET',
+      path: `/api/v1/tasks/${encodePathSegment(taskId)}/documents`,
+      options,
+    })
+  }
+
+  /**
+   * Drop a dependency edge
+   * Remove the ordering between this task and `dependsOnTaskId`. Idempotent: an edge that is not there is a no-op.
+   * `POST /api/v1/tasks/{taskId}/dependencies/remove` — operation `removePublicTaskDependency`.
+   */
+  removeDependency(taskId: string, body: AddPublicTaskDependencyRequest, options: RequestOptions = {}): Promise<PublicTask> {
+    return this.#transport.request<PublicTask>({
+      method: 'POST',
+      path: `/api/v1/tasks/${encodePathSegment(taskId)}/dependencies/remove`,
+      body,
+      options,
+    })
   }
 
   /**
@@ -1579,9 +1692,11 @@ export class KeysResource {
 export abstract class CatFactoryResources {
   /** Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one. */
   readonly jobs: JobsResource
-  /** The workspace's board services — the frames tasks are created under. */
+  /** The workspace's board services, the frames tasks are created under: list them, or create one (optionally backed by a repository). */
   readonly services: ServicesResource
-  /** A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete. */
+  /** The repositories this workspace can back a service with, and which service each already backs: the discovery half of service creation. */
+  readonly repos: ReposResource
+  /** A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete, plus the two relationships that outlive a create: the tasks it waits for, and the requirements documents it is built against. */
   readonly tasks: TasksResource
   /** The pipelines a task can be started with, and whether each is headless-startable. */
   readonly pipelines: PipelinesResource
@@ -1607,6 +1722,7 @@ export abstract class CatFactoryResources {
   protected constructor(transport: Transport) {
     this.jobs = new JobsResource(transport)
     this.services = new ServicesResource(transport)
+    this.repos = new ReposResource(transport)
     this.tasks = new TasksResource(transport)
     this.pipelines = new PipelinesResource(transport)
     this.taskTypes = new TaskTypesResource(transport)

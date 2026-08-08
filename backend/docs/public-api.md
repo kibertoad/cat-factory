@@ -405,17 +405,24 @@ mapping, so it always agrees with the field it filters on.
 
 ### Services & tasks
 
-| Method / path                            | Scope    | Behaviour                                                                                                                                                                                                                                                                                                                                                                                          |
-| ---------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/services`                   | `read`   | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                                                                                                                                                                                                                                                                     |
-| `POST /api/v1/services/:serviceId/tasks` | `write`  | Create a task. Body `{ title (1–200), description? (≤2000), taskType?, fields?, ticket?, documents? }` (`taskType` defaults to `feature`; `recurring` is not creatable here). See [Filling a task type's form](#filling-a-task-types-form), [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket) and [Attaching requirements documents](#attaching-requirements-documents). |
-| `GET /api/v1/services/:serviceId/tasks`  | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                                                                                                                                                                                  |
-| `GET /api/v1/tasks/:taskId`              | `read`   | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                                                                                                                                                                                                                                                                          |
-| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit the task's authored input: `{ title?, description?, fields? }` (an empty patch is a no-op). `fields` is MERGED over what the task already carries, so a caller sends only what it decides; see [Repairing a refused input](#repairing-a-refused-input).                                                                                                                                       |
-| `POST /api/v1/tasks/:taskId/start`       | `write`¹ | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                                                                                                                                                                                   |
-| `POST /api/v1/tasks/:taskId/stop`        | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                                                                                                                                                                                      |
-| `POST /api/v1/tasks/:taskId/retry`       | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                                                                                                                                                                                   |
-| `DELETE /api/v1/tasks/:taskId`           | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                                                                                                                                                                                       |
+| Method / path                                    | Scope    | Behaviour                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/services`                           | `read`   | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                                                                                                                                                                                                                                                                     |
+| `POST /api/v1/services/:serviceId/tasks`         | `write`  | Create a task. Body `{ title (1–200), description? (≤2000), taskType?, fields?, ticket?, documents? }` (`taskType` defaults to `feature`; `recurring` is not creatable here). See [Filling a task type's form](#filling-a-task-types-form), [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket) and [Attaching requirements documents](#attaching-requirements-documents). |
+| `GET /api/v1/services/:serviceId/tasks`          | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                                                                                                                                                                                  |
+| `GET /api/v1/tasks/:taskId`                      | `read`   | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl, dependsOn, autoStartDependents }`.                                                                                                                                                                                                                                                          |
+| `PATCH /api/v1/tasks/:taskId`                    | `write`  | Edit the task's authored input: `{ title?, description?, fields?, autoStartDependents? }` (an empty patch is a no-op). `fields` is MERGED over what the task already carries, so a caller sends only what it decides; see [Repairing a refused input](#repairing-a-refused-input).                                                                                                                 |
+| `POST /api/v1/tasks/:taskId/start`               | `write`¹ | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                                                                                                                                                                                   |
+| `POST /api/v1/tasks/:taskId/stop`                | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                                                                                                                                                                                      |
+| `POST /api/v1/tasks/:taskId/retry`               | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                                                                                                                                                                                   |
+| `DELETE /api/v1/tasks/:taskId`                   | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                                                                                                                                                                                       |
+| `POST /api/v1/services`                          | `admin`  | Create a service, optionally backed by a repository. See [Provisioning the board](#provisioning-the-board).                                                                                                                                                                                                                                                                                        |
+| `GET /api/v1/repos`                              | `read`   | The repositories a service can be created against, and which service each already backs.                                                                                                                                                                                                                                                                                                           |
+| `POST /api/v1/tasks/:taskId/dependencies`        | `write`  | Declare that this task waits for another. Body `{ dependsOnTaskId }`. Idempotent. See [Ordering a batch of tasks](#ordering-a-batch-of-tasks).                                                                                                                                                                                                                                                     |
+| `POST /api/v1/tasks/:taskId/dependencies/remove` | `write`  | Drop the edge. Idempotent.                                                                                                                                                                                                                                                                                                                                                                         |
+| `GET /api/v1/tasks/:taskId/documents`            | `read`   | The requirements documents attached to the task, in reading order.                                                                                                                                                                                                                                                                                                                                 |
+| `POST /api/v1/tasks/:taskId/documents`           | `write`  | Attach one, in either form creation takes. See [Attaching requirements documents](#attaching-requirements-documents).                                                                                                                                                                                                                                                                              |
+| `POST /api/v1/tasks/:taskId/documents/detach`    | `write`  | Detach one by `{ source, externalId }`. Idempotent; `204`. The document itself stays in the workspace.                                                                                                                                                                                                                                                                                             |
 
 ¹ Starting a pipeline that can park on a human requires `decide`, exactly as on `POST /jobs`. See
 the paragraph below for what counts as a park.
@@ -430,8 +437,9 @@ ways a pipeline parks:
 - an **approval gate** on an enabled step;
 - an inline **review or brainstorm** kind (`requirements-review`, `clarity-review`, and the two
   brainstorms), which sets the run `blocked` awaiting an answer;
-- an unbounded **human-wait gate** (`human-review`), a gate step whose poll never times out because
-  it is waiting for a person to review the PR;
+- an unbounded **human-wait gate**, a gate step whose poll never times out because it is waiting for
+  a person (the shipped `human-review`, and any a deployment registers with
+  `pollExhaustion: 'rearm'`, which the rule reads off the gate's own registration);
 - an **interview gate**: a step whose kind carries the `interview-gate` trait (the planning and
   document interviewers, plus any a deployment registers), which asks a batch of questions and waits.
 
@@ -441,8 +449,105 @@ preset, which carries a risk-gated `human-review`: a `write`-only key cannot sta
 unconditional presets (`Standard build`, `Simple build`) never park and stay `write`-startable.
 
 What the rule does **not** see: a park raised dynamically mid-run (an agent-raised decision, a judge
-`park`), a deployment's own unbounded-wait gate, and follow-up triage. See
+`park`), and follow-up triage. A deployment's own unbounded-wait gate used to be a third blind spot
+and no longer is: every gate declares what a spent poll budget means at registration, so the rule
+asks the gate rather than a list of the shipped ones. See
 [Pick the right scope](#2-pick-the-right-scope) for what that means when you mint a key.
+
+#### Provisioning the board
+
+`/api/v1` could always list services and file work under one, and nothing could CREATE one. That was
+the last act of board setup with no headless counterpart: a deployment that provisions its own keys
+(`POST /api/v1/keys`) and enrols its own webhook still had to open the app once, to have anywhere to
+file work at all.
+
+```http
+GET /api/v1/repos
+{ "repos": [ { "repoId": 40123, "provider": "github", "owner": "acme", "name": "payments-api",
+               "defaultBranch": "main", "private": true, "monorepo": false,
+               "serviceId": null, "linkedElsewhere": false } ] }
+
+POST /api/v1/services
+{ "title": "Payments API", "type": "service", "repo": { "repoId": 40123 } }
+```
+
+**The repository link is the load-bearing half.** Execution resolves a task's repository by walking
+up to its enclosing service frame, deliberately with no first-repo fallback, so a service with none
+holds tasks and can start none of them. Creating an unlinked frame is still allowed (omit `repo`) and
+is a legitimate intermediate state for a caller mapping out a board before its repositories exist,
+but it is not a finished service.
+
+`GET /api/v1/repos` is the discovery half, and it is what makes the create usable at all: the create
+takes a `repoId`, and until now there was nowhere to learn one. `serviceId` on each row names the
+service that repository already backs **on this board**, so a caller re-running its provisioning
+finds what it created last time rather than discovering it through a `409`. A monorepo answers
+`null` there even when its subdirectories back services, since it can back more.
+
+`linkedElsewhere` is the third state the pair cannot express: the repository already backs a service
+homed on ANOTHER board of the account, so the choice is spent and there is no id here that would
+address it (every read on this API is scoped to your key's workspace, so a frame homed elsewhere
+would not appear in `GET /api/v1/services` and `POST /api/v1/services/{serviceId}/tasks` would 404
+on it). Read the flag before treating `serviceId: null` as "available".
+
+Guards, all of them the app's own rather than a second set:
+
+- A whole-repo repository that already backs a service **anywhere in the account** is MOUNTED onto
+  this board rather than duplicated, so two boards in one org share the service, its subtree and its
+  task list. Where that mount would answer with a frame homed on another board, this surface
+  REFUSES instead (`422`, `reason: repo_service_homed_elsewhere`): a `serviceId` a workspace-scoped
+  key cannot then list or file work under is worse than a refusal, because it reads as success. Use
+  the board that homes the service, or a key scoped to it.
+- A **monorepo** service must name its `repo.directory`, and a subdirectory another service already
+  claims is refused. Send `repo.monorepo: true` with the create to flag the repository as you go. A
+  `repo.directory` on a whole-repo repository is refused (`422`,
+  `reason: directory_requires_monorepo`) rather than stored: dispatch reads a service's directory
+  only while its repository is flagged a monorepo, so storing one would run the agents at the
+  repository root while the created service says otherwise. Omitting `repo.monorepo` leaves the
+  repository's flag as it stands, so it is the STORED flag that decides — and a refused create never
+  changes it.
+- `type` is the repo-backed subset (`service` / `frontend` / `library` / `document`). A `database` or
+  `queue` frame documents infrastructure for the agents and runs nothing, so nothing here creates one.
+
+There is deliberately **no `position`**: board coordinates are ergonomics for a human looking at a
+canvas, and publishing a coordinate system into a surface that is frozen forever would buy an
+integration nothing. The board lays a new service out itself. Positions, sizes, reparenting,
+archive/restore and the module/epic vocabulary stay out for the same reason.
+
+Service creation is `admin`, which is board STRUCTURE and the rung a provisioning integration holds
+anyway.
+
+#### Ordering a batch of tasks
+
+An integration filing five related tasks and starting them got five runs racing against one
+repository, each opening a pull request against a base the others were moving. The platform has had
+the mechanism to serialise them all along and no way for an external caller to be told about it.
+
+```http
+POST /api/v1/tasks/blk_ui/dependencies      { "dependsOnTaskId": "blk_api" }
+PATCH /api/v1/tasks/blk_api                 { "autoStartDependents": true }
+```
+
+Two halves, and they do different jobs. The **edge** stops `blk_ui` starting until `blk_api` is
+`done`: the engine's start gate refuses it, so a caller that starts the whole batch at once gets one
+run and four refusals rather than five races. **`autoStartDependents` on the BLOCKER** is what makes
+a declared chain run itself: when `blk_api`'s pull request merges, every task depending on it whose
+other blockers are also done starts. Without it a dependent is merely refused until the blocker
+lands, and something has to notice and start it.
+
+Both writes are **explicit and idempotent**, not toggles: an edge that already exists is returned
+as-is, and one that is not there is a no-op to remove. A REMOVE also converges on an edge whose
+blocker no longer resolves as a visible task (deleted, or homed on a board this key cannot read):
+the edge is a fact about the task's own row, and refusing to drop it would leave the task gated on a
+blocker that can never reach `done`. An id that is neither a visible task nor a declared edge is
+still `404`, so a transposed pair is answered rather than silently doing nothing. That is the difference from the app's own
+canvas gesture, where "flip it" is exactly the intent. A provisioning integration re-running its own
+setup has to CONVERGE, and a toggle would invert every edge it declared last time, silently, since
+both calls succeed and the graph it asked for is the one it does not get.
+
+Both ends must be tasks in this workspace, and an edge that would close a cycle is refused (`422`),
+so the start gate and the auto-start can never deadlock. A task's own edges come back on
+`GET /api/v1/tasks/:taskId` as `dependsOn`, which is what makes the declaration verifiable rather
+than fire-and-forget.
 
 #### Filling a task type's form
 
@@ -740,6 +845,35 @@ what did not fit.
 Documents attached this way are ordinary workspace documents: they appear in the app alongside
 imported pages, and a human can detach or re-attach them there.
 
+**After the task exists**, the same two forms are reachable on their own routes, because a spec
+routinely arrives after the task does (a ticket filed first and specified later, a PRD that lands
+mid-review):
+
+```http
+GET  /api/v1/tasks/blk_9c2/documents
+POST /api/v1/tasks/blk_9c2/documents
+{ "document": { "kind": "upload", "title": "Checkout PRD", "content": "# Checkout PRD\n…" } }
+
+POST /api/v1/tasks/blk_9c2/documents/detach
+{ "source": "upload", "externalId": "doc_71f" }
+```
+
+The list identifies each document by the `(source, externalId)` pair the detach takes, and an
+`upload` carries `source: "upload"` with an empty `url` (there is no page behind it). Detach is a
+POST rather than a `DELETE .../documents/{id}` because that identity is two values, one of which is
+a free-form external id that is a PATH for some sources (`docs/architecture/adr-0001.md`).
+
+Two properties are worth relying on. Detaching is **idempotent** and never deletes: the document
+stays in the workspace, so re-attaching it later costs no re-import, and detaching one the task does
+not hold is a no-op rather than an error. Attaching a document that a DIFFERENT live task already
+holds is **refused rather than moved** (`409`), because a document carries exactly one attachment:
+moving it would strip the other task of a spec it was created with, and nothing in that task's next
+run would report the absence.
+
+Before this, editing a task's corpus headlessly meant deleting the task and filing it again, which
+loses the id every stored reference points at, its ticket claim (which then refuses every future
+filing of that ticket) and the documents it already carried.
+
 The inline-only rule stays jobs-only: a `decide` key may start container pipelines on board tasks.
 Parks raised dynamically mid-run (an agent-raised decision, a judge park) are not statically
 knowable, so they do not gate the start; see
@@ -754,7 +888,23 @@ knowable, so they do not gate the start; see
 
 Run `status` distinguishes the states a caller reacts to: `running`, `blocked` (parked on a human;
 go read `/runs/:runId/decisions`), `paused` (spend-gated), `done`, `failed`. Each step reports
-`{ agentKind, state, progress, subtasks }`, with live subtask counts while a container step works.
+`{ agentKind, state, progress, subtasks, output, data, truncated? }`, with live subtask counts while
+a container step works.
+
+**`output` is the step's deliverable** (the agent's final reply), and `data` its structured result
+when its kind produces one; both are `null` for a step that produced none. This is what a board task
+running an INLINE-only pipeline delivers: a research pass, an estimate, a written assessment opens
+no pull request, so before 1.31.0 its result was readable only in the app. **This endpoint serves
+both whole**, matching `publicJob.result.output`, which carries the same class of content for a
+headless job. For raw diagnostics, use the [`/debug` surface](./debug-api.md) instead, which sizes
+every body before it serves it.
+
+**The SSE stream serves them REDUCED, and says so per step.** A frame carries the whole run, so an
+unreduced late frame repeats every output the run has produced so far and the traffic grows with the
+square of the pipeline's length. On the stream an oversized `output` is clipped to a leading preview,
+an oversized `data` is withheld as `null`, and the step carries `truncated: true`. A step whose
+deliverable already fits rides the stream untouched and unflagged, so `truncated` means exactly
+"something was left out of this frame". Read this endpoint for the whole thing.
 
 #### Streaming (SSE)
 
@@ -764,7 +914,7 @@ there is **no heartbeat**, so a quiet run produces a quiet stream. Event names:
 
 | Event      | Meaning                                                                                                                                                      |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `progress` | The run advanced; data is the full job / run projection (same shape as the GET).                                                                             |
+| `progress` | The run advanced; data is the job / run projection (same shape as the GET, with a run's step deliverables reduced — see above).                              |
 | `decision` | The run just **parked** on a human decision. Answer via `/runs/:runId/decisions`; the stream stays open, and a later park after a resume is announced again. |
 | `done`     | Terminal success. Stream closes.                                                                                                                             |
 | `error`    | Terminal failure. Stream closes.                                                                                                                             |
@@ -1020,12 +1170,12 @@ a sibling workspace's spend.
 What a run PROVED, for a consumer whose job is to judge it rather than debug it: a trial harness
 deciding whether to accept a change, an evaluation pipeline scoring a fleet of runs.
 
-| Method / path                            | Scope  | Behaviour                                                               |
-| ---------------------------------------- | ------ | ----------------------------------------------------------------------- |
-| `GET /api/v1/runs/:runId/report`         | `read` | The engine's **verification report** for the run.                       |
-| `GET /api/v1/runs/:runId/outcome`        | `read` | The run's **outcome summary**: what it changed, and what backs that up. |
-| `GET /api/v1/runs/:runId/artifacts`      | `read` | The binary artifacts the run captured (metadata; unpaged).              |
-| `GET /api/v1/artifacts/:artifactId/blob` | `read` | One artifact's **bytes**, with its recorded image content type.         |
+| Method / path                            | Scope  | Behaviour                                                                   |
+| ---------------------------------------- | ------ | --------------------------------------------------------------------------- |
+| `GET /api/v1/runs/:runId/report`         | `read` | The engine's **verification report** for the run.                           |
+| `GET /api/v1/runs/:runId/outcome`        | `read` | The run's **outcome summary**: what it changed, and what backs that up.     |
+| `GET /api/v1/runs/:runId/artifacts`      | `read` | The run's binary artifacts, captured and task-attached (metadata; unpaged). |
+| `GET /api/v1/artifacts/:artifactId/blob` | `read` | One artifact's **bytes**, with its recorded image content type.             |
 
 A run is addressable here on the same terms as the [decision routes](#parked-decisions-apiv1runsruniddecisions)
 that share the `/api/v1/runs/:runId/*` prefix: the runs this key could already read through
@@ -1123,11 +1273,25 @@ The `spec/` both endpoints join against is read from the branch the RUN pushed t
 the repo default: the spec increment a task wrote has not merged while its pull request is open, so
 the default branch is missing exactly the requirements the tester just ruled on.
 
-The **artifact** rows are `{ artifactId, kind, view, contentType, byteSize, hash, createdAt }`.
+The **artifact** rows are `{ artifactId, kind, scope, view, contentType, byteSize, hash, createdAt }`.
 `kind` is `screenshot` (machine-captured during the run) or `reference` (the image a human uploaded
-for it to be judged against); `view` pairs the two. The list is deliberately unpaged: the capture
-path caps how many artifacts one run may store, so the response size is bounded before the request,
-and `byteSize` lets a caller decide whether to fetch the bytes at all.
+for it to be judged against); `view` pairs the two. The list is deliberately unpaged, and both of
+its halves carry a standing row cap for that to hold: the capture path bounds how many artifacts one
+run may store, and the upload path bounds how many one task may hold (a `429` once it is full, never
+an eviction of a design somebody already attached). So the response size is bounded before the
+request, and `byteSize` lets a caller decide whether to fetch the bytes at all.
+
+**`scope` says which anchor a row came from**, and the list carries BOTH: `run` for what this run
+captured, `task` for what is attached to its task and outlives any single run of it. Until 1.31.0
+the list was the run's own rows alone, and a reference design is deliberately task-anchored (a person
+uploads it once, not once per attempt), so a caller enumerating a run's artifacts to compare a
+screenshot against the design it was judged against saw one half and concluded the run had captured
+evidence against nothing. Both halves were individually fetchable through the blob endpoint the whole
+time: it was the LIST that was half the truth.
+
+Two consequences for a consumer. A count that means "screenshots this run captured" must filter on
+`scope: "run"`. And a row that satisfies both anchors (a screenshot the run captured against its own
+task) appears ONCE, as `run`, so no count off this list double-reports it.
 
 The blob endpoint answers the artifact's stored image content type with `nosniff`, and is
 **authenticated like everything else**: a report on a public repository can link to it without

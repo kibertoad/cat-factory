@@ -78,6 +78,8 @@ type Client struct {
 	Jobs *JobsService
 	// The workspace's board services.
 	Services *ServicesService
+	// The repositories a service can be created against.
+	Repos *ReposService
 	// Board tasks: create, edit, start, stop, retry, watch, delete.
 	Tasks *TasksService
 	// The pipelines a task can be started with.
@@ -143,6 +145,7 @@ func New(options Options) (*Client, error) {
 	}
 	client.Jobs = &JobsService{client: client}
 	client.Services = &ServicesService{client: client}
+	client.Repos = &ReposService{client: client}
 	client.Tasks = &TasksService{client: client}
 	client.Pipelines = &PipelinesService{client: client}
 	client.TaskTypes = &TaskTypesService{client: client}

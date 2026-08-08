@@ -59,7 +59,17 @@ export type RenameWorkspaceInput = v.InferOutput<typeof renameWorkspaceSchema>
 
 export const addFrameSchema = v.object({
   type: blockTypeSchema,
-  position: positionSchema,
+  /**
+   * Where to drop the frame. OPTIONAL: the board lays one out on its own grid when omitted, the
+   * same fallback {@link addServiceFromRepoSchema} has always had. The app's drag-drop always sends
+   * one (the drop point IS the request); a caller with no canvas, such as the public API's
+   * service creation, deliberately sends none: board coordinates are not part of that surface.
+   */
+  position: v.optional(positionSchema),
+  /** The frame's name. Omitted ⇒ a generated `<Role> <n>` placeholder, as drag-drop has always had. */
+  title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+  /** What the service is, for the agents that read it as context. Omitted ⇒ the generated line. */
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
 })
 export type AddFrameInput = v.InferOutput<typeof addFrameSchema>
 
@@ -73,6 +83,13 @@ export type AddFrameInput = v.InferOutput<typeof addFrameSchema>
 export const addServiceFromRepoSchema = v.object({
   repoGithubId: v.number(),
   position: v.optional(positionSchema),
+  /**
+   * The service's name. Omitted ⇒ named after the repository (or, for a monorepo service, after
+   * its subdirectory), which is what the app's import button relies on.
+   */
+  title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+  /** What the service is, for the agents that read it as context. Omitted ⇒ the generated line. */
+  description: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
   /**
    * The repository role for the imported frame (backend service / frontend / library /
    * document repository). Omitted → `service`, so existing callers are unchanged.

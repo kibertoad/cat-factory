@@ -1,4 +1,4 @@
-import type { ExecutionInstance, Pipeline } from '@cat-factory/kernel'
+import type { BinaryArtifactRecord, ExecutionInstance, Pipeline } from '@cat-factory/kernel'
 import {
   parsePrVerificationReport,
   parseRunOutcome,
@@ -202,6 +202,10 @@ function defineRunEvidenceCases(harness: ConformanceHarness): void {
         {
           artifactId: 'art_1',
           kind: 'screenshot',
+          // Captured by THIS run, so `run`, even though the row also carries the task's block id:
+          // the run is the more specific anchor and the row must appear ONCE, or every count
+          // taken off this list double-reports the same image.
+          scope: 'run',
           view: 'login',
           contentType: 'image/png',
           byteSize: bytes.byteLength,
@@ -224,6 +228,67 @@ function defineRunEvidenceCases(harness: ConformanceHarness): void {
       expect(unknown.status).toBe(404)
       const anonymous = await app.callBinary('GET', '/api/v1/artifacts/art_1/blob')
       expect(anonymous.status).toBe(401)
+    })
+
+    it("lists the TASK's reference designs beside what the run captured, saying which is which", async () => {
+      // The gap this closes. A reference design is anchored on the BLOCK, deliberately, because it
+      // outlives any single run of the task (a person uploads it once, not once per attempt). The
+      // list was the run's own rows alone, so a caller comparing a screenshot against the design it
+      // was judged against saw one half and concluded the run captured evidence against nothing.
+      // Both halves were individually fetchable through the blob endpoint the whole time.
+      const store = memoryBinaryArtifactStore()
+      const app = harness.makeApp(undefined, {
+        resolveBinaryArtifactStore: () => Promise.resolve(store),
+      })
+      const { workspace } = await app.createOrgWorkspace({ seed: true })
+      const wsId = workspace.id
+      const auth = await mintKey(app, wsId, 'read')
+      const runId = await startRun(app, wsId)
+      const bytes = new Uint8Array([1, 2, 3])
+      const row = (over: Partial<BinaryArtifactRecord> & { id: string }): BinaryArtifactRecord => ({
+        workspaceId: wsId,
+        executionId: null,
+        blockId: null,
+        kind: 'screenshot',
+        view: null,
+        contentType: 'image/png',
+        byteSize: bytes.byteLength,
+        hash: 'aa',
+        storage: 'memory',
+        document: null,
+        storageKey: over.id,
+        createdAt: 1,
+        ...over,
+      })
+      // What the run captured, and what the TASK carries: a reference uploaded before any run, so
+      // it names no execution at all.
+      store.seed(
+        row({ id: 'art_shot', executionId: runId, blockId: 'task_login', view: 'login' }),
+        bytes,
+      )
+      store.seed(
+        row({ id: 'art_ref', blockId: 'task_login', kind: 'reference', view: 'login' }),
+        bytes,
+      )
+      // A reference on a DIFFERENT task, which this run's list must not reach: the union is over
+      // the run's own task, not the workspace.
+      store.seed(row({ id: 'art_elsewhere', blockId: 'task_other', kind: 'reference' }), bytes)
+
+      const listed = await app.call<PublicRunArtifactList>(
+        'GET',
+        `/api/v1/runs/${runId}/artifacts`,
+        undefined,
+        auth,
+      )
+      expect(listed.status).toBe(200)
+      expect(listed.body.artifacts.map((a) => [a.artifactId, a.scope])).toEqual([
+        ['art_shot', 'run'],
+        ['art_ref', 'task'],
+      ])
+      // And the reference's BYTES resolve through the same flat blob route, which is what makes the
+      // pairing usable rather than merely listed.
+      const blob = await app.callBinary('GET', '/api/v1/artifacts/art_ref/blob', auth)
+      expect(blob.status).toBe(200)
     })
 
     it("refuses another workspace's artifact, and 404s an unknown run rather than listing nothing", async () => {

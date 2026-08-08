@@ -13,7 +13,9 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete.
+ * A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete, plus the two
+ * relationships that outlive a create: the tasks it waits for, and the requirements documents it
+ * is built against.
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
 public final class TasksClient {
@@ -21,6 +23,34 @@ public final class TasksClient {
 
     TasksClient(Transport transport) {
         this.transport = transport;
+    }
+
+    /**
+     * Declare that a task waits for another
+     * Record that this task cannot start until `dependsOnTaskId` is done. Both ends must be tasks
+     * in this workspace, and an edge that would close a cycle is refused. Idempotent: an edge that
+     * already exists is returned as-is rather than toggled off, so a provisioning integration
+     * re-running its own setup converges. Pair it with `autoStartDependents` on the BLOCKER (the
+     * task patch) to have the chain run itself.
+     * {@code POST /api/v1/tasks/{taskId}/dependencies} (operation {@code
+     * addPublicTaskDependency}).
+     */
+    public PublicTask addDependency(String taskId, AddPublicTaskDependencyRequest body) {
+        return transport.request("POST", "/api/v1/tasks/" + Transport.pathSegment(taskId) + "/dependencies", body, Map.of(), new TypeReference<PublicTask>() {});
+    }
+
+    /**
+     * Attach a document to a task
+     * Attach a requirements document to a task that already exists, in either of the two forms
+     * creation takes: NAME a page in a connected document source, or CARRY the text inline. A
+     * task’s spec routinely arrives after the task does, and before this the only way to attach
+     * one was to delete the task and file it again, losing the id every stored reference points
+     * at, its ticket claim and the documents it already carried. A document a different live task
+     * already holds is refused rather than moved.
+     * {@code POST /api/v1/tasks/{taskId}/documents} (operation {@code attachPublicTaskDocument}).
+     */
+    public ListPublicTaskDocumentsResponseDocument attachDocument(String taskId, AttachPublicTaskDocumentRequest body) {
+        return transport.request("POST", "/api/v1/tasks/" + Transport.pathSegment(taskId) + "/documents", body, Map.of(), new TypeReference<ListPublicTaskDocumentsResponseDocument>() {});
     }
 
     /**
@@ -44,6 +74,18 @@ public final class TasksClient {
      */
     public void delete(String taskId) {
         transport.requestNoContent("DELETE", "/api/v1/tasks/" + Transport.pathSegment(taskId), null, Map.of());
+    }
+
+    /**
+     * Detach a document from a task
+     * Detach a document, naming it by the `(source, externalId)` pair the list serves. The
+     * document itself survives in the workspace, so re-attaching it later costs no re-import.
+     * Idempotent: detaching one the task does not hold is a no-op.
+     * {@code POST /api/v1/tasks/{taskId}/documents/detach} (operation {@code
+     * detachPublicTaskDocument}).
+     */
+    public void detachDocument(String taskId, DetachPublicTaskDocumentRequest body) {
+        transport.requestNoContent("POST", "/api/v1/tasks/" + Transport.pathSegment(taskId) + "/documents/detach", body, Map.of());
     }
 
     /**
@@ -101,6 +143,27 @@ public final class TasksClient {
                 return new Page<>(page.tasks(), page.nextCursor());
             }
         };
+    }
+
+    /**
+     * List a task's attached documents
+     * The requirements documents attached to the task, in the order the agents read them. Each is
+     * identified by the `(source, externalId)` pair the attach and detach calls take.
+     * {@code GET /api/v1/tasks/{taskId}/documents} (operation {@code listPublicTaskDocuments}).
+     */
+    public ListPublicTaskDocumentsResponse listDocuments(String taskId) {
+        return transport.request("GET", "/api/v1/tasks/" + Transport.pathSegment(taskId) + "/documents", null, Map.of(), new TypeReference<ListPublicTaskDocumentsResponse>() {});
+    }
+
+    /**
+     * Drop a dependency edge
+     * Remove the ordering between this task and `dependsOnTaskId`. Idempotent: an edge that is not
+     * there is a no-op.
+     * {@code POST /api/v1/tasks/{taskId}/dependencies/remove} (operation {@code
+     * removePublicTaskDependency}).
+     */
+    public PublicTask removeDependency(String taskId, AddPublicTaskDependencyRequest body) {
+        return transport.request("POST", "/api/v1/tasks/" + Transport.pathSegment(taskId) + "/dependencies/remove", body, Map.of(), new TypeReference<PublicTask>() {});
     }
 
     /**

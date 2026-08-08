@@ -5,10 +5,13 @@ package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicTask} wire model.
+ * @param autoStartDependents the {@code autoStartDependents} field.
+ * @param dependsOn the {@code dependsOn} field.
  * @param description the {@code description} field.
  * @param progress the {@code progress} field.
  * @param pullRequestUrl Always present; {@code null} when the server has no value for it.
@@ -21,6 +24,10 @@ import org.jspecify.annotations.Nullable;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicTask(
+    @JsonProperty("autoStartDependents") Boolean autoStartDependents,
+
+    @JsonProperty("dependsOn") List<String> dependsOn,
+
     @JsonProperty("description") String description,
 
     @JsonProperty("progress") Double progress,
@@ -54,6 +61,8 @@ public record PublicTask(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
+        private @Nullable Boolean autoStartDependents;
+        private @Nullable List<String> dependsOn;
         private @Nullable String description;
         private @Nullable Double progress;
         private @Nullable String pullRequestUrl;
@@ -63,6 +72,18 @@ public record PublicTask(
         private @Nullable String taskId;
         private @Nullable String taskType;
         private @Nullable String title;
+
+        /** Set {@code autoStartDependents}. */
+        public Builder autoStartDependents(@Nullable Boolean autoStartDependents) {
+            this.autoStartDependents = autoStartDependents;
+            return this;
+        }
+
+        /** Set {@code dependsOn}. */
+        public Builder dependsOn(@Nullable List<String> dependsOn) {
+            this.dependsOn = dependsOn;
+            return this;
+        }
 
         /** Set {@code description}. */
         public Builder description(@Nullable String description) {
@@ -120,7 +141,7 @@ public record PublicTask(
 
         /** Build the {@link PublicTask}. */
         public PublicTask build() {
-            return new PublicTask(description, progress, pullRequestUrl, runId, serviceId, status, taskId, taskType, title);
+            return new PublicTask(autoStartDependents, dependsOn, description, progress, pullRequestUrl, runId, serviceId, status, taskId, taskType, title);
         }
     }
 }

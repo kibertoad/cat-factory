@@ -116,7 +116,6 @@ surface built on those seams is still open, as
 - [Email as a NotificationChannel](./email-notification-channel.md)
 - [Figma design support and the designer workflow](./figma-design-support.md)
 - [MCP support maturation](./mcp-maturation.md)
-- [Public API headless completeness (repair, provision, read what you judge)](./public-api-headless-completeness.md)
 
 ### Engineering hygiene
 

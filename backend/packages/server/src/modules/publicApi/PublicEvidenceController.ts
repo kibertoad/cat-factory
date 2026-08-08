@@ -2,6 +2,7 @@ import {
   getPublicRunOutcomeContract,
   getPublicRunReportContract,
   listPublicRunArtifactsContract,
+  type PublicArtifactScope,
   type PublicRunArtifact,
 } from '@cat-factory/contracts'
 import type { BinaryArtifactRecord, BinaryArtifactStore } from '@cat-factory/kernel'
@@ -63,10 +64,14 @@ import { authorize, authorizeOrThrow, refuse } from './publicApiAuth.js'
 //     failure is shared DATA produced by `publicApiAuth`, and CLAUDE.md names it as such.
 
 /** Project a stored artifact row onto the wire, dropping the storage vocabulary. */
-function artifactToWire(record: BinaryArtifactRecord): PublicRunArtifact {
+function artifactToWire(
+  record: BinaryArtifactRecord,
+  scope: PublicArtifactScope,
+): PublicRunArtifact {
   return {
     artifactId: record.id,
     kind: record.kind,
+    scope,
     view: record.view,
     contentType: record.contentType,
     byteSize: record.byteSize,
@@ -97,6 +102,48 @@ async function requireArtifactStore<E extends AppEnv>(
     )
   }
   return store
+}
+
+/**
+ * Everything a run's evidence list should show: the artifacts the RUN captured, plus the ones
+ * attached to its TASK, each carrying which anchor it came from.
+ *
+ * The list used to be `listByExecution` alone, which is where the run's screenshots live, while a
+ * reference design is anchored on the BLOCK, deliberately, because it outlives any single run of
+ * the task. So a caller enumerating a run's artifacts to compare a screenshot against the design it
+ * was judged against saw the screenshot and not the design, and concluded the run captured
+ * evidence against nothing. Both halves were individually fetchable through
+ * `GET /api/v1/artifacts/:artifactId/blob` the whole time: only the LIST was half the truth, which
+ * is the degrade-loudly rule inverted (absent rendering as empty) on the one surface whose job is
+ * to say what a run proved.
+ *
+ * Two reads rather than one, because the two sets have different anchors ON PURPOSE and no single
+ * query spans them. Issued together: neither depends on the other, and this is a read a judging
+ * consumer makes per run.
+ *
+ * A row that satisfies BOTH (a screenshot the run captured against its own task, which carries the
+ * block id too) is emitted ONCE, as `run`: the run is the more specific anchor, and a duplicated
+ * row would make every count taken off this list overstate the evidence. Ordering follows the two
+ * reads (the run's own rows first, each store returning oldest-first), so a caller that renders
+ * the list in order sees the run's capture before the standing material it was judged against.
+ */
+async function listRunArtifacts(
+  store: BinaryArtifactStore,
+  workspaceId: string,
+  runId: string,
+  blockId: string,
+): Promise<PublicRunArtifact[]> {
+  const [captured, onTask] = await Promise.all([
+    store.listByExecution(workspaceId, runId),
+    store.listByBlock(workspaceId, blockId),
+  ])
+  const seen = new Set(captured.map((record) => record.id))
+  return [
+    ...captured.map((record) => artifactToWire(record, 'run')),
+    ...onTask
+      .filter((record) => !seen.has(record.id))
+      .map((record) => artifactToWire(record, 'task')),
+  ]
 }
 
 /**
@@ -144,8 +191,8 @@ export function publicEvidenceController(): Hono<AppEnv> {
     return c.json(outcome, 200)
   })
 
-  // The run's captured artifacts (metadata). Unpaged: the capture path caps how many one run may
-  // store, so the response size is computable before the request.
+  // The run's artifacts (metadata): what it CAPTURED, plus what its task carries. Unpaged: the
+  // capture path caps how many one run may store, so the response size is computable up front.
   buildHonoRoute(app, listPublicRunArtifactsContract, async (c) => {
     const gate = await authorize(c, listPublicRunArtifactsContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
@@ -154,9 +201,10 @@ export function publicEvidenceController(): Hono<AppEnv> {
     const store = await requireArtifactStore(c, workspaceId)
     // Resolve the run before listing, so a mistyped (or out-of-scope) id answers "no such run"
     // rather than an empty list a caller would read as "this run captured nothing".
-    if (!(await loadScopedRun(c, workspaceId, runId))) throw runNotFound(runId)
+    const scoped = await loadScopedRun(c, workspaceId, runId)
+    if (!scoped) throw runNotFound(runId)
     return c.json(
-      { artifacts: (await store.listByExecution(workspaceId, runId)).map(artifactToWire) },
+      { artifacts: await listRunArtifacts(store, workspaceId, runId, scoped.blockId) },
       200,
     )
   })
