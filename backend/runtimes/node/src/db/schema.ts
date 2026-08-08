@@ -1143,6 +1143,11 @@ export const documents = pgTable(
     // `exemplar` scoped to `doc_kind`. Nullable — a plain imported / block-linked doc has neither.
     role: text('role'),
     doc_kind: text('doc_kind'),
+    // What became of the document's rendered images at the import that wrote this body (mirror of
+    // D1 migration 0087). NULL is a distinct state, not a default: the question does not apply to a
+    // prose source or an `upload`, where every non-null value means renders were in scope and says
+    // how they went.
+    render_status: text('render_status'),
     synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
     deleted_at: bigint('deleted_at', { mode: 'number' }),
   },
@@ -1429,12 +1434,25 @@ export const binaryArtifacts = pgTable(
     hash: text('hash').notNull(),
     storage: text('storage').notNull(),
     storage_key: text('storage_key').notNull(),
+    // The imported document this artifact was rendered FROM (mirror of D1 migration 0087), or NULL
+    // for one a person uploaded. The document's own source identity rather than the block it is
+    // attached to: an import runs before any attachment exists, and only document-sourced artifacts
+    // are replaced wholesale on a re-import.
+    document_source: text('document_source'),
+    document_external_id: text('document_external_id'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_binary_artifacts_execution').on(t.workspace_id, t.execution_id),
     index('idx_binary_artifacts_block').on(t.workspace_id, t.block_id),
+    // The re-import reclaim deletes every artifact rendered from one document, so it is an indexed
+    // range delete rather than a per-workspace scan.
+    index('idx_binary_artifacts_document').on(
+      t.workspace_id,
+      t.document_source,
+      t.document_external_id,
+    ),
     // The per-workspace retention sweep filters on `created_at`; index it so the prune is an
     // indexed range delete (mirrors the D1 idx_binary_artifacts_created index).
     index('idx_binary_artifacts_created').on(t.workspace_id, t.created_at),

@@ -321,6 +321,11 @@ export function createDocumentsModule(
     clock: deps.clock,
     idGenerator: deps.idGenerator,
     versionCache: caches.linkedDocumentVersion,
+    // Where a design source's rendered frames are retained. Passed through rather than gated on a
+    // capability check here: the account-level "is any storage configured" question is exactly
+    // what the resolver answers, and duplicating it would give a second, drifting opinion.
+    resolveBinaryArtifactStore: deps.resolveBinaryArtifactStore,
+    logger: deps.logger,
   })
   const plannerService = new DocumentPlannerService({
     modelProviderResolver: deps.modelProviderResolver,

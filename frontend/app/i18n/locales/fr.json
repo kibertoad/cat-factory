@@ -4311,6 +4311,11 @@
       },
       "refreshFailed": "Impossible de vérifier les changements"
     },
+    "renders": {
+      "partial": "Certains cadres de la maquette n'ont pas pu être enregistrés en images.",
+      "failed": "Les images de la maquette n'ont pas pu être récupérées depuis la source.",
+      "storage_unavailable": "Les images de la maquette n'ont pas été enregistrées : aucun stockage d'images n'est configuré pour ce déploiement."
+    },
     "connect": {
       "title": "Connecter une source",
       "sourceFallback": "Source",

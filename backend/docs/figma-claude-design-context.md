@@ -236,6 +236,7 @@ padding 16/24]`. Bounded by the same depth/node caps as the tree.
   leans on; dropping the most-used component is the one outcome that would make the section useless.
 - **Preview:** `GET /v1/images/:key` → a best-effort short-lived rendered-preview URL on a
   `### References` line (no download: a non-multimodal agent ignores it).
+- **Renders:** the same endpoint, downloaded. See [Renders](#renders) below.
 - **Ref/auto-match:** `parseFigmaRef` canonicalises a `figma.com` share URL (dash node-ids, title
   segments, `&t=` params) to the stable `<fileKey>[:<nodeId>]` external id, matched by the
   `documentUrlResolver` seam regardless of URL-string differences.
@@ -297,12 +298,51 @@ needs a **per-site `baseUrl` credential field**, exactly the model the existing 
 provider already uses. Mapping Penpot's boards/tokens into `DesignContext` is the only new code; the
 table, link plumbing, controller, and renderer are all reused.
 
+## Renders
+
+The text half describes a screen; the render is the screen. An import now DOWNLOADS the pixels and
+retains them, through the kernel `DocumentSourceProvider.fetchRenders` port, so the design's frames
+land on the same shelf the visual-confirmation gate already reads from (`kind: 'reference'` binary
+artifacts). Nothing consumes them yet: pairing them into the gate and handing them to image-capable
+models are the later slices of the same track.
+
+- **Separate from `fetchDocument`, on purpose.** The two are wanted at different moments and cost
+  different things. A design file's version moves on ANY edit anywhere in it, so the dispatch-time
+  freshness ladder re-fetches the text often and writes nothing but a token most of the time; the
+  images are only re-downloaded when the body a reader sees actually CHANGED. Folded into one call,
+  an unrelated edit on another page would put megabytes of PNGs on the critical path of a step
+  dispatch.
+- **What is rendered:** the linked frame for a node ref; the first `MAX_RENDERS` (6) top-level frames
+  in document order for a whole-file ref. Deliberately fewer than the twelve frames the TEXT import
+  covers, because the two bound different budgets: a frame's prose costs the ~256 KB context corpus
+  a few KB, its PNG costs the account's blob storage a megabyte or two.
+- **The `view` is the frame's NAME**, which is the pairing key a captured screenshot is matched
+  against. An unnamed frame falls back to its id rather than a shared placeholder, or two screens
+  would read as two captures of one.
+- **The download is credential-free and host-pinned to Figma's signed-asset hosts**
+  (`FIGMA_RENDER_HOSTS`). The URL arrives inside a response BODY, which is the shape an SSRF comes
+  in, and the signature means no token is needed. Fail-closed: a bucket host Figma has not used
+  before costs the deployment its renders, which the import states, rather than an open redirect.
+- **Keyed to the DOCUMENT, not the block** (`binary_artifacts.document_source` /
+  `document_external_id`): an import runs before the document is attached to anything, the
+  attachment can move later, and only document-sourced artifacts may be replaced wholesale.
+  A re-import that changes the body prunes the previous set BEFORE storing the new one, so a
+  design's pictures are never a mix of two revisions.
+- **`documents.render_status` says what became of them**, because every way of ending up with no
+  images renders as the same absence: `stored` / `partial` / `none` / `failed` /
+  `storage_unavailable`, and NULL for "the question does not apply" (a prose source, an `upload`, a
+  row predating the column). The status is derived from what was RETAINED rather than downloaded, so
+  a store that rejects half the bytes reads as `partial`. Three of the five name a different fix and
+  are the ones the SPA's document row states; `stored` and `none` say nothing.
+- **Best-effort throughout.** The text is the load-bearing half and an image is an enrichment, so a
+  render failure never fails an import. Where no image storage is configured the download is not even
+  attempted, and the row says `storage_unavailable`.
+
 ## Out of scope (deliberately)
 
-- **Pixels / visual confirmation.** Inlining design _images_ is the separate binary-artifact +
-  Visual Confirmation surface (#323; see [`visual-confirmation.md`](./visual-confirmation.md)): a
-  Figma frame's rendered PNG could land there as a `kind:'reference'` artifact. The textual context
-  this doc covers does not depend on the agent ever fetching pixels.
+- **Handing the pixels to an agent.** The renders are RETAINED, not yet delivered: context files are
+  `utf8` strings by type and no harness can take an image content part today. That is the last slice
+  of the pixel track, and it is an image-bumping change.
 - **Code → canvas (the reverse flow).** Turning generated code _into_ editable design layers is
   design-authoring driven from an interactive client, the opposite direction from
   design→agent-context, and not something a headless backend consumes.

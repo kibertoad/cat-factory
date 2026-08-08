@@ -4311,6 +4311,11 @@
       },
       "refreshFailed": "Değişiklikler denetlenemedi"
     },
+    "renders": {
+      "partial": "Bazı tasarım çerçeveleri görsel olarak kaydedilemedi.",
+      "failed": "Tasarım görselleri kaynaktan alınamadı.",
+      "storage_unavailable": "Tasarım görselleri kaydedilmedi: bu kurulumda yapılandırılmış bir görsel deposu yok."
+    },
     "connect": {
       "title": "Kaynak bağla",
       "sourceFallback": "Kaynak",
