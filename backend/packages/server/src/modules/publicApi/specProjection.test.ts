@@ -1,6 +1,9 @@
 import {
+  PUBLIC_SPEC_MAX_ACCEPTANCE,
   PUBLIC_SPEC_MAX_FEATURE_CHARS,
   PUBLIC_SPEC_MAX_FEATURE_FILES,
+  PUBLIC_SPEC_MAX_FEATURE_TOTAL_CHARS,
+  PUBLIC_SPEC_MAX_ISSUES,
   PUBLIC_SPEC_MAX_REQUIREMENTS,
   type PublicSpecProvenance,
   type RequirementItem,
@@ -74,9 +77,9 @@ const requirementsOf = (spec: ReturnType<typeof toPublicServiceSpec>['spec']) =>
 
 describe('toPublicServiceSpec', () => {
   it('passes a small spec through whole, with nothing to report', () => {
-    const projected = toPublicServiceSpec('svc_1', viewWith(2, 3), PROVENANCE)
+    const projected = toPublicServiceSpec('svc_1', 'present', viewWith(2, 3), PROVENANCE)
     expect(projected.serviceId).toBe('svc_1')
-    expect(projected.present).toBe(true)
+    expect(projected.anchor).toBe('present')
     expect(requirementsOf(projected.spec)).toHaveLength(6)
     // An EMPTY `truncations` is the load-bearing half: it is what tells a reader the tree above
     // is the whole spec rather than the part that fit.
@@ -87,7 +90,7 @@ describe('toPublicServiceSpec', () => {
     // Two groups either side of the budget, so the cap has to be spent across groups rather than
     // applied per group. A per-group cap would return twice the ceiling and report neither.
     const perGroup = PUBLIC_SPEC_MAX_REQUIREMENTS
-    const projected = toPublicServiceSpec('svc_1', viewWith(2, perGroup), PROVENANCE)
+    const projected = toPublicServiceSpec('svc_1', 'present', viewWith(2, perGroup), PROVENANCE)
     expect(requirementsOf(projected.spec)).toHaveLength(PUBLIC_SPEC_MAX_REQUIREMENTS)
     expect(projected.truncations).toEqual([
       { section: 'requirements', shown: PUBLIC_SPEC_MAX_REQUIREMENTS, total: perGroup * 2 },
@@ -97,6 +100,7 @@ describe('toPublicServiceSpec', () => {
   it('keeps a group the cap emptied, rather than pruning it out of the tree', () => {
     const projected = toPublicServiceSpec(
       'svc_1',
+      'present',
       viewWith(2, PUBLIC_SPEC_MAX_REQUIREMENTS),
       PROVENANCE,
     )
@@ -110,6 +114,7 @@ describe('toPublicServiceSpec', () => {
   it("cuts in traversal order, so the rows served are the tree's own first rows", () => {
     const projected = toPublicServiceSpec(
       'svc_1',
+      'present',
       viewWith(1, PUBLIC_SPEC_MAX_REQUIREMENTS + 5),
       PROVENANCE,
     )
@@ -122,6 +127,7 @@ describe('toPublicServiceSpec', () => {
     const long = 'x'.repeat(PUBLIC_SPEC_MAX_FEATURE_CHARS + 500)
     const projected = toPublicServiceSpec(
       'svc_1',
+      'present',
       viewWith(1, 1, [feature('spec/features/o/a.feature', long)]),
       PROVENANCE,
     )
@@ -133,6 +139,7 @@ describe('toPublicServiceSpec', () => {
     // A file that FITS is not marked truncated, so `truncated` stays a signal rather than noise.
     const small = toPublicServiceSpec(
       'svc_1',
+      'present',
       viewWith(1, 1, [feature('spec/features/o/b.feature', 'Feature: b\n')]),
       PROVENANCE,
     )
@@ -146,6 +153,7 @@ describe('toPublicServiceSpec', () => {
     const content = '🐱'.repeat(PUBLIC_SPEC_MAX_FEATURE_CHARS + 10)
     const projected = toPublicServiceSpec(
       'svc_1',
+      'present',
       viewWith(1, 1, [feature('spec/features/o/c.feature', content)]),
       PROVENANCE,
     )
@@ -159,7 +167,7 @@ describe('toPublicServiceSpec', () => {
     const files = Array.from({ length: PUBLIC_SPEC_MAX_FEATURE_FILES + 3 }, (_, i) =>
       feature(`spec/features/o/${i}.feature`, 'Feature: x\n'),
     )
-    const projected = toPublicServiceSpec('svc_1', viewWith(1, 1, files), PROVENANCE)
+    const projected = toPublicServiceSpec('svc_1', 'present', viewWith(1, 1, files), PROVENANCE)
     expect(projected.features).toHaveLength(PUBLIC_SPEC_MAX_FEATURE_FILES)
     expect(projected.truncations).toEqual([
       {
@@ -179,24 +187,112 @@ describe('toPublicServiceSpec', () => {
         { path: 'spec/modules/m/g.json', kind: 'partial', dropped: 2 },
       ],
     }
-    expect(toPublicServiceSpec('svc_1', view, PROVENANCE).issues).toEqual(view.diagnostics.issues)
+    expect(toPublicServiceSpec('svc_1', 'present', view, PROVENANCE).issues).toEqual(
+      view.diagnostics.issues,
+    )
   })
 
   it('projects an ABSENT spec without inventing a tree, keeping the provenance', () => {
     const projected = toPublicServiceSpec(
       'svc_1',
+      'absent',
       { present: false, spec: null, features: [], diagnostics: { anchor: 'absent', issues: [] } },
       PROVENANCE,
     )
     expect(projected).toMatchObject({
-      present: false,
+      anchor: 'absent',
       spec: null,
       features: [],
       issues: [],
       truncations: [],
       // The provenance still names the branch that was looked at, which is what makes
-      // `present: false` a statement about a specific commit rather than about the service.
+      // `anchor: 'absent'` a statement about a specific commit rather than about the service.
       provenance: PROVENANCE,
     })
+  })
+
+  it('carries the anchor the CALLER decided, never one re-derived from the view', () => {
+    // A corrupt `spec/service.json` reads as an empty view exactly as a missing one does, and the
+    // caller is the only layer that knows which. A projection recomputing `present` off the view
+    // would answer `absent` here and fold the outcome the endpoint exists to keep apart.
+    const view: ServiceSpecView = {
+      present: false,
+      spec: null,
+      features: [],
+      diagnostics: {
+        anchor: 'unparsed',
+        issues: [{ path: 'spec/service.json', kind: 'unparsed', dropped: 0 }],
+      },
+    }
+    const projected = toPublicServiceSpec('svc_1', 'unparsed', view, PROVENANCE)
+    expect(projected.anchor).toBe('unparsed')
+    expect(projected.spec).toBeNull()
+    expect(projected.issues).toEqual(view.diagnostics?.issues)
+  })
+
+  it('caps the ISSUE list, the one axis that grows with FAILURE rather than with the spec', () => {
+    const issues = Array.from({ length: PUBLIC_SPEC_MAX_ISSUES + 7 }, (_, i) => ({
+      path: `spec/modules/m/${i}.json`,
+      kind: 'read_failed' as const,
+      dropped: 0,
+    }))
+    const view = viewWith(1, 1)
+    view.diagnostics = { anchor: 'present', issues }
+    const projected = toPublicServiceSpec('svc_1', 'present', view, PROVENANCE)
+    expect(projected.issues).toHaveLength(PUBLIC_SPEC_MAX_ISSUES)
+    // Reported like every other cap: a silently shortened issue list understates a degraded read,
+    // which is the one thing the list exists to prevent.
+    expect(projected.truncations).toEqual([
+      { section: 'issues', shown: PUBLIC_SPEC_MAX_ISSUES, total: issues.length },
+    ])
+  })
+
+  it('bounds the Gherkin across ALL files, not only within each one', () => {
+    // Each file fits the per-file cap, so the per-file cap alone would serve every one of them:
+    // 500 x 20,000 characters is the ten-megabyte body the total budget exists to refuse.
+    const each = PUBLIC_SPEC_MAX_FEATURE_CHARS
+    const count = Math.ceil(PUBLIC_SPEC_MAX_FEATURE_TOTAL_CHARS / each) + 5
+    const files = Array.from({ length: count }, (_, i) =>
+      feature(`spec/features/o/${i}.feature`, 'x'.repeat(each)),
+    )
+    const projected = toPublicServiceSpec('svc_1', 'present', viewWith(1, 1, files), PROVENANCE)
+    const carried = projected.features.reduce((n, f) => n + f.chars, 0)
+    expect(carried).toBeLessThanOrEqual(PUBLIC_SPEC_MAX_FEATURE_TOTAL_CHARS)
+    expect(projected.features.length).toBeLessThan(count)
+    // `shown` counts what the caller actually received, so it reflects whichever bound bit.
+    expect(projected.truncations).toEqual([
+      { section: 'features', shown: projected.features.length, total: count },
+    ])
+  })
+
+  it('caps acceptance criteria across the tree, keeping the requirements that carry them', () => {
+    const perRequirement = 10
+    const requirements = PUBLIC_SPEC_MAX_ACCEPTANCE / perRequirement + 5
+    const view = viewWith(1, requirements)
+    for (const group of view.spec?.modules[0]?.groups ?? []) {
+      for (const item of group.requirements ?? []) {
+        item.acceptance = Array.from({ length: perRequirement }, (_, i) => ({
+          id: `${item.id}-ac-${i}`,
+          given: 'a cart',
+          when: 'checkout',
+          outcome: 'an order',
+        }))
+      }
+    }
+    const projected = toPublicServiceSpec('svc_1', 'present', view, PROVENANCE)
+    const served = requirementsOf(projected.spec)
+    // Every requirement survives: the id is the join key this whole endpoint exists for, so the
+    // criteria are what the budget cuts, never the row that names them.
+    expect(served).toHaveLength(requirements)
+    expect(served.reduce((n, r) => n + (r.acceptance ?? []).length, 0)).toBe(
+      PUBLIC_SPEC_MAX_ACCEPTANCE,
+    )
+    expect(projected.truncations).toEqual([
+      {
+        section: 'acceptance',
+        shown: PUBLIC_SPEC_MAX_ACCEPTANCE,
+        total: requirements * perRequirement,
+      },
+    ])
   })
 })

@@ -9443,9 +9443,9 @@ class PublicServiceList:
 class PublicServiceSpec:
     """`PublicServiceSpec`, as carried on the wire."""
 
+    anchor: PublicServiceSpecAnchor
     features: list[PublicSpecFeatureFile]
     issues: list[SpecReadIssue]
-    present: bool
     provenance: PublicSpecProvenance
     service_id: str
     truncations: list[PublicSpecTruncation]
@@ -9460,11 +9460,11 @@ class PublicServiceSpec:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicServiceSpec":
         """Decode a `PublicServiceSpec` from its JSON object."""
-        known = {"features", "issues", "present", "provenance", "serviceId", "truncations", "spec"}
+        known = {"anchor", "features", "issues", "provenance", "serviceId", "truncations", "spec"}
         return cls(
+            anchor=_enum(PublicServiceSpecAnchor, data.get("anchor")),
             features=[PublicSpecFeatureFile.from_dict(item) for item in data.get("features") or []],
             issues=[SpecReadIssue.from_dict(item) for item in data.get("issues") or []],
-            present=data.get("present"),
             provenance=PublicSpecProvenance.from_dict(data.get("provenance")),
             service_id=data.get("serviceId"),
             truncations=[PublicSpecTruncation.from_dict(item) for item in data.get("truncations") or []],
@@ -9475,14 +9475,29 @@ class PublicServiceSpec:
     def to_dict(self) -> dict[str, Any]:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
+        out["anchor"] = _encode(self.anchor)
         out["features"] = [_encode(item) for item in self.features]
         out["issues"] = [_encode(item) for item in self.issues]
-        out["present"] = self.present
         out["provenance"] = _encode(self.provenance)
         out["serviceId"] = self.service_id
         out["truncations"] = [_encode(item) for item in self.truncations]
         out["spec"] = _encode(self.spec)
         return out
+
+
+class PublicServiceSpecAnchor(StrEnum):
+    """The `PublicServiceSpecAnchor` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    PRESENT = "present"
+    ABSENT = "absent"
+    UNPARSED = "unparsed"
 
 
 class PublicServiceType(StrEnum):
@@ -9678,7 +9693,9 @@ class PublicSpecTruncationSection(StrEnum):
     """
     REQUIREMENTS = "requirements"
     RULES = "rules"
+    ACCEPTANCE = "acceptance"
     FEATURES = "features"
+    ISSUES = "issues"
 
 
 @dataclass(frozen=True, slots=True)
@@ -10711,9 +10728,10 @@ class SpecModule:
 class SpecReadIssue:
     """`SpecReadIssue`, as carried on the wire."""
 
-    dropped: float
     kind: SpecReadIssueKind
     path: str
+    #: Always present; ``None`` when the server has no value for it.
+    dropped: float | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
@@ -10723,20 +10741,20 @@ class SpecReadIssue:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "SpecReadIssue":
         """Decode a `SpecReadIssue` from its JSON object."""
-        known = {"dropped", "kind", "path"}
+        known = {"kind", "path", "dropped"}
         return cls(
-            dropped=data.get("dropped"),
             kind=_enum(SpecReadIssueKind, data.get("kind")),
             path=data.get("path"),
+            dropped=data.get("dropped"),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
     def to_dict(self) -> dict[str, Any]:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
-        out["dropped"] = self.dropped
         out["kind"] = _encode(self.kind)
         out["path"] = self.path
+        out["dropped"] = self.dropped
         return out
 
 
@@ -10753,6 +10771,7 @@ class SpecReadIssueKind(StrEnum):
     READ_FAILED = "read_failed"
     UNPARSED = "unparsed"
     PARTIAL = "partial"
+    UNREAD = "unread"
 
 
 @dataclass(frozen=True, slots=True)

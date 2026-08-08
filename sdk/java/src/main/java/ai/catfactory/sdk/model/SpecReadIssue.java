@@ -9,13 +9,14 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code SpecReadIssue} wire model.
- * @param dropped the {@code dropped} field.
+ * @param dropped Always present; {@code null} when the server has no value for it.
  * @param kind the {@code kind} field.
  * @param path the {@code path} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record SpecReadIssue(
-    @JsonProperty("dropped") Double dropped,
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("dropped") @Nullable Double dropped,
 
     @JsonProperty("kind") SpecReadIssueKind kind,
 

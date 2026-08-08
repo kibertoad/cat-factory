@@ -1,15 +1,18 @@
 import {
+  SPEC_DIR,
   SPEC_FEATURES_DIR,
   SPEC_MODULES_DIR,
+  SPEC_NAME_MAX,
   SPEC_SERVICE_PATH,
+  SPEC_SUMMARY_MAX,
   safeParseDomainRule,
   safeParseRequirementGroup,
   safeParseRequirementItem,
   safeParseSpecModule,
+  type ReadSpecDoc,
   type RequirementGroup,
   type ServiceSpecView,
   type SpecAnchorState,
-  type SpecDoc,
   type SpecFeatureFile,
   type SpecModule,
   type SpecReadIssue,
@@ -54,6 +57,30 @@ import pMap from 'p-map'
 export const READ_CONCURRENCY = 12
 
 /**
+ * How many provider reads ONE pass may make before it stops walking.
+ *
+ * Concurrency bounds how many reads are in flight; this bounds how many there are at all, and they
+ * are different failures. The tree's size is set by somebody else's repository, so a walk of a
+ * 500-group spec with its rendered features is ~1,000 round trips for one request: past the
+ * Cloudflare subrequest ceiling (where the isolate is killed mid-walk and the caller gets a
+ * silently partial answer rather than a reported one), and a serious bite out of the installation's
+ * GitHub rate limit, which every run in the workspace shares. `GET /api/v1/services/:id/spec`
+ * makes that reachable from outside with a `read`-scope key, so the ceiling has to be the reader's
+ * rather than each caller's.
+ *
+ * Chosen to sit well under the 1,000-subrequest budget a Worker invocation gets, leaving room for
+ * the request's own auth, board and ref reads. Exhausting it is REPORTED (`unread`), never silent:
+ * a stopped walk and a small spec produce the same tree and need different reactions.
+ */
+export const SPEC_READ_BUDGET = 500
+
+/** Knobs a caller may override; every one of them defaults to the shared, safe value. */
+export interface ReadServiceSpecOptions {
+  /** Provider reads this pass may make. Defaults to {@link SPEC_READ_BUDGET}. */
+  maxReads?: number
+}
+
+/**
  * The issues one read pass accumulated.
  *
  * Threaded explicitly through every helper rather than kept in a module-level array: the reader is
@@ -63,8 +90,37 @@ export const READ_CONCURRENCY = 12
 class IssueLog {
   readonly issues: SpecReadIssue[] = []
 
-  add(path: string, kind: SpecReadIssue['kind'], dropped = 0): void {
+  add(path: string, kind: SpecReadIssue['kind'], dropped: number | null = 0): void {
     this.issues.push({ path, kind, dropped })
+  }
+}
+
+/**
+ * The pass's remaining read allowance, threaded beside the issue log and for the same reason.
+ *
+ * Counts the reads it REFUSED rather than logging each one: a budget that ran out 4,000 files early
+ * would otherwise make its own report the largest thing in the response, which is the failure mode
+ * the cap exists to prevent. One row, one number, added once by {@link readServiceSpec}.
+ */
+class ReadBudget {
+  private remaining: number
+  /** Reads this pass declined because the budget was spent. */
+  skipped = 0
+
+  constructor(max: number) {
+    // At least one, so the presence anchor is always reachable: a pass that cannot even ask
+    // whether a spec exists would report every service as unreadable.
+    this.remaining = Math.max(1, Math.floor(max))
+  }
+
+  /** Take one read, or record that it was declined. */
+  claim(): boolean {
+    if (this.remaining <= 0) {
+      this.skipped += 1
+      return false
+    }
+    this.remaining -= 1
+    return true
   }
 }
 
@@ -81,10 +137,15 @@ function nonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 }
 
-/** A group shard's salvage outcome: what survived, and how many items did not. */
+/**
+ * A group shard's salvage outcome: what survived, and how much did not.
+ *
+ * `dropped` is null when items were lost and no count describes them — see
+ * {@link coerceGroupShard}.
+ */
 interface GroupShardParse {
   group?: RequirementGroup
-  dropped: number
+  dropped: number | null
 }
 
 /**
@@ -98,12 +159,24 @@ interface GroupShardParse {
  * `dropped` counts the items the salvage lost, which is what makes the salvage REPORTABLE: a
  * rebuilt group is a valid-looking group that is quietly missing requirements, and a reader
  * counting coverage off it would report a smaller spec as a complete one.
+ *
+ * It is NULL when a container itself is unreadable: `requirements` (or `rules`) present but not a
+ * list — an object, a string, `null`. Those items are lost exactly as a failed validation loses
+ * them, and there is nothing to count. Coercing the container to `[]` and reporting `dropped: 0`
+ * is the same lie one layer up: the rebuilt group validates, is served, and declares nothing, so
+ * the salvage's whole purpose (a rebuilt group is never mistaken for a whole one) is defeated
+ * precisely where the shard was most badly damaged.
  */
 function coerceGroupShard(value: unknown): GroupShardParse {
   const strict = safeParseRequirementGroup(value)
   if (strict) return { group: strict, dropped: 0 }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { dropped: 0 }
   const raw = value as { requirements?: unknown; rules?: unknown }
+  // A missing container legitimately means "this group declares none" (both fields are optional);
+  // a PRESENT one that is not a list is damage, and the two must not read alike.
+  const unreadableContainer =
+    (raw.requirements !== undefined && !Array.isArray(raw.requirements)) ||
+    (raw.rules !== undefined && !Array.isArray(raw.rules))
   const rawRequirements = Array.isArray(raw.requirements) ? raw.requirements : []
   const rawRules = Array.isArray(raw.rules) ? raw.rules : []
   const requirements = rawRequirements
@@ -112,7 +185,9 @@ function coerceGroupShard(value: unknown): GroupShardParse {
   const rules = rawRules
     .map(safeParseDomainRule)
     .filter((r): r is NonNullable<typeof r> => r !== undefined)
-  const dropped = rawRequirements.length - requirements.length + (rawRules.length - rules.length)
+  const dropped = unreadableContainer
+    ? null
+    : rawRequirements.length - requirements.length + (rawRules.length - rules.length)
   // Re-validate the rebuilt group: this enforces the group-level fields (name/summary) while
   // the requirements/rules are already valid. A bad group name is unrecoverable ⇒ undefined.
   const group = safeParseRequirementGroup({ ...raw, requirements, rules })
@@ -131,7 +206,9 @@ async function safeGetFile(
   path: string,
   ref: string,
   log: IssueLog,
+  budget: ReadBudget,
 ): Promise<RepoFileContent | null> {
+  if (!budget.claim()) return null
   try {
     return await repo.getFile(path, ref)
   } catch {
@@ -146,7 +223,9 @@ async function safeList(
   path: string,
   ref: string,
   log: IssueLog,
+  budget: ReadBudget,
 ): Promise<RepoContentEntry[]> {
+  if (!budget.claim()) return []
   try {
     return await repo.listDirectory(path, ref)
   } catch {
@@ -166,7 +245,11 @@ async function getAnchorFile(
   repo: RepoFiles,
   ref: string,
   log: IssueLog,
+  budget: ReadBudget,
 ): Promise<{ status: 'ok'; file: RepoFileContent } | { status: 'absent' | 'read_failed' }> {
+  // Reachable by construction (the budget floors at one and this is the pass's first read); kept
+  // as a refusal rather than an assumption, because "we never asked" is a read that failed.
+  if (!budget.claim()) return { status: 'read_failed' }
   try {
     const file = await repo.getFile(SPEC_SERVICE_PATH, ref)
     return file ? { status: 'ok', file } : { status: 'absent' }
@@ -182,12 +265,17 @@ function noSpec(anchor: SpecAnchorState, log: IssueLog): ServiceSpecView {
 }
 
 /** Read + reassemble the spec on `ref` (a branch, tag or sha). Never throws. */
-export async function readServiceSpec(repo: RepoFiles, ref: string): Promise<ServiceSpecView> {
+export async function readServiceSpec(
+  repo: RepoFiles,
+  ref: string,
+  options: ReadServiceSpecOptions = {},
+): Promise<ServiceSpecView> {
   const log = new IssueLog()
+  const budget = new ReadBudget(options.maxReads ?? SPEC_READ_BUDGET)
   // The presence anchor: no readable object `spec/service.json` ⇒ no spec on this branch. A read
   // that FAILED is not an absent one, so the anchor alone is read through the discriminating
   // helper rather than the null-collapsing one every other read uses.
-  const anchorRead = await getAnchorFile(repo, ref, log)
+  const anchorRead = await getAnchorFile(repo, ref, log, budget)
   if (anchorRead.status !== 'ok') return noSpec(anchorRead.status, log)
   const serviceFile = anchorRead.file
   const parsedService = parseJson(serviceFile.content)
@@ -197,10 +285,11 @@ export async function readServiceSpec(repo: RepoFiles, ref: string): Promise<Ser
     log.add(SPEC_SERVICE_PATH, 'unparsed')
     return noSpec('unparsed', log)
   }
-  const service = parsedService as { service?: string; summary?: string }
+  const anchorFields = coerceAnchorFields(parsedService as Record<string, unknown>)
+  if (anchorFields.altered) log.add(SPEC_SERVICE_PATH, 'partial', null)
 
   // Walk `spec/modules/<moduleSlug>/` — each dir is one module, name-sorted by the writer.
-  const moduleDirs = (await safeList(repo, SPEC_MODULES_DIR, ref, log)).filter(
+  const moduleDirs = (await safeList(repo, SPEC_MODULES_DIR, ref, log, budget)).filter(
     (e) => e.type === 'dir',
   )
   const moduleSlugToName = new Map<string, string>()
@@ -212,8 +301,8 @@ export async function readServiceSpec(repo: RepoFiles, ref: string): Promise<Ser
     async (dir) => {
       const slug = dir.name
       const [meta, entries] = await Promise.all([
-        safeGetFile(repo, `${dir.path}/_module.json`, ref, log),
-        safeList(repo, dir.path, ref, log),
+        safeGetFile(repo, `${dir.path}/_module.json`, ref, log, budget),
+        safeList(repo, dir.path, ref, log, budget),
       ])
       const metaObj = (meta ? parseJson(meta.content) : undefined) as
         | { name?: string; summary?: string }
@@ -243,7 +332,7 @@ export async function readServiceSpec(repo: RepoFiles, ref: string): Promise<Ser
   )
   const shardContents = await pMap(
     shardRefs,
-    async (s) => ({ ref: s, file: await safeGetFile(repo, s.entry.path, ref, log) }),
+    async (s) => ({ ref: s, file: await safeGetFile(repo, s.entry.path, ref, log, budget) }),
     { concurrency: READ_CONCURRENCY },
   )
   const groupsByModule = new Map<string, RequirementGroup[]>()
@@ -256,7 +345,7 @@ export async function readServiceSpec(repo: RepoFiles, ref: string): Promise<Ser
       log.add(s.entry.path, 'unparsed')
       continue
     }
-    if (dropped > 0) log.add(s.entry.path, 'partial', dropped)
+    if (dropped === null || dropped > 0) log.add(s.entry.path, 'partial', dropped)
     groupSlugToName.set(`${s.moduleSlug}/${s.groupSlug}`, group.name)
     const list = groupsByModule.get(s.moduleSlug) ?? []
     list.push(group)
@@ -282,17 +371,54 @@ export async function readServiceSpec(repo: RepoFiles, ref: string): Promise<Ser
     .map((entry) => entry.module)
 
   // Build the doc from the per-node-validated pieces directly, so a missing/empty service
-  // name (the SPA falls back to the block title) degrades to showing the modules rather than
-  // blanking the whole view.
-  const spec: SpecDoc = {
-    service: typeof service.service === 'string' ? service.service : '',
-    summary: typeof service.summary === 'string' ? service.summary : '',
+  // name (every consumer falls back to the block title) degrades to showing the modules rather
+  // than blanking the whole view.
+  const spec: ReadSpecDoc = {
+    service: anchorFields.service,
+    summary: anchorFields.summary,
     modules,
   }
 
-  const features = await readFeatureFiles(repo, ref, moduleSlugToName, groupSlugToName, log)
+  const features = await readFeatureFiles(repo, ref, moduleSlugToName, groupSlugToName, log, budget)
+  // One row for the whole stopped walk, added last so it counts every read the pass declined.
+  if (budget.skipped > 0) log.add(SPEC_DIR, 'unread', budget.skipped)
 
   return { present: true, spec, features, diagnostics: { anchor: 'present', issues: log.issues } }
+}
+
+/**
+ * The anchor's own two fields, coerced to what {@link readSpecDocSchema} will PARSE.
+ *
+ * The reader's whole output is typed as that schema, and until this existed it was not: a
+ * `spec/service.json` naming a 300-character service, or holding a number where the summary goes,
+ * produced a view that failed the schema its own type claimed. On the SPA that is invisible; on
+ * `/api/v1` the same value is a `200` violating the published contract it is served under.
+ *
+ * `altered` is what keeps the repair from being the next silent fold: a clamped name is content
+ * this response does not carry, which is the rule every cap here already follows.
+ */
+function coerceAnchorFields(raw: Record<string, unknown>): {
+  service: string
+  summary: string
+  altered: boolean
+} {
+  const service = nonEmptyString(raw.service) ?? ''
+  const summary = typeof raw.summary === 'string' ? raw.summary : ''
+  const clamped = {
+    service: service.slice(0, SPEC_NAME_MAX),
+    summary: summary.slice(0, SPEC_SUMMARY_MAX),
+  }
+  // A field of the WRONG TYPE (a number, an object, a list) held content this view drops, exactly
+  // as a clamp does. A field that is absent, or a blank string, did not: "this spec names no
+  // service" is a state the read doc exists to be able to express, and reporting it as damage
+  // would fire the row on the ordinary case and make it mean nothing.
+  const droppedField =
+    (raw.service !== undefined && typeof raw.service !== 'string') ||
+    (raw.summary !== undefined && typeof raw.summary !== 'string')
+  return {
+    ...clamped,
+    altered: droppedField || clamped.service !== service || clamped.summary !== summary,
+  }
 }
 
 /** Read the seeded Gherkin `.feature` files under `spec/features/<module>/<group>.feature`. */
@@ -302,14 +428,15 @@ async function readFeatureFiles(
   moduleSlugToName: Map<string, string>,
   groupSlugToName: Map<string, string>,
   log: IssueLog,
+  budget: ReadBudget,
 ): Promise<SpecFeatureFile[]> {
-  const moduleDirs = (await safeList(repo, SPEC_FEATURES_DIR, ref, log)).filter(
+  const moduleDirs = (await safeList(repo, SPEC_FEATURES_DIR, ref, log, budget)).filter(
     (e) => e.type === 'dir',
   )
   const perModule = await pMap(
     moduleDirs,
     async (dir) => {
-      const entries = await safeList(repo, dir.path, ref, log)
+      const entries = await safeList(repo, dir.path, ref, log, budget)
       return entries
         .filter((e) => e.type === 'file' && e.name.endsWith('.feature'))
         .map((entry) => ({ slug: dir.name, entry }))
@@ -320,7 +447,7 @@ async function readFeatureFiles(
   const read = await pMap(
     featureRefs,
     async (fr): Promise<SpecFeatureFile | null> => {
-      const file = await safeGetFile(repo, fr.entry.path, ref, log)
+      const file = await safeGetFile(repo, fr.entry.path, ref, log, budget)
       if (!file) return null
       const groupSlug = fr.entry.name.replace(/\.feature$/, '')
       return {

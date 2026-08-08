@@ -4588,6 +4588,14 @@
       },
       "PublicServiceSpec": {
         "properties": {
+          "anchor": {
+            "enum": [
+              "present",
+              "absent",
+              "unparsed"
+            ],
+            "type": "string"
+          },
           "features": {
             "items": {
               "$ref": "#/components/schemas/PublicSpecFeatureFile"
@@ -4599,9 +4607,6 @@
               "$ref": "#/components/schemas/SpecReadIssue"
             },
             "type": "array"
-          },
-          "present": {
-            "type": "boolean"
           },
           "provenance": {
             "$ref": "#/components/schemas/PublicSpecProvenance"
@@ -4628,7 +4633,7 @@
         },
         "required": [
           "serviceId",
-          "present",
+          "anchor",
           "spec",
           "features",
           "provenance",
@@ -4731,7 +4736,9 @@
             "enum": [
               "requirements",
               "rules",
-              "features"
+              "acceptance",
+              "features",
+              "issues"
             ],
             "type": "string"
           },
@@ -5497,8 +5504,8 @@
             "type": "array"
           },
           "service": {
+            "default": "",
             "maxLength": 120,
-            "minLength": 1,
             "type": "string"
           },
           "summary": {
@@ -5507,9 +5514,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "service"
-        ],
+        "required": [],
         "type": "object"
       },
       "SpecModule": {
@@ -5540,14 +5545,22 @@
       "SpecReadIssue": {
         "properties": {
           "dropped": {
-            "default": 0,
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 0
           },
           "kind": {
             "enum": [
               "read_failed",
               "unparsed",
-              "partial"
+              "partial",
+              "unread"
             ],
             "type": "string"
           },

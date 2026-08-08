@@ -4073,15 +4073,30 @@ type PublicServiceList struct {
 
 // PublicServiceSpec is the `PublicServiceSpec` wire model.
 type PublicServiceSpec struct {
+	Anchor     PublicServiceSpecAnchor `json:"anchor"`
 	Features   []PublicSpecFeatureFile `json:"features"`
 	Issues     []SpecReadIssue         `json:"issues"`
-	Present    bool                    `json:"present"`
 	Provenance PublicSpecProvenance    `json:"provenance"`
 	ServiceID  string                  `json:"serviceId"`
 	// Spec always present; nil when the server has no value for it.
 	Spec        *SpecDoc               `json:"spec"`
 	Truncations []PublicSpecTruncation `json:"truncations"`
 }
+
+// PublicServiceSpecAnchor is the `PublicServiceSpecAnchor` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicServiceSpecAnchor string
+
+const (
+	PublicServiceSpecAnchorPresent  PublicServiceSpecAnchor = "present"
+	PublicServiceSpecAnchorAbsent   PublicServiceSpecAnchor = "absent"
+	PublicServiceSpecAnchorUnparsed PublicServiceSpecAnchor = "unparsed"
+)
+
+// PublicServiceSpecAnchorValues lists every PublicServiceSpecAnchor this SDK release knows.
+var PublicServiceSpecAnchorValues = []PublicServiceSpecAnchor{PublicServiceSpecAnchorPresent, PublicServiceSpecAnchorAbsent, PublicServiceSpecAnchorUnparsed}
 
 // PublicServiceType is the `PublicServiceType` vocabulary as carried on the wire.
 // A string type rather than an int enum: the wire form IS the string, and an unknown value must
@@ -4161,11 +4176,13 @@ type PublicSpecTruncationSection string
 const (
 	PublicSpecTruncationSectionRequirements PublicSpecTruncationSection = "requirements"
 	PublicSpecTruncationSectionRules        PublicSpecTruncationSection = "rules"
+	PublicSpecTruncationSectionAcceptance   PublicSpecTruncationSection = "acceptance"
 	PublicSpecTruncationSectionFeatures     PublicSpecTruncationSection = "features"
+	PublicSpecTruncationSectionIssues       PublicSpecTruncationSection = "issues"
 )
 
 // PublicSpecTruncationSectionValues lists every PublicSpecTruncationSection this SDK release knows.
-var PublicSpecTruncationSectionValues = []PublicSpecTruncationSection{PublicSpecTruncationSectionRequirements, PublicSpecTruncationSectionRules, PublicSpecTruncationSectionFeatures}
+var PublicSpecTruncationSectionValues = []PublicSpecTruncationSection{PublicSpecTruncationSectionRequirements, PublicSpecTruncationSectionRules, PublicSpecTruncationSectionAcceptance, PublicSpecTruncationSectionFeatures, PublicSpecTruncationSectionIssues}
 
 // PublicSpend is the `PublicSpend` wire model.
 type PublicSpend struct {
@@ -4598,7 +4615,8 @@ type SpecModule struct {
 
 // SpecReadIssue is the `SpecReadIssue` wire model.
 type SpecReadIssue struct {
-	Dropped float64           `json:"dropped"`
+	// Dropped always present; nil when the server has no value for it.
+	Dropped *float64          `json:"dropped"`
 	Kind    SpecReadIssueKind `json:"kind"`
 	Path    string            `json:"path"`
 }
@@ -4613,10 +4631,11 @@ const (
 	SpecReadIssueKindReadFailed SpecReadIssueKind = "read_failed"
 	SpecReadIssueKindUnparsed   SpecReadIssueKind = "unparsed"
 	SpecReadIssueKindPartial    SpecReadIssueKind = "partial"
+	SpecReadIssueKindUnread     SpecReadIssueKind = "unread"
 )
 
 // SpecReadIssueKindValues lists every SpecReadIssueKind this SDK release knows.
-var SpecReadIssueKindValues = []SpecReadIssueKind{SpecReadIssueKindReadFailed, SpecReadIssueKindUnparsed, SpecReadIssueKindPartial}
+var SpecReadIssueKindValues = []SpecReadIssueKind{SpecReadIssueKindReadFailed, SpecReadIssueKindUnparsed, SpecReadIssueKindPartial, SpecReadIssueKindUnread}
 
 // StartPublicTask is the `StartPublicTask` wire model.
 type StartPublicTask struct {

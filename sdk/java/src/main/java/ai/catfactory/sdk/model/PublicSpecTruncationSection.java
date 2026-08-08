@@ -16,7 +16,9 @@ import org.jspecify.annotations.Nullable;
 public enum PublicSpecTruncationSection {
     REQUIREMENTS("requirements"),
     RULES("rules"),
+    ACCEPTANCE("acceptance"),
     FEATURES("features"),
+    ISSUES("issues"),
 
     /**
      * A value this SDK release does not know.

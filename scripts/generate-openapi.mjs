@@ -414,7 +414,11 @@ const COMPONENT_SCHEMAS = {
   PublicSpecFeatureFile: 'publicSpecFeatureFileSchema',
   PublicSpecTruncation: 'publicSpecTruncationSchema',
   SpecReadIssue: 'specReadIssueSchema',
-  SpecDoc: 'specDocSchema',
+  // The READ doc, not the strict authoring one. They differ in a single field (`service` may be
+  // empty, because a half-written `spec/service.json` is a state a repository can be in) and only
+  // this one is ever served, so hoisting the other would publish a component nothing references
+  // beside an inlined `PublicServiceSpecSpec` that is the shape callers actually receive.
+  SpecDoc: 'readSpecDocSchema',
   SpecModule: 'specModuleSchema',
   RequirementGroup: 'requirementGroupSchema',
   RequirementItem: 'requirementItemSchema',

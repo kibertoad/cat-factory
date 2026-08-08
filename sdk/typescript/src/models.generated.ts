@@ -2278,15 +2278,20 @@ export interface PublicServiceList {
 }
 
 export interface PublicServiceSpec {
+  anchor: PublicServiceSpecAnchor
   features: PublicSpecFeatureFile[]
   issues: SpecReadIssue[]
-  present: boolean
   provenance: PublicSpecProvenance
   serviceId: string
   /** Always present; `null` when the server has no value for it. */
   spec: SpecDoc | null
   truncations: PublicSpecTruncation[]
 }
+
+export type PublicServiceSpecAnchor = 'present' | 'absent' | 'unparsed'
+
+/** Every `PublicServiceSpecAnchor` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_SERVICE_SPEC_ANCHOR_VALUES = ['present', 'absent', 'unparsed'] as const
 
 export type PublicServiceType = 'frontend' | 'service' | 'library' | 'document' | 'api' | 'database' | 'queue' | 'integration' | 'external' | 'environment'
 
@@ -2327,10 +2332,10 @@ export interface PublicSpecTruncation {
   total: number
 }
 
-export type PublicSpecTruncationSection = 'requirements' | 'rules' | 'features'
+export type PublicSpecTruncationSection = 'requirements' | 'rules' | 'acceptance' | 'features' | 'issues'
 
 /** Every `PublicSpecTruncationSection` value, for exhaustive handling and runtime validation. */
-export const PUBLIC_SPEC_TRUNCATION_SECTION_VALUES = ['requirements', 'rules', 'features'] as const
+export const PUBLIC_SPEC_TRUNCATION_SECTION_VALUES = ['requirements', 'rules', 'acceptance', 'features', 'issues'] as const
 
 export interface PublicSpend {
   currency: string
@@ -2570,7 +2575,7 @@ export const SEVERITY_VALUES = ['low', 'medium', 'high', 'critical'] as const
 
 export interface SpecDoc {
   modules: SpecModule[]
-  /** Length 1..120. */
+  /** Length 0..120. */
   service: string
   /** Length 0..2000. */
   summary: string
@@ -2585,15 +2590,16 @@ export interface SpecModule {
 }
 
 export interface SpecReadIssue {
-  dropped: number
+  /** Always present; `null` when the server has no value for it. */
+  dropped: number | null
   kind: SpecReadIssueKind
   path: string
 }
 
-export type SpecReadIssueKind = 'read_failed' | 'unparsed' | 'partial'
+export type SpecReadIssueKind = 'read_failed' | 'unparsed' | 'partial' | 'unread'
 
 /** Every `SpecReadIssueKind` value, for exhaustive handling and runtime validation. */
-export const SPEC_READ_ISSUE_KIND_VALUES = ['read_failed', 'unparsed', 'partial'] as const
+export const SPEC_READ_ISSUE_KIND_VALUES = ['read_failed', 'unparsed', 'partial', 'unread'] as const
 
 export interface StartPublicTask {
   /** Length 1..120. */

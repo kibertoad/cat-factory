@@ -1,5 +1,6 @@
 import {
   getPublicServiceSpecContract,
+  type PublicSpecAnchor,
   type PublicSpecProvenance,
   type ServiceSpecView,
 } from '@cat-factory/contracts'
@@ -22,7 +23,7 @@ import { toPublicServiceSpec } from './specProjection.js'
 // against the criteria it was scored on is two GETs and a map lookup, with no repository clone and
 // no VCS credential.
 //
-// Everything below is one idea applied four times: **a spec read has four outcomes and this
+// Everything below is one idea applied repeatedly: **a spec read has several outcomes and this
 // controller refuses to fold them**, because the fold is silent and always in the same direction.
 // The internal view the app's requirements window consumes reports `present: false` for both "this
 // branch holds no spec" and "we could not read the repository", which is right for a window that
@@ -34,11 +35,22 @@ import { toPublicServiceSpec } from './specProjection.js'
 //     service.
 //  2. **The repository could not be read** → `503`, `reason: "spec_read_failed"`. Retry; the spec
 //     may well be there.
-//  3. **No spec on the default branch** → `200`, `present: false`. A real, common, final answer.
-//  4. **A spec that read partially** → `200` with the tree, `issues` naming every file that did not
+//  3. **The branch could not be resolved** → `503`, `reason: "spec_ref_unresolved"`. Its own
+//     outcome rather than a shade of the last one, because it is the case the provider REFUSES to
+//     distinguish: a renamed, transferred or deleted repository, a stale default branch and a lost
+//     installation all answer 404 exactly as an absent file does. Distinct because the fix is
+//     distinct: the deployment's repo link is wrong, and no amount of retrying repairs it.
+//  4. **No spec on the default branch** → `200`, `anchor: "absent"`. A real, common, final answer,
+//     and one only reached with the ref resolved, so it is a statement about the branch rather
+//     than about our luck reaching it.
+//  5. **An anchor that is present and unusable** → `200`, `anchor: "unparsed"`, with the file named
+//     in `issues`. Its own value, not folded onto `absent`: a corrupt `spec/service.json` is a repo
+//     state somebody has to fix, and an integrator reading it as "no requirements" would be
+//     reporting a broken file as a service that declares nothing.
+//  6. **A spec that read partially** → `200` with the tree, `issues` naming every file that did not
 //     survive and `truncations` naming every cap that bit.
 //
-// A fifth case is not this controller's to invent: a service frame with no linked repository throws
+// One further case is not this controller's to invent: a service frame with no linked repository throws
 // the same `ValidationError` (a `422`) that `resolveRepoTarget` raises everywhere else, because
 // execution refuses that service too and a read that answered "no requirements" would describe a
 // service nothing can run as one that simply has nothing to say.
@@ -74,11 +86,12 @@ function requireRepoResolver<E extends AppEnv>(c: Context<E>) {
 /**
  * The head commit of the branch the spec is read from, or null when it cannot be resolved.
  *
- * Read BEFORE the tree walk, so the commit named is one the tree is at least as new as. It is
- * best-effort on purpose: a repository that serves its files but not its ref (a provider partly
- * degraded, a client binding without the capability) should answer the spec with an unnamed commit
- * rather than refuse a read that would have succeeded. The tree walk's own failures are what decide
- * outcome 2, and they are reported by the reader.
+ * Read BEFORE the tree walk, so the commit named is one the tree is at least as new as. It carries
+ * two jobs, and the second is why it is not merely decorative: it names the snapshot in
+ * `provenance`, and it is the only POSITIVE evidence this endpoint has that the branch is
+ * reachable at all. A repository that serves its files but not its ref still answers the spec, with
+ * an unnamed commit; a repository that answers neither is refused rather than reported empty (see
+ * {@link requireReadableAnchor}). Null is therefore "unproven", not "unimportant".
  */
 async function resolveCommit(ctx: RunRepoContext): Promise<string | null> {
   try {
@@ -102,19 +115,49 @@ function provenanceOf(ctx: RunRepoContext, commit: string | null): PublicSpecPro
 }
 
 /**
- * Refuse a view whose emptiness is an OUTAGE rather than an answer.
+ * The state of the branch's presence anchor, or the refusal for an emptiness that is an OUTAGE
+ * rather than an answer.
  *
- * The one place the four outcomes are separated, and it reads off the reader's own `anchor` rather
- * than re-probing: `absent` and `unparsed` are facts about the repository (no spec / a corrupt
- * `spec/service.json`, the latter carried as an `issue` so the caller learns which file), and
- * `read_failed` is a fact about the provider.
+ * The one place the outcomes are separated, and the ONLY producer of the response's `anchor`, so a
+ * new state cannot be answered by accident: the `switch` is exhaustive over the reader's own
+ * `SpecAnchorState` through a `never`, and a fifth member fails the build here rather than
+ * surfacing as an unmapped value on `/api/v1`.
+ *
+ * `commit` is the second half of the judgement, and the reason this takes it. GitHub answers 404
+ * for a file that is absent, a repository that was renamed, transferred or deleted, a `ref` that no
+ * longer exists, and an installation that lost access, and the client maps all of them to "no such
+ * file". So `absent` alone is not evidence of an empty branch: it is equally the shape of a
+ * repository nobody can read. What separates them is whether the ref RESOLVED, which the walk's own
+ * provenance read already establishes, and which cannot 404 for the innocent reason a missing file
+ * can. Unresolved plus absent is unproven, and unproven is refused rather than served as the
+ * confident "this service declares nothing" the whole endpoint exists to avoid emitting.
  */
-function assertSpecReadable(view: ServiceSpecView): void {
-  if (view.diagnostics?.anchor !== 'read_failed') return
-  throw new UnavailableError(
-    "The service's repository could not be read; the spec may exist but could not be fetched",
-    'spec_read_failed',
-  )
+function requireReadableAnchor(view: ServiceSpecView, commit: string | null): PublicSpecAnchor {
+  const anchor = view.diagnostics?.anchor ?? (view.present ? 'present' : 'absent')
+  switch (anchor) {
+    case 'present':
+    case 'unparsed':
+      // Both PROVE the branch was read: the anchor's own bytes came back.
+      return anchor
+    case 'absent':
+      if (commit) return 'absent'
+      throw new UnavailableError(
+        `The branch the spec is read from could not be resolved, so an absent spec cannot be told apart from an unreachable repository`,
+        'spec_ref_unresolved',
+      )
+    case 'read_failed':
+      throw new UnavailableError(
+        "The service's repository could not be read; the spec may exist but could not be fetched",
+        'spec_read_failed',
+      )
+    default:
+      return assertNever(anchor)
+  }
+}
+
+/** The compile-time half of the exhaustiveness guard above. */
+function assertNever(value: never): never {
+  throw new UnavailableError(`Unhandled spec anchor state: ${String(value)}`, 'spec_read_failed')
 }
 
 export function publicSpecController(): Hono<AppEnv> {
@@ -146,8 +189,8 @@ export function publicSpecController(): Hono<AppEnv> {
     // same diagnostics the app's window and the run-evidence reductions read through. A second
     // reader here is how two surfaces come to disagree about what a malformed group renders as.
     const view = await readServiceSpec(ctx.repo, ctx.baseBranch)
-    assertSpecReadable(view)
-    return c.json(toPublicServiceSpec(serviceId, view, provenanceOf(ctx, commit)), 200)
+    const anchor = requireReadableAnchor(view, commit)
+    return c.json(toPublicServiceSpec(serviceId, anchor, view, provenanceOf(ctx, commit)), 200)
   })
 
   return app

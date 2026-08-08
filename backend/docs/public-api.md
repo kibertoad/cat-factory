@@ -1554,30 +1554,48 @@ curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/outcome" \
   | jq '.requirements.entries' > verdicts.json
 
 # criterion → evidence, entirely outside the platform.
-jq -s '.[1] | map(. + {spec: $s[.id]}) ' --slurpfile s spec.json verdicts.json
+jq --slurpfile s spec.json 'map(. + {spec: $s[0][.id]})' verdicts.json
 ```
+
+(`--slurpfile` binds `$s` to an ARRAY of the file's values, so the index into the map is
+`$s[0][.id]`.)
 
 A run's join reads the spec from the branch that run pushed to, not the default branch, because a
 task's spec increment has not merged while its pull request is open. This endpoint always answers
 the **default branch**, which is the service's agreed truth. The two differ exactly for the
 requirements a run is still adding, and `provenance.commit` is what lets a caller notice.
 
-**What the response says about itself.** A spec read has four outcomes and this endpoint keeps them
-apart, because three of them produce an empty tree and need different reactions:
+**What the response says about itself.** A spec read has several outcomes and this endpoint keeps
+them apart, because most of them produce an empty tree and need different reactions:
 
-| Outcome                          | Answer                                                                            |
-| -------------------------------- | --------------------------------------------------------------------------------- |
-| No spec on the default branch    | `200`, `present: false`, `spec: null`. A real and common answer.                  |
-| The repository could not be read | `503`, `error.details.reason: "spec_read_failed"`. Retry; the spec may be there.  |
-| No version control connected     | `503`, `error.details.reason: "vcs_not_configured"`. The deployment or workspace. |
-| The spec read partially          | `200` with the tree, and `issues` naming every file that did not survive.         |
+| Outcome                               | Answer                                                                              |
+| ------------------------------------- | ----------------------------------------------------------------------------------- |
+| No spec on the default branch         | `200`, `anchor: "absent"`, `spec: null`. A real and common answer.                  |
+| A `spec/service.json` that is corrupt | `200`, `anchor: "unparsed"`, `spec: null`, with the file named in `issues`.         |
+| The branch could not be resolved      | `503`, `error.details.reason: "spec_ref_unresolved"`. The repo link, not an outage. |
+| The repository could not be read      | `503`, `error.details.reason: "spec_read_failed"`. Retry; the spec may be there.    |
+| No version control connected          | `503`, `error.details.reason: "vcs_not_configured"`. The deployment or workspace.   |
+| The spec read partially               | `200` with the tree, and `issues` naming every file that did not survive.           |
 
-The distinction that matters is the first two. The reader behind this endpoint is deliberately
-total (a flaky read degrades rather than throwing) and the app's own requirements window folds an
-unreadable repository into the same empty state as a repository with no spec, which is right for a
-window drawing an empty state and wrong for an integrator: folded here, it would report every
-service as requirement-free for the duration of a VCS incident, with nothing in the payload saying
-otherwise.
+`anchor` is how the endpoint refuses to fold the three states that all render as "no tree". Branch
+on it rather than on `spec === null`: `absent` is the only one that means the service declares
+nothing, `unparsed` means a file in the repository needs fixing, and an outage never reaches a
+`200` at all.
+
+The distinction that matters most is the one between an answer and an outage. The reader behind
+this endpoint is deliberately total (a flaky read degrades rather than throwing) and the app's own
+requirements window folds an unreadable repository into the same empty state as a repository with
+no spec, which is right for a window drawing an empty state and wrong for an integrator: folded
+here, it would report every service as requirement-free for the duration of a VCS incident, with
+nothing in the payload saying otherwise.
+
+`spec_ref_unresolved` is the subtle member. Git hosts answer `404` for a file that is absent, a
+repository that was renamed, transferred or deleted, a branch that no longer exists and an
+installation that lost access, so "no such file" and "no such repository" arrive identically. The
+endpoint resolves the branch's head commit before walking, and that resolution is the only positive
+evidence it has that the branch is reachable at all: an empty read with an unresolved ref is
+unproven and refused, rather than served as a confident `absent`. The fix is a repository link or a
+default branch, not a retry.
 
 A service frame with **no linked repository** answers `422`, the same refusal starting a run on it
 gets. There is deliberately no "first repo in the workspace" fallback anywhere in the platform, so
@@ -1585,16 +1603,36 @@ a service nothing can run never reads as one that merely has nothing to say.
 
 `issues` is one row per file the read could not fully account for: `read_failed` (the provider
 answered with something other than "absent", so the file may well exist), `unparsed` (read, and
-nothing recoverable, so its subtree is missing from the tree above), and `partial` with a `dropped`
+nothing recoverable, so its subtree is missing from the tree above), `partial` with a `dropped`
 count (a group salvaged item by item, so it looks valid and is quietly missing that many
-requirements or rules). An empty `issues` is the statement that the tree is whole.
+requirements or rules), and `unread` against the `spec` root (the walk hit its read budget, and
+`dropped` counts the files it never fetched). An empty `issues` is the statement that the tree is
+whole.
 
-`truncations` is the same idea for the caps: at most 2,000 requirement rows and 2,000 rule rows
-across the tree, at most 500 feature files, and at most 20,000 characters of Gherkin per file (each
-file also carrying `chars` / `totalChars` / `truncated`). Caps cut in the tree's own traversal
-order and nothing is re-ranked (the platform does not judge which requirement matters more), and a
-group the cap emptied stays in the tree rather than vanishing, because a missing group reads as a
-feature the service never specified.
+A `dropped` of **`null`** means content was lost there and no count describes it: a shard whose
+`requirements` is an object rather than a list has requirements that are structurally unreadable,
+so the rebuilt group is served as damaged rather than as one that legitimately declares nothing.
+Treat `null` as "some, unknown", never as zero.
+
+`truncations` is the same idea for the caps. Every row counts ITEMS, so `shown` and `total` share
+one unit:
+
+| Section        | Cap                                                         |
+| -------------- | ----------------------------------------------------------- |
+| `requirements` | 2,000 rows across the tree                                  |
+| `rules`        | 2,000 rows across the tree                                  |
+| `acceptance`   | 5,000 criteria across the tree                              |
+| `features`     | 500 files, and 1,000,000 characters of Gherkin between them |
+| `issues`       | 200 rows                                                    |
+
+Each feature file is also clamped to 20,000 characters on its own and carries `chars` /
+`totalChars` / `truncated`. Caps cut in the tree's own traversal order and nothing is re-ranked
+(the platform does not judge which requirement matters more); a group the cap emptied stays in the
+tree rather than vanishing, because a missing group reads as a feature the service never specified;
+and a requirement whose criteria the `acceptance` budget could not fit is still carried, because
+its id is the join key this endpoint exists for. `issues` is capped for the opposite reason to the
+rest: it grows with FAILURE rather than with the spec, so a rate-limit window part-way through a
+large walk would otherwise make the report of a degraded read the largest thing in the response.
 
 `provenance` names `provider`, `owner`, `repo`, the `ref` (the default branch) and the `commit` it
 describes. There is no `directory`, and the absence is the fact: the `spec/` tree is anchored at the

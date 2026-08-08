@@ -11,14 +11,14 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code SpecDoc} wire model.
  * @param modules the {@code modules} field.
- * @param service Length 1..120.
+ * @param service Length 0..120.
  * @param summary Length 0..2000.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record SpecDoc(
     @JsonProperty("modules") List<SpecModule> modules,
 
-    /** Length 1..120. */
+    /** Length 0..120. */
     @JsonProperty("service") String service,
 
     /** Length 0..2000. */

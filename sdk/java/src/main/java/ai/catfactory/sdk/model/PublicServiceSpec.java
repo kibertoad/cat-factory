@@ -10,9 +10,9 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicServiceSpec} wire model.
+ * @param anchor the {@code anchor} field.
  * @param features the {@code features} field.
  * @param issues the {@code issues} field.
- * @param present the {@code present} field.
  * @param provenance the {@code provenance} field.
  * @param serviceId the {@code serviceId} field.
  * @param spec Always present; {@code null} when the server has no value for it.
@@ -20,11 +20,11 @@ import org.jspecify.annotations.Nullable;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicServiceSpec(
+    @JsonProperty("anchor") PublicServiceSpecAnchor anchor,
+
     @JsonProperty("features") List<PublicSpecFeatureFile> features,
 
     @JsonProperty("issues") List<SpecReadIssue> issues,
-
-    @JsonProperty("present") Boolean present,
 
     @JsonProperty("provenance") PublicSpecProvenance provenance,
 
@@ -48,13 +48,19 @@ public record PublicServiceSpec(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
+        private @Nullable PublicServiceSpecAnchor anchor;
         private @Nullable List<PublicSpecFeatureFile> features;
         private @Nullable List<SpecReadIssue> issues;
-        private @Nullable Boolean present;
         private @Nullable PublicSpecProvenance provenance;
         private @Nullable String serviceId;
         private @Nullable SpecDoc spec;
         private @Nullable List<PublicSpecTruncation> truncations;
+
+        /** Set {@code anchor}. */
+        public Builder anchor(@Nullable PublicServiceSpecAnchor anchor) {
+            this.anchor = anchor;
+            return this;
+        }
 
         /** Set {@code features}. */
         public Builder features(@Nullable List<PublicSpecFeatureFile> features) {
@@ -65,12 +71,6 @@ public record PublicServiceSpec(
         /** Set {@code issues}. */
         public Builder issues(@Nullable List<SpecReadIssue> issues) {
             this.issues = issues;
-            return this;
-        }
-
-        /** Set {@code present}. */
-        public Builder present(@Nullable Boolean present) {
-            this.present = present;
             return this;
         }
 
@@ -100,7 +100,7 @@ public record PublicServiceSpec(
 
         /** Build the {@link PublicServiceSpec}. */
         public PublicServiceSpec build() {
-            return new PublicServiceSpec(features, issues, present, provenance, serviceId, spec, truncations);
+            return new PublicServiceSpec(anchor, features, issues, provenance, serviceId, spec, truncations);
         }
     }
 }

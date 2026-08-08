@@ -125,6 +125,9 @@ describe('readServiceSpec', () => {
     expect(view.spec?.service).toBe('')
     expect(view.spec?.modules?.[0]?.name).toBe('Auth')
     expect(view.spec?.modules?.[0]?.groups?.[0]?.name).toBe('Login')
+    // And NOT reported as damage: "this spec names no service" is a state the read doc exists to
+    // express, so flagging it would fire the repair row on the ordinary case.
+    expect(view.diagnostics?.issues).toEqual([])
   })
 
   it('degrades a blank _module.json name to the slug instead of dropping the module', async () => {
@@ -292,5 +295,111 @@ describe('readServiceSpec', () => {
       'main',
     )
     expect(clean.diagnostics).toEqual({ anchor: 'present', issues: [] })
+  })
+
+  it('reports an UNCOUNTABLE salvage loss as null, never as zero', async () => {
+    // `requirements` present but not a list: those requirements are lost exactly as a failed
+    // validation loses them, and there is nothing to count. Coercing the container to `[]` and
+    // reporting `dropped: 0` rebuilds a group that VALIDATES and declares nothing, which defeats
+    // the salvage's whole purpose precisely where the shard was most badly damaged.
+    const view = await readServiceSpec(
+      fakeRepo({
+        'spec/service.json': JSON.stringify({ service: 'S' }),
+        'spec/modules/m/_module.json': JSON.stringify({ name: 'M' }),
+        'spec/modules/m/g.json': JSON.stringify({
+          name: 'G',
+          requirements: { 'req-a': { id: 'req-a' } },
+        }),
+      }),
+      'main',
+    )
+    expect(view.diagnostics?.issues).toEqual([
+      { path: 'spec/modules/m/g.json', kind: 'partial', dropped: null },
+    ])
+    // The group still names itself: its identity survived even though its contents did not.
+    expect(view.spec?.modules?.[0]?.groups?.[0]?.name).toBe('G')
+  })
+
+  it('keeps "declares none" and "unreadable" apart when a container is simply ABSENT', async () => {
+    // The other side of the rule above. `rules` is omitted here, which legitimately means "this
+    // group declares none", while `requirements` holds one item that fails validation. The loss
+    // is therefore countable, and answering `null` would report an omitted optional field as
+    // damage on every ordinary salvage.
+    const view = await readServiceSpec(
+      fakeRepo({
+        'spec/service.json': JSON.stringify({ service: 'S' }),
+        'spec/modules/m/_module.json': JSON.stringify({ name: 'M' }),
+        'spec/modules/m/g.json': JSON.stringify({
+          name: 'G',
+          requirements: [{ id: 'req-a', title: 'T'.repeat(200) }],
+        }),
+      }),
+      'main',
+    )
+    expect(view.diagnostics?.issues).toEqual([
+      { path: 'spec/modules/m/g.json', kind: 'partial', dropped: 1 },
+    ])
+  })
+
+  it('stops walking at its READ BUDGET and says how many files it never fetched', async () => {
+    const files: Record<string, string> = {
+      'spec/service.json': JSON.stringify({ service: 'S' }),
+      'spec/modules/m/_module.json': JSON.stringify({ name: 'M' }),
+    }
+    for (let i = 0; i < 20; i++) {
+      files[`spec/modules/m/g${i}.json`] = JSON.stringify({ name: `G${i}`, requirements: [] })
+    }
+    const repo = fakeRepo(files)
+    let reads = 0
+    const getFile = repo.getFile.bind(repo)
+    repo.getFile = async (path, ref) => {
+      reads += 1
+      return getFile(path, ref)
+    }
+
+    const view = await readServiceSpec(repo, 'main', { maxReads: 6 })
+    // The bound is the point: the tree's size is set by somebody else's repository, and one
+    // request may not turn into an unbounded number of provider round trips.
+    expect(reads).toBeLessThanOrEqual(6)
+    const unread = view.diagnostics?.issues.filter((i) => i.kind === 'unread') ?? []
+    // ONE row for the whole stopped walk: a row per skipped file would make the budget's own
+    // report the largest thing in the response, which is what the budget exists to prevent.
+    expect(unread).toHaveLength(1)
+    expect(unread[0]?.path).toBe('spec')
+    expect(unread[0]?.dropped).toBeGreaterThan(0)
+    // Still a usable, honestly-labelled partial view rather than a refusal.
+    expect(view.present).toBe(true)
+  })
+
+  it('leaves a spec that fits its budget completely unremarked', async () => {
+    const view = await readServiceSpec(
+      fakeRepo({
+        'spec/service.json': JSON.stringify({ service: 'S' }),
+        'spec/modules/m/_module.json': JSON.stringify({ name: 'M' }),
+        'spec/modules/m/g.json': JSON.stringify({ name: 'G', requirements: [] }),
+      }),
+      'main',
+    )
+    expect(view.diagnostics?.issues).toEqual([])
+  })
+
+  it('coerces the anchor to what the doc schema will PARSE, and reports the repair', async () => {
+    // The reader's output is typed as the read-doc schema, and until it clamped it was not: an
+    // over-long name or a non-string summary produced a view failing the schema its own type
+    // names. On `/api/v1` that is a 200 violating the contract it is published under.
+    const view = await readServiceSpec(
+      fakeRepo({
+        'spec/service.json': JSON.stringify({ service: 'S'.repeat(200), summary: 42 }),
+        'spec/modules/m/_module.json': JSON.stringify({ name: 'M' }),
+        'spec/modules/m/g.json': JSON.stringify({ name: 'G', requirements: [] }),
+      }),
+      'main',
+    )
+    expect(view.spec?.service).toHaveLength(120)
+    expect(view.spec?.summary).toBe('')
+    // Reported, because a clamped name is content this view does not carry.
+    expect(view.diagnostics?.issues).toEqual([
+      { path: 'spec/service.json', kind: 'partial', dropped: null },
+    ])
   })
 })

@@ -8,16 +8,15 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code SpecReadIssueKind} vocabulary.
+ * The {@code PublicServiceSpecAnchor} vocabulary.
  * Decoding an unrecognised value yields {@link #UNRECOGNIZED} rather than throwing, and {@link
  * #wireValue()} still returns what the server actually sent. This surface is additive, so refusing
  * a value the server legitimately added would break a caller on a release it was never told about.
  */
-public enum SpecReadIssueKind {
-    READ_FAILED("read_failed"),
+public enum PublicServiceSpecAnchor {
+    PRESENT("present"),
+    ABSENT("absent"),
     UNPARSED("unparsed"),
-    PARTIAL("partial"),
-    UNREAD("unread"),
 
     /**
      * A value this SDK release does not know.
@@ -31,7 +30,7 @@ public enum SpecReadIssueKind {
 
     private final String wire;
 
-    SpecReadIssueKind(String wire) {
+    PublicServiceSpecAnchor(String wire) {
         this.wire = wire;
     }
 
@@ -43,8 +42,8 @@ public enum SpecReadIssueKind {
 
     /** Decode from the wire, tolerating a value this release does not know. */
     @JsonCreator
-    public static SpecReadIssueKind fromWire(@Nullable String wire) {
-        for (SpecReadIssueKind candidate : values()) {
+    public static PublicServiceSpecAnchor fromWire(@Nullable String wire) {
+        for (PublicServiceSpecAnchor candidate : values()) {
             if (candidate.wire.equals(wire)) {
                 return candidate;
             }

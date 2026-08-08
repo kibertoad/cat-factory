@@ -7,10 +7,10 @@ import { handleError } from '../../http/errorHandler.js'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
 import { publicSpecController } from './PublicSpecController.js'
 
-// The spec read has FOUR outcomes and the entire point of this controller is that it never folds
-// them: three of them produce an empty tree and demand different reactions from the caller, and
-// the fold they invite is always the same one: reporting a VCS outage as a service that has
-// written no requirements.
+// The spec read has SEVERAL outcomes and the entire point of this controller is that it never
+// folds them: most of them produce an empty tree and demand different reactions from the caller,
+// and the fold they invite is always the same one: reporting a VCS outage, an unreachable
+// repository or a corrupt anchor as a service that has written no requirements.
 //
 // Each test below drives the REAL route through the real error funnel, because that funnel is what
 // turns a thrown refusal into the `details.reason` a headless caller branches on: a hand-built
@@ -122,7 +122,7 @@ describe('GET /api/v1/services/:serviceId/spec', () => {
     const spec = body as PublicServiceSpec
 
     expect(status).toBe(200)
-    expect(spec.present).toBe(true)
+    expect(spec.anchor).toBe('present')
     expect(spec.serviceId).toBe(SERVICE_ID)
     expect(spec.spec?.modules?.[0]?.groups?.[0]?.requirements?.[0]?.id).toBe('req-total-positive')
     expect(spec.features[0]?.path).toBe('spec/features/orders/place.feature')
@@ -139,11 +139,11 @@ describe('GET /api/v1/services/:serviceId/spec', () => {
     expect(spec.truncations).toEqual([])
   })
 
-  it('answers present: false for a repository that simply holds no spec', async () => {
+  it('answers anchor: absent for a repository that simply holds no spec', async () => {
     const call = harness({ resolve: async () => repoContext(fakeRepo({})) })
     const { status, body } = await call()
     expect(status).toBe(200)
-    expect(body).toMatchObject({ present: false, spec: null, features: [] })
+    expect(body).toMatchObject({ anchor: 'absent', spec: null, features: [] })
   })
 
   it('REFUSES with spec_read_failed when the repository could not be read', async () => {
@@ -160,6 +160,50 @@ describe('GET /api/v1/services/:serviceId/spec', () => {
     expect(reasonOf(body)).toBe('spec_read_failed')
   })
 
+  it('REFUSES rather than reporting "no spec" when the branch itself would not resolve', async () => {
+    // The fold this endpoint is most likely to make WITHOUT noticing. A repository that was
+    // renamed, transferred or deleted, a `baseBranch` that no longer exists and an installation
+    // that lost access all answer 404, and the client maps 404 to "no such file" exactly as it
+    // does for a repository that genuinely holds no spec. Only the ref resolution tells them
+    // apart, so an unresolved ref may not be served as a confident empty answer.
+    const repo = fakeRepo({})
+    repo.headSha = async () => null
+    const call = harness({ resolve: async () => repoContext(repo) })
+    const { status, body } = await call()
+    expect(status).toBe(503)
+    expect(reasonOf(body)).toBe('spec_ref_unresolved')
+  })
+
+  it('still serves a spec whose ref would not resolve, because the tree PROVES the read', async () => {
+    // The other half of the same rule: a provider degraded only on refs answered the anchor's own
+    // bytes, so the branch is demonstrably readable and refusing would drop an answer we hold.
+    // The commit is null, which the provenance already exists to say.
+    const repo = fakeRepo(SPEC_FILES)
+    repo.headSha = async () => {
+      throw new Error('refs API down')
+    }
+    const { status, body } = await harness({ resolve: async () => repoContext(repo) })()
+    const spec = body as PublicServiceSpec
+    expect(status).toBe(200)
+    expect(spec.anchor).toBe('present')
+    expect(spec.provenance.commit).toBeNull()
+  })
+
+  it('answers anchor: unparsed for a corrupt anchor, never folding it onto absent', async () => {
+    // A `spec/service.json` that is there and unusable is a repository state somebody has to fix.
+    // Answered as `absent` it would read as a service that declares nothing, which is the exact
+    // shape of the mistake the whole endpoint refuses to make one layer up.
+    const call = harness({
+      resolve: async () => repoContext(fakeRepo({ 'spec/service.json': '{ not json' })),
+    })
+    const { status, body } = await call()
+    const spec = body as PublicServiceSpec
+    expect(status).toBe(200)
+    expect(spec.anchor).toBe('unparsed')
+    expect(spec.spec).toBeNull()
+    expect(spec.issues).toEqual([{ path: 'spec/service.json', kind: 'unparsed', dropped: 0 }])
+  })
+
   it('serves a PARTIAL spec, naming the file that did not survive', async () => {
     const call = harness({
       resolve: async () =>
@@ -168,7 +212,7 @@ describe('GET /api/v1/services/:serviceId/spec', () => {
     const { status, body } = await call()
     const spec = body as PublicServiceSpec
     expect(status).toBe(200)
-    expect(spec.present).toBe(true)
+    expect(spec.anchor).toBe('present')
     // Served, not refused: the part that arrived is useful, and `issues` is what stops it reading
     // as the whole.
     expect(spec.issues).toEqual([

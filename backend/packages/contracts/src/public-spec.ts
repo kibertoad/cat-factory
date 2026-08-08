@@ -1,6 +1,6 @@
 import * as v from 'valibot'
 import { vcsProviderSchema } from './routes/auth.js'
-import { specDocSchema, specReadIssueSchema } from './spec.js'
+import { readSpecDocSchema, specReadIssueSchema } from './spec.js'
 
 // ---------------------------------------------------------------------------
 // The public read of a service's in-repo SPECIFICATION (`GET /api/v1/services/:serviceId/spec`).
@@ -27,9 +27,10 @@ import { specDocSchema, specReadIssueSchema } from './spec.js'
 //     "no spec on this branch" and "we could not read the repo" into one `present: false`, which
 //     is right for a window rendering an empty state and wrong for an integrator: it would report
 //     every service as requirement-free for the duration of a VCS incident. Here an unwired VCS
-//     capability and a failed read are each a `503` carrying their own `details.reason`, an absent
-//     spec is `present: false`, and a spec that read PARTIALLY is served with {@link
-//     PublicServiceSpec.issues} naming each file that did not survive.
+//     capability and a failed read are each a `503` carrying their own `details.reason`, what the
+//     branch holds is the three-valued {@link PublicServiceSpec.anchor}, and a spec that read
+//     PARTIALLY is served with {@link PublicServiceSpec.issues} naming each file that did not
+//     survive.
 //  3. **Provenance, because this is a snapshot and not a subscription.** The spec on the default
 //     branch is not the spec a run with an open pull request is working against, so the response
 //     names the ref and the commit it describes rather than implying a liveness it does not have.
@@ -49,11 +50,41 @@ export const PUBLIC_SPEC_MAX_REQUIREMENTS = 2_000
 /** Ceiling on domain-rule rows one response may carry, across the whole tree. */
 export const PUBLIC_SPEC_MAX_RULES = 2_000
 
+/**
+ * Ceiling on acceptance criteria one response may carry, across the whole tree.
+ *
+ * Across the tree rather than per requirement, because a per-item cap does not bound anything: a
+ * criterion carries three 2,000-character clauses, so twenty of them on each of 2,000 requirements
+ * is a response two orders of magnitude past every other cap here. The row caps bound the tree's
+ * SHAPE; this bounds the part of its WEIGHT they do not.
+ */
+export const PUBLIC_SPEC_MAX_ACCEPTANCE = 5_000
+
 /** Ceiling on how many rendered `.feature` files one response may carry. */
 export const PUBLIC_SPEC_MAX_FEATURE_FILES = 500
 
 /** Ceiling on the characters of Gherkin ONE feature file may carry. */
 export const PUBLIC_SPEC_MAX_FEATURE_CHARS = 20_000
+
+/**
+ * Ceiling on the characters of Gherkin ALL feature files may carry, together.
+ *
+ * The per-file cap alone bounds nothing that matters: 500 files each clamped to 20,000 characters
+ * is a ten-megabyte body served to a `read`-scope key. Spent in the same traversal order as every
+ * other budget, so a file is whole, clamped, or absent, and never a sample.
+ */
+export const PUBLIC_SPEC_MAX_FEATURE_TOTAL_CHARS = 1_000_000
+
+/**
+ * Ceiling on read-issue rows one response may carry.
+ *
+ * The issue list is produced by the read rather than by the spec, so it is the one axis that grows
+ * with FAILURE: a rate-limit window part-way through a few-thousand-shard walk logs a row per
+ * shard, and an uncapped list makes the report of a degraded read larger than a healthy response.
+ * Capping it without saying so would be the same fold every cap here exists to prevent, so it gets
+ * a `truncations` row like the rest.
+ */
+export const PUBLIC_SPEC_MAX_ISSUES = 200
 
 /**
  * Where the served tree was read from, and WHEN.
@@ -107,7 +138,13 @@ export const publicSpecFeatureFileSchema = v.object({
 export type PublicSpecFeatureFile = v.InferOutput<typeof publicSpecFeatureFileSchema>
 
 /** Which axis a cap bit on. Every member counts ITEMS, so `shown`/`total` share one unit. */
-export const publicSpecTruncationSectionSchema = v.picklist(['requirements', 'rules', 'features'])
+export const publicSpecTruncationSectionSchema = v.picklist([
+  'requirements',
+  'rules',
+  'acceptance',
+  'features',
+  'issues',
+])
 export type PublicSpecTruncationSection = v.InferOutput<typeof publicSpecTruncationSectionSchema>
 
 /**
@@ -128,27 +165,60 @@ export const publicSpecTruncationSchema = v.object({
 export type PublicSpecTruncation = v.InferOutput<typeof publicSpecTruncationSchema>
 
 /**
+ * How the presence anchor (`spec/service.json`) resolved, for a caller that got a `200`.
+ *
+ * {@link specAnchorStateSchema} minus `read_failed`, which never reaches a body here: an unread
+ * repository is a `503` carrying `reason: "spec_read_failed"`. What remains are the three states
+ * that are FACTS ABOUT THE REPOSITORY, and they are served as three values rather than folded into
+ * one boolean because they need different reactions:
+ *
+ *  - `present`  — a spec was read. `spec` is the tree.
+ *  - `absent`   — the default branch holds no `spec/service.json`. The common, final answer, and
+ *    the only one that means "this service declares nothing".
+ *  - `unparsed` — the anchor is THERE and unusable (truncated JSON, a half-written commit). The
+ *    tree is unavailable for a reason somebody has to fix in the repository, and an integrator
+ *    treating it as "no requirements" would be reporting a broken file as an empty service.
+ *
+ * A boolean carried the first two and quietly folded the third onto `absent`, discoverable only by
+ * noticing an `issues` row. This surface does not fold outcomes; the whole endpoint exists because
+ * the internal view does.
+ */
+export const publicSpecAnchorSchema = v.picklist(['present', 'absent', 'unparsed'])
+export type PublicSpecAnchor = v.InferOutput<typeof publicSpecAnchorSchema>
+
+/**
  * The service's specification as `/api/v1` serves it.
  *
- * `present: false` means exactly one thing here: the service's repository holds no
- * `spec/service.json` on its default branch. It never means the repository could not be read (a
- * `503` with `reason: "spec_read_failed"`), that no repository is linked (a `422`), or that this
- * deployment wired no VCS integration (a `503` with `reason: "vcs_not_configured"`).
+ * A `200` here never means the repository could not be read (a `503` with
+ * `reason: "spec_read_failed"`), that no repository is linked (a `422`), or that this deployment
+ * wired no VCS integration (a `503` with `reason: "vcs_not_configured"`). What it does mean is
+ * {@link PublicServiceSpec.anchor}.
  */
 export const publicServiceSpecSchema = v.object({
   /** The board service frame this spec belongs to, echoed so a response stands alone. */
   serviceId: v.string(),
-  /** Whether the default branch holds a spec at all. */
-  present: v.boolean(),
-  /** The structured tree (modules → groups → requirements + rules), or null when absent. */
-  spec: v.nullable(specDocSchema),
+  /**
+   * What the default branch holds where the spec should be. `spec` is non-null exactly when this
+   * is `present`; the other two are the two ways it can be null.
+   */
+  anchor: publicSpecAnchorSchema,
+  /**
+   * The structured tree (modules → groups → requirements + rules), or null when `anchor` is not
+   * `present`. {@link readSpecDocSchema} rather than the strict authoring schema: a spec whose
+   * anchor names no service is a state a repository can genuinely be in, and this surface has to
+   * describe repositories as they are.
+   */
+  spec: v.nullable(readSpecDocSchema),
   /** The rendered Gherkin, one entry per `.feature` file. Empty when the repo renders none. */
   features: v.array(publicSpecFeatureFileSchema),
   provenance: publicSpecProvenanceSchema,
   /**
    * Files the read could not fully account for: a provider error on one shard, a shard whose JSON
-   * is unusable, a group salvaged with some requirements dropped. A present-but-partial spec is
-   * served rather than refused, and this is what stops the part that arrived reading as the whole.
+   * is unusable, a group salvaged with some requirements dropped, the tail a spent read budget
+   * never reached. A present-but-partial spec is served rather than refused, and this is what
+   * stops the part that arrived reading as the whole.
+   *
+   * Capped at {@link PUBLIC_SPEC_MAX_ISSUES}, with a `truncations` row when the cap bit.
    */
   issues: v.array(specReadIssueSchema),
   /** Every cap that bit. Empty when nothing was left out. */
