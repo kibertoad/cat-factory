@@ -153,8 +153,12 @@ a scope change to weigh on its own.
 **Whenever a mechanism is enumerated by hand, ask what the enumeration is derived FROM.** The scope
 rule had been written against the two park mechanisms anyone would think of (a flag on a step, a
 kind that blocks) and missed the third (a gate that never stops polling), which is exactly the one
-carried by `pl_full`, the preset most board tasks run. `HUMAN_WAIT_GATE_KINDS` and
-`BUILTIN_GATE_KINDS` now carry drift guards deriving their expectation from the gate registry.
+carried by `pl_full`, the preset most board tasks run. The first answer was a pair of hand-kept
+constants (`HUMAN_WAIT_GATE_KINDS`, `BUILTIN_GATE_KINDS`) with drift guards deriving their
+expectation from the gate registry; [ADR 0050](./0050-public-api-headless-completeness.md) then
+deleted both, moving `pollExhaustion` onto the registration itself so admission reads the registry
+directly and a deployment's own gate is seen for free. The lesson outlived the mechanism: a guard
+over a hand-kept list is a second-best to not keeping one.
 
 **Two SDK-generation rules bite the CONTRACT, not the emitter.** A request-body field may not carry
 a valibot `default`: the emitters read it as "always present" outbound, so four published clients
@@ -172,9 +176,10 @@ on the persistence allow-list, so a node with no main database answers `unknown_
 ticket-less, document-less create is unaffected. Moving those write surfaces is a slice of the
 mothership tracker.
 
-**Two things are deliberately left open**, each recorded so they are not re-derived. Both are
-carried, with the rest of the headless-completeness gaps a later sweep found, in
-[`public-api-headless-completeness.md`](../../../docs/initiatives/public-api-headless-completeness.md):
+**Two things are deliberately left open**, each recorded so they are not re-derived. Both were
+carried, with the rest of the headless-completeness gaps a later sweep found, into
+[ADR 0050](./0050-public-api-headless-completeness.md), **which has since closed both**; the
+statements below are the reasoning as it stood, not the current surface:
 
 - **A deployment-registered unbounded-wait gate is invisible to admission.** `parkSurfacesOf` reads
   a constant naming the BUILT-IN rearming gates, so a deployment's own is admitted for a plain

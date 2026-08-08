@@ -710,18 +710,23 @@ export class RunDispatcher {
     if (step?.agentKind === HUMAN_TEST_AGENT_KIND) {
       return { kind: 'continue' }
     }
-    const gate = step ? this.gateFor(step.agentKind) : undefined
+    // Read off the REGISTRATION, not off the definition the factory builds: it is one
+    // declaration, and public-API admission has to read the same one at HTTP request time where
+    // there is no engine context to build a definition with. `undefined` here means the kind is
+    // not registered as a gate at all (a step whose gate was retired between the run starting and
+    // this poll landing), which falls through to the timeout below exactly as an unknown kind did.
+    const pollExhaustion = step ? this.gateRegistry.pollExhaustion(step.agentKind) : undefined
     const timeoutError = 'Gate precheck did not settle within its polling budget'
     // An unbounded human-wait gate (human-review, `pollExhaustion: 'rearm'`) has no deadline:
     // running out of polls is never a verdict. Always re-arm another poll cycle — the waiting
     // is surfaced via the gate's notification (escalated by the severity sweep), not by killing
     // the run.
-    if (step && gate && gate.pollExhaustion === 'rearm') {
+    if (step && pollExhaustion === 'rearm') {
       if (step.gate) step.gate.phase = 'checking'
       await this.runStateMachine.casPersist(workspaceId, instance)
       return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
     }
-    if (!step || !gate || gate.pollExhaustion !== 'pass') {
+    if (!step || pollExhaustion !== 'pass') {
       return { kind: 'job_failed', error: timeoutError, failureKind: 'timeout' }
     }
     // A time-windowed watch gate (post-release-health) may be configured to watch LONGER
@@ -743,7 +748,7 @@ export class RunDispatcher {
     // Window genuinely elapsed (or a non-windowed pass gate): finish as a healthy pass.
     const isFinalStep = instance.currentStep === instance.steps.length - 1
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
-      output: `${gate.kind} gate passed: watch window elapsed with no regression observed.`,
+      output: `${step.agentKind} gate passed: watch window elapsed with no regression observed.`,
     })
   }
 

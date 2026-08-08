@@ -198,7 +198,22 @@ const API_PREFIX = '/api/v1'
 // dispatch-`failure` diagnostics above while the branch was in flight: the SECOND number this one
 // has held, and it surfaced here rather than on the VERSION line, which auto-merged clean to the
 // number main had just used. Re-read this line after any merge rather than trusting that.
-const API_VERSION = '1.30.0'
+//
+// 1.31.0, not 1.30.0: board PROVISIONING and the relationships that outlive a create. Seven new
+// operations (`GET /api/v1/repos`, `POST /api/v1/services`, the two dependency writes, and the
+// three task-document routes), two new optional request fields (`autoStartDependents` on the task
+// patch), and three new response fields (`dependsOn` and `autoStartDependents` on the task
+// projection, `scope` on a run artifact, `output` and `data` on a run step). Additive on every
+// axis: nothing is renamed, retyped or re-scoped, and a consumer built against 1.30.0 keeps
+// parsing every response it already understood.
+//
+// One population change is worth stating rather than leaving for a reader to discover, because it
+// is the point of one of the slices: `GET /api/v1/runs/:runId/artifacts` now returns the reference
+// designs attached to the run's TASK alongside the artifacts the run captured, each row saying
+// which it is. A consumer counting rows off that list to mean "screenshots this run captured" must
+// filter on `scope: 'run'`; one comparing a screenshot against the design it was judged against
+// finally has both, which is why the list was half the truth before.
+const API_VERSION = '1.31.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -366,6 +381,18 @@ const OPERATION_DOCS = {
     description:
       'List the board service frames in the key’s workspace, so a caller can discover the serviceId to create/list tasks under.',
   },
+  createPublicService: {
+    tag: 'Services',
+    summary: 'Create a service',
+    description:
+      'Create a board service, optionally backed by a repository from `GET /api/v1/repos`. The repository link is what makes the service runnable: execution resolves a task’s repository by walking up to its enclosing service frame, so a service with none holds tasks and can start none of them. A whole-repo repository that already backs a service in this account is MOUNTED rather than duplicated; a monorepo service must name its subdirectory. The board lays the service out itself: this surface publishes no coordinates. Requires an `admin` key.',
+  },
+  listPublicRepos: {
+    tag: 'Repos',
+    summary: 'List the repositories a service can be created against',
+    description:
+      'List the repositories the key’s workspace has connected, each with the service that already backs it (null when nothing does, and always null for a monorepo, which can back several). The discovery half of service creation: the create takes a repoId, and this is where one comes from.',
+  },
   createPublicTask: {
     tag: 'Tasks',
     summary: 'Create a task under a service',
@@ -413,6 +440,36 @@ const OPERATION_DOCS = {
     summary: "Get a task's run (rich projection)",
     description:
       'Read a task’s run in detail: per-step status/progress/subtasks, the failure kind and message, and the PR (url + branch).',
+  },
+  addPublicTaskDependency: {
+    tag: 'Tasks',
+    summary: 'Declare that a task waits for another',
+    description:
+      'Record that this task cannot start until `dependsOnTaskId` is done. Both ends must be tasks in this workspace, and an edge that would close a cycle is refused. Idempotent: an edge that already exists is returned as-is rather than toggled off, so a provisioning integration re-running its own setup converges. Pair it with `autoStartDependents` on the BLOCKER (the task patch) to have the chain run itself.',
+  },
+  removePublicTaskDependency: {
+    tag: 'Tasks',
+    summary: 'Drop a dependency edge',
+    description:
+      'Remove the ordering between this task and `dependsOnTaskId`. Idempotent: an edge that is not there is a no-op.',
+  },
+  listPublicTaskDocuments: {
+    tag: 'Tasks',
+    summary: "List a task's attached documents",
+    description:
+      'The requirements documents attached to the task, in the order the agents read them. Each is identified by the `(source, externalId)` pair the attach and detach calls take.',
+  },
+  attachPublicTaskDocument: {
+    tag: 'Tasks',
+    summary: 'Attach a document to a task',
+    description:
+      'Attach a requirements document to a task that already exists, in either of the two forms creation takes: NAME a page in a connected document source, or CARRY the text inline. A task’s spec routinely arrives after the task does, and before this the only way to attach one was to delete the task and file it again, losing the id every stored reference points at, its ticket claim and the documents it already carried. A document a different live task already holds is refused rather than moved.',
+  },
+  detachPublicTaskDocument: {
+    tag: 'Tasks',
+    summary: 'Detach a document from a task',
+    description:
+      'Detach a document, naming it by the `(source, externalId)` pair the list serves. The document itself survives in the workspace, so re-attaching it later costs no re-import. Idempotent: detaching one the task does not hold is a no-op.',
   },
   deletePublicTask: {
     tag: 'Tasks',

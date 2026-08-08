@@ -118,6 +118,9 @@ on every future change to `/api/v1`, the SDKs, or the webhook delivery contract:
   answered in the app. The residual gap is bounded (a deployment that registers a human-wait gate
   also controls the keys it mints) and closing it means moving the declaration out of
   `GateDefinition` and onto registration, which is a gate-registry change, not an API one.
+  **[ADR 0050](./0050-public-api-headless-completeness.md) has since made exactly that change**, so
+  the rule now reads every gate's own registration and `HUMAN_WAIT_GATE_KINDS` is gone; the
+  paragraph above records why the constant existed, not what the code does today.
 - **The decision-surface additions (A1..A6, B1..B2, C1..C2) are unaffected**: all are additive.
   Their tracker stays live; its open question about the start path is settled by this ADR.
 - **`docs/openapi.json` `info.version` policy**: minor for additions, and a major only ever

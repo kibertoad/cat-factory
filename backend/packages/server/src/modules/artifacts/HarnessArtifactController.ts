@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { bearerToken } from '../../auth/middleware.js'
 import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
@@ -13,8 +14,8 @@ import {
 } from './imageArtifacts.js'
 import type { BinaryArtifactStore } from '@cat-factory/kernel'
 import { NotFoundError, UnavailableError, UnauthorizedError } from '@cat-factory/kernel'
-import type { Context } from 'hono'
 import type { ContainerSession } from '../../containers/ContainerSessionService.js'
+import { reclaimArtifactOverflow, reserveArtifactSlot } from './artifactSetCap.js'
 
 /**
  * Cap on how many screenshots a single run may upload. A `tester-ui` run captures one shot per
@@ -23,6 +24,26 @@ import type { ContainerSession } from '../../containers/ContainerSessionService.
  * count is read back from the store per ingest (cheap, indexed by execution).
  */
 const MAX_SCREENSHOTS_PER_RUN = 100
+
+/** One run's capture set, as {@link reserveArtifactSlot} / {@link reclaimArtifactOverflow} see it. */
+function runCap(store: BinaryArtifactStore, workspaceId: string, executionId: string) {
+  return {
+    limit: MAX_SCREENSHOTS_PER_RUN,
+    count: () => store.countByExecution(workspaceId, executionId),
+    list: () => store.listByExecution(workspaceId, executionId),
+    remove: (id: string) => store.delete(workspaceId, id),
+  }
+}
+
+/** The one refusal both cap checks answer with, so the pre-check and the reconcile cannot differ. */
+function refuseFullRun<E extends AppEnv>(c: Context<E>, executionId: string) {
+  logger.warn('artifact ingest: per-run screenshot limit reached', {
+    scope: 'artifactIngest',
+    executionId,
+    limit: MAX_SCREENSHOTS_PER_RUN,
+  })
+  return c.json({ error: { code: 'too_many', message: 'Per-run screenshot limit reached' } }, 429)
+}
 
 /**
  * Resolve the stored content type for an uploaded screenshot. Screenshots are always PNGs, so a
@@ -109,21 +130,14 @@ export function harnessArtifactController(): Hono<AppEnv> {
       }
 
       // Per-run upload ceiling (fast-path): a runaway/compromised container can't fill the store
-      // with unbounded screenshots scoped to its run. This pre-check rejects the steady-state case
+      // with unbounded screenshots scoped to its run. The shared cap rejects the steady-state case
       // cheaply via an indexed COUNT (no row materialise); concurrent ingests that race past it are
       // caught by the post-insert reconcile below, so the effective ceiling holds even without a
       // DB-level atomic counter.
-      const existingCount = await store.countByExecution(session.workspaceId, session.executionId)
-      if (existingCount >= MAX_SCREENSHOTS_PER_RUN) {
-        logger.warn('artifact ingest: per-run screenshot limit reached', {
-          scope: 'artifactIngest',
-          executionId: session.executionId,
-          count: existingCount,
-        })
-        return c.json(
-          { error: { code: 'too_many', message: 'Per-run screenshot limit reached' } },
-          429,
-        )
+      const cap = runCap(store, session.workspaceId, session.executionId)
+      const priorCount = await reserveArtifactSlot(cap)
+      if (priorCount === null) {
+        return refuseFullRun(c, session.executionId)
       }
 
       let form: FormData
@@ -170,31 +184,11 @@ export function harnessArtifactController(): Hono<AppEnv> {
         },
         blob: bytes,
       })
-      // Reconcile the cap against concurrent inserts: the pre-check is check-then-act, so a burst
-      // of parallel ingests can each pass it before any row lands. We only need to run this
-      // (which materialises the run's rows to find the overflow tail) when the insert COULD have
-      // crossed the cap — i.e. the pre-check count was already at the edge. Steady-state uploads
-      // far below the cap skip it entirely, so the common path is one COUNT + one insert.
-      if (existingCount + 1 >= MAX_SCREENSHOTS_PER_RUN) {
-        // listByExecution is oldest-first, so anything at index >= the cap is overflow; if THIS
-        // record is in that tail, roll it back (delete its row + bytes) and reject. The oldest
-        // `MAX_SCREENSHOTS_PER_RUN` always survive, so the store is bounded to exactly the cap per
-        // run without dropping legitimate earlier shots.
-        const after = await store.listByExecution(session.workspaceId, session.executionId)
-        if (after.length > MAX_SCREENSHOTS_PER_RUN) {
-          const overflow = new Set(after.slice(MAX_SCREENSHOTS_PER_RUN).map((r) => r.id))
-          if (overflow.has(record.id)) {
-            await store.delete(session.workspaceId, record.id)
-            logger.warn(
-              'artifact ingest: per-run screenshot limit reached (post-insert reconcile)',
-              { scope: 'artifactIngest', executionId: session.executionId, count: after.length },
-            )
-            return c.json(
-              { error: { code: 'too_many', message: 'Per-run screenshot limit reached' } },
-              429,
-            )
-          }
-        }
+      // Check-then-act, so a burst of parallel ingests can each pass the pre-check before any row
+      // lands; the reconcile rolls THIS record back when it is the one that overflowed, leaving the
+      // oldest `MAX_SCREENSHOTS_PER_RUN` untouched.
+      if (await reclaimArtifactOverflow(cap, priorCount, record.id)) {
+        return refuseFullRun(c, session.executionId)
       }
       return c.json({ artifactId: record.id }, 201)
     },

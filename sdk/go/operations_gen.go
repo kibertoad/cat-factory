@@ -470,9 +470,31 @@ func (s *JobsService) Stream(ctx context.Context, id string) (*EventStream, erro
 	return s.client.stream(ctx, req)
 }
 
-// ServicesService the workspace's board services — the frames tasks are created under.
+// ServicesService the workspace's board services, the frames tasks are created under: list them, or create one
+// (optionally backed by a repository).
 type ServicesService struct {
 	client *Client
+}
+
+// Create create a service
+// Create a board service, optionally backed by a repository from `GET /api/v1/repos`. The
+// repository link is what makes the service runnable: execution resolves a task’s repository by
+// walking up to its enclosing service frame, so a service with none holds tasks and can start
+// none of them. A whole-repo repository that already backs a service in this account is MOUNTED
+// rather than duplicated; a monorepo service must name its subdirectory. The board lays the
+// service out itself: this surface publishes no coordinates. Requires an `admin` key.
+// POST /api/v1/services (operation createPublicService).
+func (s *ServicesService) Create(ctx context.Context, body CreatePublicServiceRequest) (*PublicService, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   "/api/v1/services",
+		Body:   body,
+	}
+	var out PublicService
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // List list the workspace's services
@@ -491,9 +513,76 @@ func (s *ServicesService) List(ctx context.Context) (*PublicServiceList, error) 
 	return &out, nil
 }
 
-// TasksService a board task's whole lifecycle: create, edit, start, stop, retry, watch, delete.
+// ReposService the repositories this workspace can back a service with, and which service each already backs:
+// the discovery half of service creation.
+type ReposService struct {
+	client *Client
+}
+
+// List list the repositories a service can be created against
+// List the repositories the key’s workspace has connected, each with the service that already
+// backs it (null when nothing does, and always null for a monorepo, which can back several). The
+// discovery half of service creation: the create takes a repoId, and this is where one comes
+// from.
+// GET /api/v1/repos (operation listPublicRepos).
+func (s *ReposService) List(ctx context.Context) (*ListPublicReposResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/repos",
+	}
+	var out ListPublicReposResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// TasksService a board task's whole lifecycle: create, edit, start, stop, retry, watch, delete, plus the two
+// relationships that outlive a create: the tasks it waits for, and the requirements documents it
+// is built against.
 type TasksService struct {
 	client *Client
+}
+
+// AddDependency declare that a task waits for another
+// Record that this task cannot start until `dependsOnTaskId` is done. Both ends must be tasks in
+// this workspace, and an edge that would close a cycle is refused. Idempotent: an edge that
+// already exists is returned as-is rather than toggled off, so a provisioning integration
+// re-running its own setup converges. Pair it with `autoStartDependents` on the BLOCKER (the task
+// patch) to have the chain run itself.
+// POST /api/v1/tasks/{taskId}/dependencies (operation addPublicTaskDependency).
+func (s *TasksService) AddDependency(ctx context.Context, taskID string, body AddPublicTaskDependencyRequest) (*PublicTask, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/tasks/%s/dependencies", pathEscape(taskID)),
+		Body:   body,
+	}
+	var out PublicTask
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// AttachDocument attach a document to a task
+// Attach a requirements document to a task that already exists, in either of the two forms
+// creation takes: NAME a page in a connected document source, or CARRY the text inline. A task’s
+// spec routinely arrives after the task does, and before this the only way to attach one was to
+// delete the task and file it again, losing the id every stored reference points at, its ticket
+// claim and the documents it already carried. A document a different live task already holds is
+// refused rather than moved.
+// POST /api/v1/tasks/{taskId}/documents (operation attachPublicTaskDocument).
+func (s *TasksService) AttachDocument(ctx context.Context, taskID string, body AttachPublicTaskDocumentRequest) (*ListPublicTaskDocumentsResponseDocument, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/tasks/%s/documents", pathEscape(taskID)),
+		Body:   body,
+	}
+	var out ListPublicTaskDocumentsResponseDocument
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // Create create a task under a service
@@ -524,6 +613,20 @@ func (s *TasksService) Delete(ctx context.Context, taskID string) error {
 	req := requestSpec{
 		Method: "DELETE",
 		Path:   fmt.Sprintf("/api/v1/tasks/%s", pathEscape(taskID)),
+	}
+	return s.client.requestNoContent(ctx, req)
+}
+
+// DetachDocument detach a document from a task
+// Detach a document, naming it by the `(source, externalId)` pair the list serves. The document
+// itself survives in the workspace, so re-attaching it later costs no re-import. Idempotent:
+// detaching one the task does not hold is a no-op.
+// POST /api/v1/tasks/{taskId}/documents/detach (operation detachPublicTaskDocument).
+func (s *TasksService) DetachDocument(ctx context.Context, taskID string, body DetachPublicTaskDocumentRequest) error {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/tasks/%s/documents/detach", pathEscape(taskID)),
+		Body:   body,
 	}
 	return s.client.requestNoContent(ctx, req)
 }
@@ -609,6 +712,39 @@ func (s *TasksService) ListByServiceAll(ctx context.Context, serviceID string, q
 			page.Cursor = result.NextCursor
 		}
 	}
+}
+
+// ListDocuments list a task's attached documents
+// The requirements documents attached to the task, in the order the agents read them. Each is
+// identified by the `(source, externalId)` pair the attach and detach calls take.
+// GET /api/v1/tasks/{taskId}/documents (operation listPublicTaskDocuments).
+func (s *TasksService) ListDocuments(ctx context.Context, taskID string) (*ListPublicTaskDocumentsResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/tasks/%s/documents", pathEscape(taskID)),
+	}
+	var out ListPublicTaskDocumentsResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RemoveDependency drop a dependency edge
+// Remove the ordering between this task and `dependsOnTaskId`. Idempotent: an edge that is not
+// there is a no-op.
+// POST /api/v1/tasks/{taskId}/dependencies/remove (operation removePublicTaskDependency).
+func (s *TasksService) RemoveDependency(ctx context.Context, taskID string, body AddPublicTaskDependencyRequest) (*PublicTask, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/tasks/%s/dependencies/remove", pathEscape(taskID)),
+		Body:   body,
+	}
+	var out PublicTask
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // Retry retry a task's failed run

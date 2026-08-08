@@ -285,7 +285,6 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     resolveTestSecretRefs,
     resolveValidationChecks,
     tasks,
-    fileGitHubIssue,
     releaseHealthDeps,
     packageRegistryDeps,
     incidentEnrichmentDeps,
@@ -488,33 +487,41 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // Jira tickets from the per-workspace encrypted connection store — both per-tenant.
     pipelineScheduleRepository: repos.pipelineScheduleRepository,
     trackerSettingsRepository: repos.trackerSettingsRepository,
-    ticketTrackerProvider: new TicketTrackerService({
-      trackerSettingsRepository: repos.trackerSettingsRepository,
-      fetchImpl: fetch,
-      ...(fileGitHubIssue ? { fileGitHubIssue } : {}),
-      ...(tasks.taskConnectionStore
-        ? {
-            resolveJiraConnection: async (workspaceId) => {
-              const connection = await tasks.taskConnectionStore!.getByWorkspace(
-                workspaceId,
-                'jira',
-              )
-              const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
-              if (!baseUrl || !accountEmail || !apiToken) return null
-              return { baseUrl, accountEmail, apiToken }
-            },
-            resolveLinearConnection: async (workspaceId) => {
-              const connection = await tasks.taskConnectionStore!.getByWorkspace(
-                workspaceId,
-                'linear',
-              )
-              const { apiKey, token } = connection?.credentials ?? {}
-              return apiKey || token ? { apiKey, token } : null
-            },
-          }
-        : {}),
-    }),
+    ticketTrackerProvider: buildTicketTrackerProvider(bundle),
   }
+}
+
+/**
+ * The workspace's ticket tracker: GitHub issues through the workspace's App installation, Jira and
+ * Linear from the per-workspace encrypted connection store, all per-tenant.
+ *
+ * Its own function because the two credential resolvers are the bulk of it and neither belongs to
+ * the dependency literal's shape: pulling them out keeps that literal readable as the list of
+ * bindings it is.
+ */
+function buildTicketTrackerProvider(bundle: NodeCoreDepsBundle): TicketTrackerService {
+  const { repos, tasks, fileGitHubIssue } = bundle
+  const store = tasks.taskConnectionStore
+  return new TicketTrackerService({
+    trackerSettingsRepository: repos.trackerSettingsRepository,
+    fetchImpl: fetch,
+    ...(fileGitHubIssue ? { fileGitHubIssue } : {}),
+    ...(store
+      ? {
+          resolveJiraConnection: async (workspaceId) => {
+            const connection = await store.getByWorkspace(workspaceId, 'jira')
+            const { baseUrl, accountEmail, apiToken } = connection?.credentials ?? {}
+            if (!baseUrl || !accountEmail || !apiToken) return null
+            return { baseUrl, accountEmail, apiToken }
+          },
+          resolveLinearConnection: async (workspaceId) => {
+            const connection = await store.getByWorkspace(workspaceId, 'linear')
+            const { apiKey, token } = connection?.credentials ?? {}
+            return apiKey || token ? { apiKey, token } : null
+          },
+        }
+      : {}),
+  })
 }
 
 /**

@@ -108,6 +108,7 @@ import { foundationalBuiltinsController } from './modules/foundationalServices/F
 import { binaryGeneratorsController } from './modules/binaryGenerators/BinaryGeneratorsController.js'
 import { promptFragmentsInternalController } from './modules/promptFragments/PromptFragmentsInternalController.js'
 import { publicApiController } from './modules/publicApi/PublicApiController.js'
+import { publicBoardController } from './modules/publicApi/PublicBoardController.js'
 import { publicApiKeyController } from './modules/publicApi/PublicApiKeyController.js'
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
 import { publicDebugController } from './modules/publicApi/PublicDebugController.js'
@@ -229,6 +230,11 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // The PUBLIC external API (`/api/v1/*`): key-authenticated in-controller (its `/api` prefix
   // bypasses the session gate), for external systems to run a public inline pipeline headlessly.
   app.route('/', publicApiController())
+  // Board PROVISIONING (`/api/v1/repos`, `/api/v1/services`) plus the two task relationships that
+  // outlive a create call (dependency edges, attached requirements documents). The same
+  // in-controller key auth; service creation is `admin` (board structure), the task-level writes
+  // `write`. See backend/docs/public-api.md.
+  app.route('/', publicBoardController())
   // The public PARKED-DECISION surface (`/api/v1/runs/:runId/decisions/*`): the answerer that lets
   // a headless run include the clarification loop at all. Same in-controller key auth, gated on
   // the `decide` rung of the scope ladder. See backend/docs/adr/0047-headless-clarification-loop.md.

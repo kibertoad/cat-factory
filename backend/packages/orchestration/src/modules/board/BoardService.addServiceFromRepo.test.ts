@@ -50,7 +50,7 @@ describe('BoardService.addServiceFromRepo — shared-service mount', () => {
     }
   }
 
-  function build(existing: Service | null, alreadyMountedHere = false) {
+  function build(existing: Service | null, alreadyMountedHere = false, homeWorkspaceId = HOME_WS) {
     const upserts: WorkspaceMount[] = []
     const deps = {
       workspaceRepository: {
@@ -66,7 +66,7 @@ describe('BoardService.addServiceFromRepo — shared-service mount', () => {
       blockRepository: {
         findById: async (id: string) =>
           existing && id === existing.frameBlockId
-            ? { workspaceId: HOME_WS, serviceId: existing.id, block: homeFrame() }
+            ? { workspaceId: homeWorkspaceId, serviceId: existing.id, block: homeFrame() }
             : null,
         listByWorkspace: async () => [],
       },
@@ -106,5 +106,27 @@ describe('BoardService.addServiceFromRepo — shared-service mount', () => {
     const block = await service.addServiceFromRepo(WS, { repoGithubId: 101 })
     expect(block.id).toBe('frame_shared')
     expect(upserts).toHaveLength(0)
+  })
+
+  it('REFUSES a foreign-homed service for a caller that cannot address it, and mounts nothing', async () => {
+    // The public API's policy. Its every read is workspace-scoped, so answering 201 with the frame
+    // homed on `ws_a` would hand a key a `serviceId` that `GET /api/v1/services` does not list and
+    // `POST /api/v1/services/{id}/tasks` 404s on — a success that reads as one and is not.
+    const { service, upserts } = build(existingService())
+    await expect(
+      service.addServiceFromRepo(WS, { repoGithubId: 101 }, 'refuse'),
+    ).rejects.toMatchObject({ details: { reason: 'repo_service_homed_elsewhere' } })
+    // Refused BEFORE the write: the board does not quietly acquire a service the caller asked to
+    // CREATE and cannot then see.
+    expect(upserts).toHaveLength(0)
+  })
+
+  it('still answers under `refuse` when the service is homed on THIS board', async () => {
+    // `refuse` is about ADDRESSABILITY, not about sharing: a service whose frame is homed here is
+    // one the caller can read back, so the ordinary idempotent answer stands. Without this the
+    // policy would refuse a provisioning integration its OWN previous run's service.
+    const { service } = build(existingService(), true, WS)
+    const block = await service.addServiceFromRepo(WS, { repoGithubId: 101 }, 'refuse')
+    expect(block.id).toBe('frame_shared')
   })
 })

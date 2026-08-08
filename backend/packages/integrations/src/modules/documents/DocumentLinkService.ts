@@ -277,6 +277,37 @@ export class DocumentLinkService {
     return documents.map((doc) => toSourceDocument({ ...doc, linkedBlockId: block.id }))
   }
 
+  /** Every document attached to one block, in the order the agents read them. */
+  async listBlockLinks(workspaceId: string, blockId: string): Promise<SourceDocument[]> {
+    const rows = await this.deps.documentRepository.listByBlock(workspaceId, blockId)
+    return rows.map(toSourceDocument)
+  }
+
+  /**
+   * Detach ONE document from ONE block, naming the document by its `(source, externalId)` key.
+   *
+   * Scoped to the block on purpose, unlike the repository's own by-ref detach: a document row
+   * carries exactly one attachment, so clearing it by ref alone would strip the document from
+   * whichever task is holding it, which need not be the one the caller named. Asking "does this
+   * block hold it" first means the worst case is a no-op.
+   *
+   * Idempotent, and that is the same decision the guard above forces: a document this block does
+   * not hold is left alone and reported as detached, because a caller retrying after a timeout
+   * should converge rather than have to tell "it was never attached" from "I already detached it".
+   * Nothing is deleted either way: the document stays in the workspace, so re-attaching it later
+   * costs no re-import.
+   */
+  async detachFromBlock(
+    workspaceId: string,
+    blockId: string,
+    source: DocumentOrigin,
+    externalId: string,
+  ): Promise<void> {
+    const document = await this.deps.documentRepository.get(workspaceId, source, externalId)
+    if (!document || document.linkedBlockId !== blockId) return
+    await this.deps.documentRepository.linkBlock(workspaceId, source, externalId, null)
+  }
+
   /**
    * Detach every document attached to one block, in a single write.
    *

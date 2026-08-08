@@ -11,12 +11,16 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code UpdatePublicTask} wire model.
+ * @param autoStartDependents May be absent entirely.
  * @param description May be absent entirely. Length 0..2000.
  * @param fields May be absent entirely.
  * @param title May be absent entirely. Length 1..200.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record UpdatePublicTask(
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("autoStartDependents") @Nullable Boolean autoStartDependents,
+
     /** May be absent entirely. Length 0..2000. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("description") @Nullable String description,
 
@@ -39,9 +43,16 @@ public record UpdatePublicTask(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
+        private @Nullable Boolean autoStartDependents;
         private @Nullable String description;
         private @Nullable Map<String, CreatePublicTaskFieldsValue> fields;
         private @Nullable String title;
+
+        /** Set {@code autoStartDependents}. */
+        public Builder autoStartDependents(@Nullable Boolean autoStartDependents) {
+            this.autoStartDependents = autoStartDependents;
+            return this;
+        }
 
         /** Set {@code description}. */
         public Builder description(@Nullable String description) {
@@ -63,7 +74,7 @@ public record UpdatePublicTask(
 
         /** Build the {@link UpdatePublicTask}. */
         public UpdatePublicTask build() {
-            return new UpdatePublicTask(description, fields, title);
+            return new UpdatePublicTask(autoStartDependents, description, fields, title);
         }
     }
 }

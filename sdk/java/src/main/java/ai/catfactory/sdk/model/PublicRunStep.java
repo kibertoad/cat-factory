@@ -4,26 +4,39 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicRunStep} wire model.
  * @param agentKind the {@code agentKind} field.
+ * @param data Always present; {@code null} when the server has no value for it.
+ * @param output Always present; {@code null} when the server has no value for it.
  * @param progress the {@code progress} field.
  * @param state the {@code state} field.
  * @param subtasks Always present; {@code null} when the server has no value for it.
+ * @param truncated May be absent entirely.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicRunStep(
     @JsonProperty("agentKind") String agentKind,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("data") @Nullable Object data,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("output") @Nullable String output,
 
     @JsonProperty("progress") Double progress,
 
     @JsonProperty("state") StepState state,
 
     /** Always present; {@code null} when the server has no value for it. */
-    @JsonProperty("subtasks") @Nullable RunSubtaskCounts subtasks
+    @JsonProperty("subtasks") @Nullable RunSubtaskCounts subtasks,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("truncated") @Nullable Boolean truncated
 ) {
 
     /** A new builder for {@link PublicRunStep}. */
@@ -39,13 +52,28 @@ public record PublicRunStep(
      */
     public static final class Builder {
         private @Nullable String agentKind;
+        private @Nullable Object data;
+        private @Nullable String output;
         private @Nullable Double progress;
         private @Nullable StepState state;
         private @Nullable RunSubtaskCounts subtasks;
+        private @Nullable Boolean truncated;
 
         /** Set {@code agentKind}. */
         public Builder agentKind(@Nullable String agentKind) {
             this.agentKind = agentKind;
+            return this;
+        }
+
+        /** Set {@code data}. */
+        public Builder data(@Nullable Object data) {
+            this.data = data;
+            return this;
+        }
+
+        /** Set {@code output}. */
+        public Builder output(@Nullable String output) {
+            this.output = output;
             return this;
         }
 
@@ -67,9 +95,15 @@ public record PublicRunStep(
             return this;
         }
 
+        /** Set {@code truncated}. */
+        public Builder truncated(@Nullable Boolean truncated) {
+            this.truncated = truncated;
+            return this;
+        }
+
         /** Build the {@link PublicRunStep}. */
         public PublicRunStep build() {
-            return new PublicRunStep(agentKind, progress, state, subtasks);
+            return new PublicRunStep(agentKind, data, output, progress, state, subtasks, truncated);
         }
     }
 }

@@ -1,4 +1,4 @@
-import type { ExecutionStatus } from '@cat-factory/contracts'
+import type { ExecutionStatus, PublicRun, PublicRunStep } from '@cat-factory/contracts'
 
 // Park announcement for the public SSE streams (`/api/v1/jobs/:id/events` and the board task
 // stream). Extracted from `PublicApiController` because BOTH streams need identical behaviour and
@@ -44,5 +44,53 @@ export function createParkAnnouncer(): {
       announced = true
       return true
     },
+  }
+}
+
+/**
+ * Per-step character cap on the deliverable a STREAM frame carries, applied to `output` and to
+ * `data`'s serialized size alike.
+ *
+ * Sized as a preview a caller can act on (recognise the shape of the deliverable, decide whether
+ * to fetch the rest) rather than as a budget for the deliverable itself, and deliberately smaller
+ * than the run detail's own 8,000-char sibling (`MAX_HISTORY_OUTPUT_CHARS`, which bounds the same
+ * class of content for the same reason): this cap is paid once per step per FRAME, where that one
+ * is paid once per step.
+ */
+export const STREAM_DELIVERABLE_PREVIEW_CHARS = 2_000
+
+/**
+ * Reduce a run for an SSE frame: clip each step's oversized `output` to a preview, withhold an
+ * oversized `data`, and mark every step the reduction touched.
+ *
+ * The stream re-sends the whole run on every change, so an unreduced frame repeats every output
+ * the run has produced so far and the traffic grows with the SQUARE of the pipeline's length. The
+ * point read (`GET /api/v1/tasks/{taskId}/run`) serves both fields whole and is what a caller
+ * reads for the deliverable; this keeps the progress channel a progress channel.
+ *
+ * Only what EXCEEDS the cap is touched. A step whose deliverable already fits — which is the
+ * ordinary case for the structured `data` a fork choice or an estimate carries — rides the stream
+ * unchanged and unflagged, so `truncated` means exactly "something was left out of this frame"
+ * rather than "this frame came from the stream". That is the whole reason the flag exists: a
+ * clipped preview that did not say so is indexed by a caller as the step's output, and its tail is
+ * then absent in a way that reads as never written.
+ */
+export function reduceRunForStream(run: PublicRun): PublicRun {
+  return { ...run, steps: run.steps.map(reduceStepForStream) }
+}
+
+function reduceStepForStream(step: PublicRunStep): PublicRunStep {
+  const output = step.output
+  const clipped = output !== null && output.length > STREAM_DELIVERABLE_PREVIEW_CHARS
+  // Measured, not assumed: `data` is whatever the step's agent kind produced, so its size is a
+  // property of the deployment's kinds rather than of this contract.
+  const withheld =
+    step.data != null && JSON.stringify(step.data).length > STREAM_DELIVERABLE_PREVIEW_CHARS
+  if (!clipped && !withheld) return step
+  return {
+    ...step,
+    output: clipped && output !== null ? output.slice(0, STREAM_DELIVERABLE_PREVIEW_CHARS) : output,
+    data: withheld ? null : step.data,
+    truncated: true,
   }
 }

@@ -145,6 +145,16 @@ export interface BinaryArtifactStore {
    */
   listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]>
   /**
+   * How many artifacts a board block holds (the per-block upload cap precheck), the sibling of
+   * {@link countByExecution} and, like it, an indexed COUNT that materialises no row.
+   *
+   * A block's set is the one an external caller reads UNPAGED, folded into
+   * `GET /api/v1/runs/{runId}/artifacts` beside the run's own captures. That endpoint is
+   * unpaged because both halves are bounded by construction, so the block half owes the same
+   * standing bound the run half has always had.
+   */
+  countByBlock(workspaceId: string, blockId: string): Promise<number>
+  /**
    * Artifacts rendered from one imported document — the design renders an import retained, read
    * back by the surfaces that pair them with a task's screenshots.
    */
@@ -216,6 +226,8 @@ export interface BinaryArtifactMetadataStore {
   /** Count a run's artifacts without materialising rows (the per-run upload cap precheck). */
   countByExecution(workspaceId: string, executionId: string): Promise<number>
   listByBlock(workspaceId: string, blockId: string): Promise<BinaryArtifactRecord[]>
+  /** Count a block's artifacts without materialising rows (the per-block upload cap precheck). */
+  countByBlock(workspaceId: string, blockId: string): Promise<number>
   /** Records rendered from one imported document (the design renders an import retained). */
   listByDocument(
     workspaceId: string,
@@ -437,6 +449,9 @@ export function createBinaryArtifactStore(deps: {
     },
     countByExecution(workspaceId, executionId) {
       return metadata.countByExecution(workspaceId, executionId)
+    },
+    countByBlock(workspaceId, blockId) {
+      return metadata.countByBlock(workspaceId, blockId)
     },
     listByBlock(workspaceId, blockId) {
       return metadata.listByBlock(workspaceId, blockId)

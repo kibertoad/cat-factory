@@ -1,5 +1,170 @@
 # @cat-factory/node-server
 
+## 0.194.1
+
+### Patch Changes
+
+- Updated dependencies [3e9a6af]
+  - @cat-factory/contracts@0.276.0
+  - @cat-factory/kernel@0.274.0
+  - @cat-factory/gates@0.10.0
+  - @cat-factory/orchestration@0.242.0
+  - @cat-factory/integrations@0.152.0
+  - @cat-factory/server@0.254.0
+  - @cat-factory/agents@0.118.1
+  - @cat-factory/consensus@0.14.60
+  - @cat-factory/eks@0.1.272
+  - @cat-factory/gitlab@0.18.7
+  - @cat-factory/observability-otel@0.18.7
+  - @cat-factory/prompt-fragments@1.0.24
+  - @cat-factory/spend@0.15.42
+  - @cat-factory/caching@0.18.15
+  - @cat-factory/observability-langfuse@0.10.44
+  - @cat-factory/provider-bedrock@0.7.421
+  - @cat-factory/provider-cloudflare@0.7.422
+  - @cat-factory/provider-s3@0.2.341
+
+## 0.194.0
+
+### Minor Changes
+
+- a62bcf8: Deliver notifications by email, and add the notification manager that decides which events go to
+  which channel.
+
+  The `EmailSender` port, its SendGrid/Resend adapters and the per-account connection have been live
+  for a while and were used only for invitations. A new `EmailNotificationChannel` puts them behind
+  the same `NotificationChannel` port the in-app and Slack transports implement, so the engine call
+  sites that raise notifications are untouched. It resolves recipients from the SAME rules
+  `resolveWorkspaceAccess` applies (account membership is the prerequisite, an account admin always
+  qualifies, a `workspace_members` row counts only for a still-current account member), reads them in
+  three batched queries rather than a point-read per person, and isolates each send so one bad address
+  cannot cost every other recipient their notification. An account with no sender connected produces
+  zero attempts and zero warnings.
+
+  The manager (`notification_settings`, one row per workspace, D1 ⇄ Drizzle with a conformance suite)
+  stores per-type, per-channel OVERRIDES over the shipped defaults, and one service answers both the
+  settings API and the delivery gate so the toggle a human sees cannot say something the engine does
+  not do. **By default email carries only the high-impact events**: the ones where something is
+  stopped until a human acts (`merge_review`, `decision_required`, `ci_failed`, `test_failed`,
+  `release_regression`) or the deployment itself is degraded (`platform_health`, `infra_unreachable`,
+  `budget_paused`, `key_drift`). The per-step review parks are deliberately off by default — several
+  arrive on nearly every task, and mailing them is the firehose that gets a sender's domain filtered.
+
+  Only the channels whose delivery is a plain yes/no are routed here: the in-app push and email.
+  Slack and the outbound webhooks answer "which types" where their DESTINATION is declared (a Slack
+  route's channel, a webhook endpoint's own `types` filter), so a second switch would be a place to
+  look that does not decide. The settings panel says so and links to the Slack routing.
+
+  Delivery now carries WHICH lifecycle edge it reports (`NotificationDeliveryReason`: `raised` /
+  `refreshed` / `settled`), because the service re-delivers a card on every transition it makes and
+  the transports split hard on what that means. A STATE transport (the in-app push, the outbound
+  webhook) takes every edge, so a board holding an open card sees it settle instead of rendering an
+  already-made decision as still actionable. An ALERT transport (email, Slack) takes the `raised` edge
+  alone: a mailbox and a chat channel cannot render a correction, so a second "Decision needed" after
+  the decision was made is simply false. This also corrects Slack, which re-posted on every resolve
+  and dismissal before the edge existed, and it is why the escalation sweep's loop over a workspace's
+  overdue cards now performs no routing or audience reads at all. **The edge is a required parameter
+  and rides the mothership delegation wire**, where it is refused rather than defaulted: the persisted
+  row cannot supply it (a raise and an escalation are both `open`), so a node one build behind fails
+  loudly instead of mailing the org about decisions already made.
+
+  Two more behaviours to watch for when reviewing. The in-app push is gated too, but only on the raise:
+  muting a type stops the live toast, while the card is still persisted, still in the inbox on the next
+  snapshot, and still pushed when it settles. And a settings read that FAILS falls back to the shipped
+  default and logs, rather than defaulting to deliver-everything (a mailshot) or deliver-nothing (the
+  parked run nobody hears about). In the settings panel the same distinction is explicit: a deployment
+  with no routing store and a read that broke are separate states, and only the first renders the
+  shipped defaults, because saving is a full replace and a grid built from defaults would otherwise
+  overwrite overrides nobody had seen.
+
+- fe8ca56: Let a deployment define its own binary artifact stores in code. Implement the kernel
+  `BinaryBlobBackend` port, register it on the new app-owned `BinaryStoreRegistry`, and pass the
+  registry to `start()` / `startLocal()` / `createWorker({ overrides })`: each registered store then
+  appears in the account-settings storage picker beside the platform's `fs` / `db` / `s3` / `r2`
+  backends, and the per-account resolver builds it when an account selects it. The registered id is
+  stamped onto every artifact row, an account naming a store this build does not register resolves to
+  no storage and is named in the log and the settings panel, and the retention sweeps reclaim through
+  a custom store like any built-in one.
+
+  On the Worker the registry is held PROCESS-WIDE rather than on the app, alongside the model-provider
+  and capability-credential registrations and for the same reason: that runtime builds a container per
+  entry point, and the entry points that write and reclaim artifacts (the durable driver, the queue
+  consumers, the retention cron) take no overrides. A store must be registered on every process that
+  handles its bytes, which in mothership mode means the nodes that write them AND the mothership that
+  sweeps them; a mothership-mode node now says so at boot.
+
+  Internal break: `ContentStorageCapability` gains a required `customStores` and `ContentStorageSummary`
+  a required `customStoreId`, so a facade or test building either literal must add them (the compile
+  error is the point). `BinaryArtifactStorageKind` is now open at the type level, since a registered
+  store's id is a legitimate value of the `storage` column.
+
+### Patch Changes
+
+- 2544fb3: Give the five HKDF cipher-info tags their own exported constants beside the services that
+  own the sealed data, and import them in both facades instead of re-typing the literals.
+
+  These strings derive the keys that seal provider subscriptions, provider API keys, personal
+  subscriptions, local model endpoints and user secrets at rest, so a divergence between the
+  two facades produces credentials one seals and the other cannot open, with nothing failing
+  loudly. Four of their siblings were already imported constants; these five had been missed.
+
+- 2544fb3: Make the provider-routing VCS client reflective, so it can no longer under-report the port.
+
+  `ProviderRoutingGitHubClient` was a hand-written delegate over a 53-method port, 20 of whose
+  methods are optional. It implemented the 33 required ones and 18 of the optional ones were
+  simply absent, which typechecks precisely because they are optional. `providerRoutingGitHubClient`
+  replaces it with a `Proxy` (the shape `runtimes/local/src/vcsClientRouter.ts` already documents),
+  so the surface it presents is the union of what its backing clients implement.
+
+  Behaviour change, in a deployment running BOTH a GitHub App and GitLab connect: the branch
+  protection preflight now answers for real on GitHub installations, where it previously reported
+  `capability: 'unavailable'` for the whole workspace. A call landing on a provider whose client
+  does not implement the method refuses with the new `VcsCapabilityUnsupportedError` rather than
+  `undefined is not a function`; `GitHubService.checkDefaultBranchProtection` absorbs it and keeps
+  reporting `unavailable`, which is exactly the fact it already models.
+
+  Reflecting means deciding what counts as a member, and the first answer was too generous:
+  membership was tested with `Reflect.has`, which walks into `Object.prototype`, so `toString`,
+  `valueOf`, `constructor` and the rest were answered with installation-routing functions. Coercing
+  the client to a string called `toString()` with no arguments, which routed on `undefined` as the
+  installation id and returned a promise where a primitive was required, so a template literal or a
+  logger touching the client threw `TypeError: Cannot convert object to primitive value` with an
+  unawaited repository read rejecting behind it. Membership now stops at `Object.prototype` and
+  anything that is not a port member is answered by the proxy target, so those names behave as they
+  do on any object while an unimplemented optional method still reads as absent.
+
+  `VcsCapabilityUnsupportedError`'s reason joins the shared `UNAVAILABLE_REASONS` vocabulary and
+  gains translated SPA copy. Without it the refusal rendered as the generic 503 wording, "this
+  deployment has not configured the capability", which is the misattribution the class exists to
+  prevent: no operator wiring changes what a provider does not offer. Its sibling
+  `vcs_client_unconfigured` deliberately stays on the generic copy, because that one IS a wiring gap.
+
+- Updated dependencies [2544fb3]
+- Updated dependencies [a62bcf8]
+- Updated dependencies [2544fb3]
+- Updated dependencies [fe8ca56]
+- Updated dependencies [2544fb3]
+- Updated dependencies [2544fb3]
+- Updated dependencies [2544fb3]
+  - @cat-factory/server@0.253.0
+  - @cat-factory/kernel@0.273.0
+  - @cat-factory/contracts@0.275.0
+  - @cat-factory/integrations@0.151.0
+  - @cat-factory/orchestration@0.241.0
+  - @cat-factory/agents@0.118.0
+  - @cat-factory/caching@0.18.14
+  - @cat-factory/consensus@0.14.59
+  - @cat-factory/eks@0.1.271
+  - @cat-factory/gates@0.9.39
+  - @cat-factory/gitlab@0.18.6
+  - @cat-factory/observability-langfuse@0.10.43
+  - @cat-factory/observability-otel@0.18.6
+  - @cat-factory/prompt-fragments@1.0.23
+  - @cat-factory/provider-bedrock@0.7.420
+  - @cat-factory/provider-cloudflare@0.7.421
+  - @cat-factory/provider-s3@0.2.340
+  - @cat-factory/spend@0.15.41
+
 ## 0.193.0
 
 ### Minor Changes

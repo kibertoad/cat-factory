@@ -363,9 +363,6 @@ export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
   unwiredOutput: 'Post-release health gate skipped (no release-health provider configured).',
   attemptBudget: (preset, config) =>
     gateConfigNumber(config, 'maxAttempts') ?? preset.releaseMaxAttempts,
-  // Running out of poll budget while still watching means the window outlasted the driver's
-  // budget with NO regression observed — a healthy pass, not a timeout.
-  pollExhaustion: 'pass',
   probe: async (workspaceId, blockId, gateState): Promise<GateProbe> => {
     // Only watch a release that actually SHIPPED. The merger sets the block `done` when it
     // merges for real, but leaves it `pr_ready` when it raises a review without merging — and
@@ -547,8 +544,8 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
   helperKind: FIXER_AGENT_KIND,
   wired: () => ctx.isProviderWired(PULL_REQUEST_REVIEW_PROVIDER),
   unwiredOutput: 'Human review gate skipped (no PR-review provider configured).',
-  // A human review is unbounded: never time out the wait, and never give up on rounds.
-  pollExhaustion: 'rearm',
+  // A human review is unbounded: never give up on rounds. The other half of that, never timing
+  // the WAIT out, is `pollExhaustion: 'rearm'` on this gate's registration.
   attemptBudget: () => Number.MAX_SAFE_INTEGER,
   probe: async (workspaceId, blockId, gateState): Promise<GateProbe> => {
     const provider = ctx.requireProvider(PULL_REQUEST_REVIEW_PROVIDER)

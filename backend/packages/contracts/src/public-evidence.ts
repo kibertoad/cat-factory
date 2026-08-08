@@ -32,11 +32,31 @@ import * as v from 'valibot'
 export const publicArtifactKindSchema = v.picklist(['screenshot', 'reference'])
 export type PublicArtifactKind = v.InferOutput<typeof publicArtifactKindSchema>
 
+/**
+ * What an artifact is ANCHORED on, which is what says whether the run produced it:
+ *
+ * - `run`: captured by THIS run. It carries the run's id, and a re-run captures its own.
+ * - `task`: attached to the run's task and outliving any single run of it. A reference design a
+ *   person uploaded before the first run is the case that matters: it is what the run's
+ *   screenshots are judged against, and it is deliberately not run-anchored, because uploading one
+ *   per attempt is exactly what a reference exists to avoid.
+ *
+ * Stated per row rather than folded away, because the two sets answer different questions and a
+ * silent union would make "the run captured 3 screenshots" unreadable off a list of 5. It is also
+ * why the list is not simply the run's own rows: a caller enumerating a run's artifacts to compare
+ * a screenshot against its reference saw only one half, so the reference rendered as ABSENT on the
+ * one surface whose job is to say what a run proved, while being individually fetchable all along.
+ */
+export const publicArtifactScopeSchema = v.picklist(['run', 'task'])
+export type PublicArtifactScope = v.InferOutput<typeof publicArtifactScopeSchema>
+
 /** One binary artifact a run produced (metadata; the bytes are a separate fetch). */
 export const publicRunArtifactSchema = v.object({
   /** The id to pass to `GET /api/v1/artifacts/{artifactId}/blob`. */
   artifactId: v.string(),
   kind: publicArtifactKindSchema,
+  /** Which anchor this row came from ({@link publicArtifactScopeSchema}). */
+  scope: publicArtifactScopeSchema,
   /** Logical view name, which is what pairs a screenshot with its reference. Null when unnamed. */
   view: v.nullable(v.string()),
   /** The MIME type the blob endpoint will answer with (always a raster image today). */
@@ -53,11 +73,17 @@ export const publicRunArtifactSchema = v.object({
 export type PublicRunArtifact = v.InferOutput<typeof publicRunArtifactSchema>
 
 /**
- * A run's artifacts, whole rather than paginated.
+ * A run's artifacts (the ones it CAPTURED plus the ones attached to its task, each saying which
+ * it is: {@link publicArtifactScopeSchema}), whole rather than paginated.
  *
  * Deliberately unpaged where every sibling list is keyset-paginated: the capture path enforces
- * a per-run ceiling, so the row count is bounded by construction and the response size is
- * computable before the request. A cursor here would be a page-2 that structurally cannot exist.
+ * a per-run ceiling and a task's uploads are a human-sized set, so the row count is bounded by
+ * construction and the response size is computable before the request. A cursor here would be a
+ * page-2 that structurally cannot exist.
+ *
+ * An artifact that is BOTH (a screenshot a run captured against its own task) appears ONCE, as
+ * `run`: the run is the more specific anchor, and a row appearing twice under two scopes would
+ * make every count off this list wrong in the direction that reads as extra evidence.
  */
 export const publicRunArtifactListSchema = v.object({
   artifacts: v.array(publicRunArtifactSchema),
