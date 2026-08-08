@@ -513,16 +513,19 @@ function str(args: Record<string, unknown>, name: string): string {
  * parameters to the same level, so "whatever is not a path parameter" would forward a model's
  * typo as a query parameter the deployment then ignores, and the caller would see a filter that
  * silently did nothing.
+ *
+ * Returns the call site's own query type. \`args\` arrives as JSON-RPC input validated against the
+ * tool's \`inputSchema\`, which is generated from the SAME contract as that type and marks the
+ * same parameters required, so the narrowing is asserted here once instead of at every thunk. A
+ * host that skips its own validation and omits a required parameter is refused by the deployment
+ * with a 400 naming the field.
  */
-function pick(
-  args: Record<string, unknown>,
-  names: readonly string[],
-): Record<string, unknown> {
+function pick<Query>(args: Record<string, unknown>, names: readonly string[]): Query {
   const out: Record<string, unknown> = {}
   for (const name of names) {
     if (args[name] !== undefined) out[name] = args[name]
   }
-  return out
+  return out as Query
 }
 
 ${emitted

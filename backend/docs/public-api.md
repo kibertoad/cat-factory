@@ -62,12 +62,12 @@ existed.
 
 Scopes are an ordered, **inclusive** ladder; each rung can do everything below it:
 
-| Scope    | Adds                                                                                                                                                                                                                             |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, a run's [evidence](#run-evidence-report--artifacts), the whole [`/debug` surface](./debug-api.md).                       |
-| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                                                                                                      |
-| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                            |
-| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**), manage the [outbound webhook](#outbound-webhooks-push), and [provision keys](#key-provisioning-apiv1keys). |
+| Scope    | Adds                                                                                                                                                                                                                                                                      |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage` and its [spend breakdowns](#spend-by-repository-ticket-or-run), a run's [evidence](#run-evidence-report--artifacts), the whole [`/debug` surface](./debug-api.md). |
+| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                                                                                                                                               |
+| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                                                                     |
+| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**), manage the [outbound webhook](#outbound-webhooks-push), and [provision keys](#key-provisioning-apiv1keys).                                          |
 
 Two things to know before minting `decide` or `admin`:
 
@@ -253,6 +253,9 @@ curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN_ID/report"
 
 # 8. The period's spend + budget position, for a dashboard:
 curl -s -H "$AUTH" "$BASE/api/v1/usage"
+
+# 9. …and what the quarter cost per repository, for the budget conversation:
+curl -s -H "$AUTH" "$BASE/api/v1/usage/spend?dimension=repo&window=90d"
 ```
 
 The headless-job flow is the same shape one level up: `POST /api/v1/jobs` with
@@ -1154,9 +1157,10 @@ the document leaks no workspace state, but it is the map of everything else on t
 
 ### Usage & budget
 
-| Method / path       | Scope  | Behaviour                                                      |
-| ------------------- | ------ | -------------------------------------------------------------- |
-| `GET /api/v1/usage` | `read` | The current period's spend + budget position, as one resource. |
+| Method / path             | Scope  | Behaviour                                                               |
+| ------------------------- | ------ | ----------------------------------------------------------------------- |
+| `GET /api/v1/usage`       | `read` | The current period's spend + budget position, as one resource.          |
+| `GET /api/v1/usage/spend` | `read` | The same money over a window, sliced by ONE cost-attribution dimension. |
 
 Response: `{ periodStart, currency, budget, rows }`. `budget` is the **metered** position the spend
 safeguard acts on: `costSpent`, `costLimit` and `exceeded: true` when runs are paused at the cap.
@@ -1164,6 +1168,87 @@ safeguard acts on: `costSpent`, `costLimit` and `exceeded: true` when runs are p
 kinds**: a `subscription` row's `costEstimate` is illustrative (flat-rate plans bill nothing per
 token); only `metered` rows are money. Workspace tier only, by design: a workspace key never learns
 a sibling workspace's spend.
+
+#### Spend by repository, ticket or run
+
+`/usage` answers the BUDGET question: what has this calendar month cost, and are runs paused. It
+carries no board-shape axis, so it cannot answer the one an organisation actually budgets against:
+what did this repository cost us last quarter, what did that ticket cost, what did one pipeline run
+cost. `/usage/spend` is that read.
+
+```http
+GET /api/v1/usage/spend?dimension=repo&window=90d
+```
+
+```json
+{
+  "dimension": "repo",
+  "window": "90d",
+  "generatedAt": 1775000000000,
+  "since": 1767224000000,
+  "currency": "USD",
+  "source": "daily-rollup",
+  "rolledUpThrough": 1774915200000,
+  "totals": {
+    "inputTokens": 41200311,
+    "outputTokens": 903122,
+    "calls": 5140,
+    "meteredCost": 612.44,
+    "subscriptionCost": 88.1
+  },
+  "rows": [
+    {
+      "key": "40123",
+      "label": "acme/payments-api",
+      "inputTokens": 28110402,
+      "outputTokens": 611893,
+      "calls": 3311,
+      "meteredCost": 402.19,
+      "subscriptionCost": 61.0
+    },
+    {
+      "key": "",
+      "label": null,
+      "inputTokens": 902,
+      "outputTokens": 40,
+      "calls": 3,
+      "meteredCost": 0.04,
+      "subscriptionCost": 0
+    }
+  ]
+}
+```
+
+`dimension` is required and closed: `repo`, `ticket` and `run` are the attribution axes, and
+`model`, `agentKind`, `service` and `taskType` slice the same money the other ways. There is no
+`workspace` dimension: every key is bound to one board, so it would return a single row naming the
+board you already addressed, and the account-wide view it exists for is admin-gated and
+cross-workspace by design. `window` is `24h` / `7d` (default) / `30d` / `90d`.
+
+Five things decide whether a number off this is read correctly:
+
+- **`meteredCost` is money; `subscriptionCost` is not.** The same rule as `/usage`, and for the same
+  reason: a flat-rate harness plan bills nothing per token, so the second figure is what those tokens
+  WOULD have cost metered. Their sum denominates nothing.
+- **The EMPTY `key` is a real slice, not a gap.** It is spend whose run, service, repository or
+  ticket could not be resolved. It is reported rather than dropped, so `rows` always sums to
+  `totals`; an inner join would have under-reported the window while the breakdown still looked
+  complete.
+- **`source` says which store answered, and the two attribute differently.** `24h`/`7d` scan the
+  metered ledger live: exact to the millisecond, and resolving a repository or a ticket through
+  TODAY's links, so re-pointing a service or re-importing an issue re-attributes history. `30d`/`90d`
+  read the durable daily rollup, which froze that attribution while the money was being spent and is
+  never pruned. Comparing a `7d` figure against a `90d` one means comparing two different questions.
+- **Read `rolledUpThrough` before reporting a quiet quarter.** On a rollup window it is the newest
+  UTC day the sweep has covered, or `null` when no pass has ever completed, and a rollup that has
+  never run and a board that spent nothing produce the same empty breakdown.
+- **`since` is the real span**, snapped down to a bucket edge, so a window covers up to one bucket
+  more than its nominal length. Do not re-derive it from `window`.
+
+`rows` is deliberately UNCAPPED. Every dimension but one has catalog-bounded cardinality (models,
+agent kinds, the board's services, its repositories, the task-type picklist); `ticket` grows with
+ACTIVITY, so a busy board over `90d` can return thousands of rows. A silent `LIMIT` would be the
+smaller number that still reads as complete, which is what this surface refuses everywhere else.
 
 ### Run evidence (report + outcome + artifacts)
 

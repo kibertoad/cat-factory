@@ -1,6 +1,7 @@
 import {
   getDebugAgentContextContract,
   getDebugLlmCallContract,
+  getDebugLlmExportContract,
   getDebugRunContract,
   listDebugAgentContextContract,
   listDebugLlmCallsContract,
@@ -48,6 +49,13 @@ const DEFAULT_RUN_PAGE = 25
 const DEFAULT_CALL_PAGE = 25
 const DEFAULT_CONTEXT_PAGE = 25
 const DEFAULT_SMALL_ROW_PAGE = 50
+
+/**
+ * Call rows the LLM export carries when the caller names no `limit`. Smaller than a list page's
+ * default on purpose: the bundle's value is that it fits in a reader's context beside the
+ * rollups, and the resumable list is one hop away for the run that needs walking whole.
+ */
+const DEFAULT_EXPORT_CALL_ROWS = 50
 
 /**
  * The per-body budget a point read uses when the caller names none: the whole stored body, up
@@ -180,6 +188,31 @@ export function publicDebugController(): Hono<AppEnv> {
       view: query.view ?? 'raw',
     })
     return call ? c.json(call, 200) : notFound(c, 'call')
+  })
+
+  // The run's model activity as ONE document: the complete SQL rollups plus a bounded window of
+  // the calls behind them. What the app's export button produces for a human, for the caller that
+  // would otherwise issue the overview plus a walk of the call list to assemble the same thing.
+  // The rollups do NOT move with `limit`, so a windowed bundle still reports what the run cost.
+  buildHonoRoute(app, getDebugLlmExportContract, async (c) => {
+    const gate = await authorize(c, getDebugLlmExportContract.minScope)
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const debug = requireDebug(c)
+    if (!debug) return unavailable(c)
+    const workspaceId = gate.auth.workspaceId
+    const runId = c.req.valid('param').runId
+    const query = c.req.valid('query')
+    if (!(await debug.runExists(workspaceId, runId))) return notFound(c, 'run')
+    return c.json(
+      await debug.llmExport(workspaceId, runId, {
+        limit: query.limit ?? DEFAULT_EXPORT_CALL_ROWS,
+        // Forwards through the run, which is how an analysis of it reads: the newest tail is
+        // what the paged list already leads with.
+        order: query.order ?? 'oldest',
+        bodyChars: query.bodyChars ?? 0,
+      }),
+      200,
+    )
   })
 
   // The run's captured dispatches — identity and sizes, never bodies.

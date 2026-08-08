@@ -589,7 +589,7 @@ function emitQueryRecord(operation) {
   const components = operation.queryParams
     .map(
       (param) =>
-        `    ${javadocInline([param.doc, 'Null means "not sent".'].filter(Boolean))}@Nullable ${javaType(param.type)} ${member(param.wireName, param.type)}`,
+        `    ${javadocInline([param.doc, param.required ? 'Required: null is refused by the deployment with a 400 naming this parameter.' : 'Null means "not sent".'].filter(Boolean))}@Nullable ${javaType(param.type)} ${member(param.wireName, param.type)}`,
     )
     .join(',\n\n')
   const entries = operation.queryParams
@@ -624,7 +624,9 @@ function emitQueryRecord(operation) {
     javadoc([
       `Query parameters for {@code ${operation.group}().${operation.method}()}.`,
       '',
-      'Every parameter is optional; a null one is not sent at all.',
+      operation.queryParams.some((param) => param.required)
+        ? 'A null parameter is not sent at all; the ones marked required above must be set, or the deployment refuses the call.'
+        : 'Every parameter is optional; a null one is not sent at all.',
     ]) +
     `public record ${name}(\n${components}\n) {\n` +
     '\n' +

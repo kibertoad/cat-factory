@@ -19,6 +19,7 @@ import type {
   DebugAgentContextDetail,
   DebugAgentContextEntry,
   DebugLlmCall,
+  DebugLlmExport,
   DebugRunOverview,
   DebugRunSummary,
   ToolCallOrder,
@@ -280,6 +281,49 @@ export class RunDebugService {
       (call) => ({ createdAt: call.createdAt, id: call.id }),
       (call) => toDebugLlmCall(call),
     )
+  }
+
+  /**
+   * The run's model activity as one self-describing bundle: the rollups, plus a bounded window
+   * of the calls behind them.
+   *
+   * The rollup half is the SAME fold {@link RunDebugService.overview} publishes, over the same
+   * priced cells, so the two documents cannot report different money for one run. The call half
+   * is `listLlmCalls` with its cursor dropped: a bundle answers a question about one end of the
+   * run rather than being a page of a walk, and the walk already exists for the caller that
+   * wants the whole sequence.
+   *
+   * Which end is the caller's to pick, and the bundle says which was kept, because the two are
+   * opposite readings of a long run: `oldest` shows how it went wrong, `newest` shows what it
+   * was doing when it died.
+   */
+  async llmExport(
+    workspaceId: string,
+    runId: string,
+    opts: { limit: number; order: 'oldest' | 'newest'; bodyChars: number },
+  ): Promise<DebugLlmExport> {
+    const [summaries, page] = await Promise.all([
+      this.deps.priceRollup?.(workspaceId, runId) ?? this.unpricedRollup(workspaceId, runId),
+      this.listLlmCalls(workspaceId, runId, {
+        limit: opts.limit,
+        order: opts.order,
+        bodyChars: opts.bodyChars,
+      }),
+    ])
+    const { totals, byAgentKind, byPhase } = foldLlmRollup(summaries)
+    return {
+      kind: 'cat-factory.run-llm-export',
+      version: 1,
+      runId,
+      generatedAt: this.deps.clock.now(),
+      llm: { totals, byAgentKind, byPhase, costCurrency: this.deps.costCurrency ?? null },
+      order: opts.order,
+      // The page's own peek, not `totals.calls > limit`: the rollup counts every recorded call
+      // in the run, while this list is what the page actually holds, and only the page can say
+      // whether a row was left behind. They agree wherever both are complete.
+      truncated: page.nextCursor !== null,
+      calls: page.items,
+    }
   }
 
   /** One recorded call with its bodies windowed, or null when the workspace has no such call. */

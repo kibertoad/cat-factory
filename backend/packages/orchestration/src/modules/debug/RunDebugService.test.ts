@@ -376,3 +376,95 @@ describe('RunDebugService.listToolCalls', () => {
     })
   })
 })
+
+describe('RunDebugService LLM export', () => {
+  /** A store whose rollup covers the whole run and whose page holds one row more than asked. */
+  function exportRepo(callRows: number) {
+    const summarizeByExecution = vi.fn(async () => [
+      {
+        agentKind: 'coder',
+        calls: 9,
+        promptTokens: 100,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        completionTokens: 20,
+        peakCompletionTokens: 20,
+        maxOutputTokens: null,
+        truncatedCalls: 0,
+        upstreamMs: 5,
+        overheadMs: 1,
+        errors: 0,
+        warnings: 0,
+      },
+    ])
+    const listPage = vi.fn(async (_ws: string, opts: { limit: number }) =>
+      Array.from({ length: Math.min(callRows, opts.limit) }, (_unused, index) =>
+        call(`llm_${index}`, index),
+      ),
+    )
+    const service = new RunDebugService({
+      executionRepository: executionRepo([run('exec_1', 1)]),
+      clock,
+      llmCallMetricRepository: {
+        summarizeByExecution,
+        listPage,
+      } as unknown as LlmCallMetricRepository,
+      costCurrency: 'USD',
+    })
+    return { service, summarizeByExecution, listPage }
+  }
+
+  it('reports the WHOLE run in its rollups while the call rows are a window', async () => {
+    // The property the internal export cannot offer: its numbers are folded from the rows it
+    // holds, so a slice makes them a partial sum. Here the rollup is a SQL aggregate over every
+    // recorded call, so a bundle a caller budgeted down to two rows still says what the run cost.
+    const { service, listPage } = exportRepo(9)
+
+    const bundle = await service.llmExport('ws', 'exec_1', {
+      limit: 2,
+      order: 'oldest',
+      bodyChars: 0,
+    })
+
+    expect(bundle.llm.totals.calls).toBe(9)
+    expect(bundle.calls).toHaveLength(2)
+    expect(bundle.truncated).toBe(true)
+    expect(bundle.order).toBe('oldest')
+    expect(bundle.kind).toBe('cat-factory.run-llm-export')
+    expect(bundle.llm.costCurrency).toBe('USD')
+    // The page's own peek decides truncation, and the body budget rides to the store unmodified.
+    expect(listPage).toHaveBeenCalledWith(
+      'ws',
+      expect.objectContaining({ limit: 3, order: 'oldest', bodyChars: 0 }),
+    )
+  })
+
+  it('says a bundle is complete when the run fits inside the window', async () => {
+    const { service } = exportRepo(2)
+    const bundle = await service.llmExport('ws', 'exec_1', {
+      limit: 50,
+      order: 'newest',
+      bodyChars: 512,
+    })
+    expect(bundle.truncated).toBe(false)
+    expect(bundle.calls).toHaveLength(2)
+    expect(bundle.order).toBe('newest')
+  })
+
+  it('serves an unwired telemetry sink as an EMPTY bundle rather than failing', async () => {
+    const service = new RunDebugService({
+      executionRepository: executionRepo([run('exec_1', 1)]),
+      clock,
+    })
+    const bundle = await service.llmExport('ws', 'exec_1', {
+      limit: 50,
+      order: 'oldest',
+      bodyChars: 0,
+    })
+    expect(bundle.calls).toEqual([])
+    expect(bundle.llm.totals.calls).toBe(0)
+    expect(bundle.truncated).toBe(false)
+    // A deployment that prices nothing says so rather than denominating null costs.
+    expect(bundle.llm.costCurrency).toBeNull()
+  })
+})

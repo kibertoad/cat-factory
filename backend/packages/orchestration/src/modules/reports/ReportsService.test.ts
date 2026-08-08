@@ -126,3 +126,64 @@ describe('ReportsService source routing', () => {
     expect(view.activity.byWorkspace).toEqual([])
   })
 })
+
+describe('ReportsService.breakdown', () => {
+  async function breakdown(window: ReportWindow, dimension: ReportSpendDimension) {
+    const { asked, reportsRepository, spendRollupRepository } = fakes()
+    const result = await service({ reportsRepository, spendRollupRepository }).breakdown(
+      'acc_1',
+      dimension,
+      window,
+      'ws_1',
+    )
+    return { result, asked }
+  }
+
+  it('routes ONE dimension through the same store the whole report would have used', async () => {
+    // The single-dimension read exists to cost one GROUP BY instead of eleven; what it must not
+    // do is answer from a different store than the panel, or a repository's quarterly cost would
+    // change with which surface asked for it.
+    const live = await breakdown('7d', 'repo')
+    expect(live.result.source).toBe('ledger')
+    expect(live.asked).toEqual({ ledger: ['repo'], rollup: [] })
+    expect(live.result.rolledUpThrough).toBeNull()
+
+    const durable = await breakdown('90d', 'ticket')
+    expect(durable.result.source).toBe('daily-rollup')
+    expect(durable.asked).toEqual({ ledger: [], rollup: ['ticket'] })
+    expect(durable.result.rolledUpThrough).toBe(NOW - DAY)
+  })
+
+  it('folds the totals from the rows it returns, so the two cannot disagree', async () => {
+    const { result } = await breakdown('7d', 'run')
+    expect(result.rows).toEqual([
+      {
+        key: 'from-ledger',
+        label: null,
+        inputTokens: 1,
+        outputTokens: 1,
+        calls: 1,
+        meteredCost: 2,
+        subscriptionCost: 0,
+      },
+    ])
+    expect(result.totals).toEqual({
+      inputTokens: 1,
+      outputTokens: 1,
+      calls: 1,
+      meteredCost: 2,
+      subscriptionCost: 0,
+    })
+  })
+
+  it('reports the SNAPPED window start the numbers were actually computed over', async () => {
+    // Not `generatedAt - windowMs`: the start is snapped down to a bucket edge so a slice read
+    // here covers the identical span the panel's own aggregate does. A caller that re-derived it
+    // from `window` would name a span up to one bucket shorter than the one it is holding.
+    const { result } = await breakdown('30d', 'repo')
+    expect(result.generatedAt).toBe(NOW)
+    expect(result.since).toBe(NOW - 30 * DAY)
+    expect(result.since % DAY).toBe(0)
+    expect(result.currency).toBe('EUR')
+  })
+})

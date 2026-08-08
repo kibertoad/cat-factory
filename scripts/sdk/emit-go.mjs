@@ -386,8 +386,19 @@ function emitQueryTypes(placed) {
       const fields = operation.queryParams
         .map(
           (param) =>
-            doc(goName(param.wireName), [param.doc, 'Zero value means "not sent".'], '\t') +
-            `\t${goName(param.wireName)} ${goType(param.type, true)}`,
+            doc(
+              goName(param.wireName),
+              [
+                param.doc,
+                // Required parameters are still POINTERS: the struct is one shape for every
+                // operation and a value field would send a zero rather than nothing. What the
+                // doc must not do is imply that leaving it nil is a call the deployment serves.
+                param.required
+                  ? 'Is REQUIRED: the deployment refuses a nil here with a 400 naming it.'
+                  : 'Zero value means "not sent".',
+              ],
+              '\t',
+            ) + `\t${goName(param.wireName)} ${goType(param.type, true)}`,
         )
         .join('\n')
       const encode = operation.queryParams

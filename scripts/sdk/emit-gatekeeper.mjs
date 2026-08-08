@@ -218,16 +218,20 @@ function str(args: Record<string, unknown>, name: string): string {
   return value
 }
 
-/** The subset of \`args\` that belongs in the query string, picked by name. */
-function pick(
-  args: Record<string, unknown>,
-  names: readonly string[],
-): Record<string, unknown> {
+/**
+ * The subset of \`args\` that belongs in the query string, picked by name.
+ *
+ * Returns the call site's own query type: \`queryParams\` on the binding names exactly these
+ * fields, so a caller that forwards what the binding declares is holding the shape the SDK
+ * method wants. One that omits a required parameter is refused by the deployment with a 400
+ * naming the field.
+ */
+function pick<Query>(args: Record<string, unknown>, names: readonly string[]): Query {
   const out: Record<string, unknown> = {}
   for (const name of names) {
     if (args[name] !== undefined) out[name] = args[name]
   }
-  return out
+  return out as Query
 }
 
 ${emitted

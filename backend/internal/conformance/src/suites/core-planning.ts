@@ -587,6 +587,87 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
     // still required, and an unauthenticated caller learns nothing.
     expect((await call('GET', '/api/v1/usage')).status).toBe(401)
   })
+
+  it('slices the same money by repository and ticket, off whichever store the window routes to', async () => {
+    const { call, createOrgWorkspace } = harness.makeApp()
+    const { workspace } = await createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const minted = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
+      label: 'spend',
+      scope: 'read',
+    })
+    const auth = { authorization: `Bearer ${minted.body.secret}` }
+
+    type Spend = {
+      dimension: string
+      window: string
+      generatedAt: number
+      since: number
+      currency: string
+      source: string
+      rolledUpThrough: number | null
+      totals: { calls: number; meteredCost: number; subscriptionCost: number }
+      rows: { key: string; label: string | null; meteredCost: number }[]
+    }
+
+    // The LIVE half: the short windows scan the ledger, and nothing in that path can be behind,
+    // so claiming a coverage boundary would invite a reader to believe the numbers were bounded
+    // by one. The TCO axes are what this endpoint exists for, so both are driven here.
+    for (const dimension of ['repo', 'ticket', 'run'] as const) {
+      const live = await call<Spend>(
+        'GET',
+        `/api/v1/usage/spend?dimension=${dimension}&window=24h`,
+        undefined,
+        auth,
+      )
+      expect(live.status).toBe(200)
+      expect(live.body.dimension).toBe(dimension)
+      expect(live.body.source).toBe('ledger')
+      expect(live.body.rolledUpThrough).toBeNull()
+      expect(live.body.currency).toBeTruthy()
+      // A board that has spent nothing reports real zeros against a real window, and the window
+      // it reports is the SNAPPED one every number was computed over.
+      expect(live.body.rows).toEqual([])
+      expect(live.body.totals).toMatchObject({ calls: 0, meteredCost: 0, subscriptionCost: 0 })
+      expect(live.body.since).toBeLessThan(live.body.generatedAt)
+    }
+
+    // The DURABLE half: the long windows read the rollup on both facades, and a deployment whose
+    // sweep has never run says so with `rolledUpThrough: null` rather than presenting an empty
+    // quarter as a quiet one.
+    const durable = await call<Spend>(
+      'GET',
+      '/api/v1/usage/spend?dimension=repo&window=90d',
+      undefined,
+      auth,
+    )
+    expect(durable.status).toBe(200)
+    expect(durable.body.source).toBe('daily-rollup')
+    expect(durable.body.window).toBe('90d')
+
+    // The window defaults to the widest LIVE one, so a caller that states nothing gets
+    // millisecond-exact numbers rather than a rollup that may be a sweep behind.
+    const defaulted = await call<Spend>(
+      'GET',
+      '/api/v1/usage/spend?dimension=model',
+      undefined,
+      auth,
+    )
+    expect(defaulted.body.window).toBe('7d')
+    expect(defaulted.body.source).toBe('ledger')
+
+    // The vocabularies are closed on both axes, and a dimension this surface deliberately does
+    // not publish (`workspace`, which every key already addresses) is refused rather than served.
+    expect(
+      (await call('GET', '/api/v1/usage/spend?dimension=workspace', undefined, auth)).status,
+    ).toBe(400)
+    expect((await call('GET', '/api/v1/usage/spend', undefined, auth)).status).toBe(400)
+    expect(
+      (await call('GET', '/api/v1/usage/spend?dimension=repo&window=1y', undefined, auth)).status,
+    ).toBe(400)
+    expect((await call('GET', '/api/v1/usage/spend?dimension=repo')).status).toBe(401)
+  })
 }
 
 /**

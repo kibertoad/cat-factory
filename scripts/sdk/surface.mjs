@@ -70,6 +70,7 @@ const SURFACE = {
 
   // ---- Usage ----------------------------------------------------------------------------
   getPublicUsage: { group: 'usage', method: 'get' },
+  getPublicSpend: { group: 'usage', method: 'spend' },
 
   // ---- Key introspection (`read` scope; the startup self-check) --------------------------
   getPublicIdentity: { group: 'me', method: 'get' },
@@ -133,6 +134,7 @@ const SURFACE = {
   getDebugRun: { group: 'debug', method: 'getRun' },
   listDebugLlmCalls: { group: 'debug', method: 'listLlmCalls', paginates: 'calls' },
   getDebugLlmCall: { group: 'debug', method: 'getLlmCall' },
+  getDebugLlmExport: { group: 'debug', method: 'getLlmExport' },
   listDebugAgentContext: { group: 'debug', method: 'listAgentContext', paginates: 'snapshots' },
   getDebugAgentContext: { group: 'debug', method: 'getAgentContext' },
   listDebugToolCalls: { group: 'debug', method: 'listToolCalls', paginates: 'toolCalls' },
@@ -226,12 +228,13 @@ export const GROUP_DOCS = {
   notifications: "The workspace's human-actionable inbox: list, act on, or dismiss a run tail.",
   webhook:
     "The workspace's outbound endpoints: register, inspect or remove the receivers that notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address the `default` endpoint; the named ones let an integration enroll its own receiver, with its own signing secret and filters, beside whatever else is registered.",
-  usage: "The billing period's metered budget position and the per-model breakdown behind it.",
+  usage:
+    "The workspace's money, two ways: the billing period's metered budget position with the per-model breakdown behind it, and spend over a window sliced by the dimension a budget is kept against (a repository, a tracker ticket, one run).",
   me: 'What the calling key is and what it may do — the self-check an integration runs at startup.',
   decisions:
     'Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates.',
   debug:
-    "A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs.",
+    "A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs, and the whole model-activity bundle as one document.",
   evidence:
     "What a run proved: the engine's verification report, the outcome summary behind it, and the artifacts it captured, bytes included.",
   keys: "The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted).",
