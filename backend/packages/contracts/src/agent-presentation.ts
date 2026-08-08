@@ -21,6 +21,23 @@ export const agentCategorySchema = v.picklist([
 ])
 export type AgentCategory = v.InferOutput<typeof agentCategorySchema>
 
+const AGENT_CATEGORY_SET: ReadonlySet<string> = new Set(agentCategorySchema.options)
+
+/**
+ * Whether a value is a category THIS BUILD knows, DERIVED from the picklist so it cannot drift
+ * from it the way a hand-written second list would.
+ *
+ * The vocabulary is closed, but the values reaching a reader are not this build's alone: a
+ * `presentation.category` arrives in the workspace snapshot from a kind a DEPLOYMENT registered,
+ * and a category retired from the union goes on living in stored pipelines. A reader that maps one
+ * through an exhaustive `Record` is therefore total against the TYPE and partial against the DATA,
+ * which is the gap where the lookup returns `undefined` and whatever reads it renders a blank or
+ * throws. Narrow with this first and state the negative case as the unknown it is.
+ */
+export function isAgentCategory(value: string): value is AgentCategory {
+  return AGENT_CATEGORY_SET.has(value)
+}
+
 // ---------------------------------------------------------------------------
 // Agent TIER — how specialist a kind is, in three cumulative levels. Orthogonal to
 // `category` (which section a kind groups under) and to the interface mode

@@ -4653,6 +4653,7 @@
       "rounds": "ラウンド",
       "purposeLabel": "目的",
       "purposePlaceholder": "目的を選択",
+      "purposeUnrecognized": "認識できません ({purpose})",
       "purposeOption": {
         "build": "開発",
         "document": "ドキュメント",
@@ -4903,7 +4904,8 @@
   },
   "palette": {
     "hint": "エージェントをクリックするとパイプラインに追加されます。",
-    "customAgents": "カスタムエージェント"
+    "customAgents": "カスタムエージェント",
+    "purposeHidden": "この目的では {count} 件のエージェントが非表示です。"
   },
   "gates": {
     "subtitle": {

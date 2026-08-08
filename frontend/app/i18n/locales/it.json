@@ -4214,6 +4214,7 @@
       "rounds": "Giri",
       "purposeLabel": "Scopo",
       "purposePlaceholder": "Seleziona uno scopo",
+      "purposeUnrecognized": "Non riconosciuto ({purpose})",
       "purposeOption": {
         "build": "Sviluppo",
         "document": "Documentazione",
@@ -6734,7 +6735,8 @@
   },
   "palette": {
     "hint": "Clicca su un agente per aggiungerlo alla pipeline.",
-    "customAgents": "Agenti personalizzati"
+    "customAgents": "Agenti personalizzati",
+    "purposeHidden": "{count} agente nascosto per questo scopo. | {count} agenti nascosti per questo scopo."
   },
   "forkDecision": {
     "title": "Scegli un approccio di implementazione",
