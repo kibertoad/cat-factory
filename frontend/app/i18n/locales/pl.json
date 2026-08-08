@@ -2334,7 +2334,8 @@
         "shortcuts": "Skróty klawiszowe",
         "bugHunt": "Polowanie na błędy",
         "toggleUiMode": "Zmień tryb interfejsu",
-        "foundationalServices": "Usługi fundamentalne"
+        "foundationalServices": "Usługi fundamentalne",
+        "notificationSettings": "Zarządzaj routingiem powiadomień"
       },
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
@@ -2358,7 +2359,8 @@
         "bugHunt": "błąd bug polowanie triage zaległości zgłoszenia nieprzypisane",
         "toggleUiMode": "interfejs tryb podstawowy zaawansowany pokaż ukryj",
         "tutorial": "samouczek przewodnik pomoc nauka wprowadzenie",
-        "foundationalServices": "wspólna możliwość platforma usługa api kontrakt openapi katalog"
+        "foundationalServices": "wspólna możliwość platforma usługa api kontrakt openapi katalog",
+        "notificationSettings": "powiadomienia e-mail routing kanały skrzynka"
       }
     },
     "integrationsHub": {
@@ -2428,6 +2430,10 @@
         "bugHunt": {
           "label": "Polowanie na błędy",
           "description": "Oceń otwarte, nieprzypisane błędy z tablicy i wybierz jeden do naprawy"
+        },
+        "notificationSettings": {
+          "label": "Powiadomienia",
+          "description": "Wybierz, które zdarzenia trafiają do skrzynki i na e-mail."
         }
       }
     },
@@ -4217,6 +4223,57 @@
     "confirmDisconnect": {
       "title": "Rozłączyć Slack?",
       "body": "Powiadomienia Slack zostaną wstrzymane do ponownego połączenia."
+    }
+  },
+  "notificationSettings": {
+    "panel": {
+      "title": "Powiadomienia",
+      "intro": "Wybierz, które zdarzenia ta tablica dostarcza i którym kanałem. Nietknięte pozycje używają wartości domyślnej.",
+      "inAppNote": "„W aplikacji” steruje tylko powiadomieniem na żywo. Karta i tak jest zapisywana i pozostaje w skrzynce po odświeżeniu.",
+      "emailNote": "E-mail wymaga nadawcy połączonego z kontem (Ustawienia konta). Domyślnie wysyłane są tylko zdarzenia o dużym wpływie.",
+      "otherChannelsNote": "Slack i wychodzące webhooki wybierają własną listę zdarzeń tam, gdzie konfiguruje się ich miejsce docelowe.",
+      "openSlack": "Routing Slacka"
+    },
+    "column": {
+      "event": "Zdarzenie",
+      "inApp": "W aplikacji",
+      "email": "E-mail"
+    },
+    "action": {
+      "save": "Zapisz",
+      "reset": "Przywróć domyślne"
+    },
+    "toast": {
+      "saved": "Zapisano routing powiadomień"
+    },
+    "error": {
+      "load": "Nie udało się wczytać ustawień powiadomień",
+      "save": "Nie udało się zapisać ustawień powiadomień"
+    },
+    "unavailable": "To wdrożenie nie przechowuje routingu powiadomień, więc wszystkie zdarzenia używają wartości domyślnej.",
+    "type": {
+      "merge_review": "Przeglad scalenia",
+      "pipeline_complete": "Pipeline ukonczony",
+      "ci_failed": "Niepowodzenie CI",
+      "test_failed": "Niepowodzenie testow",
+      "requirement_review": "Przeglad wymagan",
+      "clarity_review": "Przeglad klarownosci",
+      "release_regression": "Regresja wydania",
+      "decision_required": "Wymagana decyzja",
+      "human_test_ready": "Gotowe do testow przez czlowieka",
+      "visual_confirmation_ready": "Gotowe do potwierdzenia wizualnego",
+      "human_review": "Oczekuje na przegląd kodu",
+      "followup_pending": "Działania do rozstrzygnięcia",
+      "fork_decision_pending": "Podejście do implementacji",
+      "judge_review": "Werdykt przeglądu",
+      "pr_review_ready": "Uwagi z przeglądu PR",
+      "initiative": "Aktualizacje inicjatywy",
+      "platform_health": "Kondycja platformy",
+      "infra_unreachable": "Awarie infrastruktury",
+      "budget_paused": "Uruchomienia wstrzymane (budżet)",
+      "budget_threshold": "Ostrzeżenie o budżecie",
+      "key_drift": "Rozbieżność klucza szyfrowania",
+      "merge_tag_request": "Prośba o nakład przeglądu"
     }
   },
   "docInterview": {

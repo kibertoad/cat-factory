@@ -49,8 +49,9 @@ prerequisites are configured.
   independently settable; see `CLAUDE.md` → "Dependency prepopulation"),
   plus `detectValidationChecksFromRepo` (the repo-root read behind the inspector's "Detect"
   button: one listing, then only the manifests it proved exist; the rules are pure kernel).
-- `slack/`, `email/`, `notificationWebhook/`: notification channels (the last one is the outbound
-  HMAC-signed HTTP channel a headless integration registers to be pushed parked decisions); `writeback/`, `providers/`, `corpus/`,
+- `slack/`, `email/`, `notificationWebhook/`: notification channels (`email/` carries both the
+  per-account sender connection and the `EmailNotificationChannel` over it; the last one is the
+  outbound HMAC-signed HTTP channel a headless integration registers to be pushed parked decisions); `writeback/`, `providers/`, `corpus/`,
   `provisioning-logs/`, `accountSettings/`, `localSettings/`: supporting services. `writeback/`
   owns both directions of the tracker clarification loop: `reviewQuestions.logic.ts` (questions
   OUT) and its sibling `reviewReplies.logic.ts` (the reply grammar + the acknowledgement), kept

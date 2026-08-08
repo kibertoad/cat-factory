@@ -816,7 +816,13 @@ export type {
 export { TRACKER_COMMENT_INGEST_CLAIM_TTL_MS } from './tracker-comment-ingest-repositories.js'
 export {
   type NotificationChannel,
+  type NotificationRouter,
   type RaiseNotificationInput,
   CompositeNotificationChannel,
   NoopNotificationChannel,
+  RoutedNotificationChannel,
 } from './notification-channel.js'
+export type {
+  NotificationSettingsRecord,
+  NotificationSettingsRepository,
+} from './notification-settings-repositories.js'

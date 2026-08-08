@@ -8,6 +8,10 @@
 
 export type {
   NotificationType,
+  NotificationDeliveryChannel,
+  NotificationChannelOverrides,
+  NotificationRoutingMatrix,
+  NotificationSettings,
   NotificationStatus,
   OnCallRecommendation,
   OnCallAssessment,

@@ -230,6 +230,13 @@ export {
   type FanOutEventPublisherDependencies,
 } from './events/FanOutEventPublisher.js'
 export { InAppNotificationChannel } from './events/InAppNotificationChannel.js'
+// The routed half of delivery (the notification manager + the per-channel gate + the email
+// channel), built once here so both facades wire it identically.
+export {
+  buildNotificationDelivery,
+  type NotificationDeliveryInput,
+  type NotificationDeliverySupport,
+} from './notifications/notificationDelivery.js'
 export {
   type MachineEventRelay,
   type MachineEventClient,

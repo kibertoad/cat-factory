@@ -137,7 +137,11 @@ import { selectDocumentsDeps } from './container-documents-deps'
 import { selectGitHubDeps } from './github-deps.js'
 import { selectTasksDeps } from './tasks-deps.js'
 import type { D1Database } from '@cloudflare/workers-types'
-import { buildExternalNotificationChannel, selectSlackDeps } from './container-notification-deps'
+import {
+  buildExternalNotificationChannel,
+  buildWorkerNotificationDelivery,
+  selectSlackDeps,
+} from './container-notification-deps'
 
 /**
  * The pre-built infrastructure handles + app-owned registries `buildContainer` computes
@@ -833,6 +837,10 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     config,
     db,
     notificationWebhookSupport?.channel,
+    // The email transport, already wrapped in the notification manager's routing gate. It rides
+    // this set for the same reason Slack does: it sends through the account's sealed provider
+    // key, so a mothership-mode laptop cannot deliver it and this side must.
+    buildWorkerNotificationDelivery(config, db, clock).emailChannel,
   )
 
   return {

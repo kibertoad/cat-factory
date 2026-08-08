@@ -72,6 +72,14 @@ const dynamicIntegrationCommands = computed<Command[]>(() => {
       run: () => ui.openSlack(),
     })
   }
+  list.push({
+    id: 'notification-settings',
+    label: t('layout.commandBar.cmd.notificationSettings'),
+    group: groupIntegrations,
+    icon: 'i-lucide-bell',
+    keywords: t('layout.commandBar.keywords.notificationSettings'),
+    run: () => ui.openNotificationSettings(),
+  })
   if (documents.available) {
     for (const src of documents.sources) {
       list.push({

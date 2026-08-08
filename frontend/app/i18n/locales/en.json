@@ -2441,7 +2441,8 @@
         "shortcuts": "Keyboard shortcuts",
         "bugHunt": "Bug hunt",
         "toggleUiMode": "Switch interface mode",
-        "foundationalServices": "Foundational services"
+        "foundationalServices": "Foundational services",
+        "notificationSettings": "Manage notification routing"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2465,7 +2466,8 @@
         "bugHunt": "bug hunt triage backlog issue tracker unassigned",
         "toggleUiMode": "interface mode basic advanced simple expert show hide",
         "tutorial": "tutorial onboarding tour guide help learn basics",
-        "foundationalServices": "shared capability platform service api contract openapi catalog"
+        "foundationalServices": "shared capability platform service api contract openapi catalog",
+        "notificationSettings": "notifications email routing channels inbox"
       }
     },
     "shortcuts": {
@@ -2542,6 +2544,10 @@
         "bugHunt": {
           "label": "Bug hunt",
           "description": "Rate a board's open, unassigned bugs and pick one to fix"
+        },
+        "notificationSettings": {
+          "label": "Notifications",
+          "description": "Choose which events reach the inbox and email."
         }
       }
     },
@@ -4354,6 +4360,57 @@
     "confirmDisconnect": {
       "title": "Disconnect Slack?",
       "body": "Slack notifications will stop until you reconnect."
+    }
+  },
+  "notificationSettings": {
+    "panel": {
+      "title": "Notifications",
+      "intro": "Choose which events this board delivers, and on which channel. Anything left untouched uses the shipped default.",
+      "inAppNote": "In-app controls the live push. The card is saved either way, so it is still in your inbox after a reload.",
+      "emailNote": "Email needs a sender connected for the account (Account settings). By default only high-impact events are mailed.",
+      "otherChannelsNote": "Slack and outbound webhooks pick their own event list where their destination is configured.",
+      "openSlack": "Slack routing"
+    },
+    "column": {
+      "event": "Event",
+      "inApp": "In-app",
+      "email": "Email"
+    },
+    "action": {
+      "save": "Save",
+      "reset": "Restore defaults"
+    },
+    "toast": {
+      "saved": "Notification routing saved"
+    },
+    "error": {
+      "load": "Could not load notification settings",
+      "save": "Could not save notification settings"
+    },
+    "unavailable": "This deployment stores no notification routing, so every event uses the shipped default.",
+    "type": {
+      "merge_review": "Merge review",
+      "pipeline_complete": "Pipeline complete",
+      "ci_failed": "CI failed",
+      "test_failed": "Tests failed",
+      "requirement_review": "Requirement review",
+      "clarity_review": "Clarity review",
+      "release_regression": "Release regression",
+      "decision_required": "Decision needed",
+      "human_test_ready": "Ready for human testing",
+      "visual_confirmation_ready": "Ready for visual confirmation",
+      "human_review": "Awaiting code review",
+      "followup_pending": "Follow-ups to decide",
+      "fork_decision_pending": "Implementation approach",
+      "judge_review": "Review verdict",
+      "pr_review_ready": "PR review findings",
+      "initiative": "Initiative updates",
+      "platform_health": "Platform health",
+      "infra_unreachable": "Infrastructure outages",
+      "budget_paused": "Runs paused (budget)",
+      "budget_threshold": "Budget warning",
+      "key_drift": "Encryption-key drift",
+      "merge_tag_request": "Review-effort tag requested"
     }
   },
   "docInterview": {

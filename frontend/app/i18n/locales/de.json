@@ -2495,7 +2495,8 @@
         "shortcuts": "Tastenkürzel",
         "bugHunt": "Fehlerjagd",
         "toggleUiMode": "Oberflächenmodus wechseln",
-        "foundationalServices": "Basisdienste"
+        "foundationalServices": "Basisdienste",
+        "notificationSettings": "Benachrichtigungs-Routing verwalten"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2519,7 +2520,8 @@
         "bugHunt": "fehler bug jagd triage backlog tracker nicht zugewiesen",
         "toggleUiMode": "oberfläche modus einfach erweitert anzeigen ausblenden",
         "tutorial": "tutorial tour einführung hilfe onboarding lernen grundlagen",
-        "foundationalServices": "gemeinsame Fähigkeit Plattform Dienst API Vertrag OpenAPI Katalog"
+        "foundationalServices": "gemeinsame Fähigkeit Plattform Dienst API Vertrag OpenAPI Katalog",
+        "notificationSettings": "benachrichtigungen e-mail routing kanäle posteingang"
       }
     },
     "shortcuts": {
@@ -2596,6 +2598,10 @@
         "bugHunt": {
           "label": "Fehlerjagd",
           "description": "Offene, nicht zugewiesene Fehler eines Boards bewerten und einen zum Beheben auswählen"
+        },
+        "notificationSettings": {
+          "label": "Benachrichtigungen",
+          "description": "Wählen Sie, welche Ereignisse den Posteingang und E-Mails erreichen."
         }
       }
     },
@@ -5675,6 +5681,57 @@
     "confirmDisconnect": {
       "title": "Slack trennen?",
       "body": "Slack-Benachrichtigungen werden gestoppt, bis du die Verbindung wiederherstellst."
+    }
+  },
+  "notificationSettings": {
+    "panel": {
+      "title": "Benachrichtigungen",
+      "intro": "Wählen Sie, welche Ereignisse dieses Board zustellt und über welchen Kanal. Nicht geänderte Einträge verwenden die Voreinstellung.",
+      "inAppNote": "„In der App“ steuert nur die Live-Benachrichtigung. Die Karte wird ohnehin gespeichert und bleibt nach dem Neuladen im Posteingang.",
+      "emailNote": "E-Mail erfordert einen für das Konto verbundenen Versanddienst (Kontoeinstellungen). Standardmäßig werden nur besonders wichtige Ereignisse verschickt.",
+      "otherChannelsNote": "Slack und ausgehende Webhooks wählen ihre Ereignisliste dort, wo ihr Ziel konfiguriert wird.",
+      "openSlack": "Slack-Routing"
+    },
+    "column": {
+      "event": "Ereignis",
+      "inApp": "In der App",
+      "email": "E-Mail"
+    },
+    "action": {
+      "save": "Speichern",
+      "reset": "Standard wiederherstellen"
+    },
+    "toast": {
+      "saved": "Benachrichtigungs-Routing gespeichert"
+    },
+    "error": {
+      "load": "Benachrichtigungseinstellungen konnten nicht geladen werden",
+      "save": "Benachrichtigungseinstellungen konnten nicht gespeichert werden"
+    },
+    "unavailable": "Diese Installation speichert kein Benachrichtigungs-Routing; alle Ereignisse verwenden die Voreinstellung.",
+    "type": {
+      "merge_review": "Merge-Review",
+      "pipeline_complete": "Pipeline abgeschlossen",
+      "ci_failed": "CI fehlgeschlagen",
+      "test_failed": "Tests fehlgeschlagen",
+      "requirement_review": "Anforderungs-Review",
+      "clarity_review": "Klarheits-Review",
+      "release_regression": "Release-Regression",
+      "decision_required": "Entscheidung erforderlich",
+      "human_test_ready": "Bereit für manuelle Tests",
+      "visual_confirmation_ready": "Bereit für visuelle Bestätigung",
+      "human_review": "Wartet auf Code-Review",
+      "followup_pending": "Offene Folgepunkte",
+      "fork_decision_pending": "Umsetzungsansatz",
+      "judge_review": "Prüfurteil",
+      "pr_review_ready": "PR-Review-Befunde",
+      "initiative": "Initiativen-Updates",
+      "platform_health": "Plattformzustand",
+      "infra_unreachable": "Infrastrukturausfälle",
+      "budget_paused": "Läufe pausiert (Budget)",
+      "budget_threshold": "Budgetwarnung",
+      "key_drift": "Abweichung des Verschlüsselungsschlüssels",
+      "merge_tag_request": "Review-Aufwand angefragt"
     }
   },
   "docInterview": {

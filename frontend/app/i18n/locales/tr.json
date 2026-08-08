@@ -2334,7 +2334,8 @@
         "shortcuts": "Klavye kısayolları",
         "bugHunt": "Hata avı",
         "toggleUiMode": "Arayüz modunu değiştir",
-        "foundationalServices": "Temel hizmetler"
+        "foundationalServices": "Temel hizmetler",
+        "notificationSettings": "Bildirim yönlendirmesini yönet"
       },
       "keywords": {
         "newPipeline": "boru hattı ajanlar zincir",
@@ -2358,7 +2359,8 @@
         "bugHunt": "hata bug av önceliklendirme birikmiş kayıt atanmamış",
         "toggleUiMode": "arayüz mod temel gelişmiş göster gizle",
         "tutorial": "eğitim tur rehber yardım öğren tanıtım",
-        "foundationalServices": "ortak yetenek platform hizmet api sözleşme openapi katalog"
+        "foundationalServices": "ortak yetenek platform hizmet api sözleşme openapi katalog",
+        "notificationSettings": "bildirimler e-posta yönlendirme kanallar gelen kutusu"
       }
     },
     "integrationsHub": {
@@ -2428,6 +2430,10 @@
         "bugHunt": {
           "label": "Hata avı",
           "description": "Bir panodaki açık ve atanmamış hataları değerlendirin ve düzeltmek için birini seçin"
+        },
+        "notificationSettings": {
+          "label": "Bildirimler",
+          "description": "Gelen kutusuna ve e-postaya hangi olayların ulaşacağını seçin."
         }
       }
     },
@@ -4217,6 +4223,57 @@
     "confirmDisconnect": {
       "title": "Slack bağlantısı kesilsin mi?",
       "body": "Yeniden bağlanana kadar Slack bildirimleri duracak."
+    }
+  },
+  "notificationSettings": {
+    "panel": {
+      "title": "Bildirimler",
+      "intro": "Bu panonun hangi olayları hangi kanaldan ilettiğini seçin. Dokunmadığınız satırlar varsayılanı kullanır.",
+      "inAppNote": "«Uygulama içi» yalnızca canlı bildirimi denetler. Kart yine de kaydedilir ve yenilemeden sonra gelen kutunuzda kalır.",
+      "emailNote": "E-posta için hesaba bağlı bir gönderici gerekir (Hesap ayarları). Varsayılan olarak yalnızca yüksek etkili olaylar gönderilir.",
+      "otherChannelsNote": "Slack ve giden web kancaları, kendi olay listelerini hedeflerinin yapılandırıldığı yerde seçer.",
+      "openSlack": "Slack yönlendirmesi"
+    },
+    "column": {
+      "event": "Olay",
+      "inApp": "Uygulama içi",
+      "email": "E-posta"
+    },
+    "action": {
+      "save": "Kaydet",
+      "reset": "Varsayılanlara dön"
+    },
+    "toast": {
+      "saved": "Bildirim yönlendirmesi kaydedildi"
+    },
+    "error": {
+      "load": "Bildirim ayarları yüklenemedi",
+      "save": "Bildirim ayarları kaydedilemedi"
+    },
+    "unavailable": "Bu kurulum bildirim yönlendirmesi saklamaz; tüm olaylar varsayılanı kullanır.",
+    "type": {
+      "merge_review": "Birleştirme incelemesi",
+      "pipeline_complete": "Pipeline tamamlandı",
+      "ci_failed": "CI başarısız",
+      "test_failed": "Testler başarısız",
+      "requirement_review": "Gereksinim incelemesi",
+      "clarity_review": "Netlik incelemesi",
+      "release_regression": "Sürüm gerilemesi",
+      "decision_required": "Karar gerekiyor",
+      "human_test_ready": "İnsan testine hazır",
+      "visual_confirmation_ready": "Görsel onaya hazır",
+      "human_review": "Kod incelemesi bekliyor",
+      "followup_pending": "Karara bağlanacak takipler",
+      "fork_decision_pending": "Uygulama yaklaşımı",
+      "judge_review": "İnceleme kararı",
+      "pr_review_ready": "PR inceleme bulguları",
+      "initiative": "Girisim guncellemeleri",
+      "platform_health": "Platform sağlığı",
+      "infra_unreachable": "Altyapı kesintileri",
+      "budget_paused": "Çalışmalar duraklatıldı (bütçe)",
+      "budget_threshold": "Bütçe uyarısı",
+      "key_drift": "Şifreleme anahtarı sapması",
+      "merge_tag_request": "İnceleme eforu etiketi istendi"
     }
   },
   "docInterview": {

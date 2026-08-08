@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { Notification } from '~/types/domain'
+import type { NotificationRoutingMatrix, NotificationSettings } from '~/types/notifications'
+import { ApiError } from '~/composables/api/errors'
 import type { ReviewEffort } from '~/types/merge'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -109,5 +111,66 @@ export const useNotificationsStore = defineStore('notifications', () => {
     upsert(resolved)
   }
 
-  return { open, hydrate, hydrateBaseline, upsert, byBlock, count, act, dismiss }
+  // ---- the notification manager (per-workspace channel routing) ------------
+  // Loaded on demand by the settings panel, never with the board: an inbox reader does not
+  // need the routing matrix, and the read 503s on a deployment with no routing store.
+
+  /** The workspace's routing settings, or null until loaded. */
+  const settings = ref<NotificationSettings | null>(null)
+  /** null = not probed yet; false = the deployment wired no routing store (the panel says so). */
+  const settingsAvailable = ref<boolean | null>(null)
+  const savingSettings = ref(false)
+
+  async function loadSettings() {
+    const ws = useWorkspaceStore()
+    try {
+      settings.value = await api.getNotificationSettings(ws.requireId())
+      settingsAvailable.value = true
+    } catch (error) {
+      // A 503 is the opt-in shape (no routing store wired), not a failure to report: the panel
+      // renders the shipped defaults read-only. Anything else is a real error for the caller.
+      if (isUnavailable(error)) {
+        settingsAvailable.value = false
+        settings.value = null
+        return
+      }
+      throw error
+    }
+  }
+
+  /** Replace the routing overrides (a full replace; dropping a cell restores its default). */
+  async function updateSettings(matrix: NotificationRoutingMatrix) {
+    const ws = useWorkspaceStore()
+    savingSettings.value = true
+    try {
+      settings.value = await api.updateNotificationSettings(ws.requireId(), matrix)
+    } finally {
+      savingSettings.value = false
+    }
+  }
+
+  return {
+    open,
+    hydrate,
+    hydrateBaseline,
+    upsert,
+    byBlock,
+    count,
+    act,
+    dismiss,
+    settings,
+    settingsAvailable,
+    savingSettings,
+    loadSettings,
+    updateSettings,
+  }
 })
+
+/**
+ * Whether a failed load is the SETTLED "you can't have this" — the facade wired no routing store
+ * (503) — rather than a transient fault. Only that latches `settingsAvailable` to false;
+ * everything else propagates so a later visit retries and the caller can report it.
+ */
+function isUnavailable(error: unknown): boolean {
+  return error instanceof ApiError && error.statusCode === 503
+}

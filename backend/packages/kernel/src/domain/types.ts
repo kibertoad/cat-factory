@@ -570,6 +570,12 @@ export type {
   NotificationSeverity,
   NotificationPayload,
   ResolveNotificationAction,
+  // The notification manager: which types a workspace delivers on which channel.
+  NotificationDeliveryChannel,
+  NotificationChannelOverrides,
+  NotificationRoutingMatrix,
+  NotificationSettings,
+  UpdateNotificationSettingsInput,
   // Per-workspace runtime settings (human-wait escalation threshold + task limits).
   WorkspaceSettings,
   UpdateWorkspaceSettingsInput,

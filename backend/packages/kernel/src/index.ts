@@ -812,4 +812,10 @@ export {
   type ResolveWorkspaceAccessInput,
 } from './domain/workspace-access.js'
 
+export {
+  notificationAudienceUserIds,
+  type AudienceAccountMember,
+  type NotificationAudienceInput,
+} from './domain/notification-audience.js'
+
 export { type TaskContextView, renderTaskContext } from './shared/tasks-prompt.logic.js'

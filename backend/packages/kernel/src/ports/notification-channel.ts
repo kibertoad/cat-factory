@@ -1,4 +1,10 @@
-import type { Notification, NotificationPayload, NotificationType } from '../domain/types.js'
+import { defaultNotificationRoute } from '@cat-factory/contracts'
+import type {
+  Notification,
+  NotificationDeliveryChannel,
+  NotificationPayload,
+  NotificationType,
+} from '../domain/types.js'
 
 /**
  * The input to raise (or re-raise) a notification. The canonical shape the engine and
@@ -53,4 +59,66 @@ export class CompositeNotificationChannel implements NotificationChannel {
 /** The no-op channel: delivers nothing (tests, or a deployment with no channels wired). */
 export class NoopNotificationChannel implements NotificationChannel {
   async deliver(): Promise<void> {}
+}
+
+/**
+ * Whether a workspace routes a notification type to one channel — the notification
+ * manager's decision, as the delivery path sees it. The implementation reads the
+ * workspace's stored overrides and falls back to the shipped default
+ * (`isNotificationRouted` in `@cat-factory/contracts`, the single source of truth the
+ * settings UI renders from).
+ */
+export interface NotificationRouter {
+  isRouted(
+    workspaceId: string,
+    type: NotificationType,
+    channel: NotificationDeliveryChannel,
+  ): Promise<boolean>
+}
+
+/**
+ * Gates one channel's deliveries on the workspace's routing for that channel.
+ *
+ * A DECORATOR rather than a filter inside {@link CompositeNotificationChannel}, because
+ * only some transports are routed here: Slack and the outbound webhooks answer "which
+ * types" where their destination is declared (a Slack route's channel, a webhook
+ * endpoint's own `types` filter), so wrapping them would be a second switch for a
+ * question already decided. A facade wraps exactly the channels the manager owns, and
+ * what it wrapped is legible at the wiring site.
+ *
+ * A router failure means the decision is UNKNOWN, and the honest reading of that is the
+ * SHIPPED DEFAULT rather than silence: a settings read failing must not be the reason a
+ * human never hears that their run parked, and it must not turn every muted type into a
+ * mailshot either. So a throw falls back to the same default a workspace that never
+ * configured anything gets, and is reported through `onError` instead of swallowed.
+ */
+export class RoutedNotificationChannel implements NotificationChannel {
+  constructor(
+    private readonly channel: NotificationDeliveryChannel,
+    private readonly router: NotificationRouter,
+    private readonly inner: NotificationChannel,
+    private readonly onError?: (
+      error: unknown,
+      context: {
+        workspaceId: string
+        notificationId: string
+        channel: NotificationDeliveryChannel
+      },
+    ) => void,
+  ) {}
+
+  async deliver(workspaceId: string, notification: Notification): Promise<void> {
+    let routed = defaultNotificationRoute(notification.type, this.channel)
+    try {
+      routed = await this.router.isRouted(workspaceId, notification.type, this.channel)
+    } catch (error) {
+      this.onError?.(error, {
+        workspaceId,
+        notificationId: notification.id,
+        channel: this.channel,
+      })
+    }
+    if (!routed) return
+    await this.inner.deliver(workspaceId, notification)
+  }
 }

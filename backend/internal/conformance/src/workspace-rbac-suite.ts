@@ -340,6 +340,10 @@ function registerRbacMemberManagementTests(
       { perm: 'settings.manage', method: 'PATCH', path: w(''), body: { name: `no-${uniq()}` } }, // board rename (per-handler)
       { perm: 'settings.manage', method: 'PUT', path: w('/settings') },
       { perm: 'settings.manage', method: 'PUT', path: w('/tracker-settings') },
+      // The notification manager: re-routing which types the whole board is told about, and on
+      // which channel, is workspace configuration — a member acts on their inbox, they do not
+      // decide what everyone else hears about.
+      { perm: 'settings.manage', method: 'PUT', path: w('/notification-settings') },
       { perm: 'settings.manage', method: 'DELETE', path: w('/model-presets/none') },
       // The consensus-GROUP library. Same permission as the model-preset library above and for
       // the same reason: a group decides which models review a task and how many of them run,
