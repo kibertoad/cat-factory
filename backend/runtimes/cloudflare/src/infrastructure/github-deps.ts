@@ -9,7 +9,7 @@ import type { CoreDependencies } from '@cat-factory/orchestration'
 import {
   makeResolveRepoFilesForCoords,
   makeResolveRunRepoContext,
-  ProviderRoutingGitHubClient,
+  providerRoutingGitHubClient,
   logger,
 } from '@cat-factory/server'
 import { buildGitLabEngineClient } from '@cat-factory/gitlab'
@@ -131,7 +131,7 @@ export function selectGitHubDeps(
   // the GitHub-issue/docs consumers keep the raw App `githubClient` (they must not gain the
   // GitLab fallback, per CLAUDE.md's VCS rule).
   const moduleClient: GitHubClient = gitlabConnectClient
-    ? new ProviderRoutingGitHubClient({
+    ? providerRoutingGitHubClient({
         installations: githubInstallationRepository,
         github: githubClient,
         gitlab: gitlabConnectClient,

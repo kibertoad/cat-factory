@@ -564,6 +564,103 @@ export class RunStateMachine {
   }
 
   /**
+   * Persist the run under CAS and then emit it, in that order. Adjacent `casPersist` +
+   * `emitInstance` is the single most-repeated pair in the engine, and the ordering is the
+   * point: emitting first would push a state the durable row does not yet hold, so a browser
+   * that reloads on the event reads BACK the older run. Taking the pair together makes
+   * "persisted but not emitted" (and its inverse) unrepresentable at a call site.
+   *
+   * `blockStatus` folds in the `updateBlockProgress` that precedes the pair on the step-boundary
+   * paths; `rollUpMetrics` is forwarded to {@link emitInstance}.
+   */
+  async persistAndEmit(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    options: { blockStatus?: 'in_progress' | 'blocked'; rollUpMetrics?: boolean } = {},
+  ): Promise<void> {
+    if (options.blockStatus) {
+      await this.updateBlockProgress(workspaceId, instance, options.blockStatus)
+    }
+    await this.casPersist(workspaceId, instance)
+    await this.emitInstance(
+      workspaceId,
+      instance,
+      options.rollUpMetrics === undefined ? {} : { rollUpMetrics: options.rollUpMetrics },
+    )
+  }
+
+  /**
+   * Clear a settled HUMAN-GATE step's live state. The four human-gate controllers
+   * (review / visual-confirmation / interview / human-test) share this prologue verbatim
+   * before {@link settleStepAndAdvance}; the agent-result paths do their own step marking
+   * earlier, around logic that has to run in between, so they do not use it.
+   *
+   * `approval` is cleared rather than left resolved because the gate is finished: a lingering
+   * approval object is what a later re-entry would read as a still-open decision.
+   */
+  finishHumanGateStep(step: PipelineStep, options: { clearPendingInterview?: boolean } = {}): void {
+    this.stepGraph.finishStep(step)
+    step.progress = 1
+    // Live subtask counts only describe an in-flight step; a stale "3/8" against a finished
+    // gate is the board lying about work that is over.
+    step.subtasks = undefined
+    step.approval = null
+    if (options.clearPendingInterview) step.pendingInterview = null
+  }
+
+  /**
+   * THE run's terminal transition: finish this step, then either finish the run or advance the
+   * cursor to the next one. Every path that completes a step ends here, which is the point.
+   *
+   * Two invariants live in this method and nowhere else:
+   *
+   *  - **`stopRunContainer` fires ONLY on the final step.** Every step of a pipeline shares one
+   *    container keyed by the execution id, so reclaiming it between steps kills the next step's
+   *    workspace. It was re-asserted by hand at seven call sites before this existed.
+   *  - **`updateBlockProgress` → `casPersist` → `emitInstance`, in that order** (via
+   *    {@link persistAndEmit}), so no observer ever sees a state the durable row does not hold.
+   *
+   * The three real variations across the call sites are options rather than copies:
+   * `confidence` (only the agent-result path has one to hand `finalizeBlock`) and
+   * `resolverOwnsTerminalStatus` (a resolver such as the merger already set the block's terminal
+   * status, so advancing to a trailing step must refresh progress rather than overwrite it back
+   * to `in_progress`). The caller marks the step itself, either through
+   * {@link finishHumanGateStep} or in its own prologue.
+   */
+  async settleStepAndAdvance(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    isFinalStep: boolean,
+    options: { confidence?: number; resolverOwnsTerminalStatus?: boolean } = {},
+  ): Promise<AdvanceResult> {
+    if (isFinalStep) {
+      instance.status = 'done'
+      await this.finalizeBlock(workspaceId, instance, options.confidence)
+      await this.persistAndEmit(workspaceId, instance)
+      // The run is finished: reclaim its per-run container now instead of letting it idle out
+      // its sleepAfter window (~10 min of billed-but-useless compute). Only safe HERE, on the
+      // final step, because all of a pipeline's steps share the one container keyed by the
+      // execution id. Best-effort and idempotent.
+      await this.stopRunContainer(workspaceId, instance)
+      return { kind: 'done' }
+    }
+    instance.currentStep += 1
+    const next = instance.steps[instance.currentStep]
+    if (next) this.stepGraph.startStep(next)
+    // A resolver that already set the block's TERMINAL status (the merger flips it to
+    // `done`/`pr_ready` mid-pipeline) must not be clobbered back to `in_progress` as the run
+    // advances to a trailing step: refresh progress only, preserving that status. (The final
+    // step's `finalizeBlock` then leaves a `done` block alone.)
+    if (options.resolverOwnsTerminalStatus) {
+      await this.refreshBlockProgress(workspaceId, instance)
+      await this.persistAndEmit(workspaceId, instance)
+    } else {
+      await this.persistAndEmit(workspaceId, instance, { blockStatus: 'in_progress' })
+    }
+    return { kind: 'continue' }
+  }
+
+  /**
    * The pure in-memory half of advancing past a resolved gate (paired with its side-effect
    * counterpart {@link settleAdvancedGate}): stamp the gate step done and move the run cursor
    * (final step → run `done`; else start the next step). No persistence and no external

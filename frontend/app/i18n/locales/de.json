@@ -5473,7 +5473,8 @@
       "description": {
         "binary_generators_unreachable": "Die generativen Integrationen dieser Installation konnten gerade nicht gelesen werden, deshalb wurde der Lauf nicht gestartet. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
         "foundational_builtins_unreachable": "Die integrierten Basisdienste dieser Installation konnten gerade nicht gelesen werden. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
-        "connection_credentials_unreadable": "Die gespeicherten Zugangsdaten dieser Verbindung konnten nicht gelesen werden. Wenn diese Installation den Dienst mit dem zugehörigen Schlüssel erreicht, verbinden Sie die Quelle neu, um sie zu ersetzen; andernfalls versuchen Sie es erneut, sobald diese Verbindung wiederhergestellt ist."
+        "connection_credentials_unreadable": "Die gespeicherten Zugangsdaten dieser Verbindung konnten nicht gelesen werden. Wenn diese Installation den Dienst mit dem zugehörigen Schlüssel erreicht, verbinden Sie die Quelle neu, um sie zu ersetzen; andernfalls versuchen Sie es erneut, sobald diese Verbindung wiederhergestellt ist.",
+        "vcs_capability_unsupported": "Der mit diesem Workspace verbundene Quellcode-Anbieter bietet diesen Vorgang nicht an. Es ist nichts falsch konfiguriert und eine Einrichtung hilft hier nicht: Für diesen Anbieter ist der Vorgang nicht verfügbar."
       }
     },
     "action": {

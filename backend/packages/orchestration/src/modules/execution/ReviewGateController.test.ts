@@ -124,6 +124,29 @@ function fakeDeps(over: Partial<ReviewGateControllerDeps> = {}) {
     advanceRunPastGate: vi.fn((_i: ExecutionInstance, _idx: number) => false),
     settleAdvancedGate: vi.fn(async () => {}),
     raiseDecisionRequired: vi.fn(async () => {}),
+    // The shared settle helpers the controllers now delegate their terminal transition to.
+    // Faked FAITHFULLY (delegating to the sibling fakes) rather than as bare `vi.fn()`s, so the
+    // assertions below still observe the real sequence: a final step finalizes the block and
+    // reclaims the container, a non-final step advances the cursor and starts the next step.
+    finishHumanGateStep: vi.fn((s: PipelineStep, o: { clearPendingInterview?: boolean } = {}) => {
+      stepGraph.finishStep(s)
+      s.progress = 1
+      s.subtasks = undefined
+      s.approval = null
+      if (o.clearPendingInterview) s.pendingInterview = null
+    }),
+    settleStepAndAdvance: vi.fn(async (ws: string, i: ExecutionInstance, isFinalStep: boolean) => {
+      if (isFinalStep) {
+        i.status = 'done'
+        await stateMachine.finalizeBlock()
+        await stateMachine.stopRunContainer()
+        return { kind: 'done' } as const
+      }
+      i.currentStep += 1
+      const next = i.steps[i.currentStep]
+      if (next) stepGraph.startStep(next)
+      return { kind: 'continue' } as const
+    }),
     updateBlockProgress: vi.fn(async () => {}),
     finalizeBlock: vi.fn(async () => {}),
     stopRunContainer: vi.fn(async () => {}),

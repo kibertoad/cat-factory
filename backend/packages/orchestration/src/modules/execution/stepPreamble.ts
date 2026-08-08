@@ -96,8 +96,7 @@ export async function runStepPreamble(
     if (!(await deps.currentStepIsNonMetered(workspaceId, instance, step))) {
       if (instance.status !== 'paused') {
         instance.status = 'paused'
-        await deps.stateMachine.casPersist(workspaceId, instance)
-        await deps.stateMachine.emitInstance(workspaceId, instance)
+        await deps.stateMachine.persistAndEmit(workspaceId, instance)
         // Surface the pause in the inbox (F3): a `paused` run is invisible to the sweeper and
         // has no auto-resume, so without this card the paused board badge is its only signal.
         await deps.stateMachine.raiseBudgetPaused(workspaceId)
@@ -118,8 +117,7 @@ export async function runStepPreamble(
       const pendingId = step.decision?.id ?? step.approval?.id
       if (pendingId) {
         instance.status = 'blocked'
-        await deps.stateMachine.casPersist(workspaceId, instance)
-        await deps.stateMachine.emitInstance(workspaceId, instance)
+        await deps.stateMachine.persistAndEmit(workspaceId, instance)
         return { kind: 'stop', result: { kind: 'awaiting_decision', decisionId: pendingId } }
       }
     }

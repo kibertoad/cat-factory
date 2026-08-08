@@ -5473,7 +5473,8 @@
       "description": {
         "binary_generators_unreachable": "Non è stato possibile leggere le integrazioni generative di questa installazione in questo momento, quindi l'esecuzione non è partita. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
         "foundational_builtins_unreachable": "Non è stato possibile leggere i servizi fondamentali integrati di questa installazione in questo momento. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
-        "connection_credentials_unreadable": "Non è stato possibile leggere le credenziali memorizzate di questa connessione. Se questa installazione riesce a raggiungere il servizio che ne custodisce la chiave, ricollega la sorgente per sostituirle; altrimenti riprova quando quella connessione sarà ripristinata."
+        "connection_credentials_unreadable": "Non è stato possibile leggere le credenziali memorizzate di questa connessione. Se questa installazione riesce a raggiungere il servizio che ne custodisce la chiave, ricollega la sorgente per sostituirle; altrimenti riprova quando quella connessione sarà ripristinata.",
+        "vcs_capability_unsupported": "Il provider di controllo del codice collegato a questo workspace non offre questa operazione. Non c'è nulla di configurato male e nessuna impostazione può aiutare: non è disponibile per questo provider."
       }
     },
     "action": {

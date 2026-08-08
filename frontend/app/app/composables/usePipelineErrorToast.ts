@@ -335,6 +335,7 @@ const UNAVAILABLE_DESCRIPTION_KEYS: Record<UnavailableReason, string> = {
     'errors.unavailable.description.foundational_builtins_unreachable',
   connection_credentials_unreadable:
     'errors.unavailable.description.connection_credentials_unreadable',
+  vcs_capability_unsupported: 'errors.unavailable.description.vcs_capability_unsupported',
 }
 
 /**

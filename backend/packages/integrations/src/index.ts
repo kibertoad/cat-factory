@@ -473,12 +473,14 @@ export {
 } from './modules/slack/slack.logic.js'
 export {
   ProviderSubscriptionService,
+  PROVIDER_SUBSCRIPTIONS_CIPHER_INFO,
   type ProviderSubscriptionServiceDependencies,
   type VendorCredentialSummary,
   type LeasedSubscriptionToken,
 } from './modules/providers/ProviderSubscriptionService.js'
 export {
   ApiKeyService,
+  PROVIDER_API_KEYS_CIPHER_INFO,
   type ApiKeyServiceDependencies,
   type ApiKeySummary,
   type LeasedApiKey,
@@ -493,6 +495,7 @@ export {
 } from './modules/publicApi/PublicApiKeyService.js'
 export {
   PersonalSubscriptionService,
+  PERSONAL_SUBSCRIPTIONS_CIPHER_INFO,
   type PersonalSubscriptionServiceDependencies,
   type LeasedPersonalToken,
   DEFAULT_ACTIVATION_TTL_MS,
@@ -500,6 +503,7 @@ export {
 } from './modules/providers/PersonalSubscriptionService.js'
 export {
   LocalModelEndpointService,
+  LOCAL_MODEL_ENDPOINTS_CIPHER_INFO,
   type LocalModelEndpointServiceDependencies,
   type ResolvedLocalEndpoint,
 } from './modules/providers/LocalModelEndpointService.js'
@@ -512,6 +516,7 @@ export {
 } from './modules/providers/localModelUrl.js'
 export {
   UserSecretService,
+  USER_SECRET_CIPHER_INFO,
   type UserSecretServiceDependencies,
 } from './modules/providers/UserSecretService.js'
 export {

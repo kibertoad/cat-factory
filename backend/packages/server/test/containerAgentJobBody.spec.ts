@@ -15,6 +15,12 @@ import {
   type ContainerAgentExecutorDependencies,
 } from '../src/agents/ContainerAgentExecutor.js'
 import type { ContainerSessionService } from '../src/containers/ContainerSessionService.js'
+// Derived rather than spelled out: what these specs are about is that the prompt names the
+// sibling checkout for each repo, not what that name looks like. The NAME's shape is pinned
+// where it matters, against the harness that creates the directory, by the executor-harness's
+// `harness-contract.conformity.test.ts`. Hard-coding it here would put a third copy of the rule
+// in a spec that has no way to tell the harness it moved.
+import { siblingCheckoutDir } from '../src/agents/harnessContract.js'
 
 // Characterization snapshot of the harness job body `buildJobBody` produces for each
 // agent kind. `buildJobBody` is private, so we drive it through `startJob` and capture
@@ -259,7 +265,7 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     expect(spec.referenceRepos).not.toMatchObject([{ pr: expect.anything() }])
     const systemPrompt = spec.systemPrompt as string
     expect(systemPrompt).toContain('## Reference repositories')
-    expect(systemPrompt).toContain('acme__design-system/')
+    expect(systemPrompt).toContain(`${siblingCheckoutDir('acme', 'design-system')}/`)
   })
 
   it('doc-writer with NO reference repos emits no referenceRepos field', async () => {
@@ -687,8 +693,8 @@ describe('ContainerAgentExecutor multi-repo gate/merge targeting', () => {
     // The system prompt names both sibling checkouts + their per-repo diff commands…
     const systemPrompt = spec.systemPrompt as string
     expect(systemPrompt).toContain('## Multi-repo pull request')
-    expect(systemPrompt).toContain('acme__widgets/')
-    expect(systemPrompt).toContain('acme__billing/')
+    expect(systemPrompt).toContain(`${siblingCheckoutDir('acme', 'widgets')}/`)
+    expect(systemPrompt).toContain(`${siblingCheckoutDir('acme', 'billing')}/`)
     expect(systemPrompt).toContain('git diff origin/develop...HEAD')
     // …and the user prompt is the combined-diff variant (ONE assessment across repos).
     const userPrompt = spec.userPrompt as string

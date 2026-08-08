@@ -21,6 +21,14 @@ import { defaultUserSecretKindRegistry, type UserSecretKindRegistry } from './us
 // user id at run time — the basis for `ResolveUserGitHubToken`. The secret is never
 // returned to the SPA; only status metadata + a `hasSecret` flag.
 
+/**
+ * HKDF domain tag separating a user's sealed generic secrets from every other cipher (mirrors
+ * {@link TEST_SECRETS_CIPHER_INFO} et al). Both facades build their `WebCryptoSecretCipher` from
+ * this constant: the tag derives the key, so a facade spelling it differently seals credentials
+ * its sibling cannot unseal.
+ */
+export const USER_SECRET_CIPHER_INFO = 'cat-factory:user-secret'
+
 export interface UserSecretServiceDependencies {
   userSecretRepository: UserSecretRepository
   secretCipher: SecretCipher

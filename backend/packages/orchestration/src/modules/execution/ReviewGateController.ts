@@ -401,25 +401,8 @@ export class ReviewGateController {
     step: PipelineStep,
     isFinalStep: boolean,
   ): Promise<AdvanceResult> {
-    this.deps.stepGraph.finishStep(step)
-    step.progress = 1
-    step.subtasks = undefined
-    step.approval = null
-    if (isFinalStep) {
-      instance.status = 'done'
-      await this.deps.stateMachine.finalizeBlock(workspaceId, instance, undefined)
-      await this.deps.stateMachine.casPersist(workspaceId, instance)
-      await this.deps.stateMachine.emitInstance(workspaceId, instance)
-      await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
-      return { kind: 'done' }
-    }
-    instance.currentStep += 1
-    const next = instance.steps[instance.currentStep]
-    if (next) this.deps.stepGraph.startStep(next)
-    await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'continue' }
+    this.deps.stateMachine.finishHumanGateStep(step)
+    return this.deps.stateMachine.settleStepAndAdvance(workspaceId, instance, isFinalStep)
   }
 
   /** Resolve a block's current review or throw. */
