@@ -113,8 +113,9 @@ list through the card the platform's own notification raises.
 Three things are worth knowing before changing it:
 
 - **The claims live in the specs**, not here: they need workerd and a Cap'n Web session. What this
-  module grades is that the suite RAN and that everything in it passed, read from vitest's JSON
-  report rather than the exit code alone, because a suite that collected nothing also exits 0.
+  module grades is that the suite RAN and that everything in it passed, read from the JSON report's
+  per-assertion statuses rather than the exit code or its totals: a suite that collected nothing
+  exits 0, and so does one whose specs were all SKIPPED, which the totals still count as tests.
 - **The workspace is asked to PARK.** `startBackend` clears `E2E_DECISION_ON_STEPS` for every other
   phase; this one sets `decisionOnSteps: [0]` for its own workspace over the control channel. A
   Gatekeeper cannot be smoketested against a deployment that never parks a run.

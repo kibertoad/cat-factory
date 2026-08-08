@@ -38,7 +38,7 @@ export default defineConfig({
         bindings: {
           CAT_FACTORY_BASE_URL: fromHarness('CAT_FACTORY_BASE_URL'),
           PROVISIONING_KEY: fromHarness('CAT_FACTORY_PROVISIONING_KEY'),
-          // A public `https` host, because the deployment refuses to register anything else — and
+          // A public `https` host, because the deployment refuses to register anything else, and
           // an unroutable one, because nothing may actually arrive: the suite drives the receiver
           // itself, with the platform's own notification inside the envelope. `.invalid` never
           // resolves, so a delivery the deployment attempts fails at DNS instead of reaching a

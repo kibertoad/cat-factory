@@ -331,9 +331,10 @@ recovers from its revocation, forwards the everyday loop, and answers a run that
 
 - **The claims live in the SPECS, and the phase grades only that they ran.** They need workerd and a
   Cap'n Web session, which exist in that package and not in a Node harness; what the harness has and
-  the package must not is a database. So the phase reads vitest's JSON REPORT rather than its exit
-  code: a suite that collected nothing also exits 0, and this repo's own rule is that a phase which
-  reported nothing is not a pass.
+  the package must not is a database. So the phase reads the JSON REPORT's per-assertion statuses
+  rather than its exit code or its totals: a suite that collected nothing also exits 0, and so does
+  one whose specs were every one of them SKIPPED, which the totals still count as tests. This
+  repo's own rule is that a phase which reported nothing is not a pass.
 - **The workspace is asked to PARK, per workspace.** `startBackend` clears `E2E_DECISION_ON_STEPS`
   for every other phase (a park would stop the SDK scenario before it observed any progress), so
   this phase sets `decisionOnSteps: [0]` for its own workspace over the control channel. A
@@ -349,11 +350,16 @@ recovers from its revocation, forwards the everyday loop, and answers a run that
 - **It runs in the Gatekeeper's own NON-BLOCKING lane, not in the blocking smoketest job.** That is
   also why the phase is asked for BY NAME rather than joining the everything run, and why the
   summary prints it as NOT RUN there: a section that is simply absent reads as a section that
-  passed. The lane's `paths-filter` gained the publicApi controllers and the two harness paths; it
-  did not need the contracts, because a contract change that moves the surface must regenerate
-  `sdk/gatekeeper/src/bindings.generated.ts` (`check:sdk` refuses otherwise), which is already in
-  the filter. A controller whose BEHAVIOUR moved under an unchanged contract is the case that
-  needed adding, and it is exactly what this leg exists to catch.
+  passed. The lane's `paths-filter` gained the publicApi controllers, `orchestration`, and the two
+  harness paths; it did not need the contracts, because a contract change that moves the surface
+  must regenerate `sdk/gatekeeper/src/bindings.generated.ts` (`check:sdk` refuses otherwise), which
+  is already in the filter. BEHAVIOUR that moved under an unchanged contract is the case that
+  needed adding, and it is exactly what this leg exists to catch. `orchestration` is in it for the
+  same reason one layer down and is not optional: the suite's central claim is that a real run
+  parks, raises the notification the card is built from, and leaves the park when answered, none of
+  which lives in the controller that serves them, so a filter naming only the controllers skips the
+  lane on precisely the changes that would break it. The line stops there rather than reaching the
+  repositories, which conformance already covers cross-runtime and this suite adds nothing to.
 
 **What blocks the second leg**: a ref to pin. The opt-in shape is agreed (`GATEKEEPER_OS_REF`,
 nightly, `continue-on-error`), and it is deliberately not landing as a workflow that clones a

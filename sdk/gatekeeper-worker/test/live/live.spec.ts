@@ -3,8 +3,8 @@
 // The suite beside this one runs the same Worker in the same runtime against a SCRIPTED origin,
 // which is what makes it hermetic and is also the one thing it structurally cannot see: a fixture
 // agrees with this package by construction. So a request shape the generated bindings and the SDK
-// both consider correct — a decision field the projection spells differently, a notification type
-// the platform retired, a mint the key surface admits on other terms — round-trips there and fails
+// both consider correct (a decision field the projection spells differently, a notification type
+// the platform retired, a mint the key surface admits on other terms) round-trips there and fails
 // for the first time in somebody's production.
 //
 // This file closes that gap and nothing else. It drives the SAME Worker, in real workerd, with its
@@ -213,7 +213,7 @@ async function firstServiceId(capability: RemoteCapability): Promise<string> {
  *
  * The DESCRIPTION is not decoration. The platform runs a deterministic input gate before the first
  * dispatch, and a task carrying only a title parks on it (`description_missing`) without an agent
- * ever being asked — which is correct behaviour, and would make every run below stop on the wrong
+ * ever being asked, which is correct behaviour, and would make every run below stop on the wrong
  * park. It is also the first thing this leg found that no scripted origin could have.
  */
 async function createTask(capability: RemoteCapability, title: string): Promise<string> {
@@ -278,7 +278,7 @@ describe('per-actor credentials', () => {
     }
 
     // `/api/v1/me` describes the key the request ARRIVED on, so this is the live answer to "did the
-    // call go out as the actor rather than on the Gatekeeper's own provisioning secret" — the fact
+    // call go out as the actor rather than on the Gatekeeper's own provisioning secret": the fact
     // the scripted origin can only imitate by echoing a bearer it invented.
     expect(first.externalIdentity).toBe(actorId)
     expect(first.scope).toBe('write')
@@ -427,8 +427,13 @@ describe('answering a real park', () => {
       decisions?: { kind: string }[]
     }
     expect((settled.decisions ?? []).some((entry) => entry.kind === 'agent-decision')).toBe(false)
+    // Asserted PRESENT before it is asserted settled. `listCards` keeps a card it has resolved, so
+    // one missing from the list is a regression that DROPPED it rather than settling it, and an
+    // absent card would satisfy `expect(undefined?.resolvedAt).not.toBeNull()` on this suite's
+    // central claim.
     const resolved = (await capability.approvals_list()).find((entry) => entry.cardId === cardId)
-    expect(resolved?.resolvedAt).not.toBeNull()
+    expect(resolved, 'the answered card is no longer listed').toBeDefined()
+    expect(resolved?.resolvedAt).toEqual(expect.any(Number))
   })
 })
 

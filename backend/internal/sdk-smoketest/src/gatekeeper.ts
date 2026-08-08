@@ -5,20 +5,25 @@
 // and it is also the one thing it cannot see: a fixture agrees with the package by construction, so
 // a request shape the generated bindings and the SDK both consider correct fails for the first time
 // against a real deployment. The generated table is regenerated from the same spec the deployment
-// serves, which keeps the two from drifting on PATHS and SCOPES — never on what a body has to
+// serves, which keeps the two from drifting on PATHS and SCOPES, never on what a body has to
 // carry, which is where the first cut of that package's decision answerers were wrong.
 //
 // So this phase gives that suite a real origin. It seeds a workspace, points the Worker at this
 // harness's own backend, and runs the package's `test/live` specs in workerd with no outbound
 // service, so every call the Gatekeeper makes leaves the isolate and lands on the deployment.
 //
-// Two things follow from the shape of that, and both are deliberate:
+// Three things follow from the shape of that, and all three are deliberate:
 //
 //   - THE SPECS ARE THE ASSERTIONS. Unlike the SDK phases, there is nothing to compare and no
 //     report to grade field by field: the claims are in the specs, where the workerd runtime and
 //     the Cap'n Web session they need already exist. What this module grades is that the suite RAN
-//     and that everything in it passed, which is why the JSON reporter's counts are read rather
-//     than the exit code alone: a suite that collected nothing exits 0 and is not a pass.
+//     and that everything in it passed, which is why the JSON reporter's per-assertion statuses are
+//     read rather than the exit code or the totals: a suite that collected nothing exits 0, and so
+//     does one whose specs were every one of them SKIPPED, which the totals still count as tests.
+//   - THE DIAGNOSTIC IS THE CHILD'S OWN OUTPUT, and this phase is the only thing holding it. So
+//     every way the run can go wrong lands as a FAILURE STRING carrying it, never as a thrown
+//     error: `run.ts` calls this from a `try` whose `finally` only stops the backend, so a throw
+//     escapes past the summary and takes the output with it.
 //   - THE RUN PARKS ON PURPOSE. `startBackend` clears `E2E_DECISION_ON_STEPS` for every other
 //     phase, so this one asks for the park PER WORKSPACE over the control channel. A Gatekeeper
 //     whose whole reason to exist is answering parked runs cannot be smoketested against a
@@ -56,8 +61,13 @@ export interface GatekeeperReport {
 const GATEKEEPER_EXPECTED: Record<string, unknown> = {
   // The suite ran at all. A phase that reported nothing is not a pass, and a workerd pool that
   // failed to boot exits non-zero with an empty report rather than a failing test.
-  suiteCollectedSpecs: true,
+  suiteExecutedSpecs: true,
   suiteFailures: 0,
+  // A skip is not a pass either, and it is the one failure mode that survives every other check
+  // here: a skipped spec exits 0, fails nothing, and is counted by the report's own total. This
+  // suite has no conditional skips, so any at all means an assertion this lane claims to make is
+  // not being made.
+  suiteSkippedSpecs: 0,
   suiteExitCode: 0,
 }
 
@@ -78,36 +88,71 @@ async function parkOnFirstStep(context: GatekeeperContext): Promise<void> {
 
 /** Run the live suite and report what it did. */
 export async function runGatekeeperPhase(context: GatekeeperContext): Promise<GatekeeperReport> {
-  const observations: Record<string, unknown> = {}
-  const failures: string[] = []
   const reportPath = join(context.workDir, 'gatekeeper-live.json')
 
   try {
     await parkOnFirstStep(context)
   } catch (error) {
     return {
-      observations,
+      observations: {},
       failures: [`the workspace could not be set to park: ${describe(error)}`],
     }
   }
 
   const run = await runVitest(context, reportPath)
-  observations.suiteExitCode = run.exitCode
+  if (run.kind === 'unstartable') {
+    // The CLI never ran, so there is no report to read and no output to quote: what a reader needs
+    // is the reason it could not start, which is the one thing the child cannot have printed.
+    return { observations: {}, failures: [`the live suite could not be started: ${run.detail}`] }
+  }
 
-  const summary = await readReport(reportPath)
-  if (summary === null) {
+  return gradeSuiteRun(run, await readReport(reportPath), reportPath)
+}
+
+/**
+ * Turn one finished run into what the phase reports.
+ *
+ * Separated from the spawn and exported so the grading can be tested without a workerd pool: this
+ * is where "the suite passed" is decided, and a bug in it is invisible by construction.
+ */
+export function gradeSuiteRun(
+  run: { exitCode: number; output: string },
+  report: ReportRead,
+  reportPath: string,
+): GatekeeperReport {
+  const observations: Record<string, unknown> = { suiteExitCode: run.exitCode }
+  const failures: string[] = []
+
+  if (report.kind === 'absent') {
     // No report means the pool never got as far as running a spec (a missing binding, a workerd
     // that would not boot). The child's own output is the only thing that explains it, so it is
     // reported rather than summarised.
-    failures.push(`the live suite produced no report. Its output was:\n${run.output}`)
-    return { observations, failures }
+    return {
+      observations,
+      failures: [`the live suite produced no report. Its output was:\n${run.output}`],
+    }
+  }
+  if (report.kind === 'unreadable') {
+    // A DIFFERENT fact from the one above, and the reason both are named: a report that is present
+    // but unparseable is a child killed mid-write, not a pool that never booted.
+    return {
+      observations,
+      failures: [
+        `the live suite's report at ${reportPath} is not readable JSON (${report.detail}). ` +
+          `Its output was:\n${run.output}`,
+      ],
+    }
   }
 
-  observations.suiteSpecCount = summary.total
-  observations.suiteCollectedSpecs = summary.total > 0
-  observations.suiteFailures = summary.failed
-  for (const failed of summary.failedNames) failures.push(`spec failed: ${failed}`)
-  if (run.exitCode !== 0 && summary.failed === 0) {
+  observations.suiteSpecCount = report.executed
+  observations.suiteExecutedSpecs = report.executed > 0
+  observations.suiteSkippedSpecs = report.skipped
+  observations.suiteFailures = report.failed
+  for (const failed of report.failedNames) failures.push(`spec failed: ${failed}`)
+  // NAMED, not just counted: a skipped spec is an assertion this lane claims to make and did not,
+  // and the count alone leaves a reader to work out which one from a suite they cannot see.
+  for (const skipped of report.skippedNames) failures.push(`spec did not run: ${skipped}`)
+  if (run.exitCode !== 0 && report.failed === 0) {
     failures.push(`the live suite exited ${run.exitCode} with no failing spec`)
   }
   // The child's own output carries the diff, the stack and the deployment's refusal, and every one
@@ -135,10 +180,16 @@ export function compareGatekeeperReport(report: GatekeeperReport): ParityProblem
   return problems
 }
 
-interface VitestRun {
-  exitCode: number
-  output: string
-}
+/**
+ * What the child did.
+ *
+ * `unstartable` is its own outcome rather than an exit code, because the two need different
+ * reports: a CLI that never started has no output to quote and a remedy to name instead, where a
+ * CLI that ran and failed has output that IS the report.
+ */
+type VitestRun =
+  | { kind: 'ran'; exitCode: number; output: string }
+  | { kind: 'unstartable'; detail: string }
 
 /**
  * Spawn the package's live suite.
@@ -149,10 +200,25 @@ interface VitestRun {
  * bindings, and refuses to run without them.
  */
 async function runVitest(context: GatekeeperContext, reportPath: string): Promise<VitestRun> {
+  let bin: string
+  try {
+    bin = vitestBin()
+  } catch (error) {
+    // The same disposition `mcp.ts` gives its missing binary: an artifact of OURS that is absent is
+    // a failure with a fix to name, and naming it here is what keeps it from escaping `run.ts` as a
+    // resolution stack with no phase attached to it.
+    return {
+      kind: 'unstartable',
+      detail:
+        `vitest is not installed for ${GATEKEEPER_PACKAGE}. Run \`pnpm install\` first ` +
+        `(${describe(error)}).`,
+    }
+  }
+
   const child = spawn(
     process.execPath,
     [
-      vitestBin(),
+      bin,
       'run',
       '--config',
       'vitest.live.config.ts',
@@ -178,11 +244,26 @@ async function runVitest(context: GatekeeperContext, reportPath: string): Promis
   child.stdout?.on('data', (chunk) => output.push(String(chunk)))
   child.stderr?.on('data', (chunk) => output.push(String(chunk)))
 
-  const exitCode = await new Promise<number>((resolveExit) => {
-    child.once('error', () => resolveExit(-1))
-    child.once('exit', (code) => resolveExit(code ?? -1))
+  // Collected rather than settled on, so that ONE listener ends the wait: an array because the
+  // handler assigns from a closure, where narrowing a `let` back to its declared type is a
+  // reader's guess about the compiler rather than something the code says.
+  const spawnFailures: unknown[] = []
+  child.once('error', (error) => spawnFailures.push(error))
+
+  // `close`, never `exit`: `exit` fires when the process ends, which is BEFORE its piped stdout and
+  // stderr have necessarily been drained, and that output is the only diagnostic this phase has.
+  // A child that never spawned emits `error` and then `close` too, so this settles that case as
+  // well rather than hanging on it.
+  const exitCode = await new Promise<number | null>((settle) => {
+    child.once('close', (code) => settle(code))
   })
-  return { exitCode, output: output.join('') }
+
+  if (spawnFailures.length > 0) {
+    return { kind: 'unstartable', detail: `${bin} could not be run: ${describe(spawnFailures[0])}` }
+  }
+  // A `null` code is a child killed by a signal, which is a run that happened and whose output is
+  // worth quoting, so it stays an exit code rather than becoming `unstartable`.
+  return { kind: 'ran', exitCode: exitCode ?? -1, output: output.join('') }
 }
 
 /** The vitest CLI the gatekeeper package installs, resolved through its own `node_modules`. */
@@ -191,36 +272,77 @@ function vitestBin(): string {
   return join(dirname(fromPackage.resolve('vitest/package.json')), 'vitest.mjs')
 }
 
-interface Summary {
-  total: number
+export interface Summary {
+  kind: 'read'
+  /** Specs that actually ran. NOT the report's own total, which counts the skipped ones. */
+  executed: number
+  skipped: number
+  skippedNames: string[]
   failed: number
   failedNames: string[]
 }
 
-/** Read vitest's JSON report, or `null` when the run never wrote one. */
-async function readReport(path: string): Promise<Summary | null> {
+/**
+ * What reading vitest's JSON report found.
+ *
+ * `absent` and `unreadable` are separate outcomes because they are separate facts with separate
+ * fixes: nothing was written at all, versus something was written and is not a report.
+ */
+export type ReportRead = Summary | { kind: 'absent' } | { kind: 'unreadable'; detail: string }
+
+/**
+ * Reduce vitest's JSON report to what this phase grades.
+ *
+ * Split from the file read and exported so it can be tested on its own: it is the one piece of
+ * this module whose bug is SILENT, reporting a pass for a run that asserted nothing.
+ */
+export function summariseVitestReport(raw: string): ReportRead {
+  let parsed: { testResults?: { assertionResults?: { status?: string; fullName?: string }[] }[] }
+  try {
+    parsed = JSON.parse(raw) as typeof parsed
+  } catch (error) {
+    // Never thrown: a child killed mid-write is exactly when the phase's report matters most, and a
+    // parse error escaping this module takes the child's output out with it.
+    return { kind: 'unreadable', detail: describe(error) }
+  }
+
+  // Counted off the individual ASSERTIONS rather than the report's `numTotalTests`, which counts a
+  // skipped spec as a test: read that way, an all-skipped suite satisfies every expectation here
+  // while having asserted nothing. Anything that is not passed or failed did not execute, whichever
+  // of vitest's several spellings for that the reporter used.
+  const assertions = (parsed.testResults ?? []).flatMap((file) => file.assertionResults ?? [])
+  const nameOf = (assertion: { fullName?: string }): string =>
+    assertion.fullName ?? 'an unnamed spec'
+  const executed = assertions.filter(
+    (assertion) => assertion.status === 'passed' || assertion.status === 'failed',
+  )
+  const failedNames = assertions
+    .filter((assertion) => assertion.status === 'failed')
+    .map((assertion) => nameOf(assertion))
+  const skippedNames = assertions
+    .filter((assertion) => assertion.status !== 'passed' && assertion.status !== 'failed')
+    .map((assertion) => nameOf(assertion))
+
+  return {
+    kind: 'read',
+    executed: executed.length,
+    skipped: skippedNames.length,
+    skippedNames,
+    failed: failedNames.length,
+    failedNames,
+  }
+}
+
+/** Read vitest's JSON report. */
+async function readReport(path: string): Promise<ReportRead> {
   let raw: string
   try {
     raw = await readFile(path, 'utf8')
   } catch {
-    return null
+    return { kind: 'absent' }
   }
   await rm(path, { force: true })
-  const parsed = JSON.parse(raw) as {
-    numTotalTests?: number
-    numFailedTests?: number
-    testResults?: { assertionResults?: { status?: string; fullName?: string }[] }[]
-  }
-  const failedNames = (parsed.testResults ?? []).flatMap((file) =>
-    (file.assertionResults ?? [])
-      .filter((assertion) => assertion.status === 'failed')
-      .map((assertion) => assertion.fullName ?? 'an unnamed spec'),
-  )
-  return {
-    total: parsed.numTotalTests ?? 0,
-    failed: parsed.numFailedTests ?? failedNames.length,
-    failedNames,
-  }
+  return summariseVitestReport(raw)
 }
 
 function describe(error: unknown): string {

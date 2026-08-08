@@ -44,5 +44,13 @@ the per-workspace park profile a Gatekeeper's whole reason for existing depends 
 by NAME rather than being part of the everything run, because CI runs it in the Gatekeeper's own
 non-blocking lane; the summary prints it as not run rather than omitting the section.
 
+**Grading "they ran" is read off the JSON report's PER-ASSERTION statuses, never its totals or the
+exit code.** Both of those call a suite that asserted nothing a pass: an empty run exits 0, and a
+fully skipped one exits 0 with a full `numTotalTests`. `summariseVitestReport` and `gradeSuiteRun`
+are split out of the spawn and unit-tested (`test/gatekeeper.test.ts`) for exactly that reason: a
+bug in this reduction reports green and nothing else notices. For the same reason every way the
+child can go wrong becomes a failure STRING carrying its output rather than a throw, which `run.ts`
+would let escape past the summary.
+
 **See also:** `sdk/README.md` (the SDK family and its design rules), `backend/internal/e2e`
 (whose test server this boots), `backend/docs/public-api.md`.

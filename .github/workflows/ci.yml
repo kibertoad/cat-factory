@@ -163,19 +163,26 @@ jobs:
             # is what makes that true rather than merely intended: without it an
             # `sdk/gatekeeper-worker/**`-only diff left `code` false and skipped both lanes.
             #
-            # The last three entries are what the LIVE half of this lane needs, and they are
-            # narrower than they look. A change to the `/api/v1` CONTRACTS already lands here
-            # through `sdk/gatekeeper/**`, because the bindings table is generated from the spec and
-            # `check:sdk` refuses a diff that did not regenerate it; what that cannot see is a
-            # controller whose BEHAVIOUR moved under an unchanged contract, which is exactly the
-            # disagreement the live suite exists to catch. The harness paths are here because the
-            # phase and the boot it runs against live in them.
+            # The last four entries are what the LIVE half of this lane needs. A change to the
+            # `/api/v1` CONTRACTS already lands here through `sdk/gatekeeper/**`, because the
+            # bindings table is generated from the spec and `check:sdk` refuses a diff that did not
+            # regenerate it; what that cannot see is BEHAVIOUR that moved under an unchanged
+            # contract, which is exactly the disagreement the live suite exists to catch. That is
+            # the whole publicApi module, and `orchestration` one layer under it: the live suite's
+            # central claim is that a real run PARKS, RAISES the notification the card is built
+            # from, and LEAVES the park when answered, and all three of those live in the engine
+            # rather than in the controller that serves them. Without it the lane skips exactly the
+            # PRs that would break it. The line is drawn there and not deeper: the repositories the
+            # engine persists through are covered cross-runtime by conformance, which the live
+            # suite adds nothing to. The harness paths are here because the phase and the boot it
+            # runs against live in them.
             gatekeeper:
               - 'deploy/gatekeeper/**'
               - 'sdk/gatekeeper/**'
               - 'sdk/gatekeeper-worker/**'
               - 'sdk/typescript/**'
               - 'backend/packages/server/src/modules/publicApi/**'
+              - 'backend/packages/orchestration/**'
               - 'backend/internal/sdk-smoketest/**'
               - 'backend/internal/e2e/src/**'
               - '.github/workflows/ci.yml'
