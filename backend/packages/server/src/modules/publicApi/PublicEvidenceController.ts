@@ -13,7 +13,7 @@ import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { blobResponseHeaders } from '../artifacts/imageArtifacts.js'
-import { loadScopedRun } from './decisions/scope.js'
+import { requireScopedRun, runNotFound } from './decisions/scope.js'
 import { authorize, authorizeOrThrow, refuse } from './publicApiAuth.js'
 
 // The public run-EVIDENCE surface: a run's verification report, its outcome summary, the binary
@@ -32,7 +32,7 @@ import { authorize, authorizeOrThrow, refuse } from './publicApiAuth.js'
 //  1. **`read` scope, like the debug surface and for the same reason.** These are reads. Gating
 //     them behind `admin`, which on this API also merges pull requests and deletes tasks,
 //     would mean handing an auditing integration a destructive key to look at a screenshot.
-//  2. **The run-scoped reads resolve through `loadScopedRun`, NOT the debug surface's wider
+//  2. **The run-scoped reads resolve through `requireScopedRun`, NOT the debug surface's wider
 //     workspace rule**, even though a `read` key can already reach far more sensitive material
 //     through `/api/v1/debug/*`. What decides it is not how much is exposed but that ONE prefix
 //     may carry only ONE access semantic: `/api/v1/runs/:runId/*` already means "a run this key
@@ -146,14 +146,6 @@ async function listRunArtifacts(
   ]
 }
 
-/**
- * The refusal both run-scoped reads share: the id names no run this key may read.
- *
- * One factory rather than a literal per route so the two cannot answer the same condition with
- * different words, and so the reason a caller branches on is decided once.
- */
-const runNotFound = (runId: string) => new NotFoundError('Run', runId, { reason: 'run_not_found' })
-
 export function publicEvidenceController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
@@ -164,7 +156,7 @@ export function publicEvidenceController(): Hono<AppEnv> {
     if ('fail' in gate) return refuse(c, gate.fail)
     const { workspaceId } = gate.auth
     const runId = c.req.valid('param').runId
-    if (!(await loadScopedRun(c, workspaceId, runId))) throw runNotFound(runId)
+    await requireScopedRun(c, workspaceId, runId)
     const report = await c
       .get('container')
       .executionService.composeVerificationReport(workspaceId, runId)
@@ -182,7 +174,7 @@ export function publicEvidenceController(): Hono<AppEnv> {
     if ('fail' in gate) return refuse(c, gate.fail)
     const { workspaceId } = gate.auth
     const runId = c.req.valid('param').runId
-    if (!(await loadScopedRun(c, workspaceId, runId))) throw runNotFound(runId)
+    await requireScopedRun(c, workspaceId, runId)
     const outcome = await c.get('container').executionService.composeRunOutcome(workspaceId, runId)
     // Same 404 as the report's, for the same reason: from outside, "no such run this key may
     // read" and "the run's task is gone" are one fact: there is nothing to summarise under
@@ -201,8 +193,7 @@ export function publicEvidenceController(): Hono<AppEnv> {
     const store = await requireArtifactStore(c, workspaceId)
     // Resolve the run before listing, so a mistyped (or out-of-scope) id answers "no such run"
     // rather than an empty list a caller would read as "this run captured nothing".
-    const scoped = await loadScopedRun(c, workspaceId, runId)
-    if (!scoped) throw runNotFound(runId)
+    const scoped = await requireScopedRun(c, workspaceId, runId)
     return c.json(
       { artifacts: await listRunArtifacts(store, workspaceId, runId, scoped.blockId) },
       200,

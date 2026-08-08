@@ -28,6 +28,11 @@ request for real; recording how much review an already-landed one took performs 
 side-effect and merges nothing, so an integration whose job is collecting evidence no longer needs a
 key that can also delete tasks and merge.
 
+Refusals across the surface carry `error.details.reason`: `run_not_found`, `no_merge_record` (a
+readable run whose pipeline reached no merge decision) and `merge_record_not_found`, which the
+record-addressed READ and the TAG now answer identically, so a client branches on one value
+whichever of the two it called.
+
 `POST /api/v1/notifications/:id/act` deliberately stays body-less, so the app's one-tap
 confirm-and-tag has no single-request headless equivalent: every SDK emitter renders a request body
 as a required positional parameter, so adding `reviewEffort` there would rewrite `act(id)` as

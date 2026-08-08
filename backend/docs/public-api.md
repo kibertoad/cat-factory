@@ -1378,13 +1378,24 @@ widens one automatically: the rules live on the workspace's merge presets and a 
 
 Refusals carry `error.details.reason`: `run_not_found` (the id names no run this key may read),
 `no_merge_record` (the run is readable and simply made no merge decision, because its pipeline has no
-`merger` step or it never reached one) and `merge_record_not_found`. A deployment that wired no
-track-record store answers `503` rather than an empty rollup set.
+`merger` step or it never reached one) and `merge_record_not_found` (the id names no record this
+workspace holds), which the record-addressed **read and tag answer identically**, so a client can
+branch on one value whichever of the two it called. A deployment that wired no track-record store
+answers `503` rather than an empty rollup set.
 
 A run is addressable here on the same terms as every other `/api/v1/runs/:runId/*` route: the runs
 this key could already read through `GET /api/v1/jobs/:id` or `GET /api/v1/tasks/:taskId/run`. The
 two record-addressed routes are scoped to the key's workspace instead, like every point read on this
 API.
+
+**A record outlives its run, and that is deliberate.** A track record holds no foreign key to the
+execution row, so re-running or cancelling a task leaves the evidence its earlier merge decision
+produced exactly where it was. The visible consequence is that the two addresses stop agreeing:
+`GET /runs/:runId/merge-record` starts answering `run_not_found` while
+`GET /merge-records/:recordId` still serves the record, which is the same set of rows the rollups
+have been counting all along. Address a record you intend to keep reading by its `recordId`, which
+is stable, rather than by the run that minted it. Neither door is wider than the other: both re-apply
+the key's workspace, which is the one boundary this surface enforces.
 
 ```sh
 # The loop: merge the tail, then record what reviewing it actually cost.

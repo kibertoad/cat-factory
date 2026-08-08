@@ -13,12 +13,16 @@ import type {
   WorkspaceRepository,
   Logger,
 } from '@cat-factory/kernel'
-import { CHANGE_CLASSES, emptyMergeClassRollup } from '@cat-factory/contracts'
 import {
-  assertFound,
+  CHANGE_CLASSES,
+  emptyMergeClassRollup,
+  MERGE_RECORD_NOT_FOUND_REASON,
+} from '@cat-factory/contracts'
+import {
   classifyChangedFiles,
   describeError,
   noopLogger,
+  NotFoundError,
   requireWorkspace,
 } from '@cat-factory/kernel'
 
@@ -314,6 +318,12 @@ export class MergeTrackRecordService {
   /**
    * Tag (or clear) how much review effort a human spent. Unlike the write paths above this is a
    * deliberate user action, so an unknown id is a real 404 rather than a silent skip.
+   *
+   * That 404 carries {@link MERGE_RECORD_NOT_FOUND_REASON}, the same `details.reason` the
+   * record-addressed READ answers, because from a caller's side the two are one condition: the id
+   * names no record this workspace holds. Refusing here rather than pre-checking in the caller is
+   * what keeps the write a single round-trip and leaves no window between the check and the patch;
+   * the reason has to ride the throw for that to cost the caller nothing.
    */
   async tag(
     workspaceId: string,
@@ -321,11 +331,10 @@ export class MergeTrackRecordService {
     reviewEffort: ReviewEffort | null,
   ): Promise<MergeTrackRecord> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    const existing = assertFound(
-      await this.deps.mergeTrackRecordRepository.get(workspaceId, id),
-      'MergeTrackRecord',
-      id,
-    )
+    const existing = await this.deps.mergeTrackRecordRepository.get(workspaceId, id)
+    if (!existing) {
+      throw new NotFoundError('MergeTrackRecord', id, { reason: MERGE_RECORD_NOT_FOUND_REASON })
+    }
     const taggedAt = reviewEffort ? this.deps.clock.now() : null
     await this.deps.mergeTrackRecordRepository.patch(workspaceId, id, { reviewEffort, taggedAt })
     return { ...existing, reviewEffort, taggedAt }

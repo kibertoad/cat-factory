@@ -933,6 +933,30 @@ function registerPublicMergeEvidenceTests(driveMergerRun: MergerRunDriver): void
       return { authorization: `Bearer ${created.body.secret}` }
     }
 
+    /**
+     * Call a route expecting a REFUSAL, and surface its status beside the machine-readable
+     * `details.reason` a caller actually branches on.
+     *
+     * Reading the reason through one helper is what keeps these cases honest: a status-only
+     * assertion passes on a 404 whose `details` is absent entirely, which is exactly how the tag
+     * route came to answer without the reason its siblings publish.
+     */
+    async function refusal(
+      app: ConformanceApp,
+      method: 'GET' | 'POST',
+      path: string,
+      auth: Record<string, string>,
+      body?: unknown,
+    ): Promise<{ status: number; reason?: string }> {
+      const res = await app.call<{ error?: { details?: { reason?: string } } }>(
+        method,
+        path,
+        body,
+        auth,
+      )
+      return { status: res.status, reason: res.body?.error?.details?.reason }
+    }
+
     /** A run parked on `merge_review`, in an ORG workspace so a key can be minted for it. */
     async function pendingRun() {
       const run = await driveMergerRun({
@@ -1045,9 +1069,15 @@ function registerPublicMergeEvidenceTests(driveMergerRun: MergerRunDriver): void
       expect(rolled.body.rollups.find((r) => r.changeClass === 'schema')!.total).toBe(0)
     })
 
-    it('refuses a run in another workspace, and a run that made no merge decision', async () => {
+    it('tells apart an unreadable run, a run that decided nothing, and an unknown record', async () => {
       const run = await pendingRun()
       const auth = await mintKey(run.app, run.wsId, 'read')
+
+      // An id naming no run this key may read. Its own reason, because the fix differs: stop
+      // asking, where `no_merge_record` below means keep watching a run that is genuinely there.
+      const noRun = await refusal(run.app, 'GET', '/api/v1/runs/exec_nope/merge-record', auth)
+      expect(noRun.status).toBe(404)
+      expect(noRun.reason).toBe('run_not_found')
 
       // A run with no `merger` step reaches no merge decision. That is a fact about the run, so it
       // gets its own reason: a caller must be able to tell it from an id it simply cannot see.
@@ -1071,19 +1101,98 @@ function registerPublicMergeEvidenceTests(driveMergerRun: MergerRunDriver): void
         { pipelineId: coderOnly.body.id },
       )
       expect(started.status).toBe(201)
-      const noRecord = await run.app.call<{ error: { details?: { reason?: string } } }>(
+      const noRecord = await refusal(
+        run.app,
         'GET',
         `/api/v1/runs/${started.body.id}/merge-record`,
-        undefined,
         auth,
       )
       expect(noRecord.status).toBe(404)
-      expect(noRecord.body.error.details?.reason).toBe('no_merge_record')
+      expect(noRecord.reason).toBe('no_merge_record')
 
-      // An unknown record id is a 404 rather than a 200 with a nulled-out body, and so is a
-      // well-formed one this key's workspace does not hold.
-      const unknown = await run.app.call('GET', '/api/v1/merge-records/mtr_nope', undefined, auth)
-      expect(unknown.status).toBe(404)
+      // An unknown record id is a 404 rather than a 200 with a nulled-out body, and the READ and
+      // the TAG answer it with the SAME reason, because from a caller's side they are one fact
+      // about one id. Driving both is what keeps them that way: the tag's 404 is raised deep in
+      // `MergeTrackRecordService`, so it is the one that silently loses its reason when the two
+      // are spelled independently.
+      const unknownRead = await refusal(run.app, 'GET', '/api/v1/merge-records/mtr_nope', auth)
+      expect(unknownRead.status).toBe(404)
+      expect(unknownRead.reason).toBe('merge_record_not_found')
+
+      const writeAuth = await mintKey(run.app, run.wsId, 'write')
+      const unknownTag = await refusal(
+        run.app,
+        'POST',
+        '/api/v1/merge-records/mtr_nope/effort',
+        writeAuth,
+        { reviewEffort: 'minor' },
+      )
+      expect(unknownTag.status).toBe(404)
+      expect(unknownTag.reason).toBe('merge_record_not_found')
+    })
+
+    it('refuses a REAL record to a key from another workspace, by run and by record id', async () => {
+      // The workspace predicate, driven against a record that genuinely EXISTS. An assertion that
+      // only ever asks for `mtr_nope` passes on a repository that dropped its workspace predicate
+      // entirely, which is the one bug this case is here to catch: the id is unknown everywhere,
+      // so the refusal proves nothing about scoping.
+      const run = await pendingRun()
+      const record = await run.app.call<PublicMergeRecord>(
+        'GET',
+        `/api/v1/runs/${run.executionId}/merge-record`,
+        undefined,
+        await mintKey(run.app, run.wsId, 'read'),
+      )
+      expect(record.status).toBe(200)
+
+      // A second org board on the SAME deployment, so both rows live in one store and only the
+      // workspace predicate stands between them.
+      const { workspace: other } = await run.app.createOrgWorkspace({ seed: true })
+      const foreignRead = await mintKey(run.app, other.id, 'read')
+      const foreignWrite = await mintKey(run.app, other.id, 'write')
+
+      // Every door onto the record, each refusing with the reason its own address implies: the
+      // run-scoped read never confirms the run exists, and the two record-addressed routes never
+      // confirm the record does.
+      const byRun = await refusal(
+        run.app,
+        'GET',
+        `/api/v1/runs/${run.executionId}/merge-record`,
+        foreignRead,
+      )
+      expect(byRun.status).toBe(404)
+      expect(byRun.reason).toBe('run_not_found')
+
+      const byId = await refusal(
+        run.app,
+        'GET',
+        `/api/v1/merge-records/${record.body.recordId}`,
+        foreignRead,
+      )
+      expect(byId.status).toBe(404)
+      expect(byId.reason).toBe('merge_record_not_found')
+
+      // And the WRITE cannot reach across either. A foreign key with the right rung is still the
+      // wrong workspace, and a tag that landed here would corrupt another board's rollups.
+      const tagged = await refusal(
+        run.app,
+        'POST',
+        `/api/v1/merge-records/${record.body.recordId}/effort`,
+        foreignWrite,
+        { reviewEffort: 'major' },
+      )
+      expect(tagged.status).toBe(404)
+      expect(tagged.reason).toBe('merge_record_not_found')
+
+      // The record itself is untouched: the refusals above refused, they did not half-apply.
+      const stillOwned = await run.app.call<PublicMergeRecord>(
+        'GET',
+        `/api/v1/merge-records/${record.body.recordId}`,
+        undefined,
+        await mintKey(run.app, run.wsId, 'read'),
+      )
+      expect(stillOwned.status).toBe(200)
+      expect(stillOwned.body.reviewEffort).toBeNull()
     })
   })
 }
