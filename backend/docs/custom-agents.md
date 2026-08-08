@@ -5,6 +5,13 @@ auditor, a security scanner, a bespoke reviewer, a custom migrator) **without fo
 platform and without rebuilding the executor-harness image**. This document is the model:
 the seams. The worked reference is `backend/internal/example-custom-agent`.
 
+> **Authoring one is documented on the website**:
+> [Custom Agents & Gates](https://www.catfactory.ai/extend/custom-agents.html) walks an author
+> through registering a kind, a gate or a judge from a deployment repository, with
+> [Integration Manifests](https://www.catfactory.ai/extend/manifests.html) beside it. This page is
+> the ENGINE design behind those seams: the three stages, what each registry owns, and the
+> invariants a new capability has to keep.
+
 > For the ergonomics layered on these seams: provider tokens, schema-driven structured
 > output, boot-time registration validation, and the surface-driven prompt/`resultView`
 > wiring: see [`custom-agent-gate-ergonomics.md`](./custom-agent-gate-ergonomics.md).

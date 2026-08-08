@@ -36,6 +36,25 @@ The `deploy/*` packages depend on the libraries via `workspace:*` in this repo;
 external organizations swap that for the published npm version (see each
 `deploy/*/README.md`).
 
+## Where does a new doc go?
+
+Two surfaces, and **ownership follows the reader**. Anyone who can act without cloning this repo
+(deployers, operators, workspace users, integrators on the public API, the SDKs, MCP or manifests)
+reads [catfactory.ai](https://www.catfactory.ai/), whose source is
+[kibertoad/cat-factory-website](https://github.com/kibertoad/cat-factory-website). Anyone changing
+the code reads the docs here.
+
+Where a topic serves both, split it by DEPTH rather than copying: the website page owns the
+user-facing account and the doc here keeps the internal design plus a link. Land the website page
+FIRST, so the link from here never 404s. The named exceptions that stay in this repo whatever their
+audience, the audit and the open slices are in
+[`docs/README.md`](./docs/README.md#where-does-a-new-doc-go) and
+[`docs/initiatives/documentation-revamp.md`](./docs/initiatives/documentation-revamp.md).
+
+Your PR's documentation sweep therefore has one extra question: **does this change alter behaviour a
+website page describes?** If it does, say so in the PR so the website's `sync-docs` pass picks it up,
+or open the website PR yourself.
+
 ## Common commands
 
 ```sh

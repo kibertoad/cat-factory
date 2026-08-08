@@ -1,5 +1,12 @@
 # Remote run debugging API (`/api/v1/debug/*`)
 
+> **Callers read this on the website**:
+> [Public API](https://www.catfactory.ai/extend/public-api.html) owns the endpoints, scopes and
+> wire shapes, the [SDKs](https://www.catfactory.ai/extend/sdks.html) and
+> [MCP server](https://www.catfactory.ai/extend/mcp-server.html) own driving them, and
+> [Observability](https://www.catfactory.ai/operate/observability.html) owns investigating a run.
+> This page is the DESIGN: the one constraint every endpoint here obeys, and why.
+
 The read-only surface that lets something outside the browser answer **"why did this run fail,
 stall, or cost that much"**: in practice, an LLM handed an API key and asked to diagnose a run.
 

@@ -1,5 +1,9 @@
 # Running cat-factory on Kubernetes
 
+> **Deploying on Kubernetes is on the website**
+> ([Kubernetes](https://www.catfactory.ai/deploy/kubernetes.html)). This page is the topology
+> design: which process runs where and who owns what.
+
 How to run the **Node facade** (`@cat-factory/node-server`) and its agent workload on
 Kubernetes: where the executor image runs, where the backend runs, where the proxy the
 executor reaches the world through lives, and who owns/hosts what.

@@ -1,5 +1,10 @@
 # Bring your own infra: self-hosted runner pool
 
+> **Operating a pool is on the website**:
+> [Runner Pools](https://www.catfactory.ai/operate/runner-pools.html) owns registering and
+> running one, and [Integration Manifests](https://www.catfactory.ai/extend/manifests.html) owns
+> the manifest shape. This page is the integration PROTOCOL a scheduler has to satisfy.
+
 By default cat-factory runs every repo-operating agent job in a **per-run
 Cloudflare Container**. If your organization would rather run that workload on
 **your own container/runner pool** (k3s, Nomad, Kubernetes, or an internal

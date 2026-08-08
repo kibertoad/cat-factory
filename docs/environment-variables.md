@@ -5,6 +5,14 @@ grouped by purpose and annotated with the deployment modes each applies to. For 
 narrative on how config is loaded per runtime, see the facade sections in
 [`CLAUDE.md`](../CLAUDE.md) and the example `.env` files under `deploy/*`.
 
+**This file is the canonical list, and it stays in this repo** even though its audience is
+operators: `scripts/check-reserved-env-keys.mjs` reads it, and that guard is only useful when it
+fires in the PR that adds the variable. The operator-facing copy at
+[catfactory.ai/reference/environment-variables](https://www.catfactory.ai/reference/environment-variables.html)
+is RENDERED from this file by the website's `scripts/sync-env-vars.mjs`, so adding a row here is
+still the one edit. Configuration narrative (what to set first, what refuses to boot) belongs on
+the website's [Configuration](https://www.catfactory.ai/deploy/configuration.html) page, not here.
+
 ## These names are RESERVED
 
 Every variable in this reference belongs to the platform, and none of them can be the KEY a
@@ -95,9 +103,9 @@ Budgets are tiered: a per-workspace monthly limit (configured in the UI), a per-
 limit, and a per-user limit. The two variables below are operator hard ceilings on the
 account and user tiers. When set, a UI user cannot configure a value above the cap (it is
 also enforced server-side), the cap is shown on the budget configuration screen, and it
-acts as the effective tier limit when nothing is configured. See
-[`docs/initiatives/tiered-budgets.md`](initiatives/tiered-budgets.md). Amounts are in the
-base pricing currency (EUR by default).
+acts as the effective tier limit when nothing is configured. How budgets behave for a user is on
+the website: [Budgets](https://www.catfactory.ai/guide/budgets.html). Amounts are in the base
+pricing currency (EUR by default).
 
 | Variable                         | Modes        | Default         | Description                                                                |
 | -------------------------------- | ------------ | --------------- | -------------------------------------------------------------------------- |
@@ -149,7 +157,7 @@ UI (Workspace settings -> Budget) and defaults to about 100 EUR/month.
 | `AUTH_TRUST_PROXY_HOPS`                                                                 | Node, Local | `1`                    | How many trusted proxies sit in front of this process, used to pick the client hop out of an `x-forwarded-for` chain. The rightmost entry is the one the nearest proxy appended, so one proxy needs no change; a CDN plus a load balancer is `2`. A chain shorter than this is discarded in favour of the socket peer.                                                                                                                                  |
 | `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET`                                 | CF, Node    | none                   | "Login with GitHub" OAuth app.                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `GOOGLE_OAUTH_REDIRECT_URL`   | Node        | none                   | "Login with Google" OAuth app.                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `AUTH_SSO_ISSUER_URL` / `AUTH_SSO_CLIENT_ID` / `AUTH_SSO_CLIENT_SECRET`                 | CF, Node    | none                   | Enterprise SSO through the deployment's own OpenID Connect provider (Okta, Entra ID, Auth0, Keycloak, PingFederate, a Shibboleth OP …). ONE generic adapter: the issuer's discovery document supplies every endpoint. All three are required together — a partial set REFUSES to boot, as does a non-https issuer, a weak `AUTH_SESSION_SECRET`, or `AUTH_DEV_OPEN` alongside SSO. See [auth.md](../backend/docs/auth.md#enterprise-sso-generic-oidc).  |
+| `AUTH_SSO_ISSUER_URL` / `AUTH_SSO_CLIENT_ID` / `AUTH_SSO_CLIENT_SECRET`                 | CF, Node    | none                   | Enterprise SSO through the deployment's own OpenID Connect provider (Okta, Entra ID, Auth0, Keycloak, PingFederate, a Shibboleth OP …). ONE generic adapter: the issuer's discovery document supplies every endpoint. All three are required together: a partial set REFUSES to boot, as does a non-https issuer, a weak `AUTH_SESSION_SECRET`, or `AUTH_DEV_OPEN` alongside SSO. See [auth.md](../backend/docs/auth.md#enterprise-sso-generic-oidc).   |
 | `AUTH_SSO_LABEL` / `AUTH_SSO_SCOPES` / `AUTH_SSO_REDIRECT_URL`                          | CF, Node    | see auth.md            | SSO presentation + request shaping: the sign-in button label, the space-separated scopes (`openid` is added when absent), and an explicit `redirect_uri` for a deployment whose public URL differs from the request origin.                                                                                                                                                                                                                             |
 | `AUTH_SSO_GROUPS_CLAIM` / `AUTH_SSO_REQUIRED_GROUPS` / `AUTH_SSO_ALLOWED_EMAIL_DOMAINS` | CF, Node    | `groups` / none / none | Optional narrowings on SSO admission. By default the IdP's own app assignment is the whole allowlist (which is the point of SSO); these restrict it further to named directory groups and/or verified email domains, checked on EVERY sign-in.                                                                                                                                                                                                          |
 
@@ -207,6 +215,8 @@ UI (Workspace settings -> Budget) and defaults to about 100 EUR/month.
 | `GATE_OUTCOME_RETENTION_DAYS`      | CF, Node        | `90`                       | Retention for the settled-gate projection behind the dashboard's gate attempt statistics.                                                                                         |
 | `PLATFORM_RUN_DAY_RETENTION_DAYS`  | CF, Node        | `400`                      | Retention for the daily run rollup behind the dashboard's `30d`/`90d` windows.                                                                                                    |
 | `AUDIT_EVENT_RETENTION_DAYS`       | CF, Node        | `730`                      | Retention for the account audit log. The longest window here by design: it answers a compliance question, not an operational one. `0` disables the prune entirely.                |
+| `NOTIFICATION_RETENTION_DAYS`      | CF, Node        | `90`                       | Retention for RESOLVED (acted or dismissed) notifications. Open cards are the actionable inbox and are never pruned.                                                              |
+| `PROVISIONING_LOG_RETENTION_DAYS`  | CF, Node        | `14`                       | Retention for the infrastructure provisioning event log (high churn).                                                                                                             |
 | `LLM_RECORD_PROMPTS`               | CF, Node        | `false`                    | Deployment switch that (with the per-workspace toggle) enables storing prompts/agent context.                                                                                     |
 | `LOG_LEVEL`                        | CF, Node, Local | `info`                     | Emit threshold for the structured logger: `debug`/`info`/`warn`/`error`. An unrecognised value falls back to `info`. See [`backend/docs/logging.md`](../backend/docs/logging.md). |
 

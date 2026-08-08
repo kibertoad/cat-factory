@@ -1,12 +1,12 @@
 # CLAUDE.md: architecture & flow notes
 
-Orientation for working in this repo. Product docs: [`README.md`](./README.md),
-[`backend/README.md`](./backend/README.md), `backend/docs/`. Vocabulary traps (block vs task vs card,
-runner/executor/transport, `runtimes/cloudflare` = `@cat-factory/worker`) are resolved in
-[`docs/glossary.md`](./docs/glossary.md). Every `backend/packages/*` and `backend/runtimes/*` carries an
-`AGENTS.md` with its entry point and a "where things live" map; the repository layout is the root
-README's table (CI-guarded). Design records: [`backend/docs/adr/`](./backend/docs/adr/); in-flight
-initiatives: `docs/initiatives/`.
+Orientation for working in this repo. Product docs are the WEBSITE (catfactory.ai); this tree documents
+how it is built: [`README.md`](./README.md), [`backend/README.md`](./backend/README.md), `backend/docs/`.
+Vocabulary traps (block vs task vs card, runner/executor/transport, `runtimes/cloudflare` =
+`@cat-factory/worker`) are resolved in [`docs/glossary.md`](./docs/glossary.md). Every
+`backend/packages/*` and `backend/runtimes/*` carries an `AGENTS.md` with its entry point and a "where
+things live" map; the repository layout is the root README's table (CI-guarded). Design records:
+[`backend/docs/adr/`](./backend/docs/adr/); in-flight initiatives: `docs/initiatives/`.
 
 **This file holds the cross-cutting RULES plus an index of the runtime flows.** Keep it to what applies
 across features: a rule already enforced by a typecheck, a CI guard, or a linked doc does not need
@@ -107,28 +107,29 @@ after the PR forked: merge `origin/main` into the PR branch, fix there, and push
 
 ### Documentation-staleness sweep before every PR
 
-Docs are part of the change and CI cannot catch staleness. Match the sweep to the blast radius (a
-one-line internal fix needs none; a new export / env var / capability / flow does):
+Docs are part of the change and CI cannot catch staleness. Match the sweep to the blast radius (a one-line
+internal fix needs none; a new export / env var / capability / flow does):
 
-- The package's own `README.md` + `AGENTS.md`.
-- The root `README.md`: the repository-layout row, plus a "What it supports" row for a new user-facing
-  capability. A CONTRIBUTOR-only doc goes under `docs/internal/`, framed from the README's last section.
-- This file, only for a new CROSS-CUTTING convention or a change to a flow it indexes. Detail about one
-  flow goes in that flow's doc.
-- A higher-level doc must POINT AT a new deeper doc rather than restate or omit it, or it is lost.
+- The package's own `README.md` + `AGENTS.md`; the root `README.md`'s layout and feature-guide rows.
+- This file, only for a new CROSS-CUTTING convention or a change to a flow it indexes; detail about one flow
+  goes in that flow's doc, and a higher-level doc POINTS AT a new deeper one or the deeper one is lost.
+- **Does this change behaviour a catfactory.ai page describes?** OWNERSHIP FOLLOWS THE READER: the website
+  owns what anyone can act on with NO checkout, a doc here keeps the internal design plus a LINK, and the
+  two split by DEPTH, never mirrored. If yes, say so in the PR or open the website PR, landing it FIRST so
+  the link never 404s. Model and open slices: `docs/initiatives/documentation-revamp.md`.
 
 ### Bigger initiatives get a tracker document
 
-Multi-PR work (cross-cutting refactor, registry-by-registry migration, strangler conversion) gets a
-tracker under `docs/initiatives/` with the first PR: goal and rationale, target pattern (link the pilot),
-a per-item checklist with PR links updated each slice, and the gotchas the pilot surfaced. It also earns
-its keep when an initiative is REDIRECTED, so the next iteration can't re-propose a withdrawn approach.
+Multi-PR work (cross-cutting refactor, registry-by-registry migration, strangler conversion) gets a tracker
+under `docs/initiatives/` with the first PR: goal and rationale, target pattern (link the pilot), a per-item
+checklist with PR links updated each slice, and the gotchas the pilot surfaced. It also earns its keep when
+an initiative is REDIRECTED, so the next iteration can't re-propose a withdrawn approach.
 
 **When the committed scope completes, convert the tracker into a numbered ADR under `backend/docs/adr/`
 (`NNNN-slug.md`, next free number) and `git rm` the tracker in the same PR.** Keep Context / Decision /
-Rationale / Consequences; drop the checklists. Header shape: `# ADR NNNN: <title>` plus a `Status` /
+Rationale / Consequences and drop the checklists; header shape `# ADR NNNN: <title>` plus a `Status` /
 `Date` / `Context layer` bullet block. Check the number against ALL existing files first: parallel
-branches have collided on one number three times.
+branches have collided on one three times.
 
 ## Writing style: no em-dashes, no LLM-tell prose
 
@@ -159,10 +160,10 @@ messages, code comments, UI copy.
 - **The Postgres-backed suites need a reachable server AND `--env-mode=loose`**; a bare `[ELIFECYCLE]
 Command failed` with no vitest summary is a CANCELLED sibling. Recipe, including how to start a cluster where no Docker daemon runs: [`running-tests.md`](./docs/internal/running-tests.md).
 - **ALWAYS format/lint-fix the ENTIRE tree, never a subset.** `pnpm lint:fix` from the root (or
-  `pnpm exec oxfmt .`); the only correct argument to `oxfmt`/`oxlint` is `.`, for any reason. On
-  Windows the whole-tree run rewrites line endings across hundreds of files: expected, and git's
-  normalization absorbs it at commit time. Run it ONCE at the end and trust the result: do not diff,
-  stash, or investigate why an untouched file was reformatted (it sweeps up pre-existing drift).
+  `pnpm exec oxfmt .`); the only correct argument to `oxfmt`/`oxlint` is `.`, for any reason. On Windows
+  the whole-tree run rewrites line endings across hundreds of files: expected, and git's normalization
+  absorbs it at commit time. Run it ONCE at the end and trust the result: do not diff, stash, or
+  investigate why an untouched file was reformatted (it sweeps up pre-existing drift).
 
 ## Keep the runtimes symmetric
 
@@ -475,20 +476,20 @@ GitLab deployments.
 ## Public-API SDK clients: generated from the spec, never hand-edited
 
 Four official clients for `/api/v1` live under `sdk/` (TypeScript, Python, Go, and Java, which also
-serves Kotlin), plus two projections over it: `sdk/mcp` (the operations as MCP tools) and
-`sdk/gatekeeper` (per-operation scope floors, from the contracts' `minScope`). THOSE SIX are the chain
+serves Kotlin), plus two projections: `sdk/mcp` (the operations as MCP tools) and `sdk/gatekeeper`
+(per-operation scope floors, from the contracts' `minScope`). THOSE SIX are the chain
 **contracts → `docs/openapi.json` → `sdk/*`** with no hand-editing at any link: `pnpm gen:sdk` renders
 the spec and `pnpm check:sdk` fails CI on drift and version skew. `sdk/gatekeeper-worker` is the ONE
-member outside it, hand-written throughout: a published library CONSUMING that table. Design, the
-Java/Kotlin trade and that exception: [`sdk/README.md`](./sdk/README.md). Two rules bite from outside:
+member outside it, hand-written: a published library CONSUMING that table. Generation, the smoketest
+and that exception: [`sdk/README.md`](./sdk/README.md). Two rules bite from outside:
 
 - **Never edit a file whose header says GENERATED**; change the contracts or the emitter. Only models
   and operations are generated; each transport is hand-written beside them.
 - **Adding a `/api/v1` endpoint means adding an entry to `scripts/sdk/surface.mjs`** naming its resource
-  group and method. Generation FAILS without one, so a new endpoint cannot ship as an un-callable hole
-  in four clients. The same entry becomes an MCP tool with no second decision, except a STREAMING
-  endpoint, which must be named in `MCP_OMITTED_OPERATIONS` with the reason (generation fails on an
-  unclassified one). A scenario step added to one `sdk-smoketest` client must be added to all four.
+  group and method. Generation FAILS without one, so a new endpoint cannot ship as an un-callable hole in
+  four clients, and the same entry becomes an MCP tool with no second decision, except a STREAMING one,
+  named in `MCP_OMITTED_OPERATIONS` with its reason. A scenario step added to one `sdk-smoketest` client
+  must be added to all four.
 
 ## Migrations
 
@@ -534,10 +535,9 @@ adapters) live in its own `AGENTS.md`.
   post-mortem, `localDind`): [`backend/runtimes/local/AGENTS.md`](./backend/runtimes/local/AGENTS.md).
 - **Model provisioning** is composed per facade from `CompositeModelProvider`; unconfigured providers
   aren't registered, so `resolve` throws a clear error instead of failing deep in the SDK. Locally-run
-  models are per-user endpoints with NO API key, forwarded server-side, so the base URL is constrained to
+  models are per-user endpoints with NO API key forwarded SERVER-side, so the base URL is constrained to
   a loopback-only allow-list (`localRunnerUrlError`) at the write boundary, the test probe and every
-  run-time redirect hop; `LOCAL_MODELS_ALLOW_LAN=true` is the operator opt-in, an internal-network SSRF
-  surface on a shared deployment. Doc: [`backend/docs/model-support.md`](./backend/docs/model-support.md).
+  redirect hop; `LOCAL_MODELS_ALLOW_LAN=true` is the operator opt-in. Doc: [`backend/docs/model-support.md`](./backend/docs/model-support.md).
 - **`deploy/preview`** carries the per-PR TEST environments for THIS repo. Board wiring AND the three
   editing constraints (no `include:`/bind mounts/`env_file`, the empty `apiBase`, the per-PR name
   templates): [`docs/internal/dogfooding.md`](./docs/internal/dogfooding.md).

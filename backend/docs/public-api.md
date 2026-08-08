@@ -6,6 +6,17 @@ dashboard that reads spend. Every route is the external counterpart of a service
 already makes (same behaviour, same arbitration), projected through deliberately small public
 resources (`publicTask`, `publicRun`, `publicPipeline`, …) rather than the raw internal entities.
 
+> **Where this sits after the documentation split**: the website's
+> [Public API](https://www.catfactory.ai/extend/public-api.html) owns the account an integrator
+> reads first (what the surface is for, keys and scopes, the webhook contract), and the
+> [SDKs](https://www.catfactory.ai/extend/sdks.html) and
+> [MCP server](https://www.catfactory.ai/extend/mcp-server.html) pages own driving it. This file
+> stays the endpoint-by-endpoint REFERENCE, because it is the prose companion to the generated
+> `docs/openapi.json` and several of its anchors are linked from published package READMEs and from
+> error messages in code. Moving that reference to the website is deliberately deferred: see the
+> documentation-revamp tracker. Until then, a change to a route updates the reference here AND
+> whichever website page states its behaviour.
+
 This is the **how-to and reference**. Its siblings each own a different slice:
 
 - [ADR 0030](./adr/0030-public-api-surface.md): the design record covering why the surface has this
