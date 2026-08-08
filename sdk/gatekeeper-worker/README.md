@@ -112,8 +112,11 @@ work that says what it wants.
 
 ## What to configure
 
-Everything operational comes from the Worker's environment; the template's `wrangler.toml` carries
-all of it:
+Everything operational comes from the Worker's environment, through two mechanisms that are not
+interchangeable: the vars and the Durable Object binding are written in the template's
+`wrangler.toml`, and the three credentials are secrets, put with `wrangler secret put` into the
+platform's secret store. A credential in a config file is a credential in a repository, so a
+refusal names the mechanism its binding actually takes rather than offering both.
 
 | Binding                | Kind           | What it is                                                                    |
 | ---------------------- | -------------- | ----------------------------------------------------------------------------- |
@@ -125,8 +128,10 @@ all of it:
 | `OS_SHARED_TOKEN`      | secret         | The bearer the paired OS deployment presents on every RPC call.               |
 | `STATE`                | Durable Object | A namespace bound to `GatekeeperState`: cards, dedupe log, minted keys.       |
 
-A missing binding is answered as a 503 naming it, never defaulted: there is no safe stand-in for a
-credential or for the identity of the deployment it talks to.
+A missing binding is answered as a 503 naming it and how it is set, never defaulted: there is no
+safe stand-in for a credential or for the identity of the deployment it talks to. `GET /health`
+asks the whole table at once rather than the bindings a given request path happens to read, so a
+deployment that is wired for liveness and unwired for traffic reads as what it is.
 
 The Worker serves five routes:
 
@@ -136,7 +141,7 @@ The Worker serves five routes:
 | `ALL /rpc`                     | `OS_SHARED_TOKEN` | The Cap'n Web endpoint the OS deployment talks to.            |
 | `POST /admin/enroll`           | `OS_SHARED_TOKEN` | Re-assert the webhook registration. Also runs hourly on cron. |
 | `POST /admin/retire?actorId=…` | `OS_SHARED_TOKEN` | Offboarding: revoke every key minted for one OS user.         |
-| `GET /health`                  | none              | Liveness, plus whether the configuration and policy compile.  |
+| `GET /health`                  | none              | Green only when every binding is set and the policy compiles. |
 
 `/rpc` is bearer-gated even though the intended path is a Worker service binding, which never
 traverses the internet: a Worker with a route attached is reachable by anyone who finds it, and a
@@ -219,11 +224,17 @@ does inside cat-factory is governed by cat-factory's own merge policy and approv
 
 ## Upgrading
 
-Upgrade this package and `@cat-factory/gatekeeper-bindings` together: the policy compiler checks
-your tier grants against the bindings table, so a policy naming an operation newer than the
-installed table fails with a `PolicyError` telling you to upgrade. The ladder helpers likewise
-throw on a scope rung they do not carry, so a deployment ahead of your packages reads as version
-skew, never as a key with no permissions.
+Upgrade this package. `@cat-factory/gatekeeper-bindings` arrives as its dependency, pinned to an
+exact version, so bumping this package IS how the operation table moves and there is nothing to
+keep in step by hand. Do not add a direct dependency on the bindings to keep them "together": an
+exact pin plus a second range installs a SECOND copy of the table, while policy still compiles
+against the one resolved here. Everything a policy names is re-exported from
+`@cat-factory/gatekeeper-worker/policy`, so a deployment never needs that dependency.
+
+Version skew is reported rather than absorbed. A policy naming an operation newer than the
+installed table fails with a `PolicyError` telling you to upgrade, and the ladder helpers throw on
+a scope rung they do not carry, so a deployment ahead of your packages reads as skew, never as a
+key with no permissions.
 
 ## Tests
 

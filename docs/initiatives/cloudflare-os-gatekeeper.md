@@ -453,6 +453,20 @@ here:
 
 ## Gotchas the pilot surfaced
 
+- **A health route that assembles is not a health route that checks.** `/health` answered
+  `{ ok: true }` off `Gatekeeper.create`, which reads three of the seven bindings, so a Worker with
+  no `OS_SHARED_TOKEN` or `WEBHOOK_SECRET` was green while `/rpc` refused every call and the
+  receiver verified no delivery. The failure is worse than an absent check, because a monitor keyed
+  on it AGREES the deployment is fine. Two rules came out of it: a health check asks the whole
+  configuration rather than whatever the request path it borrows happens to read, and it asks in
+  ONE pass, because an operator who learns the next unset binding only after redeploying wires a
+  deployment one restart at a time. The check is derived from `GatekeeperEnv` through an exhaustive
+  `Record`, so a binding this check would silently pass over fails the build instead.
+- **"Set it in wrangler.toml or with `wrangler secret put`" is a refusal that leaks credentials.**
+  Offered both mechanisms, an operator picks the one that is a file, and the file is committed. The
+  mechanism each binding takes is now a fact stated once (`BINDING_KINDS`) and cited by both
+  READMEs, which had independently drifted into telling operators that the three secrets live in
+  `wrangler.toml`: a documentation error whose worst case is an `admin` API key in a git history.
 - **"Card type" and "decision kind" are two vocabularies, and neither maps onto the other.** A
   `decision_required` notification can be an approval gate or an agent question; `merge_review` maps
   to no `/runs/:runId/decisions` entry at all; a run that parked twice is holding the SECOND park by

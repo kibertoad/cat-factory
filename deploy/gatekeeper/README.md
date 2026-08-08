@@ -26,23 +26,27 @@ a merge against files you have edited, and what a reviewer sees in your reposito
 rather than a fork of somebody else's Worker. What the machinery does, in full, is
 [its README](../../sdk/gatekeeper-worker/README.md).
 
-The short version of what you do with this template: **configure** the six bindings in
-`wrangler.toml` (they name the two deployments and the three secrets), and **customize** the
-policy in `src/policy.config.ts` (it names who may do what). Nothing else in the template is
-meant to be edited.
+The short version of what you do with this template: **configure** the deployment (three vars and
+the Durable Object binding in `wrangler.toml`; the three credentials through
+`wrangler secret put`, never in a file this repository carries), and **customize** the policy in
+`src/policy.config.ts`, together with `test/policy.test.ts`, which pins what that policy grants
+and is meant to move with it. Nothing else in the template is meant to be edited.
 
 ## Configure
 
-Three vars in [`wrangler.toml`](./wrangler.toml) and three secrets:
+Three vars and the Durable Object namespace go in [`wrangler.toml`](./wrangler.toml). The three
+credentials are secrets: they are put into the platform's secret store and belong in no config
+file, which is the point of the split.
 
-| Binding                | Kind   | What it is                                                                    |
-| ---------------------- | ------ | ----------------------------------------------------------------------------- |
-| `CAT_FACTORY_BASE_URL` | var    | The cat-factory deployment this Gatekeeper is paired with.                    |
-| `PUBLIC_URL`           | var    | This Worker's own public origin; deliveries arrive at `<PUBLIC_URL>/webhook`. |
-| `WEBHOOK_ID`           | var    | The outbound-webhook id to enrol under. Keep it stable.                       |
-| `PROVISIONING_KEY`     | secret | An `admin` cat-factory API key. Mints per-actor keys; nothing else.           |
-| `WEBHOOK_SECRET`       | secret | 16-200 chars. Registered with the endpoint and verified on every delivery.    |
-| `OS_SHARED_TOKEN`      | secret | The bearer your Cloudflare OS deployment presents on every RPC call.          |
+| Binding                | Kind           | What it is                                                                    |
+| ---------------------- | -------------- | ----------------------------------------------------------------------------- |
+| `CAT_FACTORY_BASE_URL` | var            | The cat-factory deployment this Gatekeeper is paired with.                    |
+| `PUBLIC_URL`           | var            | This Worker's own public origin; deliveries arrive at `<PUBLIC_URL>/webhook`. |
+| `WEBHOOK_ID`           | var            | The outbound-webhook id to enrol under. Keep it stable.                       |
+| `STATE`                | Durable Object | A namespace bound to `GatekeeperState`: cards, dedupe log, minted keys.       |
+| `PROVISIONING_KEY`     | secret         | An `admin` cat-factory API key. Mints per-actor keys; nothing else.           |
+| `WEBHOOK_SECRET`       | secret         | 16-200 chars. Registered with the endpoint and verified on every delivery.    |
+| `OS_SHARED_TOKEN`      | secret         | The bearer your Cloudflare OS deployment presents on every RPC call.          |
 
 ```sh
 cd deploy/gatekeeper
@@ -53,8 +57,8 @@ pnpm deploy
 curl -X POST -H "Authorization: Bearer $OS_SHARED_TOKEN" https://your-gatekeeper/admin/enroll
 ```
 
-A missing binding is answered as a `503` naming it, never defaulted: there is no safe stand-in for
-a credential or for the identity of the deployment it talks to.
+A missing binding is answered as a `503` naming it and the mechanism it takes, never defaulted:
+there is no safe stand-in for a credential or for the identity of the deployment it talks to.
 
 The Worker serves five routes:
 
@@ -64,7 +68,7 @@ The Worker serves five routes:
 | `ALL /rpc`                     | `OS_SHARED_TOKEN` | The Cap'n Web endpoint your OS deployment talks to.           |
 | `POST /admin/enroll`           | `OS_SHARED_TOKEN` | Re-assert the webhook registration. Also runs hourly on cron. |
 | `POST /admin/retire?actorId=…` | `OS_SHARED_TOKEN` | Offboarding: revoke every key minted for one OS user.         |
-| `GET /health`                  | none              | Liveness, plus whether the configuration and policy compile.  |
+| `GET /health`                  | none              | Green only when every binding is set and the policy compiles. |
 
 `/rpc` is bearer-gated even though the intended path is a Worker service binding, which never
 traverses the internet: a Worker with a route attached is reachable by anyone who finds it, and a
