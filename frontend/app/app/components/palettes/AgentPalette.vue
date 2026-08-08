@@ -17,8 +17,9 @@ defineEmits<{
 }>()
 // The purpose of the pipeline being built, edited right here by the control above the catalog.
 // It narrows the palette to the categories that purpose has any use for (a review pipeline
-// designs nothing and builds nothing, see `purposeSuggestsAgentCategory`); `null` shows all.
-const props = defineProps<{ purpose?: PipelinePurpose | null }>()
+// designs nothing and builds nothing, see `purposeSuggestsAgentCategory`). Required, like the
+// field it edits: a draft is classified from the moment it exists.
+const props = defineProps<{ purpose: PipelinePurpose }>()
 
 // The post-release-health gate is only meaningful — and only accepted by the backend —
 // with an observability integration connected, so it appears in the palette ONLY then.

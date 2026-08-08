@@ -149,12 +149,21 @@ being offered on task blocks.
 The two narrowings run in **opposite directions**, which was a correction made during review rather
 than the first cut. `document` / `review` demand the EXPLICIT classifier, because a build pipeline on
 a document task is actively wrong. `feature`/`bug` only EXCLUDE `document` / `review` / `planning`,
-because `purpose` is optional at every write boundary: the builder's dropdown starts unset
-(`draftPurpose = null`) and the create request omits it, and a `PipelineRegistry` entry need not
+because a pipeline could reach the picker unclassified: the builder's dropdown started unset
+(`draftPurpose = null`), the create request omitted it, and a `PipelineRegistry` entry need not
 declare one. Requiring the classifier there would have hidden every workspace's own hand-built
 pipelines from the picker they were built for, silently, with nothing on screen to explain it. The
-kernel guard that every BUILT-IN declares a purpose is what the document/review half leans on; it
+kernel guard that every BUILT-IN declares a purpose is what the document/review half leaned on; it
 never covered the pipelines actually at risk.
+
+**`Pipeline.purpose` is mandatory as of the library-narrowing change**, so that write-boundary hole
+is closed at each of the three producers rather than absorbed by the readers: the entity and the
+create request require it, `definePipeline` and therefore every `PipelineRegistry` entry require it
+at compile time, and the shared `rowToPipeline` resolves a pre-mandatory NULL column to `build` (the
+classifier such a row already behaved as). The asymmetry above SURVIVES, drawn now on the one thing
+still open: a stored classifier this build cannot NAME, which the persisted closed vocabulary makes
+reachable in both directions. `document` / `review` hide it; `feature`/`bug` keep it, for exactly
+the reason they kept an unclassified pipeline.
 
 Both predicates are composed at every manual-start picker: the add-task modal, the focus view's Run
 menu, the inspector's Run menu and the task's default-pipeline setting. All four, not the two the

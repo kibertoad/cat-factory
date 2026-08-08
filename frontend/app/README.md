@@ -277,6 +277,12 @@ one dial narrows both ends of the slideover. The purpose is not a view preferenc
 saved on the pipeline and also decides which task pickers offer it, which is why the control
 writes through to the draft while the tier writes to its own store.
 
+`Pipeline.purpose` is MANDATORY, so there is no unclassified state for any of these surfaces to
+invent a policy for: a new draft starts at `build` (what an unclassified pipeline always behaved
+as) and the dial only moves it. What each surface still has to read carefully is a purpose the
+BUNDLE cannot name, which the persisted, closed vocabulary makes reachable in both directions (a
+browser older than a new member, a row older than a retired one).
+
 Purpose is filtered by three predicates in `@cat-factory/contracts`, and the difference between
 the first two is the point:
 
@@ -290,10 +296,15 @@ the first two is the point:
   reduced with the label and archive dials in `utils/pipelineLibrary.ts`. The one dial in that
   column whose control is elsewhere, so it is the one that owes a "n hidden" hint. It may be
   exact where the pickers' `pipelineAllowedForTaskType` is permissive, because it narrows a list
-  somebody is BROWSING rather than one they are about to run from: two purposes never mix, but a
-  pipeline carrying no purpose is listed at every purpose, since `purpose` is optional at every
-  write boundary and hiding one would take a workspace's own hand-built pipelines out of the
-  library they were built in.
+  somebody is BROWSING rather than one they are about to run from: two known purposes never mix,
+  while a pipeline whose classifier this build cannot NAME is listed at every purpose rather than
+  vanishing from the editor that has to fix it.
+
+The library's purpose is a BROWSING dial of its own, defaulting to the draft's and relaxed by the
+hint itself ("show every purpose"). Reading the draft directly is the trap: it is an authoring
+field with no "off" setting, so a hint that only NAMES the absence would send the reader to a
+control whose every setting narrows and whose every change is saved. A dial that hides rows owes
+both a count and a way back, and the way back may not be an edit.
 
 Relevance is a subset of compatibility, asserted over the whole grid in `pipeline.spec.ts`. Keep
 it that way: the palette may hide what the save gate tolerates, so tightening the relevance table

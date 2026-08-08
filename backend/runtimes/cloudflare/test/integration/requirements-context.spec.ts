@@ -82,6 +82,7 @@ describe('reworked requirements as agent context', () => {
 
     const pipeline = await app.call<{ id: string }>('POST', `/workspaces/${ws}/pipelines`, {
       name: 'Build',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     await app.call('POST', `/workspaces/${ws}/blocks/${task.body.id}/executions`, {
@@ -127,6 +128,7 @@ describe('reworked requirements as agent context', () => {
 
     const pipeline = await app.call<{ id: string }>('POST', `/workspaces/${ws}/pipelines`, {
       name: 'Spec',
+      purpose: 'build',
       agentKinds: ['spec-writer'],
     })
     await app.call('POST', `/workspaces/${ws}/blocks/${task.body.id}/executions`, {

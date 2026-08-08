@@ -4213,7 +4213,6 @@
       "strategy": "Strategie",
       "rounds": "Runden",
       "purposeLabel": "Zweck",
-      "purposePlaceholder": "Zweck auswählen",
       "purposeUnrecognized": "Nicht erkannt ({purpose})",
       "purposeOption": {
         "build": "Entwicklung",
@@ -4233,6 +4232,9 @@
       "addParticipant": "Teilnehmer hinzufügen",
       "savedPipelines": "Gespeicherte Pipelines",
       "purposeHiddenPipelines": "{count} gespeicherte Pipeline ist für diesen Zweck ausgeblendet. | {count} gespeicherte Pipelines sind für diesen Zweck ausgeblendet.",
+      "everyPurposeListed": "Gespeicherte Pipelines aller Zwecke werden aufgelistet.",
+      "listEveryPurpose": "Alle Zwecke anzeigen",
+      "narrowToDraftPurpose": "Auf diesen Zweck eingrenzen",
       "hideArchived": "Archivierte ausblenden",
       "archivedCount": "Archiviert ({count})",
       "allLabels": "Alle",

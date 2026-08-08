@@ -53,6 +53,7 @@ export function defineValidationChecksConformance(harness: ConformanceHarness): 
       (
         await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Build only',
+          purpose: 'build',
           agentKinds: ['coder'],
         })
       ).body

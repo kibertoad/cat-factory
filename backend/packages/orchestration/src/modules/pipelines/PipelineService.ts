@@ -241,7 +241,7 @@ export class PipelineService {
       ...alignedStepOptions(input.agentKinds, input.stepOptions),
       ...normalizedLabels(input.labels),
       ...(input.availability ? { availability: input.availability } : {}),
-      ...(input.purpose ? { purpose: input.purpose } : {}),
+      purpose: input.purpose,
     }
     await this.pipelineRepository.insert(workspaceId, pipeline)
     return pipeline
@@ -297,7 +297,7 @@ export class PipelineService {
       ...(source.availability ? { availability: source.availability } : {}),
       // The use-case classifier is a property of the pipeline's shape, so a clone inherits it
       // (a cloned document pipeline stays a document pipeline).
-      ...(source.purpose ? { purpose: source.purpose } : {}),
+      purpose: source.purpose,
       // A clone is a fresh, active, editable copy — never `builtin`, never `archived`.
     }
     await this.pipelineRepository.insert(workspaceId, pipeline)
@@ -415,7 +415,7 @@ export class PipelineService {
       ...alignedStepOptions(agentKinds, stepOptions),
       ...normalizedLabels(labels),
       ...(availability ? { availability } : {}),
-      ...(purpose ? { purpose } : {}),
+      purpose,
       // `archived` is organization-only state, mutated via `organize` — preserved here.
       ...(existing.archived ? { archived: true } : {}),
     }

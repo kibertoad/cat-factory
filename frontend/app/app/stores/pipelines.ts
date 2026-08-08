@@ -70,11 +70,15 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   const draftLabels = ref<string[]>([])
   /**
    * The use-case classifier of the pipeline being assembled/edited (`build` / `document` /
-   * `review` / `research` / `planning`), or null when unclassified. Drives which task pickers
-   * offer the saved pipeline and which agent kinds the builder palette shows (a non-`build`
-   * purpose hides the Implementation/Testing kinds).
+   * `review` / `research` / `planning`). Drives which task pickers offer the saved pipeline, which
+   * agent kinds the builder palette shows (a non-`build` purpose hides the Implementation/Testing
+   * kinds) and which saved pipelines the library lists.
+   *
+   * Never null: `Pipeline.purpose` is mandatory, so a draft is classified from the moment it
+   * exists. `build` is the default because it is what an unclassified pipeline has always behaved
+   * as, so the dial starts where the old absence pointed rather than at a choice nobody made.
    */
-  const draftPurpose = ref<PipelinePurpose | null>(null)
+  const draftPurpose = ref<PipelinePurpose>('build')
   const draftName = ref('New pipeline')
   /** Prose description for the pipeline being assembled/edited (shown in the pickers). */
   const draftDescription = ref('')

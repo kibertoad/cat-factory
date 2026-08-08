@@ -4213,7 +4213,6 @@
       "strategy": "Strategia",
       "rounds": "Giri",
       "purposeLabel": "Scopo",
-      "purposePlaceholder": "Seleziona uno scopo",
       "purposeUnrecognized": "Non riconosciuto ({purpose})",
       "purposeOption": {
         "build": "Sviluppo",
@@ -4233,6 +4232,9 @@
       "addParticipant": "Aggiungi partecipante",
       "savedPipelines": "Pipeline salvate",
       "purposeHiddenPipelines": "{count} pipeline salvata nascosta per questo scopo. | {count} pipeline salvate nascoste per questo scopo.",
+      "everyPurposeListed": "Sono elencate le pipeline salvate di ogni scopo.",
+      "listEveryPurpose": "Mostra tutti gli scopi",
+      "narrowToDraftPurpose": "Limita a questo scopo",
       "hideArchived": "Nascondi archiviate",
       "archivedCount": "Archiviate ({count})",
       "allLabels": "Tutte",

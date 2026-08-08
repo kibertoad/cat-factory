@@ -28,7 +28,6 @@ import {
   issueIntakeConfigSchema,
   notificationTypeSchema,
   parseStoredAgentFailure,
-  pipelinePurposeSchema,
   priorStepOutputSchema,
   resolvedFrontendBindingSchema,
   runDiagnosticsSchema,
@@ -340,15 +339,26 @@ function readOptScalar(prop: string, column = toSnake(prop)): RowReader {
 }
 
 /**
- * An optional enum column surfaced only when the stored value is a valid member of `schema`,
- * else left absent — a corrupt or pre-classifier legacy value reads as unset (e.g. an
- * unclassified `purpose`) rather than leaking an invalid enum onto the wire. Lenient by design:
- * an unrecognized value is a valid "absent" state here, so it is dropped, not thrown on.
+ * A REQUIRED classifier column whose stored value this build may not be able to name.
+ *
+ * The two states are read differently on purpose, because they are different facts:
+ *
+ *  - EMPTY (NULL / `''`) is a row written before the field was mandatory, and it resolves to
+ *    `fallback`. Not a guess: `fallback` is the classifier such a row has always BEHAVED as, so
+ *    the resolution is byte-for-byte the prior behaviour rather than a new opinion about it. It is
+ *    resolved HERE rather than by a back-fill migration because it has to be anyway — a node one
+ *    build behind still writes NULL after any sweep, and no query filters on the column — and one
+ *    rule in one place beats the same rule in three (a mapper, a D1 migration, a Drizzle one).
+ *  - A value the schema does not recognise PASSES THROUGH unchanged, because it is a member this
+ *    build cannot name rather than a value that was never set, and the two must not render the
+ *    same. Dropping it would erase a deployment's own classifier on the next write; folding it
+ *    onto `fallback` would state a classification nobody chose. The readers narrow it themselves
+ *    (`isPipelinePurpose` / `classifierFor`) and the SPA quotes it back to the user by name.
  */
-function readOptEnum(prop: string, schema: GenericSchema, column = toSnake(prop)): RowReader {
+function readClassifier(prop: string, fallback: string, column = toSnake(prop)): RowReader {
   return (row, out) => {
     const value = row[column]
-    if (value != null && value !== '' && is(schema, value)) out[prop] = value
+    out[prop] = value == null || value === '' ? fallback : value
   }
 }
 
@@ -690,7 +700,9 @@ export interface PipelineRow {
   availability?: string | null
   /**
    * The pipeline's use-case classifier: `'build'` / `'document'` / `'review'` / `'research'` /
-   * `'planning'` (migration 0056_pipeline_purpose). NULL/absent ⇒ unclassified.
+   * `'planning'` (migration 0056_pipeline_purpose). The COLUMN stays nullable while the domain
+   * field is mandatory: a row written before the classifier was required carries NULL, and
+   * {@link readClassifier} is where that is resolved.
    */
   purpose?: string | null
 }
@@ -717,7 +729,9 @@ const pipelineReader = makeRowReader<PipelineRow, Pipeline>([
   readOptScalar('version'),
   readFlag('public'),
   readOptScalar('availability'),
-  readOptEnum('purpose', pipelinePurposeSchema),
+  // `purpose` is mandatory on the entity, so this read must be TOTAL: see {@link readClassifier}
+  // for why an empty column resolves to `build` while an unnameable member passes through.
+  readClassifier('purpose', 'build'),
 ])
 
 export function rowToPipeline(row: PipelineRow): Pipeline {

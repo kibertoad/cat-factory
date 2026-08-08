@@ -107,6 +107,7 @@ export function defineJudgeConformance(harness: ConformanceHarness): void {
       const { workspace } = await app.createWorkspace()
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${workspace.id}/pipelines`, {
         name: 'Build + scope judge',
+        purpose: 'build',
         agentKinds: ['coder', 'scope-judge'],
       })
       const start = await app.call(
@@ -147,6 +148,7 @@ export function defineJudgeConformance(harness: ConformanceHarness): void {
       const { workspace } = await app.createWorkspace()
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${workspace.id}/pipelines`, {
         name: 'Build + scope judge',
+        purpose: 'build',
         agentKinds: ['coder', 'scope-judge'],
       })
       await app.call('POST', `/workspaces/${workspace.id}/blocks/task_login/executions`, {
@@ -184,6 +186,7 @@ export function defineJudgeConformance(harness: ConformanceHarness): void {
       const { workspace } = await app.createWorkspace()
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${workspace.id}/pipelines`, {
         name: 'Build + scope judge',
+        purpose: 'build',
         agentKinds: ['coder', 'scope-judge'],
       })
       await app.call('POST', `/workspaces/${workspace.id}/blocks/task_login/executions`, {
@@ -214,6 +217,7 @@ export function defineJudgeConformance(harness: ConformanceHarness): void {
       const { workspace } = await app.createWorkspace()
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${workspace.id}/pipelines`, {
         name: 'Build + scope judge',
+        purpose: 'build',
         agentKinds: ['coder', 'scope-judge'],
       })
       await app.call('POST', `/workspaces/${workspace.id}/blocks/task_login/executions`, {
@@ -235,6 +239,7 @@ export function defineJudgeConformance(harness: ConformanceHarness): void {
       const { workspace } = await app.createWorkspace()
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${workspace.id}/pipelines`, {
         name: 'Build + scope judge',
+        purpose: 'build',
         agentKinds: ['coder', 'scope-judge'],
       })
       await app.call('POST', `/workspaces/${workspace.id}/blocks/task_login/executions`, {

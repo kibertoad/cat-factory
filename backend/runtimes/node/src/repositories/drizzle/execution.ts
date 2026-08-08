@@ -88,7 +88,7 @@ function pipelineValues(workspaceId: string, pipeline: Pipeline) {
     version: pipeline.version ?? null,
     public: pipeline.public ? 1 : null,
     availability: pipeline.availability ?? null,
-    purpose: pipeline.purpose ?? null,
+    purpose: pipeline.purpose,
   }
 }
 
@@ -152,7 +152,7 @@ export class DrizzlePipelineRepository implements PipelineRepository {
         version: pipeline.version ?? null,
         public: pipeline.public ? 1 : null,
         availability: pipeline.availability ?? null,
-        purpose: pipeline.purpose ?? null,
+        purpose: pipeline.purpose,
       })
       .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, pipeline.id)))
   }

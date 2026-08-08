@@ -4652,7 +4652,6 @@
       "strategy": "Stratégie",
       "rounds": "Tours",
       "purposeLabel": "Objectif",
-      "purposePlaceholder": "Sélectionner un objectif",
       "purposeUnrecognized": "Non reconnu ({purpose})",
       "purposeOption": {
         "build": "Développement",
@@ -4672,6 +4671,9 @@
       "addParticipant": "Ajouter un participant",
       "savedPipelines": "Pipelines enregistrés",
       "purposeHiddenPipelines": "{count} pipeline enregistré masqué pour cet objectif. | {count} pipelines enregistrés masqués pour cet objectif.",
+      "everyPurposeListed": "Les pipelines enregistrés de tous les objectifs sont affichés.",
+      "listEveryPurpose": "Afficher tous les objectifs",
+      "narrowToDraftPurpose": "Limiter à cet objectif",
       "hideArchived": "Masquer les archivés",
       "archivedCount": "Archivés ({count})",
       "allLabels": "Toutes",

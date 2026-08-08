@@ -4652,7 +4652,6 @@
       "strategy": "Strategia",
       "rounds": "Rundy",
       "purposeLabel": "Cel",
-      "purposePlaceholder": "Wybierz cel",
       "purposeUnrecognized": "Nierozpoznany ({purpose})",
       "purposeOption": {
         "build": "Programowanie",
@@ -4672,6 +4671,9 @@
       "addParticipant": "Dodaj uczestnika",
       "savedPipelines": "Zapisane pipeline'y",
       "purposeHiddenPipelines": "{count} zapisany pipeline ukryty dla tego celu. | {count} zapisane pipeline'y ukryte dla tego celu. | {count} zapisanych pipeline'ów ukrytych dla tego celu.",
+      "everyPurposeListed": "Wyświetlane są zapisane pipeline'y wszystkich celów.",
+      "listEveryPurpose": "Pokaż wszystkie cele",
+      "narrowToDraftPurpose": "Zawęź do tego celu",
       "hideArchived": "Ukryj zarchiwizowane",
       "archivedCount": "Zarchiwizowane ({count})",
       "allLabels": "Wszystkie",

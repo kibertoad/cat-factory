@@ -5,29 +5,32 @@ import { narrowPipelineLibrary } from '~/utils/pipelineLibrary'
 
 type Row = Pick<Pipeline, 'purpose' | 'labels' | 'archived'> & { id: string }
 
-const row = (id: string, purpose?: Pipeline['purpose'], extra: Partial<Row> = {}): Row => ({
+const row = (id: string, purpose: Pipeline['purpose'], extra: Partial<Row> = {}): Row => ({
   id,
-  ...(purpose ? { purpose } : {}),
+  purpose,
   ...extra,
 })
 
 // A purpose this build has no member for: what a row saved by a newer build (or before a member
-// was retired) looks like on the way back out of the store.
+// was retired) looks like on the way back out of the store. Reachable even though the field is
+// mandatory, which is the whole reason the predicates still narrow the value they are handed.
 const UNKNOWN_PURPOSE = 'acme-migration' as Pipeline['purpose']
 
-// Spread across all three dials, so the purpose count cannot come out right by coincidence: an
-// archived row and a differently-labelled row are excluded by the OTHER two either way.
+// Spread across all three dials, so neither count can come out right by coincidence: an archived
+// row and a differently-labelled row are excluded by the OTHER dials either way.
 const LIBRARY: Row[] = [
   row('build-a', 'build'),
   row('build-archived', 'build', { archived: true }),
   row('review-a', 'review'),
   row('review-tagged', 'review', { labels: ['nightly'] }),
+  row('review-archived-tagged', 'review', { archived: true, labels: ['nightly'] }),
   row('document-tagged', 'document', { labels: ['nightly'] }),
-  row('unclassified', undefined),
 ]
 
 describe('narrowPipelineLibrary', () => {
-  it('lists the whole library while the draft is unclassified', () => {
+  it('lists every purpose when the library is browsed at none', () => {
+    // `null` is the library's own relaxation, not an unclassified draft: `Pipeline.purpose` is
+    // mandatory, so the reader asking to browse past the purpose is the only way to get here.
     const { offered, hiddenByPurpose } = narrowPipelineLibrary(LIBRARY, {
       purpose: null,
       showArchived: true,
@@ -36,20 +39,17 @@ describe('narrowPipelineLibrary', () => {
     expect(hiddenByPurpose).toBe(0)
   })
 
-  it('lists the pipelines built for the purpose being edited, plus the unclassified ones', () => {
-    // An unclassified pipeline is not known-wrong for any purpose, and `purpose` is optional at
-    // every write boundary, so hiding one would take a workspace's own hand-built pipelines out of
-    // the library they were built in.
+  it('lists the pipelines built for the purpose being browsed at', () => {
     const { offered, hiddenByPurpose } = narrowPipelineLibrary(LIBRARY, { purpose: 'review' })
-    expect(offered.map((p) => p.id)).toEqual(['review-a', 'review-tagged', 'unclassified'])
+    expect(offered.map((p) => p.id)).toEqual(['review-a', 'review-tagged'])
     // `build-archived` is hidden by the archive toggle either way, so the purpose does not claim it.
     expect(hiddenByPurpose).toBe(2)
   })
 
   it('measures the purpose count against what the other dials already admit', () => {
     // The rule `narrowAgentPalette` established: each hint promises "relax THIS dial alone and you
-    // get n more". Counting over the whole library would name `document-tagged` here, which the
-    // label filter hides at every purpose.
+    // get n more". Counting over the whole library would name `build-a` here, which the label
+    // filter hides at every purpose.
     const { offered, hiddenByPurpose } = narrowPipelineLibrary(LIBRARY, {
       purpose: 'review',
       label: 'nightly',
@@ -58,16 +58,28 @@ describe('narrowPipelineLibrary', () => {
     expect(hiddenByPurpose).toBe(1)
   })
 
-  it('keeps the archive and label dials working on their own', () => {
+  it('counts the archived rows the OTHER dials admit, not the whole catalog', () => {
+    // The count the "Archived (n)" toggle renders. Against the raw catalog it would promise rows
+    // the toggle cannot reveal: two pipelines are archived, but only one of them is a `review` one.
+    expect(narrowPipelineLibrary(LIBRARY, { purpose: 'review' }).archivedInScope).toBe(1)
+    expect(narrowPipelineLibrary(LIBRARY, { purpose: 'planning' }).archivedInScope).toBe(0)
+    expect(narrowPipelineLibrary(LIBRARY, { purpose: null }).archivedInScope).toBe(2)
     expect(
-      narrowPipelineLibrary(LIBRARY, { purpose: 'build', showArchived: true }).offered.map(
-        (p) => p.id,
-      ),
-    ).toEqual(['build-a', 'build-archived', 'unclassified'])
-    expect(narrowPipelineLibrary(LIBRARY, { purpose: 'build' }).offered.map((p) => p.id)).toEqual([
-      'build-a',
-      'unclassified',
+      narrowPipelineLibrary(LIBRARY, { purpose: null, label: 'nightly' }).archivedInScope,
+    ).toBe(1)
+  })
+
+  it('keeps the archived count steady across the toggle it governs', () => {
+    // Unlike `hiddenByPurpose`, this one may NOT drop to zero once the dial is relaxed: it decides
+    // whether the toggle is offered at all, so a count that vanished when the toggle worked would
+    // strand the archived rows visible with no way to hide them again.
+    const shown = narrowPipelineLibrary(LIBRARY, { purpose: 'review', showArchived: true })
+    expect(shown.offered.map((p) => p.id)).toEqual([
+      'review-a',
+      'review-tagged',
+      'review-archived-tagged',
     ])
+    expect(shown.archivedInScope).toBe(1)
   })
 
   it('narrows by neither purpose this build cannot name', () => {
@@ -83,6 +95,7 @@ describe('narrowPipelineLibrary', () => {
     expect(narrowPipelineLibrary(stored, { purpose: UNKNOWN_PURPOSE })).toEqual({
       offered: stored.filter((p) => !p.archived),
       hiddenByPurpose: 0,
+      archivedInScope: 2,
     })
   })
 })

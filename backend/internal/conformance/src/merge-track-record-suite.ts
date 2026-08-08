@@ -160,6 +160,7 @@ export function defineMergeTrackRecordSuite(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build + merger',
+        purpose: 'build',
         agentKinds: ['coder', 'merger'],
       })
       const start = await app.call<ExecutionInstance>(
@@ -485,6 +486,7 @@ function registerMergeClassFallbackTests(
     })
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Build + merger',
+      purpose: 'build',
       agentKinds: ['coder', 'merger'],
     })
     await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -528,6 +530,7 @@ function registerMergeClassFallbackTests(
     const wsId = workspace.id
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Build + merger',
+      purpose: 'build',
       agentKinds: ['coder', 'merger'],
     })
     // Two DIFFERENT seeded tasks, so one workspace accumulates two different classes.
@@ -825,7 +828,7 @@ function registerSubmissionAllowlistTests(harness: ConformanceHarness): void {
     const pipeline = await app.call<Pipeline>(
       'POST',
       `/workspaces/${wsId}/pipelines`,
-      { name: 'Build + merger', agentKinds: ['coder', 'merger'] },
+      { name: 'Build + merger', purpose: 'build', agentKinds: ['coder', 'merger'] },
       adminAuth,
     )
     const start = await app.call<ExecutionInstance>(
@@ -1094,6 +1097,7 @@ function registerPublicMergeEvidenceTests(driveMergerRun: MergerRunDriver): void
       // rather than `done`, so starting it is a 409 about ordering and not about this assertion.
       const coderOnly = await run.app.call<Pipeline>('POST', `/workspaces/${run.wsId}/pipelines`, {
         name: 'Coder only',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const task = await run.app.call<{ id: string }>(

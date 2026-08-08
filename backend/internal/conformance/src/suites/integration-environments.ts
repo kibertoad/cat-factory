@@ -75,6 +75,7 @@ function registerDisposerTests(harness: ConformanceHarness): void {
     expect(registered.status).toBe(201)
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Deploy then dispose',
+      purpose: 'build',
       agentKinds: ['deployer', 'disposer'],
     })
     await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -507,6 +508,7 @@ function registerInfraHandlerTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Deploy only',
+      purpose: 'build',
       agentKinds: ['deployer'],
     })
     const start = await app.call<ExecutionInstance>(
@@ -565,6 +567,7 @@ function registerInfraHandlerTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Deploy + test',
+      purpose: 'build',
       agentKinds: ['deployer', 'tester-api'],
     })
     const start = await app.call<ExecutionInstance>(
@@ -1252,6 +1255,7 @@ function registerDeployLifecycleTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Deploy only',
+      purpose: 'build',
       agentKinds: ['deployer'],
     })
     const start = await app.call<ExecutionInstance>(
@@ -1384,6 +1388,7 @@ function registerDeployLifecycleTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Deploy only',
+      purpose: 'build',
       agentKinds: ['deployer'],
     })
     const start = await app.call<ExecutionInstance>(

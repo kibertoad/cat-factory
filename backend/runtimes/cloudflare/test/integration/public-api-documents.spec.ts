@@ -129,6 +129,7 @@ describe('public API: creating a task WITH requirements documents', () => {
       `/workspaces/${workspaceId}/pipelines`,
       {
         name: 'Build',
+        purpose: 'build',
         agentKinds: ['coder'],
       },
     )

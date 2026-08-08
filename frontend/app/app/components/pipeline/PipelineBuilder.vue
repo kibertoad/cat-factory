@@ -404,14 +404,21 @@ const showArchived = ref(false)
 const allLabels = computed(() =>
   [...new Set(pipelines.pipelines.flatMap((p) => p.labels ?? []))].sort(),
 )
-const archivedCount = computed(() => pipelines.pipelines.filter((p) => p.archived).length)
-// The library is narrowed by the same purpose dial the palette is: browsing at `review` lists the
+// The library is narrowed by the same purpose the palette is: browsing at `review` lists the
 // pipelines built for reviewing, not the whole workspace catalog. `narrowPipelineLibrary` owns the
-// reduction so the rule is unit-testable and the "n hidden" hint counts the population the purpose
-// control can actually reveal, rather than the rows the label filter is hiding either way.
+// reduction so the rule is unit-testable and each hint counts the population its own control can
+// actually reveal, rather than the rows another dial is hiding either way.
+//
+// It is a BROWSING dial of its own, not a read of `draftPurpose`. The draft's purpose is an
+// authoring field with no "unclassified" setting, so keying the library straight off it would
+// leave the only ways back through the hidden rows a re-classification of the pipeline being
+// edited (which persists) or discarding the draft. This ref is what "relax THIS dial alone" means
+// for the purpose: it defaults to following the draft and the hint below toggles it, changing what
+// is listed and nothing that gets saved.
+const browseEveryPurpose = ref(false)
 const library = computed(() =>
   narrowPipelineLibrary(pipelines.pipelines, {
-    purpose: pipelines.draftPurpose,
+    purpose: browseEveryPurpose.value ? null : pipelines.draftPurpose,
     label: labelFilter.value,
     showArchived: showArchived.value,
   }),
@@ -1137,7 +1144,7 @@ async function clone(p: Pipeline) {
               {{ t('pipeline.builder.savedPipelines') }}
             </h3>
             <UButton
-              v-if="archivedCount"
+              v-if="library.archivedInScope"
               :icon="showArchived ? 'i-lucide-archive-restore' : 'i-lucide-archive'"
               :color="showArchived ? 'primary' : 'neutral'"
               variant="ghost"
@@ -1151,7 +1158,7 @@ async function clone(p: Pipeline) {
               {{
                 showArchived
                   ? t('pipeline.builder.hideArchived')
-                  : t('pipeline.builder.archivedCount', { count: archivedCount })
+                  : t('pipeline.builder.archivedCount', { count: library.archivedInScope })
               }}
             </UButton>
           </div>
@@ -1180,18 +1187,39 @@ async function clone(p: Pipeline) {
             </UBadge>
           </div>
 
-          <!-- What the purpose dial (one column left, above the palette) is holding back. Stated
-               here rather than beside the control because this is where the absence is noticed:
-               a narrowed library must never read as the whole one. -->
-          <p v-if="library.hiddenByPurpose" class="mb-2 shrink-0 px-1 text-[10px] text-slate-500">
-            {{
-              t(
-                'pipeline.builder.purposeHiddenPipelines',
-                { count: library.hiddenByPurpose },
-                library.hiddenByPurpose,
-              )
-            }}
-          </p>
+          <!-- What the purpose is holding back, and the way past it. Stated here rather than
+               beside the palette's purpose control because this is where the absence is noticed:
+               a narrowed library must never read as the whole one, and a hint that only NAMES an
+               absence sends the reader to the authoring dial one column left, whose every setting
+               narrows and whose every change is saved. -->
+          <div
+            v-if="browseEveryPurpose || library.hiddenByPurpose"
+            class="mb-2 flex shrink-0 flex-wrap items-center gap-x-2 px-1 text-[10px] text-slate-500"
+          >
+            <span>
+              {{
+                browseEveryPurpose
+                  ? t('pipeline.builder.everyPurposeListed')
+                  : t(
+                      'pipeline.builder.purposeHiddenPipelines',
+                      { count: library.hiddenByPurpose },
+                      library.hiddenByPurpose,
+                    )
+              }}
+            </span>
+            <button
+              type="button"
+              class="underline underline-offset-2 hover:text-slate-300"
+              data-testid="pipeline-library-purpose-toggle"
+              @click="browseEveryPurpose = !browseEveryPurpose"
+            >
+              {{
+                browseEveryPurpose
+                  ? t('pipeline.builder.narrowToDraftPurpose')
+                  : t('pipeline.builder.listEveryPurpose')
+              }}
+            </button>
+          </div>
 
           <ul class="flex-1 space-y-1.5 pe-1 lg:min-h-0 lg:overflow-y-auto">
             <li

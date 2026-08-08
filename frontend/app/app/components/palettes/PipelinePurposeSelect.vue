@@ -13,8 +13,8 @@ import { isPipelinePurpose, PIPELINE_PURPOSES, type PipelinePurpose } from '@cat
 const { t } = useI18n()
 
 const props = defineProps<{
-  /** The draft's purpose. `null` = unclassified, which narrows nothing. */
-  purpose?: PipelinePurpose | null
+  /** The draft's purpose. Required: every pipeline carries one, the builder's default being `build`. */
+  purpose: PipelinePurpose
   /** How many agent kinds the current purpose hides. Renders the "n hidden" hint when > 0. */
   hiddenCount?: number
 }>()
@@ -31,19 +31,15 @@ const PURPOSE_LABELS = computed<Record<PipelinePurpose, string>>(() => ({
   planning: t('pipeline.builder.purposeOption.planning'),
 }))
 
-// The button text: the chosen purpose, or the placeholder while the draft carries none. An
-// unclassified draft reads as an unmade choice rather than as a purpose called "none", because
-// that is what it is: nothing is filtered until one is picked.
-//
-// A stored purpose this build has no label for is NAMED as unrecognised and quoted back, not
-// folded into the placeholder and not left to render as an empty string after the colon. It is
-// the one state the user cannot diagnose from the control: the palette is unfiltered (see
-// `purposeSuggestsAgentCategory`), so a blank label would read as a pipeline nobody classified
-// while the saved row says otherwise. The menu still lists every current member, so naming the
-// value is also the way out of it.
+// The button text. A stored purpose this build has no label for is NAMED as unrecognised and
+// quoted back, rather than left to render as an empty string after the colon: it is the one state
+// the user cannot diagnose from the control, because a purpose this bundle cannot name narrows
+// nothing (see `purposeSuggestsAgentCategory`), so a blank label would read as a pipeline nobody
+// classified while the saved row says otherwise. The menu still lists every member this build has,
+// so naming the value is also the way out of it. Reachable even though the field is mandatory: the
+// value is persisted and this bundle can be older than the member it reads.
 const current = computed(() => {
   const purpose = props.purpose
-  if (!purpose) return t('pipeline.builder.purposePlaceholder')
   if (!isPipelinePurpose(purpose)) return t('pipeline.builder.purposeUnrecognized', { purpose })
   return PURPOSE_LABELS.value[purpose]
 })

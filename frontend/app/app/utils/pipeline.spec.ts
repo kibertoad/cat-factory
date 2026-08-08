@@ -74,16 +74,19 @@ describe('pipelineAllowedForTaskType', () => {
     expect(pipelineAllowedForTaskType(pipeline({ purpose: 'document' }), 'document')).toBe(true)
     expect(pipelineAllowedForTaskType(pipeline({ purpose: 'build' }), 'document')).toBe(false)
     expect(pipelineAllowedForTaskType(pipeline({ purpose: 'research' }), 'document')).toBe(false)
-    // An unclassified pipeline is hidden from a document task (it requires the explicit classifier).
-    expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), 'document')).toBe(false)
+    // A classifier this build cannot NAME is hidden too: this narrowing requires the explicit
+    // member, because a non-document pipeline on a document task authors no document at all.
+    expect(pipelineAllowedForTaskType(pipeline({ purpose: UNKNOWN_PURPOSE }), 'document')).toBe(
+      false,
+    )
   })
 
   it('a review task offers ONLY review-purpose pipelines', () => {
     expect(pipelineAllowedForTaskType(pipeline({ purpose: 'review' }), 'review')).toBe(true)
     expect(pipelineAllowedForTaskType(pipeline({ purpose: 'build' }), 'review')).toBe(false)
     expect(pipelineAllowedForTaskType(pipeline({ purpose: 'document' }), 'review')).toBe(false)
-    // An unclassified pipeline is hidden from a review task (it requires the explicit classifier).
-    expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), 'review')).toBe(false)
+    // Same disposition as the document task's, for the same reason.
+    expect(pipelineAllowedForTaskType(pipeline({ purpose: UNKNOWN_PURPOSE }), 'review')).toBe(false)
   })
 
   it('a programmatic task (feature / bug) hides only what cannot ship code', () => {
@@ -99,26 +102,27 @@ describe('pipelineAllowedForTaskType', () => {
     }
   })
 
-  it('keeps an UNCLASSIFIED pipeline on a feature / bug task', () => {
-    // The one place this narrowing runs opposite to the document/review one, and it has to: a
-    // `purpose` is optional at every write boundary (the builder leaves it unset by default, a
-    // registered deployment pipeline need not declare one), so requiring it here would hide a
-    // workspace's own hand-built pipelines from the picker they were built for — silently, with
-    // nothing on screen to explain the absence. Unclassified is not known-wrong for a feature the
-    // way a document preset is.
+  it('keeps a pipeline whose classifier this build cannot name on a feature / bug task', () => {
+    // The one place this narrowing runs opposite to the document/review one, and it has to. The
+    // value is persisted, so a deployment's own classifier (or one retired since the row was
+    // written) reaches a bundle with no member for it — and hiding it would take that pipeline out
+    // of the picker people use most, silently, with nothing on screen to explain the absence. It is
+    // not known-wrong for a feature the way a document preset is.
     for (const type of ['feature', 'bug'] as const) {
-      expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), type)).toBe(true)
+      expect(pipelineAllowedForTaskType(pipeline({ purpose: UNKNOWN_PURPOSE }), type)).toBe(true)
     }
-    // Still hidden from the types whose narrowing DOES demand the explicit classifier.
-    expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), 'document')).toBe(false)
-    expect(pipelineAllowedForTaskType(pipeline({ purpose: undefined }), 'review')).toBe(false)
+    // Still hidden from the types whose narrowing DOES demand the explicit member.
+    expect(pipelineAllowedForTaskType(pipeline({ purpose: UNKNOWN_PURPOSE }), 'document')).toBe(
+      false,
+    )
+    expect(pipelineAllowedForTaskType(pipeline({ purpose: UNKNOWN_PURPOSE }), 'review')).toBe(false)
   })
 
   it('an un-narrowed task type stays unrestricted (spike, ralph, custom, undefined)', () => {
     // A custom (namespaced) deployment type has no purpose mapping we could infer, and `spike` /
     // `ralph` pin their own default pipeline instead of narrowing the picker.
     for (const type of ['spike', 'ralph', 'acme:incident', undefined] as const) {
-      for (const purpose of ['build', 'document', 'review', 'research', undefined] as const) {
+      for (const purpose of ['build', 'document', 'review', 'research'] as const) {
         expect(pipelineAllowedForTaskType(pipeline({ purpose }), type)).toBe(true)
       }
     }
@@ -151,8 +155,8 @@ describe('pipelineAllowedForBlockLevel (initiative binding)', () => {
 })
 
 describe('purposeAllowsAgentCategory (builder save gate)', () => {
-  it('a build (or unclassified) pipeline may use every category', () => {
-    for (const purpose of ['build', null, undefined] as const) {
+  it('a build pipeline, and one whose classifier this build cannot name, may use every category', () => {
+    for (const purpose of ['build', UNKNOWN_PURPOSE] as const) {
       for (const cat of AGENT_CATEGORIES) {
         expect(purposeAllowsAgentCategory(purpose, cat)).toBe(true)
       }
@@ -173,8 +177,8 @@ describe('purposeAllowsAgentCategory (builder save gate)', () => {
 })
 
 describe('purposeSuggestsAgentCategory (builder palette filter)', () => {
-  it('offers the whole catalog to a build pipeline and to an unclassified one', () => {
-    for (const purpose of ['build', null, undefined] as const) {
+  it('offers the whole catalog to a build pipeline, and to one it cannot name', () => {
+    for (const purpose of ['build', UNKNOWN_PURPOSE] as const) {
       for (const cat of AGENT_CATEGORIES) {
         expect(purposeSuggestsAgentCategory(purpose, cat)).toBe(true)
       }

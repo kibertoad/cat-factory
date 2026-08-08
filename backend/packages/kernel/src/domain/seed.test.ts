@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   BUILTIN_TASK_TYPES,
+  isPipelinePurpose,
   pipelineAllowedForBlockLevel,
   pipelineAllowedForTaskType,
 } from '@cat-factory/contracts'
@@ -303,7 +304,13 @@ describe('seedPipelines: built-in tagging and versioning', () => {
 
   it('defaults only an UNVERSIONED built-in to 1, leaving an explicit version alone', () => {
     const registry = new PipelineRegistry()
-    registry.register({ id: 'pl_org_v7', name: 'Org v7', agentKinds: ['coder'], version: 7 })
+    registry.register({
+      id: 'pl_org_v7',
+      name: 'Org v7',
+      agentKinds: ['coder'],
+      purpose: 'build',
+      version: 7,
+    })
     const merged = new Map(seedPipelines(registry).map((p) => [p.id, p]))
     // A registered pipeline is not a built-in, so it keeps whatever version it declared...
     expect(merged.get('pl_org_v7')).toMatchObject({ version: 7 })
@@ -314,7 +321,13 @@ describe('seedPipelines: built-in tagging and versioning', () => {
 
   it('version-tracks a registered pipeline that REPLACES a built-in, since it is one', () => {
     const registry = new PipelineRegistry()
-    registry.register({ id: 'pl_simple', name: 'Org simple', agentKinds: ['coder'], builtin: true })
+    registry.register({
+      id: 'pl_simple',
+      name: 'Org simple',
+      agentKinds: ['coder'],
+      purpose: 'build',
+      builtin: true,
+    })
     const replaced = seedPipelines(registry).find((p) => p.id === 'pl_simple')
     expect(replaced).toMatchObject({ name: 'Org simple', builtin: true, version: 1 })
   })
@@ -361,7 +374,12 @@ describe('retiredPipelines — withdrawn built-ins', () => {
 
   it('retires a deployment-registered pipeline, dropping it from the live catalog', () => {
     const registry = new PipelineRegistry()
-    registry.register({ id: 'pl_org_legacy', name: 'Legacy org flow', agentKinds: ['coder'] })
+    registry.register({
+      id: 'pl_org_legacy',
+      name: 'Legacy org flow',
+      agentKinds: ['coder'],
+      purpose: 'build',
+    })
     expect(seedPipelines(registry).map((p) => p.id)).toContain('pl_org_legacy')
 
     registry.retire('pl_org_legacy', { replacedBy: 'pl_simple' })
@@ -375,7 +393,12 @@ describe('retiredPipelines — withdrawn built-ins', () => {
   it('lets a re-registration un-retire an id (the later assertion wins, never both)', () => {
     const registry = new PipelineRegistry()
     registry.retire('pl_org_legacy')
-    registry.register({ id: 'pl_org_legacy', name: 'Revived', agentKinds: ['coder'] })
+    registry.register({
+      id: 'pl_org_legacy',
+      name: 'Revived',
+      agentKinds: ['coder'],
+      purpose: 'build',
+    })
     expect(seedPipelines(registry).map((p) => p.id)).toContain('pl_org_legacy')
     expect(retiredPipelines(registry).map((p) => p.id)).not.toContain('pl_org_legacy')
   })
@@ -391,14 +414,16 @@ describe('retiredPipelines — withdrawn built-ins', () => {
 })
 
 describe('seedPipelines — purpose classification is total and matches the engine guards', () => {
-  it('classifies every built-in, so no preset falls through a narrowed picker', () => {
-    // A `document` / `review` task offers ONLY explicitly-classified pipelines, so an unclassified
-    // built-in would be invisible there — silently, with nothing failing. (A `feature` / `bug` task
-    // narrows the other way round, excluding what cannot ship code, so unclassified survives that
-    // picker; this assertion is what the document/review half relies on.) The catalog is ours, so
-    // every entry can and must say what it is for.
+  it('classifies every built-in with a purpose the contract recognises', () => {
+    // `Pipeline.purpose` is mandatory and `definePipeline` requires it, so a MISSING one no longer
+    // compiles. What the types cannot reach is the `as Pipeline` cast `definePipeline` ends on:
+    // it re-asserts the shape after the conditional spreads, so a mis-spelled classifier would
+    // reach the catalog typed as a member and be narrowed by nothing (the predicates read an
+    // unnameable value default-OPEN, which is right for a deployment's own value and silent for
+    // a typo in ours). Asserted against the picklist the contract itself compiled, so adding a
+    // purpose needs no edit here.
     for (const p of seedPipelines()) {
-      expect(p.purpose, `${p.id} must declare a purpose`).toBeDefined()
+      expect(isPipelinePurpose(p.purpose), `${p.id} purpose ${p.purpose}`).toBe(true)
     }
   })
 

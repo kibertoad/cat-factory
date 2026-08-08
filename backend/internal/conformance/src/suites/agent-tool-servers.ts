@@ -146,6 +146,7 @@ export function defineToolServerConformance(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Tooled audit',
+        purpose: 'build',
         agentKinds: ['conformance-tooled-auditor'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {

@@ -4795,7 +4795,6 @@
       "strategy": "Strategy",
       "rounds": "Rounds",
       "purposeLabel": "Purpose",
-      "purposePlaceholder": "Select a purpose",
       "purposeUnrecognized": "Unrecognized ({purpose})",
       "@purposeUnrecognized": {
         "description": "Shown on the pipeline-purpose control when the pipeline carries a purpose this build has no label for (a member added by a newer build, or one since retired). The raw stored value is quoted back so it can be recognised and re-picked."
@@ -4818,6 +4817,9 @@
       "addParticipant": "Add participant",
       "savedPipelines": "Saved pipelines",
       "purposeHiddenPipelines": "{count} saved pipeline hidden for this purpose. | {count} saved pipelines hidden for this purpose.",
+      "everyPurposeListed": "Listing saved pipelines for every purpose.",
+      "listEveryPurpose": "Show every purpose",
+      "narrowToDraftPurpose": "Narrow to this purpose",
       "@purposeHiddenPipelines": {
         "description": "Shown above the saved-pipeline list in the pipeline builder: how many saved pipelines are not listed because they were built for a different purpose than the one being edited."
       },

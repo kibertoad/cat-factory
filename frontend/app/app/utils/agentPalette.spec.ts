@@ -31,27 +31,33 @@ const CATALOG: AgentArchetype[] = [
 ]
 
 describe('narrowAgentPalette', () => {
-  it('narrows nothing for an unclassified pipeline at the widest tier', () => {
-    const { offered, hiddenByPurpose, hiddenByTier } = narrowAgentPalette(CATALOG, null, 'advanced')
+  it('narrows nothing for a build pipeline at the widest tier', () => {
+    const { offered, hiddenByPurpose, hiddenByTier } = narrowAgentPalette(
+      CATALOG,
+      'build',
+      'advanced',
+    )
     expect(offered.map((a) => a.kind)).toEqual(CATALOG.map((a) => a.kind))
     expect(hiddenByPurpose).toBe(0)
     expect(hiddenByTier).toBe(0)
   })
 
   it('accumulates the tiers when the purpose narrows nothing', () => {
-    expect(narrowAgentPalette(CATALOG, null, 'basic').offered.map((a) => a.kind)).toEqual([
+    expect(narrowAgentPalette(CATALOG, 'build', 'basic').offered.map((a) => a.kind)).toEqual([
       'coder',
       'architect',
       'documenter',
     ])
-    expect(narrowAgentPalette(CATALOG, null, 'intermediate').offered.map((a) => a.kind)).toEqual([
-      'coder',
-      'architect',
-      'documenter',
-      // An undeclared tier defaults to intermediate, so it appears here.
-      'acme-auditor',
-    ])
-    expect(narrowAgentPalette(CATALOG, null, 'basic').hiddenByTier).toBe(3)
+    expect(narrowAgentPalette(CATALOG, 'build', 'intermediate').offered.map((a) => a.kind)).toEqual(
+      [
+        'coder',
+        'architect',
+        'documenter',
+        // An undeclared tier defaults to intermediate, so it appears here.
+        'acme-auditor',
+      ],
+    )
+    expect(narrowAgentPalette(CATALOG, 'build', 'basic').hiddenByTier).toBe(3)
   })
 
   it('counts each dial against what the OTHER already admits', () => {

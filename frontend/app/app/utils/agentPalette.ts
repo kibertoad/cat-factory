@@ -42,7 +42,7 @@ export interface NarrowedAgentPalette<T> {
  */
 export function narrowAgentPalette<T extends Pick<AgentArchetype, 'tier' | 'category'>>(
   archetypes: readonly T[],
-  purpose: PipelinePurpose | null | undefined,
+  purpose: PipelinePurpose,
   tier: AgentTier,
 ): NarrowedAgentPalette<T> {
   const relevant = (a: T) => !a.category || purposeSuggestsAgentCategory(purpose, a.category)
