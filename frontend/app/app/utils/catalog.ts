@@ -35,6 +35,10 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-clipboard-check',
     color: '#f59e0b',
     category: 'review',
+    // Settles the PRODUCT layer before anyone builds, which is every use-case except reviewing
+    // someone else's open pull request: there the requirements are already someone's shipped
+    // decision and nothing here can change them.
+    purposes: ['build', 'document', 'research', 'planning'],
     description:
       'Reviews the collected context (description + linked PRDs/RFCs) for gaps, ambiguities, assumptions and risks before the architect starts.',
     // Opens the dedicated structured review window (answer/dismiss findings → incorporate
@@ -48,6 +52,8 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-bug',
     color: '#f59e0b',
     category: 'review',
+    // Triages a BUG REPORT for fixability, so it only makes sense where something gets fixed.
+    purposes: ['build'],
     description:
       'Triages a bug report for fixability — raising questions, gaps and assumptions about the report before anyone starts fixing it.',
     // Opens the dedicated structured review window (answer/dismiss findings → incorporate
@@ -65,6 +71,9 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-search-code',
     color: '#38bdf8',
     category: 'review',
+    // Traces a bug to its root cause in the code: a fixing pipeline's opening move, and nothing
+    // a document, review, spike or plan has any use for.
+    purposes: ['build'],
     description:
       'Read-only, multi-repo codebase investigation that traces the bug to its root cause and decides whether the report is fixable as-is or needs the reporter to clarify (no code changes).',
     resultView: 'generic-structured',
@@ -81,6 +90,9 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-clipboard-check',
     color: '#6366f1',
     category: 'review',
+    // Reviews an EXISTING open pull request, which is the whole of the review use-case, and is
+    // available to a build pipeline that wants a deep pass over the pull request it just opened.
+    purposes: ['build', 'review'],
     description:
       'Deep, token-bounded review of an open pull request: slices a large diff into cohesive ' +
       'chunks, reviews each, and returns prioritized findings.',
@@ -148,6 +160,8 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-clipboard-list',
     color: '#c084fc',
     category: 'design',
+    // Writes the in-repo spec the implementation is then built against.
+    purposes: ['build', 'planning'],
     description:
       "Aggregates every task's clarified requirements into the service's in-repo specification (spec.json) with full acceptance-scenario coverage, derived into Gherkin.",
   },
@@ -158,6 +172,9 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-drafting-compass',
     color: '#a78bfa',
     category: 'design',
+    // Designs the shape of a CODE change, so it belongs wherever code is planned or written and
+    // nowhere a document is being authored.
+    purposes: ['build', 'research', 'planning'],
     description: 'Designs the shape of the solution and breaks down the work.',
   },
   {
@@ -170,6 +187,8 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-map',
     color: '#22d3ee',
     category: 'design',
+    // Decomposes a repository into services and modules on the board.
+    purposes: ['build', 'planning'],
     description: 'Maps the repository into the service → modules blueprint.',
   },
   {
@@ -310,6 +329,9 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-book-open-text',
     color: '#818cf8',
     category: 'docs',
+    // WRITES documentation into the repository, which a pipeline that reviews someone else's
+    // pull request never does.
+    purposes: ['build', 'document'],
     description: 'Produces docs and usage examples.',
   },
   {
@@ -319,6 +341,8 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-scroll-text',
     color: '#84cc16',
     category: 'docs',
+    // Writes domain-rule docs into the repository (see `documenter`).
+    purposes: ['build', 'document'],
     description:
       'Reads the implementation and writes/updates business-logic & domain-rule docs in the repo, weaving in linked context documents.',
   },
@@ -329,6 +353,9 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-shield-alert',
     color: '#ef4444',
     category: 'docs',
+    // The review activity that groups under Documentation: it reads a change against the
+    // documented rules and reports violations, writing nothing.
+    purposes: ['build', 'review'],
     description:
       'Reviews a change against the documented domain rules and reports violations, undocumented changes and unexpected drift.',
   },

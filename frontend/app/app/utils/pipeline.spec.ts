@@ -8,7 +8,9 @@ import {
   pipelineAllowedForTaskType,
   purposeAllowsAgentCategory,
   purposeSuggestsAgentCategory,
+  purposeSuggestsAgentKind,
 } from '@cat-factory/contracts'
+import type { PipelinePurpose } from '@cat-factory/contracts'
 import type { Block, Pipeline } from '~/types/domain'
 import {
   pipelineAllowedForManualStart,
@@ -210,6 +212,73 @@ describe('purposeSuggestsAgentCategory (builder palette filter)', () => {
       for (const cat of AGENT_CATEGORIES) {
         if (purposeSuggestsAgentCategory(purpose, cat)) {
           expect(purposeAllowsAgentCategory(purpose, cat)).toBe(true)
+        }
+      }
+    }
+  })
+})
+
+describe('purposeSuggestsAgentKind (what the palette actually filters on)', () => {
+  it('defers to the category for a kind that declares no purposes of its own', () => {
+    // The normal case, and the one that keeps a deployment-registered kind exactly as visible as
+    // it was before kinds could speak for themselves.
+    for (const purpose of [...PIPELINE_PURPOSES, UNKNOWN_PURPOSE]) {
+      for (const category of AGENT_CATEGORIES) {
+        expect(purposeSuggestsAgentKind(purpose, { category })).toBe(
+          purposeSuggestsAgentCategory(purpose, category),
+        )
+      }
+      expect(purposeSuggestsAgentKind(purpose, {})).toBe(true)
+    }
+  })
+
+  it('lets a kind narrow within a category its siblings still belong to', () => {
+    // What the category table structurally cannot say: `docs` survives a `review` pipeline so the
+    // Domain Rules Reviewer does, which also handed it the two kinds that WRITE documentation.
+    const author = { category: 'docs', purposes: ['build', 'document'] } as const
+    expect(purposeSuggestsAgentKind('document', author)).toBe(true)
+    expect(purposeSuggestsAgentKind('review', author)).toBe(false)
+    expect(purposeSuggestsAgentCategory('review', 'docs')).toBe(true)
+  })
+
+  it('is a declaration, not an exemption from the category', () => {
+    // A kind cannot buy its way back into a purpose its section is not offered to: `docs` is gone
+    // for `planning`, and the palette drops the kind whether or not it named `planning` itself.
+    const doc = { category: 'docs', purposes: ['planning'] } as const
+    expect(purposeSuggestsAgentKind('planning', doc)).toBe(
+      purposeSuggestsAgentCategory('planning', 'docs'),
+    )
+  })
+
+  it('reads a list naming nothing this build knows as no declaration at all', () => {
+    const stale = { category: 'docs', purposes: [UNKNOWN_PURPOSE] } as const
+    for (const purpose of PIPELINE_PURPOSES) {
+      expect(purposeSuggestsAgentKind(purpose, stale)).toBe(
+        purposeSuggestsAgentCategory(purpose, 'docs'),
+      )
+    }
+    // And a purpose this build cannot name still narrows nothing, declaration or not.
+    expect(
+      purposeSuggestsAgentKind(UNKNOWN_PURPOSE, { category: 'docs', purposes: ['build'] }),
+    ).toBe(true)
+  })
+
+  it('never offers what the save gate would refuse', () => {
+    // The same invariant the category predicate carries, restated where the palette now reads it:
+    // a kind's own declaration may only ever hide more, so it can never open a hole through which
+    // a kind is offered and its step then blocks the save.
+    for (const purpose of [...PIPELINE_PURPOSES, UNKNOWN_PURPOSE]) {
+      for (const category of AGENT_CATEGORIES) {
+        const declarations: (readonly PipelinePurpose[] | undefined)[] = [
+          undefined,
+          PIPELINE_PURPOSES,
+          ['build'],
+          [UNKNOWN_PURPOSE],
+        ]
+        for (const purposes of declarations) {
+          if (purposeSuggestsAgentKind(purpose, { category, purposes })) {
+            expect(purposeAllowsAgentCategory(purpose, category)).toBe(true)
+          }
         }
       }
     }

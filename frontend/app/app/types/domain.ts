@@ -117,7 +117,7 @@ export type {
   PreviewStatus,
 } from '@cat-factory/contracts'
 
-import type { AgentCategory, AgentKind, AgentTier } from '@cat-factory/contracts'
+import type { AgentCategory, AgentKind, AgentTier, PipelinePurpose } from '@cat-factory/contracts'
 
 // The document-kind list + the per-kind field descriptors are runtime values (used to render
 // the picker and the conditional per-kind inputs), so they are re-exported as values — the
@@ -135,6 +135,12 @@ export interface AgentArchetype {
   description: string
   /** Palette category this archetype is grouped under. Absent ⇒ ungrouped/system kind. */
   category?: AgentCategory
+  /**
+   * The pipeline PURPOSES the palette offers this kind to, WITHIN the ones its {@link category}
+   * already admits (`purposeSuggestsAgentKind`). Absent ⇒ the category alone decides, which is
+   * the normal case: declare this only to opt OUT of a purpose the category would admit.
+   */
+  purposes?: readonly PipelinePurpose[]
   /**
    * How specialist this kind is — the tier the palette / model-preset override list filter on
    * (`basic` shows only basic kinds, `intermediate` adds those, `advanced` shows everything).

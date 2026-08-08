@@ -140,6 +140,8 @@ export const CODE_COMMENTER_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Keeps in-source comments relevant and up-to-date: adds why-not-what comments, fixes ones that have drifted from the code, and removes noise, with no behaviour change.',
       category: 'docs',
+      // Comments source code in place: documentation by category, code work by use-case.
+      purposes: ['build'],
       tier: 'advanced',
     },
   },

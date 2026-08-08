@@ -360,6 +360,8 @@ export const INITIATIVE_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Decomposes a high-level initiative brief into a service → module → task plan. Runs inline (no repo), the entry agent for the public API.',
       category: 'design',
+      // Decomposes an initiative brief: the planning use-case, and only that one.
+      purposes: ['planning'],
       tier: 'advanced',
     },
   },

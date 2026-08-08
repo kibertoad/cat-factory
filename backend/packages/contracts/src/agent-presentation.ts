@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { pipelinePurposeSchema } from './pipeline-purpose-vocabulary.js'
 import { agentKindSchema, namespacedIdSchema } from './primitives.js'
 import { RESULT_VIEW_IDS } from './result-views.js'
 
@@ -97,6 +98,26 @@ export const agentPresentationSchema = v.object({
   description: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
   /** Palette section; omitted ⇒ the kind is not a standalone palette block (e.g. a companion). */
   category: v.optional(agentCategorySchema),
+  /**
+   * The pipeline PURPOSES the palette should offer this kind to, WITHIN the ones its
+   * {@link category} already admits (`purposeSuggestsAgentKind`). Omitted ⇒ the category alone
+   * decides, which is the normal case. Declare it to opt OUT of a purpose the category would
+   * admit: a documentation AUTHOR has no business in a pipeline whose whole job is reviewing
+   * someone else's pull request, and its category cannot say so without also taking the Domain
+   * Rules Reviewer down with it. It never widens anything, in the palette or in what the
+   * builder will SAVE (`purposeAllowsAgentCategory`), so a kind that opts out of a purpose
+   * stays editable in a stored pipeline that already uses it.
+   *
+   * An EMPTY list is refused rather than accepted, because the reader treats "declared nothing"
+   * and "declared an empty list" as the same thing (the category alone decides, so the kind is
+   * offered at every purpose that section admits) and that is the exact inverse of what an author
+   * writing `purposes: []` means by it. Refusing at registration is the only place the two can
+   * still be told apart: by the time the palette reads the list the intent is gone. Note this is
+   * NOT the same case as a list whose every member THIS BUILD cannot name, which the palette
+   * deliberately reads as no declaration: that one is a retired vocabulary member outliving the
+   * bundle reading it, not a statement someone typed.
+   */
+  purposes: v.optional(v.pipe(v.array(pipelinePurposeSchema), v.minLength(1))),
   /**
    * How specialist this kind is ({@link AGENT_TIERS}). The palette and the model-preset
    * override list show the selected tier and everything below it, so a kind declared
