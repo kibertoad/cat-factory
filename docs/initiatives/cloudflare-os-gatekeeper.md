@@ -429,6 +429,27 @@ suite covers.
 - [x] Slice 6: base/template split (`@cat-factory/gatekeeper-worker` published, `deploy/gatekeeper`
       down to its policy, bindings and wiring)
 
+## Open documentation gaps
+
+Registered by the 2026-08-08 documentation revision, which restructured the three READMEs
+(bindings, machinery, template) around what each piece is, its purpose, usage, configuration and
+customization, added the Gatekeeper naming map to `docs/glossary.md`, documented `deny`, masking
+semantics, the reserved capability methods and the error split, and fixed the template README's
+withheld-reason list (it named three of the four). What that sweep could NOT close stays open
+here:
+
+- [ ] **A rendered protocol reference for the OS side.** The shapes an OS consumer receives
+      (`ApprovalCard`, `CardInspection`, the `runs_watched` entries, the `/webhook` response
+      envelope) are documented only as exported TypeScript types in
+      `sdk/gatekeeper-worker/src/`. A TypeScript consumer reads them; a non-TypeScript OS
+      integration has nothing rendered. Worth doing only when such a consumer appears, and then
+      preferably generated from the types rather than transcribed.
+- [ ] **A `WEBHOOK_SECRET` rotation recipe.** The provisioning-key rotation story is documented
+      (a 401 drops the cached key and re-mints once), but rotating the webhook secret is not:
+      what order to update the secret and re-enrol in, and what happens to deliveries signed
+      with the old secret while the two disagree. Needs verifying against the enrolment and
+      verification code before it can be written down honestly.
+
 ## Gotchas the pilot surfaced
 
 - **"Card type" and "decision kind" are two vocabularies, and neither maps onto the other.** A
