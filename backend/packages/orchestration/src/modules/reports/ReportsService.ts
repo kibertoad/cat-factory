@@ -52,8 +52,12 @@ export interface ReportsBreakdown {
   currency: string
   source: ReportSpendSource
   rolledUpThrough: number | null
+  /** Over the window's WHOLE population, never only the rows returned beside it. */
   totals: ReportTotals
+  /** The heaviest slices by metered cost, capped by the caller's `limit` when it named one. */
   rows: ReportSpendRow[]
+  /** True when the window held more slices than `limit`, so `rows` is a prefix of them. */
+  truncated: boolean
 }
 
 export interface ReportsServiceDependencies {
@@ -185,12 +189,18 @@ export class ReportsService {
    * where this is one `GROUP BY` and returning the other ten would be work nobody asked for.
    * Everything else about it is deliberately the same read, so a number here and the same
    * number in the panel come from one code path.
+   *
+   * `limit` bounds what is RETURNED, not what is aggregated: `totals` folds the window's whole
+   * population either way, so a capped breakdown still reports what was spent and only loses
+   * the identity of the tail. That is why the cap is applied here rather than pushed into the
+   * `GROUP BY` as a SQL `LIMIT`, which would take the totals down with it.
    */
   async breakdown(
     accountId: string,
     dimension: ReportSpendDimension,
     window: ReportWindow,
     workspaceId?: string | null,
+    limit?: number,
   ): Promise<ReportsBreakdown> {
     const { windowMs, bucketMs, source: preferred } = REPORT_WINDOWS[window]
     const until = this.deps.clock.now()
@@ -214,10 +224,13 @@ export class ReportsService {
       currency: this.deps.currency,
       source,
       rolledUpThrough,
-      // Folded from the rows being returned rather than queried again: this breakdown
-      // partitions the window's whole ledger, so the two cannot disagree by construction.
+      // Folded from ALL the rows rather than queried again: this breakdown partitions the
+      // window's whole ledger, so the two cannot disagree by construction. Folded BEFORE the
+      // cap for the same reason: a total over the returned prefix would under-report the
+      // window while still reading as the window's total.
       totals: foldTotals(rows),
-      rows,
+      truncated: limit !== undefined && rows.length > limit,
+      rows: limit !== undefined ? rows.slice(0, limit) : rows,
     }
   }
 

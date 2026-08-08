@@ -128,13 +128,14 @@ describe('ReportsService source routing', () => {
 })
 
 describe('ReportsService.breakdown', () => {
-  async function breakdown(window: ReportWindow, dimension: ReportSpendDimension) {
+  async function breakdown(window: ReportWindow, dimension: ReportSpendDimension, limit?: number) {
     const { asked, reportsRepository, spendRollupRepository } = fakes()
     const result = await service({ reportsRepository, spendRollupRepository }).breakdown(
       'acc_1',
       dimension,
       window,
       'ws_1',
+      limit,
     )
     return { result, asked }
   }
@@ -152,6 +153,38 @@ describe('ReportsService.breakdown', () => {
     expect(durable.result.source).toBe('daily-rollup')
     expect(durable.asked).toEqual({ ledger: [], rollup: ['ticket'] })
     expect(durable.result.rolledUpThrough).toBe(NOW - DAY)
+  })
+
+  it('folds the totals over the WHOLE window, then caps the rows', async () => {
+    // The property that makes a capped public breakdown honest rather than a smaller number
+    // that reads as complete: the tail leaves `rows`, and none of its money leaves `totals`.
+    // Two slices, one row asked for: the heavy one is kept (the port orders heaviest-first and
+    // the cap is a prefix of that order), the light one's spend still lands in the total.
+    const { reportsRepository, spendRollupRepository } = fakes()
+    reportsRepository.spendByDimension = async () => [group('heavy', 9), group('light', 1)]
+    const capped = await service({ reportsRepository, spendRollupRepository }).breakdown(
+      'acc_1',
+      'run',
+      '7d',
+      'ws_1',
+      1,
+    )
+    expect(capped.rows.map((row) => row.key)).toEqual(['heavy'])
+    expect(capped.truncated).toBe(true)
+    expect(capped.totals.meteredCost).toBe(10)
+    expect(capped.totals.calls).toBe(2)
+
+    // And a limit the window does not reach is NOT a truncation: `rows.length === limit` cannot
+    // tell the two apart, which is why the flag is computed rather than inferred downstream.
+    const exact = await service({ reportsRepository, spendRollupRepository }).breakdown(
+      'acc_1',
+      'run',
+      '7d',
+      'ws_1',
+      2,
+    )
+    expect(exact.truncated).toBe(false)
+    expect(exact.rows).toHaveLength(2)
   })
 
   it('folds the totals from the rows it returns, so the two cannot disagree', async () => {

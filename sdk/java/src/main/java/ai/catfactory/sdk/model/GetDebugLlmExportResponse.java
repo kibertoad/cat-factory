@@ -10,6 +10,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code GetDebugLlmExportResponse} wire model.
+ * @param available the {@code available} field.
  * @param calls the {@code calls} field.
  * @param generatedAt the {@code generatedAt} field.
  * @param kind the {@code kind} field.
@@ -21,6 +22,8 @@ import org.jspecify.annotations.Nullable;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record GetDebugLlmExportResponse(
+    @JsonProperty("available") Boolean available,
+
     @JsonProperty("calls") List<DebugLlmCall> calls,
 
     @JsonProperty("generatedAt") Double generatedAt,
@@ -50,6 +53,7 @@ public record GetDebugLlmExportResponse(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
+        private @Nullable Boolean available;
         private @Nullable List<DebugLlmCall> calls;
         private @Nullable Double generatedAt;
         private @Nullable String kind;
@@ -58,6 +62,12 @@ public record GetDebugLlmExportResponse(
         private @Nullable String runId;
         private @Nullable Boolean truncated;
         private @Nullable Object version;
+
+        /** Set {@code available}. */
+        public Builder available(@Nullable Boolean available) {
+            this.available = available;
+            return this;
+        }
 
         /** Set {@code calls}. */
         public Builder calls(@Nullable List<DebugLlmCall> calls) {
@@ -109,7 +119,7 @@ public record GetDebugLlmExportResponse(
 
         /** Build the {@link GetDebugLlmExportResponse}. */
         public GetDebugLlmExportResponse build() {
-            return new GetDebugLlmExportResponse(calls, generatedAt, kind, llm, order, runId, truncated, version);
+            return new GetDebugLlmExportResponse(available, calls, generatedAt, kind, llm, order, runId, truncated, version);
         }
     }
 }

@@ -296,6 +296,10 @@ export class RunDebugService {
    * Which end is the caller's to pick, and the bundle says which was kept, because the two are
    * opposite readings of a long run: `oldest` shows how it went wrong, `newest` shows what it
    * was doing when it died.
+   *
+   * It also states whether the sink exists at all, because both halves degrade to the same
+   * empty document when it does not, and this is the one bundle whose intended reader draws a
+   * conclusion from what it does not contain.
    */
   async llmExport(
     workspaceId: string,
@@ -316,6 +320,12 @@ export class RunDebugService {
       version: 1,
       runId,
       generatedAt: this.deps.clock.now(),
+      // The SAME expression `overview` publishes as `sinks.llmCalls.available`, and stated for
+      // the sharper version of the same reason: with no sink wired, every rollup below folds
+      // an empty cell list and every call row is absent, which is a bundle indistinguishable
+      // from a run that made no model calls. The reader here is a model asked why the run went
+      // wrong, so an unstated absence reads as a finding.
+      available: !!this.deps.llmCallMetricRepository,
       llm: { totals, byAgentKind, byPhase, costCurrency: this.deps.costCurrency ?? null },
       order: opts.order,
       // The page's own peek, not `totals.calls > limit`: the rollup counts every recorded call

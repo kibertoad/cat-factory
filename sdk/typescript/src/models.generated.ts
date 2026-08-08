@@ -594,6 +594,7 @@ export type GetDebugLlmCallView = 'raw' | 'messages'
 export const GET_DEBUG_LLM_CALL_VIEW_VALUES = ['raw', 'messages'] as const
 
 export interface GetDebugLlmExportResponse {
+  available: boolean
   calls: DebugLlmCall[]
   generatedAt: number
   kind: 'cat-factory.run-llm-export'
@@ -803,53 +804,6 @@ export interface GetPublicRunOutcomeResponseVisualsVariant1View {
   referenceArtifactId: string | null
   view: string
 }
-
-export type GetPublicSpendDimension = 'model' | 'agentKind' | 'service' | 'repo' | 'taskType' | 'ticket' | 'run'
-
-/** Every `GetPublicSpendDimension` value, for exhaustive handling and runtime validation. */
-export const GET_PUBLIC_SPEND_DIMENSION_VALUES = ['model', 'agentKind', 'service', 'repo', 'taskType', 'ticket', 'run'] as const
-
-export interface GetPublicSpendResponse {
-  currency: string
-  dimension: GetPublicSpendDimension
-  generatedAt: number
-  /** Always present; `null` when the server has no value for it. */
-  rolledUpThrough: number | null
-  rows: GetPublicSpendResponseRow[]
-  since: number
-  source: GetPublicSpendResponseSource
-  totals: GetPublicSpendResponseTotals
-  window: GetPublicSpendWindow
-}
-
-export interface GetPublicSpendResponseRow {
-  calls: number
-  inputTokens: number
-  key: string
-  /** Always present; `null` when the server has no value for it. */
-  label: string | null
-  meteredCost: number
-  outputTokens: number
-  subscriptionCost: number
-}
-
-export type GetPublicSpendResponseSource = 'ledger' | 'daily-rollup'
-
-/** Every `GetPublicSpendResponseSource` value, for exhaustive handling and runtime validation. */
-export const GET_PUBLIC_SPEND_RESPONSE_SOURCE_VALUES = ['ledger', 'daily-rollup'] as const
-
-export interface GetPublicSpendResponseTotals {
-  calls: number
-  inputTokens: number
-  meteredCost: number
-  outputTokens: number
-  subscriptionCost: number
-}
-
-export type GetPublicSpendWindow = '24h' | '7d' | '30d' | '90d'
-
-/** Every `GetPublicSpendWindow` value, for exhaustive handling and runtime validation. */
-export const GET_PUBLIC_SPEND_WINDOW_VALUES = ['24h', '7d', '30d', '90d'] as const
 
 export interface ListDebugAgentContextResponse {
   /** Always present; `null` when the server has no value for it. */
@@ -2242,6 +2196,54 @@ export type PublicSetFindingStatusStatus = 'dismissed' | 'open'
 
 /** Every `PublicSetFindingStatusStatus` value, for exhaustive handling and runtime validation. */
 export const PUBLIC_SET_FINDING_STATUS_STATUS_VALUES = ['dismissed', 'open'] as const
+
+export interface PublicSpend {
+  currency: string
+  dimension: PublicSpendDimension
+  generatedAt: number
+  /** Always present; `null` when the server has no value for it. */
+  rolledUpThrough: number | null
+  rows: PublicSpendRow[]
+  since: number
+  source: PublicSpendSource
+  totals: PublicSpendTotals
+  truncated: boolean
+  window: PublicSpendWindow
+}
+
+export type PublicSpendDimension = 'model' | 'agentKind' | 'service' | 'repo' | 'taskType' | 'ticket' | 'run'
+
+/** Every `PublicSpendDimension` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_SPEND_DIMENSION_VALUES = ['model', 'agentKind', 'service', 'repo', 'taskType', 'ticket', 'run'] as const
+
+export interface PublicSpendRow {
+  calls: number
+  inputTokens: number
+  key: string
+  /** Always present; `null` when the server has no value for it. */
+  label: string | null
+  meteredCost: number
+  outputTokens: number
+  subscriptionCost: number
+}
+
+export type PublicSpendSource = 'ledger' | 'daily-rollup'
+
+/** Every `PublicSpendSource` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_SPEND_SOURCE_VALUES = ['ledger', 'daily-rollup'] as const
+
+export interface PublicSpendTotals {
+  calls: number
+  inputTokens: number
+  meteredCost: number
+  outputTokens: number
+  subscriptionCost: number
+}
+
+export type PublicSpendWindow = '24h' | '7d' | '30d' | '90d'
+
+/** Every `PublicSpendWindow` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_SPEND_WINDOW_VALUES = ['24h', '7d', '30d', '90d'] as const
 
 export interface PublicTask {
   autoStartDependents: boolean

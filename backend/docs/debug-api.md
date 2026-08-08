@@ -322,11 +322,11 @@ the question is open ("why did this run spend/truncate/stall"), the round trips 
 what the app's own export button produces for a human doing the same thing:
 
 ```
-GET /debug/runs/:runId/llm-export?limit=50&order=oldest&bodyChars=500
+GET /debug/runs/:runId/llm-export?limit=40&order=oldest&bodyChars=500
 ```
 
-`{ kind, version, runId, generatedAt, llm: { totals, byAgentKind, byPhase, costCurrency }, order,
-truncated, calls }`. Two properties are the whole design:
+`{ kind, version, runId, generatedAt, available, llm: { totals, byAgentKind, byPhase,
+costCurrency }, order, truncated, calls }`. Three properties are the whole design:
 
 - **The rollups cover the run; the call rows are a window.** `llm` is the SAME SQL fold the
   overview publishes (so the two documents cannot report different money), computed over every
@@ -337,6 +337,11 @@ truncated, calls }`. Two properties are the whole design:
   tell a complete bundle from a windowed one, and this is exactly the document where a partial sum
   gets quoted as a whole. `order` says which END was kept: `oldest` (the default) reads the run
   forwards, `newest` keeps the tail a run that died late says why in.
+- **`available` separates "nothing recorded" from "nothing happened".** The same repository-presence
+  fact the overview publishes as `sinks.llmCalls.available`, and it matters more here: with no sink
+  wired, the rollups fold empty and the call rows are absent, so the bundle is byte-identical to a
+  run that made no model calls. Read it first; a model handed the document without it will diagnose
+  the silence.
 
 It obeys the same size rule as everything else here: bodies are omitted unless `bodyChars` asks, so
 the default bundle never reads a text column out of the store, and its worst case is

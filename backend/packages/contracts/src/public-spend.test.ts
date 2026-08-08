@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { reportSpendDimensionSchema } from './reports.js'
-import { PUBLIC_SPEND_DIMENSIONS_OMITTED, publicSpendDimensionSchema } from './public-spend.js'
+import {
+  reportSpendDimensionSchema,
+  reportSpendSourceSchema,
+  reportWindowSchema,
+} from './reports.js'
+import {
+  PUBLIC_SPEND_DIMENSIONS_OMITTED,
+  publicSpendDimensionSchema,
+  publicSpendSourceSchema,
+  publicSpendWindowSchema,
+} from './public-spend.js'
 
 // The public spend surface publishes a SUBSET of the dimensions the internal reports port groups
 // by, and the subset is a decision rather than an accident. What has to hold is that the decision
@@ -37,5 +46,29 @@ describe('public spend dimensions', () => {
         40,
       )
     }
+  })
+})
+
+// The window and source vocabularies are DECLARED on the public contract rather than aliased off
+// the internal report ones, because everything `/api/v1` publishes is frozen and an internal
+// analytics picklist is not. What that costs is the risk of the two drifting silently, which is
+// what these assertions buy back: they turn an internal edit into a failure naming the public
+// contract, where the fix is a deliberate `/api/v1` decision (publish the new member, or state
+// that the surface deliberately does not).
+//
+// Set equality, not a count and not `toEqual` on the arrays: member ORDER is not a fact either
+// side promises, and a pinned length would fail on every ordinary addition while naming nothing.
+
+describe('public spend vocabularies', () => {
+  it('publishes exactly the internal report windows', () => {
+    expect([...publicSpendWindowSchema.options].sort()).toEqual(
+      [...reportWindowSchema.options].sort(),
+    )
+  })
+
+  it('publishes exactly the internal spend sources', () => {
+    expect([...publicSpendSourceSchema.options].sort()).toEqual(
+      [...reportSpendSourceSchema.options].sort(),
+    )
   })
 })

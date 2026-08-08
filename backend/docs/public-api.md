@@ -1189,6 +1189,7 @@ GET /api/v1/usage/spend?dimension=repo&window=90d
   "currency": "USD",
   "source": "daily-rollup",
   "rolledUpThrough": 1774915200000,
+  "truncated": false,
   "totals": {
     "inputTokens": 41200311,
     "outputTokens": 903122,
@@ -1223,17 +1224,22 @@ GET /api/v1/usage/spend?dimension=repo&window=90d
 `model`, `agentKind`, `service` and `taskType` slice the same money the other ways. There is no
 `workspace` dimension: every key is bound to one board, so it would return a single row naming the
 board you already addressed, and the account-wide view it exists for is admin-gated and
-cross-workspace by design. `window` is `24h` / `7d` (default) / `30d` / `90d`.
+cross-workspace by design. `window` is `24h` / `7d` (default) / `30d` / `90d`, and `limit` is
+`1..500` (default 100).
 
-Five things decide whether a number off this is read correctly:
+Six things decide whether a number off this is read correctly:
 
 - **`meteredCost` is money; `subscriptionCost` is not.** The same rule as `/usage`, and for the same
   reason: a flat-rate harness plan bills nothing per token, so the second figure is what those tokens
   WOULD have cost metered. Their sum denominates nothing.
 - **The EMPTY `key` is a real slice, not a gap.** It is spend whose run, service, repository or
-  ticket could not be resolved. It is reported rather than dropped, so `rows` always sums to
-  `totals`; an inner join would have under-reported the window while the breakdown still looked
+  ticket could not be resolved. It is reported rather than dropped, so an untruncated `rows` sums
+  to `totals`; an inner join would have under-reported the window while the breakdown still looked
   complete.
+- **`totals` covers the window; `rows` covers `limit`.** The rows come back heaviest first and
+  `truncated` says when there was a tail, but the totals aggregate every slice either way. So a
+  capped breakdown still reports what the board spent, and the share the returned rows account
+  for is computable: what you lose to the cap is the identity of the tail, never its money.
 - **`source` says which store answered, and the two attribute differently.** `24h`/`7d` scan the
   metered ledger live: exact to the millisecond, and resolving a repository or a ticket through
   TODAY's links, so re-pointing a service or re-importing an issue re-attributes history. `30d`/`90d`
@@ -1245,10 +1251,14 @@ Five things decide whether a number off this is read correctly:
 - **`since` is the real span**, snapped down to a bucket edge, so a window covers up to one bucket
   more than its nominal length. Do not re-derive it from `window`.
 
-`rows` is deliberately UNCAPPED. Every dimension but one has catalog-bounded cardinality (models,
-agent kinds, the board's services, its repositories, the task-type picklist); `ticket` grows with
-ACTIVITY, so a busy board over `90d` can return thousands of rows. A silent `LIMIT` would be the
-smaller number that still reads as complete, which is what this surface refuses everywhere else.
+`rows` is CAPPED, and the cap is not silent. Five of the dimensions have catalog-bounded
+cardinality (models, agent kinds, the board's services, its repositories, the task-type picklist)
+and fit inside the default with room to spare. The other two grow with ACTIVITY: `run` is one row
+per pipeline execution and `ticket` one per issue a run touched, so a busy board over `90d` is
+thousands of rows on a response nobody sized. What this surface refuses is the smaller number that
+still reads as complete, which is why the cap comes with `truncated` beside it and with totals
+that do not move: raise `limit` for a longer tail, and read `truncated` before calling a list
+exhaustive.
 
 ### Run evidence (report + outcome + artifacts)
 

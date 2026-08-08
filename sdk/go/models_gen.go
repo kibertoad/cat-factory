@@ -902,6 +902,7 @@ var GetDebugLlmCallViewValues = []GetDebugLlmCallView{GetDebugLlmCallViewRaw, Ge
 
 // GetDebugLlmExportResponse is the `GetDebugLlmExportResponse` wire model.
 type GetDebugLlmExportResponse struct {
+	Available   bool                   `json:"available"`
 	Calls       []DebugLlmCall         `json:"calls"`
 	GeneratedAt float64                `json:"generatedAt"`
 	Kind        string                 `json:"kind"`
@@ -1453,90 +1454,6 @@ type GetPublicRunOutcomeResponseVisualsVariant1View struct {
 	ReferenceArtifactID *string `json:"referenceArtifactId"`
 	View                string  `json:"view"`
 }
-
-// GetPublicSpendDimension is the `GetPublicSpendDimension` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type GetPublicSpendDimension string
-
-const (
-	GetPublicSpendDimensionModel     GetPublicSpendDimension = "model"
-	GetPublicSpendDimensionAgentKind GetPublicSpendDimension = "agentKind"
-	GetPublicSpendDimensionService   GetPublicSpendDimension = "service"
-	GetPublicSpendDimensionRepo      GetPublicSpendDimension = "repo"
-	GetPublicSpendDimensionTaskType  GetPublicSpendDimension = "taskType"
-	GetPublicSpendDimensionTicket    GetPublicSpendDimension = "ticket"
-	GetPublicSpendDimensionRun       GetPublicSpendDimension = "run"
-)
-
-// GetPublicSpendDimensionValues lists every GetPublicSpendDimension this SDK release knows.
-var GetPublicSpendDimensionValues = []GetPublicSpendDimension{GetPublicSpendDimensionModel, GetPublicSpendDimensionAgentKind, GetPublicSpendDimensionService, GetPublicSpendDimensionRepo, GetPublicSpendDimensionTaskType, GetPublicSpendDimensionTicket, GetPublicSpendDimensionRun}
-
-// GetPublicSpendResponse is the `GetPublicSpendResponse` wire model.
-type GetPublicSpendResponse struct {
-	Currency    string                  `json:"currency"`
-	Dimension   GetPublicSpendDimension `json:"dimension"`
-	GeneratedAt float64                 `json:"generatedAt"`
-	// RolledUpThrough always present; nil when the server has no value for it.
-	RolledUpThrough *float64                     `json:"rolledUpThrough"`
-	Rows            []GetPublicSpendResponseRow  `json:"rows"`
-	Since           float64                      `json:"since"`
-	Source          GetPublicSpendResponseSource `json:"source"`
-	Totals          GetPublicSpendResponseTotals `json:"totals"`
-	Window          GetPublicSpendWindow         `json:"window"`
-}
-
-// GetPublicSpendResponseRow is the `GetPublicSpendResponseRow` wire model.
-type GetPublicSpendResponseRow struct {
-	Calls       float64 `json:"calls"`
-	InputTokens float64 `json:"inputTokens"`
-	Key         string  `json:"key"`
-	// Label always present; nil when the server has no value for it.
-	Label            *string `json:"label"`
-	MeteredCost      float64 `json:"meteredCost"`
-	OutputTokens     float64 `json:"outputTokens"`
-	SubscriptionCost float64 `json:"subscriptionCost"`
-}
-
-// GetPublicSpendResponseSource is the `GetPublicSpendResponseSource` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type GetPublicSpendResponseSource string
-
-const (
-	GetPublicSpendResponseSourceLedger      GetPublicSpendResponseSource = "ledger"
-	GetPublicSpendResponseSourceDailyRollup GetPublicSpendResponseSource = "daily-rollup"
-)
-
-// GetPublicSpendResponseSourceValues lists every GetPublicSpendResponseSource this SDK release knows.
-var GetPublicSpendResponseSourceValues = []GetPublicSpendResponseSource{GetPublicSpendResponseSourceLedger, GetPublicSpendResponseSourceDailyRollup}
-
-// GetPublicSpendResponseTotals is the `GetPublicSpendResponseTotals` wire model.
-type GetPublicSpendResponseTotals struct {
-	Calls            float64 `json:"calls"`
-	InputTokens      float64 `json:"inputTokens"`
-	MeteredCost      float64 `json:"meteredCost"`
-	OutputTokens     float64 `json:"outputTokens"`
-	SubscriptionCost float64 `json:"subscriptionCost"`
-}
-
-// GetPublicSpendWindow is the `GetPublicSpendWindow` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type GetPublicSpendWindow string
-
-const (
-	GetPublicSpendWindow24h GetPublicSpendWindow = "24h"
-	GetPublicSpendWindow7d  GetPublicSpendWindow = "7d"
-	GetPublicSpendWindow30d GetPublicSpendWindow = "30d"
-	GetPublicSpendWindow90d GetPublicSpendWindow = "90d"
-)
-
-// GetPublicSpendWindowValues lists every GetPublicSpendWindow this SDK release knows.
-var GetPublicSpendWindowValues = []GetPublicSpendWindow{GetPublicSpendWindow24h, GetPublicSpendWindow7d, GetPublicSpendWindow30d, GetPublicSpendWindow90d}
 
 // ListDebugAgentContextResponse is the `ListDebugAgentContextResponse` wire model.
 type ListDebugAgentContextResponse struct {
@@ -4077,6 +3994,91 @@ const (
 
 // PublicSetFindingStatusStatusValues lists every PublicSetFindingStatusStatus this SDK release knows.
 var PublicSetFindingStatusStatusValues = []PublicSetFindingStatusStatus{PublicSetFindingStatusStatusDismissed, PublicSetFindingStatusStatusOpen}
+
+// PublicSpend is the `PublicSpend` wire model.
+type PublicSpend struct {
+	Currency    string               `json:"currency"`
+	Dimension   PublicSpendDimension `json:"dimension"`
+	GeneratedAt float64              `json:"generatedAt"`
+	// RolledUpThrough always present; nil when the server has no value for it.
+	RolledUpThrough *float64          `json:"rolledUpThrough"`
+	Rows            []PublicSpendRow  `json:"rows"`
+	Since           float64           `json:"since"`
+	Source          PublicSpendSource `json:"source"`
+	Totals          PublicSpendTotals `json:"totals"`
+	Truncated       bool              `json:"truncated"`
+	Window          PublicSpendWindow `json:"window"`
+}
+
+// PublicSpendDimension is the `PublicSpendDimension` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicSpendDimension string
+
+const (
+	PublicSpendDimensionModel     PublicSpendDimension = "model"
+	PublicSpendDimensionAgentKind PublicSpendDimension = "agentKind"
+	PublicSpendDimensionService   PublicSpendDimension = "service"
+	PublicSpendDimensionRepo      PublicSpendDimension = "repo"
+	PublicSpendDimensionTaskType  PublicSpendDimension = "taskType"
+	PublicSpendDimensionTicket    PublicSpendDimension = "ticket"
+	PublicSpendDimensionRun       PublicSpendDimension = "run"
+)
+
+// PublicSpendDimensionValues lists every PublicSpendDimension this SDK release knows.
+var PublicSpendDimensionValues = []PublicSpendDimension{PublicSpendDimensionModel, PublicSpendDimensionAgentKind, PublicSpendDimensionService, PublicSpendDimensionRepo, PublicSpendDimensionTaskType, PublicSpendDimensionTicket, PublicSpendDimensionRun}
+
+// PublicSpendRow is the `PublicSpendRow` wire model.
+type PublicSpendRow struct {
+	Calls       float64 `json:"calls"`
+	InputTokens float64 `json:"inputTokens"`
+	Key         string  `json:"key"`
+	// Label always present; nil when the server has no value for it.
+	Label            *string `json:"label"`
+	MeteredCost      float64 `json:"meteredCost"`
+	OutputTokens     float64 `json:"outputTokens"`
+	SubscriptionCost float64 `json:"subscriptionCost"`
+}
+
+// PublicSpendSource is the `PublicSpendSource` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicSpendSource string
+
+const (
+	PublicSpendSourceLedger      PublicSpendSource = "ledger"
+	PublicSpendSourceDailyRollup PublicSpendSource = "daily-rollup"
+)
+
+// PublicSpendSourceValues lists every PublicSpendSource this SDK release knows.
+var PublicSpendSourceValues = []PublicSpendSource{PublicSpendSourceLedger, PublicSpendSourceDailyRollup}
+
+// PublicSpendTotals is the `PublicSpendTotals` wire model.
+type PublicSpendTotals struct {
+	Calls            float64 `json:"calls"`
+	InputTokens      float64 `json:"inputTokens"`
+	MeteredCost      float64 `json:"meteredCost"`
+	OutputTokens     float64 `json:"outputTokens"`
+	SubscriptionCost float64 `json:"subscriptionCost"`
+}
+
+// PublicSpendWindow is the `PublicSpendWindow` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicSpendWindow string
+
+const (
+	PublicSpendWindow24h PublicSpendWindow = "24h"
+	PublicSpendWindow7d  PublicSpendWindow = "7d"
+	PublicSpendWindow30d PublicSpendWindow = "30d"
+	PublicSpendWindow90d PublicSpendWindow = "90d"
+)
+
+// PublicSpendWindowValues lists every PublicSpendWindow this SDK release knows.
+var PublicSpendWindowValues = []PublicSpendWindow{PublicSpendWindow24h, PublicSpendWindow7d, PublicSpendWindow30d, PublicSpendWindow90d}
 
 // PublicTask is the `PublicTask` wire model.
 type PublicTask struct {

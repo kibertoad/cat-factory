@@ -147,6 +147,40 @@ const SURFACE = {
 }
 
 /**
+ * Which telemetry SINK each `/api/v1/debug/*` read draws its rows from, or `null` for the two
+ * that project the run itself.
+ *
+ * This is the one policy fact about this API that a name cannot carry and a scope floor does not
+ * express. The five sinks are where the platform keeps CAPTURED TEXT: model prompts and replies,
+ * tool arguments and results, agent search terms, provisioning command output. All of it sits
+ * inside a `read` key's floor, because it is a read, so the only thing standing between a
+ * read-only Gatekeeper tier and a run's full transcript is a policy that names these operations.
+ * A hand-typed list of those names is how `debug_get_llm_export` shipped granted to an observer
+ * tier that denied every one of its siblings.
+ *
+ * The two `null` entries are the run's own lifecycle projection (ids, status, step shape,
+ * aggregates and derived signals). They are the reads a status dashboard is built from, they
+ * carry no captured text, and keeping them readable is why the classification is per-operation
+ * rather than "the whole `/debug` prefix".
+ *
+ * Generation FAILS on a `debug` operation with no entry here and on an entry the spec no longer
+ * has, so a new telemetry read cannot ship un-classified: it either names its sink and joins the
+ * derived deny set, or states that it carries none.
+ */
+export const DEBUG_TELEMETRY_SINKS = {
+  listDebugRuns: null,
+  getDebugRun: null,
+  listDebugLlmCalls: 'llmCalls',
+  getDebugLlmCall: 'llmCalls',
+  getDebugLlmExport: 'llmCalls',
+  listDebugAgentContext: 'agentContext',
+  getDebugAgentContext: 'agentContext',
+  listDebugToolCalls: 'toolCalls',
+  listDebugLogs: 'provisioningLog',
+  listDebugSearchQueries: 'searchQueries',
+}
+
+/**
  * The operations the MCP facade (`sdk/mcp`) deliberately does NOT expose as a tool, each with the
  * reason a caller should read. Generation FAILS on a streaming operation that is not named here,
  * and on an entry naming an operation the spec no longer has.

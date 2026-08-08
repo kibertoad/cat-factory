@@ -8,18 +8,25 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code GetPublicSpendResponseTotals} wire model.
+ * The {@code PublicSpendRow} wire model.
  * @param calls the {@code calls} field.
  * @param inputTokens the {@code inputTokens} field.
+ * @param key the {@code key} field.
+ * @param label Always present; {@code null} when the server has no value for it.
  * @param meteredCost the {@code meteredCost} field.
  * @param outputTokens the {@code outputTokens} field.
  * @param subscriptionCost the {@code subscriptionCost} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record GetPublicSpendResponseTotals(
+public record PublicSpendRow(
     @JsonProperty("calls") Double calls,
 
     @JsonProperty("inputTokens") Double inputTokens,
+
+    @JsonProperty("key") String key,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("label") @Nullable String label,
 
     @JsonProperty("meteredCost") Double meteredCost,
 
@@ -28,13 +35,13 @@ public record GetPublicSpendResponseTotals(
     @JsonProperty("subscriptionCost") Double subscriptionCost
 ) {
 
-    /** A new builder for {@link GetPublicSpendResponseTotals}. */
+    /** A new builder for {@link PublicSpendRow}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link GetPublicSpendResponseTotals}.
+     * Fluent builder for {@link PublicSpendRow}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
@@ -42,6 +49,8 @@ public record GetPublicSpendResponseTotals(
     public static final class Builder {
         private @Nullable Double calls;
         private @Nullable Double inputTokens;
+        private @Nullable String key;
+        private @Nullable String label;
         private @Nullable Double meteredCost;
         private @Nullable Double outputTokens;
         private @Nullable Double subscriptionCost;
@@ -55,6 +64,18 @@ public record GetPublicSpendResponseTotals(
         /** Set {@code inputTokens}. */
         public Builder inputTokens(@Nullable Double inputTokens) {
             this.inputTokens = inputTokens;
+            return this;
+        }
+
+        /** Set {@code key}. */
+        public Builder key(@Nullable String key) {
+            this.key = key;
+            return this;
+        }
+
+        /** Set {@code label}. */
+        public Builder label(@Nullable String label) {
+            this.label = label;
             return this;
         }
 
@@ -76,9 +97,9 @@ public record GetPublicSpendResponseTotals(
             return this;
         }
 
-        /** Build the {@link GetPublicSpendResponseTotals}. */
-        public GetPublicSpendResponseTotals build() {
-            return new GetPublicSpendResponseTotals(calls, inputTokens, meteredCost, outputTokens, subscriptionCost);
+        /** Build the {@link PublicSpendRow}. */
+        public PublicSpendRow build() {
+            return new PublicSpendRow(calls, inputTokens, key, label, meteredCost, outputTokens, subscriptionCost);
         }
     }
 }

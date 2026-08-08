@@ -24,9 +24,6 @@ import type {
   GetDebugLlmCallView,
   GetDebugLlmExportResponse,
   GetPublicRunOutcomeResponse,
-  GetPublicSpendDimension,
-  GetPublicSpendResponse,
-  GetPublicSpendWindow,
   ListDebugAgentContextResponse,
   ListDebugLlmCallsOrder,
   ListDebugLlmCallsResponse,
@@ -75,6 +72,9 @@ import type {
   PublicService,
   PublicServiceList,
   PublicSetFindingStatus,
+  PublicSpend,
+  PublicSpendDimension,
+  PublicSpendWindow,
   PublicTask,
   PublicTaskList,
   PublicUsage,
@@ -107,8 +107,9 @@ export type DebugGetLlmExportQuery = {
 
 /** Query parameters for `client.usage.spend()`. */
 export type UsageSpendQuery = {
-  dimension: GetPublicSpendDimension
-  window?: GetPublicSpendWindow
+  dimension: PublicSpendDimension
+  window?: PublicSpendWindow
+  limit?: number
 }
 
 /** Query parameters for `client.debug.listAgentContext()`. */
@@ -769,11 +770,11 @@ export class UsageResource {
 
   /**
    * Break the workspace's spend down by repository, ticket, run or step kind
-   * Group the board’s spend over a window (`24h`, `7d`, `30d`, `90d`) by ONE dimension: `repo`, `ticket` and `run` are the cost-attribution axes an organisation budgets against, and `model` / `agentKind` / `service` / `taskType` slice the same money the other ways. `meteredCost` is real money and `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage, so never sum them. The EMPTY `key` is the unattributed bucket, a real slice rather than a dropped row, so the rows always sum to `totals`. `source` says which store answered: the short windows scan the live ledger, which resolves a repository or a ticket through today’s links, while the long ones read the durable daily rollup, which froze that attribution while the money was spent and is never pruned. Read `rolledUpThrough` before reporting a quiet quarter, since a rollup that has never run and a board that spent nothing look identical. Workspace-scoped: the account-wide view is not reachable through this surface.
+   * Group the board’s spend over a window (`24h`, `7d`, `30d`, `90d`) by ONE dimension: `repo`, `ticket` and `run` are the cost-attribution axes an organisation budgets against, and `model` / `agentKind` / `service` / `taskType` slice the same money the other ways. `meteredCost` is real money and `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage, so never sum them. The EMPTY `key` is the unattributed bucket, a real slice rather than a dropped row, never dropped from the breakdown. `rows` is the heaviest `limit` slices (default 100, max 500) and `truncated` says when there was a tail, while `totals` aggregates the WHOLE window either way, so a capped answer still reports what the board spent. `source` says which store answered: the short windows scan the live ledger, which resolves a repository or a ticket through today’s links, while the long ones read the durable daily rollup, which froze that attribution while the money was spent and is never pruned. Read `rolledUpThrough` before reporting a quiet quarter, since a rollup that has never run and a board that spent nothing look identical. Workspace-scoped: the account-wide view is not reachable through this surface.
    * `GET /api/v1/usage/spend` — operation `getPublicSpend`.
    */
-  spend(query: UsageSpendQuery, options: RequestOptions = {}): Promise<GetPublicSpendResponse> {
-    return this.#transport.request<GetPublicSpendResponse>({
+  spend(query: UsageSpendQuery, options: RequestOptions = {}): Promise<PublicSpend> {
+    return this.#transport.request<PublicSpend>({
       method: 'GET',
       path: `/api/v1/usage/spend`,
       query,

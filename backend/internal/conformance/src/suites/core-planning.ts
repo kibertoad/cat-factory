@@ -607,6 +607,7 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
       currency: string
       source: string
       rolledUpThrough: number | null
+      truncated: boolean
       totals: { calls: number; meteredCost: number; subscriptionCost: number }
       rows: { key: string; label: string | null; meteredCost: number }[]
     }
@@ -631,6 +632,9 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
       expect(live.body.rows).toEqual([])
       expect(live.body.totals).toMatchObject({ calls: 0, meteredCost: 0, subscriptionCost: 0 })
       expect(live.body.since).toBeLessThan(live.body.generatedAt)
+      // An empty breakdown is COMPLETE, not capped. The two read identically without this
+      // field, which is the whole reason it is on the wire.
+      expect(live.body.truncated).toBe(false)
     }
 
     // The DURABLE half: the long windows read the rollup on both facades, and a deployment whose
@@ -667,6 +671,19 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
       (await call('GET', '/api/v1/usage/spend?dimension=repo&window=1y', undefined, auth)).status,
     ).toBe(400)
     expect((await call('GET', '/api/v1/usage/spend?dimension=repo')).status).toBe(401)
+
+    // The row cap is a real bound with a real ceiling, refused at both ends rather than clamped:
+    // a caller that asked for 5000 rows and silently got 500 would read the answer as complete.
+    for (const limit of ['0', '501', 'all', '1e3']) {
+      expect(
+        (await call('GET', `/api/v1/usage/spend?dimension=run&limit=${limit}`, undefined, auth))
+          .status,
+        `limit=${limit} must be refused`,
+      ).toBe(400)
+    }
+    expect(
+      (await call('GET', '/api/v1/usage/spend?dimension=run&limit=1', undefined, auth)).status,
+    ).toBe(200)
   })
 }
 

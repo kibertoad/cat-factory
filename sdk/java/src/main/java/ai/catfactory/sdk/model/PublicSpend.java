@@ -9,7 +9,7 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code GetPublicSpendResponse} wire model.
+ * The {@code PublicSpend} wire model.
  * @param currency the {@code currency} field.
  * @param dimension the {@code dimension} field.
  * @param generatedAt the {@code generatedAt} field.
@@ -18,51 +18,55 @@ import org.jspecify.annotations.Nullable;
  * @param since the {@code since} field.
  * @param source the {@code source} field.
  * @param totals the {@code totals} field.
+ * @param truncated the {@code truncated} field.
  * @param window the {@code window} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record GetPublicSpendResponse(
+public record PublicSpend(
     @JsonProperty("currency") String currency,
 
-    @JsonProperty("dimension") GetPublicSpendDimension dimension,
+    @JsonProperty("dimension") PublicSpendDimension dimension,
 
     @JsonProperty("generatedAt") Double generatedAt,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("rolledUpThrough") @Nullable Double rolledUpThrough,
 
-    @JsonProperty("rows") List<GetPublicSpendResponseRow> rows,
+    @JsonProperty("rows") List<PublicSpendRow> rows,
 
     @JsonProperty("since") Double since,
 
-    @JsonProperty("source") GetPublicSpendResponseSource source,
+    @JsonProperty("source") PublicSpendSource source,
 
-    @JsonProperty("totals") GetPublicSpendResponseTotals totals,
+    @JsonProperty("totals") PublicSpendTotals totals,
 
-    @JsonProperty("window") GetPublicSpendWindow window
+    @JsonProperty("truncated") Boolean truncated,
+
+    @JsonProperty("window") PublicSpendWindow window
 ) {
 
-    /** A new builder for {@link GetPublicSpendResponse}. */
+    /** A new builder for {@link PublicSpend}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link GetPublicSpendResponse}.
+     * Fluent builder for {@link PublicSpend}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
         private @Nullable String currency;
-        private @Nullable GetPublicSpendDimension dimension;
+        private @Nullable PublicSpendDimension dimension;
         private @Nullable Double generatedAt;
         private @Nullable Double rolledUpThrough;
-        private @Nullable List<GetPublicSpendResponseRow> rows;
+        private @Nullable List<PublicSpendRow> rows;
         private @Nullable Double since;
-        private @Nullable GetPublicSpendResponseSource source;
-        private @Nullable GetPublicSpendResponseTotals totals;
-        private @Nullable GetPublicSpendWindow window;
+        private @Nullable PublicSpendSource source;
+        private @Nullable PublicSpendTotals totals;
+        private @Nullable Boolean truncated;
+        private @Nullable PublicSpendWindow window;
 
         /** Set {@code currency}. */
         public Builder currency(@Nullable String currency) {
@@ -71,7 +75,7 @@ public record GetPublicSpendResponse(
         }
 
         /** Set {@code dimension}. */
-        public Builder dimension(@Nullable GetPublicSpendDimension dimension) {
+        public Builder dimension(@Nullable PublicSpendDimension dimension) {
             this.dimension = dimension;
             return this;
         }
@@ -89,7 +93,7 @@ public record GetPublicSpendResponse(
         }
 
         /** Set {@code rows}. */
-        public Builder rows(@Nullable List<GetPublicSpendResponseRow> rows) {
+        public Builder rows(@Nullable List<PublicSpendRow> rows) {
             this.rows = rows;
             return this;
         }
@@ -101,26 +105,32 @@ public record GetPublicSpendResponse(
         }
 
         /** Set {@code source}. */
-        public Builder source(@Nullable GetPublicSpendResponseSource source) {
+        public Builder source(@Nullable PublicSpendSource source) {
             this.source = source;
             return this;
         }
 
         /** Set {@code totals}. */
-        public Builder totals(@Nullable GetPublicSpendResponseTotals totals) {
+        public Builder totals(@Nullable PublicSpendTotals totals) {
             this.totals = totals;
             return this;
         }
 
+        /** Set {@code truncated}. */
+        public Builder truncated(@Nullable Boolean truncated) {
+            this.truncated = truncated;
+            return this;
+        }
+
         /** Set {@code window}. */
-        public Builder window(@Nullable GetPublicSpendWindow window) {
+        public Builder window(@Nullable PublicSpendWindow window) {
             this.window = window;
             return this;
         }
 
-        /** Build the {@link GetPublicSpendResponse}. */
-        public GetPublicSpendResponse build() {
-            return new GetPublicSpendResponse(currency, dimension, generatedAt, rolledUpThrough, rows, since, source, totals, window);
+        /** Build the {@link PublicSpend}. */
+        public PublicSpend build() {
+            return new PublicSpend(currency, dimension, generatedAt, rolledUpThrough, rows, since, source, totals, truncated, window);
         }
     }
 }

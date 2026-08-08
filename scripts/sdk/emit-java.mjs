@@ -577,6 +577,18 @@ import org.jspecify.annotations.NullMarked;
 `
 }
 
+/**
+ * Whether the operation has a query parameter the deployment REFUSES the call without.
+ *
+ * The one thing that decides whether a "call it with no query" affordance is a convenience or a
+ * trap, so both the client overload and the record's own empty factory ask it. Before this
+ * surface had such a parameter every query bag was legitimately omittable, which is why the two
+ * were emitted unconditionally.
+ */
+function hasRequiredQuery(operation) {
+  return operation.queryParams.some((param) => param.required)
+}
+
 /** The generated query-parameter record name for an operation, or null when it takes none. */
 function queryTypeName(operation) {
   return operation.queryParams.length > 0
@@ -620,20 +632,47 @@ function emitQueryRecord(operation) {
     .join('\n')
   const args = operation.queryParams.map((param) => member(param.wireName, param.type)).join(', ')
 
+  // The factory a caller reaches for first. With every parameter optional that is "none of
+  // them"; with a required one it is "the required ones", because an empty bag is a request the
+  // deployment refuses and a static named `none()` is how a caller is talked into making it.
+  // Same reason the client's no-query overload is withheld for these operations.
+  const required = operation.queryParams.filter((param) => param.required)
+  const factory = hasRequiredQuery(operation)
+    ? javadoc(
+        [
+          `The required parameters, with every optional one unset.`,
+          '',
+          'There is deliberately no empty factory on this record: the deployment refuses a call ' +
+            'that omits any parameter above, so an empty parameter set has no use that is not a bug.',
+        ],
+        '    ',
+      ) +
+      `    public static ${name} of(${required
+        .map((param) => `${javaType(param.type)} ${member(param.wireName, param.type)}`)
+        .join(', ')}) {\n` +
+      `        return builder()${required
+        .map((param) => {
+          const memberName = member(param.wireName, param.type)
+          return `.${memberName}(${memberName})`
+        })
+        .join('')}.build();\n` +
+      '    }\n'
+    : `    /** An empty parameter set. */\n` +
+      `    public static ${name} none() {\n` +
+      `        return builder().build();\n` +
+      '    }\n'
+
   const body =
     javadoc([
       `Query parameters for {@code ${operation.group}().${operation.method}()}.`,
       '',
-      operation.queryParams.some((param) => param.required)
+      hasRequiredQuery(operation)
         ? 'A null parameter is not sent at all; the ones marked required above must be set, or the deployment refuses the call.'
         : 'Every parameter is optional; a null one is not sent at all.',
     ]) +
     `public record ${name}(\n${components}\n) {\n` +
     '\n' +
-    `    /** An empty parameter set. */\n` +
-    `    public static ${name} none() {\n` +
-    `        return builder().build();\n` +
-    '    }\n' +
+    factory +
     '\n' +
     `    /** A new builder for {@link ${name}}. */\n` +
     '    public static Builder builder() {\n' +
@@ -722,9 +761,14 @@ function emitMethod(operation) {
         : `        transport.requestNoContent(${argsForTransport.join(', ')});\n`
 
   const overload =
-    query && operation.pathParams.length >= 0
+    query && !hasRequiredQuery(operation)
       ? // Kotlin cannot see Java default arguments, and Java has none, so the no-query call has
         // to be a real overload or every caller in both languages writes `Query.none()`.
+        //
+        // WITHHELD where a query parameter is required: the convenience it buys is a method that
+        // cannot succeed. It would compile, read as the obvious call (its javadoc says "no query
+        // parameters"), and 400 on every invocation, which is worse than the two extra words the
+        // caller writes instead.
         `${javadoc([`${operation.summary} (no query parameters).`], '    ')}` +
         `    public ${returns} ${name}(${params.filter((p) => !p.startsWith(query)).join(', ')}) {\n` +
         `        ${returns === 'void' ? '' : 'return '}${name}(${[...operation.pathParams.map((p) => member(p.wireName)), operation.body ? 'body' : null, `${query}.none()`].filter(Boolean).join(', ')});\n` +

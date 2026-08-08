@@ -889,8 +889,9 @@ export type DebugLlmExportOrder = v.InferOutput<typeof debugLlmExportOrderSchema
 /** Query params for the run's LLM export bundle. */
 export const getDebugLlmExportQuerySchema = v.object({
   /**
-   * How many CALL ROWS to include, 1..{@link DEBUG_MAX_PAGE_LIMIT} (default 50). The rollups
-   * below are unaffected: they are SQL aggregates over the whole run whatever this says.
+   * How many CALL ROWS to include, 1..{@link DEBUG_MAX_PAGE_LIMIT} (default 25, the call
+   * list's own page default). The rollups below are unaffected: they are SQL aggregates over
+   * the whole run whatever this says.
    */
   limit: v.optional(pageLimitSchema),
   /**
@@ -926,6 +927,11 @@ export type GetDebugLlmExportQuery = v.InferOutput<typeof getDebugLlmExportQuery
  * - **`truncated` is stated, never inferred.** A reader who does not know the cap cannot tell
  *   a complete bundle from a windowed one, and this is exactly the document where a partial
  *   sum gets quoted as a whole.
+ * - **`available` separates "nothing recorded" from "nothing happened".** Same fact the run
+ *   overview publishes as `sinks.llmCalls.available`, and needed here for a stronger reason:
+ *   this bundle is composed to be handed straight to a model, and a deployment that retains no
+ *   LLM telemetry would otherwise produce a document byte-identical to a run that made no
+ *   model calls at all, which reads as a diagnosis.
  */
 export const debugLlmExportSchema = v.object({
   /** Schema marker so a consuming model knows the shape without external docs. */
@@ -934,6 +940,20 @@ export const debugLlmExportSchema = v.object({
   runId: v.string(),
   /** When this bundle was composed (epoch ms). */
   generatedAt: v.number(),
+  /**
+   * Whether this deployment retains LLM telemetry at all: REPOSITORY presence, the same
+   * reading as {@link debugSinkStatusSchema}'s own field, so `false` means every number below
+   * is an absence of RECORDS rather than an absence of activity.
+   *
+   * Carried as a bare boolean rather than a second `debugSinkStatus`, because the count this
+   * sink's status would pair it with is already `llm.totals.calls`, aggregated in the same
+   * pass. A second copy of one number could only ever be a second read of the same rows.
+   *
+   * The capture-time gates (`LLM_RECORD_PROMPTS`, the per-workspace `storeAgentContext`) are
+   * invisible here exactly as they are on the overview: a workspace that opted out of body
+   * capture still reads `true`, with its call rows carrying no bodies.
+   */
+  available: v.boolean(),
   /**
    * The run's model activity, aggregated in SQL over EVERY recorded call: the same fold the
    * run overview publishes, from the same rollup, so the two documents cannot disagree.

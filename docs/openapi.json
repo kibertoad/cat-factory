@@ -4540,6 +4540,151 @@
         ],
         "type": "object"
       },
+      "PublicSpend": {
+        "properties": {
+          "currency": {
+            "type": "string"
+          },
+          "dimension": {
+            "enum": [
+              "model",
+              "agentKind",
+              "service",
+              "repo",
+              "taskType",
+              "ticket",
+              "run"
+            ],
+            "type": "string"
+          },
+          "generatedAt": {
+            "type": "number"
+          },
+          "rolledUpThrough": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/PublicSpendRow"
+            },
+            "type": "array"
+          },
+          "since": {
+            "type": "number"
+          },
+          "source": {
+            "enum": [
+              "ledger",
+              "daily-rollup"
+            ],
+            "type": "string"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/PublicSpendTotals"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "enum": [
+              "24h",
+              "7d",
+              "30d",
+              "90d"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "dimension",
+          "window",
+          "generatedAt",
+          "since",
+          "currency",
+          "source",
+          "rolledUpThrough",
+          "totals",
+          "truncated",
+          "rows"
+        ],
+        "type": "object"
+      },
+      "PublicSpendRow": {
+        "properties": {
+          "calls": {
+            "type": "number"
+          },
+          "inputTokens": {
+            "type": "number"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meteredCost": {
+            "type": "number"
+          },
+          "outputTokens": {
+            "type": "number"
+          },
+          "subscriptionCost": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "inputTokens",
+          "outputTokens",
+          "calls",
+          "meteredCost",
+          "subscriptionCost"
+        ],
+        "type": "object"
+      },
+      "PublicSpendTotals": {
+        "properties": {
+          "calls": {
+            "type": "number"
+          },
+          "inputTokens": {
+            "type": "number"
+          },
+          "meteredCost": {
+            "type": "number"
+          },
+          "outputTokens": {
+            "type": "number"
+          },
+          "subscriptionCost": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens",
+          "calls",
+          "meteredCost",
+          "subscriptionCost"
+        ],
+        "type": "object"
+      },
       "PublicTask": {
         "properties": {
           "autoStartDependents": {
@@ -8218,6 +8363,9 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "available": {
+                      "type": "boolean"
+                    },
                     "calls": {
                       "items": {
                         "properties": {
@@ -8964,6 +9112,7 @@
                     "version",
                     "runId",
                     "generatedAt",
+                    "available",
                     "llm",
                     "order",
                     "truncated",
@@ -15444,7 +15593,7 @@
     },
     "/api/v1/usage/spend": {
       "get": {
-        "description": "Group the board’s spend over a window (`24h`, `7d`, `30d`, `90d`) by ONE dimension: `repo`, `ticket` and `run` are the cost-attribution axes an organisation budgets against, and `model` / `agentKind` / `service` / `taskType` slice the same money the other ways. `meteredCost` is real money and `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage, so never sum them. The EMPTY `key` is the unattributed bucket, a real slice rather than a dropped row, so the rows always sum to `totals`. `source` says which store answered: the short windows scan the live ledger, which resolves a repository or a ticket through today’s links, while the long ones read the durable daily rollup, which froze that attribution while the money was spent and is never pruned. Read `rolledUpThrough` before reporting a quiet quarter, since a rollup that has never run and a board that spent nothing look identical. Workspace-scoped: the account-wide view is not reachable through this surface.",
+        "description": "Group the board’s spend over a window (`24h`, `7d`, `30d`, `90d`) by ONE dimension: `repo`, `ticket` and `run` are the cost-attribution axes an organisation budgets against, and `model` / `agentKind` / `service` / `taskType` slice the same money the other ways. `meteredCost` is real money and `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage, so never sum them. The EMPTY `key` is the unattributed bucket, a real slice rather than a dropped row, never dropped from the breakdown. `rows` is the heaviest `limit` slices (default 100, max 500) and `truncated` says when there was a tail, while `totals` aggregates the WHOLE window either way, so a capped answer still reports what the board spent. `source` says which store answered: the short windows scan the live ledger, which resolves a repository or a ticket through today’s links, while the long ones read the durable daily rollup, which froze that attribution while the money was spent and is never pruned. Read `rolledUpThrough` before reporting a quiet quarter, since a rollup that has never run and a board that spent nothing look identical. Workspace-scoped: the account-wide view is not reachable through this surface.",
         "operationId": "getPublicSpend",
         "parameters": [
           {
@@ -15477,6 +15626,17 @@
               ],
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -15484,139 +15644,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "currency": {
-                      "type": "string"
-                    },
-                    "dimension": {
-                      "enum": [
-                        "model",
-                        "agentKind",
-                        "service",
-                        "repo",
-                        "taskType",
-                        "ticket",
-                        "run"
-                      ],
-                      "type": "string"
-                    },
-                    "generatedAt": {
-                      "type": "number"
-                    },
-                    "rolledUpThrough": {
-                      "anyOf": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "rows": {
-                      "items": {
-                        "properties": {
-                          "calls": {
-                            "type": "number"
-                          },
-                          "inputTokens": {
-                            "type": "number"
-                          },
-                          "key": {
-                            "type": "string"
-                          },
-                          "label": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "meteredCost": {
-                            "type": "number"
-                          },
-                          "outputTokens": {
-                            "type": "number"
-                          },
-                          "subscriptionCost": {
-                            "type": "number"
-                          }
-                        },
-                        "required": [
-                          "key",
-                          "label",
-                          "inputTokens",
-                          "outputTokens",
-                          "calls",
-                          "meteredCost",
-                          "subscriptionCost"
-                        ],
-                        "type": "object"
-                      },
-                      "type": "array"
-                    },
-                    "since": {
-                      "type": "number"
-                    },
-                    "source": {
-                      "enum": [
-                        "ledger",
-                        "daily-rollup"
-                      ],
-                      "type": "string"
-                    },
-                    "totals": {
-                      "properties": {
-                        "calls": {
-                          "type": "number"
-                        },
-                        "inputTokens": {
-                          "type": "number"
-                        },
-                        "meteredCost": {
-                          "type": "number"
-                        },
-                        "outputTokens": {
-                          "type": "number"
-                        },
-                        "subscriptionCost": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "inputTokens",
-                        "outputTokens",
-                        "calls",
-                        "meteredCost",
-                        "subscriptionCost"
-                      ],
-                      "type": "object"
-                    },
-                    "window": {
-                      "enum": [
-                        "24h",
-                        "7d",
-                        "30d",
-                        "90d"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "dimension",
-                    "window",
-                    "generatedAt",
-                    "since",
-                    "currency",
-                    "source",
-                    "rolledUpThrough",
-                    "totals",
-                    "rows"
-                  ],
-                  "type": "object"
+                  "$ref": "#/components/schemas/PublicSpend"
                 }
               }
             },

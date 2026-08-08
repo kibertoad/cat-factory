@@ -8,14 +8,16 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code GetPublicSpendResponseSource} vocabulary.
+ * The {@code PublicSpendWindow} vocabulary.
  * Decoding an unrecognised value yields {@link #UNRECOGNIZED} rather than throwing, and {@link
  * #wireValue()} still returns what the server actually sent. This surface is additive, so refusing
  * a value the server legitimately added would break a caller on a release it was never told about.
  */
-public enum GetPublicSpendResponseSource {
-    LEDGER("ledger"),
-    DAILY_ROLLUP("daily-rollup"),
+public enum PublicSpendWindow {
+    V24H("24h"),
+    V7D("7d"),
+    V30D("30d"),
+    V90D("90d"),
 
     /**
      * A value this SDK release does not know.
@@ -29,7 +31,7 @@ public enum GetPublicSpendResponseSource {
 
     private final String wire;
 
-    GetPublicSpendResponseSource(String wire) {
+    PublicSpendWindow(String wire) {
         this.wire = wire;
     }
 
@@ -41,8 +43,8 @@ public enum GetPublicSpendResponseSource {
 
     /** Decode from the wire, tolerating a value this release does not know. */
     @JsonCreator
-    public static GetPublicSpendResponseSource fromWire(@Nullable String wire) {
-        for (GetPublicSpendResponseSource candidate : values()) {
+    public static PublicSpendWindow fromWire(@Nullable String wire) {
+        for (PublicSpendWindow candidate : values()) {
             if (candidate.wire.equals(wire)) {
                 return candidate;
             }

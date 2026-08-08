@@ -378,6 +378,9 @@ describe('RunDebugService.listToolCalls', () => {
 })
 
 describe('RunDebugService LLM export', () => {
+  /** A bundle request that reads nothing, for assertions about the bundle's own metadata. */
+  const EMPTY_WINDOW = { limit: 1, order: 'oldest', bodyChars: 0 } as const
+
   /** A store whose rollup covers the whole run and whose page holds one row more than asked. */
   function exportRepo(callRows: number) {
     const summarizeByExecution = vi.fn(async () => [
@@ -451,7 +454,7 @@ describe('RunDebugService LLM export', () => {
     expect(bundle.order).toBe('newest')
   })
 
-  it('serves an unwired telemetry sink as an EMPTY bundle rather than failing', async () => {
+  it('serves an unwired telemetry sink as an EMPTY bundle that SAYS it is unwired', async () => {
     const service = new RunDebugService({
       executionRepository: executionRepo([run('exec_1', 1)]),
       clock,
@@ -466,5 +469,13 @@ describe('RunDebugService LLM export', () => {
     expect(bundle.truncated).toBe(false)
     // A deployment that prices nothing says so rather than denominating null costs.
     expect(bundle.llm.costCurrency).toBeNull()
+    // The reason the flag exists: without it this bundle is byte-identical to the one a run
+    // that genuinely made no model calls produces, and its intended reader is a model asked
+    // why the run went wrong. Asserted BESIDE a wired run's, since a constant `false` would
+    // pass the half of this that matters least.
+    expect(bundle.available).toBe(false)
+    expect((await exportRepo(0).service.llmExport('ws', 'exec_1', EMPTY_WINDOW)).available).toBe(
+      true,
+    )
   })
 })

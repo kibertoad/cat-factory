@@ -77,6 +77,12 @@ function str(args: Record<string, unknown>, name: string): string {
   return value
 }
 
+/** One query parameter of a tool, and whether the deployment insists on it. */
+interface QueryParam {
+  name: string
+  required: boolean
+}
+
 /**
  * The subset of `args` that belongs in the query string.
  *
@@ -85,32 +91,99 @@ function str(args: Record<string, unknown>, name: string): string {
  * typo as a query parameter the deployment then ignores, and the caller would see a filter that
  * silently did nothing.
  *
- * Returns the call site's own query type. `args` arrives as JSON-RPC input validated against the
- * tool's `inputSchema`, which is generated from the SAME contract as that type and marks the
- * same parameters required, so the narrowing is asserted here once instead of at every thunk. A
- * host that skips its own validation and omits a required parameter is refused by the deployment
- * with a 400 naming the field.
+ * Returns the call site's own query type, and CHECKS rather than assumes: a required parameter
+ * that `args` omits throws here, the way a missing path parameter already does through
+ * `str()`. The tool's `inputSchema` marks the same parameters required, but a host is not
+ * obliged to validate against it and the reference server in this package does not, so trusting
+ * it made the narrowing a claim about a bag that had just dropped the field the call needs. The
+ * failure that produced is the worst kind for a model: a 400 about a parameter it believes it
+ * supplied, several turns after the tool description explained it.
+ *
+ * PRESENCE only. What a value may BE is the deployment's judgement, already stated in the schema
+ * the model was given, and its refusal names the field; re-deriving it here would be a second
+ * copy of the contract, free to disagree with the first.
  */
-function pick<Query>(args: Record<string, unknown>, names: readonly string[]): Query {
+function pick<Query>(args: Record<string, unknown>, params: readonly QueryParam[]): Query {
   const out: Record<string, unknown> = {}
-  for (const name of names) {
-    if (args[name] !== undefined) out[name] = args[name]
+  for (const param of params) {
+    const value = args[param.name]
+    if (value === undefined) {
+      if (param.required) {
+        throw new TypeError(`${param.name} is required`)
+      }
+      continue
+    }
+    out[param.name] = value
   }
   return out as Query
 }
 
-const QUERY_JOBS_LIST = ['limit', 'cursor', 'status', 'since'] as const
-const QUERY_TASKS_LIST_BY_SERVICE = ['limit', 'cursor', 'status'] as const
-const QUERY_USAGE_SPEND = ['dimension', 'window'] as const
-const QUERY_DEBUG_GET_AGENT_CONTEXT = ['bodyChars', 'bodyOffset'] as const
-const QUERY_DEBUG_GET_LLM_CALL = ['bodyChars', 'bodyOffset', 'view'] as const
-const QUERY_DEBUG_GET_LLM_EXPORT = ['limit', 'order', 'bodyChars'] as const
-const QUERY_DEBUG_LIST_AGENT_CONTEXT = ['stepIndex', 'limit', 'cursor'] as const
-const QUERY_DEBUG_LIST_LLM_CALLS = ['agentKind', 'phase', 'outcome', 'contains', 'order', 'limit', 'cursor', 'bodyChars'] as const
-const QUERY_DEBUG_LIST_LOGS = ['limit', 'cursor'] as const
-const QUERY_DEBUG_LIST_RUNS = ['status', 'since', 'limit', 'cursor'] as const
-const QUERY_DEBUG_LIST_SEARCH_QUERIES = ['limit', 'cursor'] as const
-const QUERY_DEBUG_LIST_TOOL_CALLS = ['limit', 'cursor', 'jobId', 'order', 'outcome'] as const
+const QUERY_JOBS_LIST: readonly QueryParam[] = [
+  { name: 'limit', required: false },
+  { name: 'cursor', required: false },
+  { name: 'status', required: false },
+  { name: 'since', required: false },
+]
+const QUERY_TASKS_LIST_BY_SERVICE: readonly QueryParam[] = [
+  { name: 'limit', required: false },
+  { name: 'cursor', required: false },
+  { name: 'status', required: false },
+]
+const QUERY_USAGE_SPEND: readonly QueryParam[] = [
+  { name: 'dimension', required: true },
+  { name: 'window', required: false },
+  { name: 'limit', required: false },
+]
+const QUERY_DEBUG_GET_AGENT_CONTEXT: readonly QueryParam[] = [
+  { name: 'bodyChars', required: false },
+  { name: 'bodyOffset', required: false },
+]
+const QUERY_DEBUG_GET_LLM_CALL: readonly QueryParam[] = [
+  { name: 'bodyChars', required: false },
+  { name: 'bodyOffset', required: false },
+  { name: 'view', required: false },
+]
+const QUERY_DEBUG_GET_LLM_EXPORT: readonly QueryParam[] = [
+  { name: 'limit', required: false },
+  { name: 'order', required: false },
+  { name: 'bodyChars', required: false },
+]
+const QUERY_DEBUG_LIST_AGENT_CONTEXT: readonly QueryParam[] = [
+  { name: 'stepIndex', required: false },
+  { name: 'limit', required: false },
+  { name: 'cursor', required: false },
+]
+const QUERY_DEBUG_LIST_LLM_CALLS: readonly QueryParam[] = [
+  { name: 'agentKind', required: false },
+  { name: 'phase', required: false },
+  { name: 'outcome', required: false },
+  { name: 'contains', required: false },
+  { name: 'order', required: false },
+  { name: 'limit', required: false },
+  { name: 'cursor', required: false },
+  { name: 'bodyChars', required: false },
+]
+const QUERY_DEBUG_LIST_LOGS: readonly QueryParam[] = [
+  { name: 'limit', required: false },
+  { name: 'cursor', required: false },
+]
+const QUERY_DEBUG_LIST_RUNS: readonly QueryParam[] = [
+  { name: 'status', required: false },
+  { name: 'since', required: false },
+  { name: 'limit', required: false },
+  { name: 'cursor', required: false },
+]
+const QUERY_DEBUG_LIST_SEARCH_QUERIES: readonly QueryParam[] = [
+  { name: 'limit', required: false },
+  { name: 'cursor', required: false },
+]
+const QUERY_DEBUG_LIST_TOOL_CALLS: readonly QueryParam[] = [
+  { name: 'limit', required: false },
+  { name: 'cursor', required: false },
+  { name: 'jobId', required: false },
+  { name: 'order', required: false },
+  { name: 'outcome', required: false },
+]
 
 /** Every `/api/v1` operation this facade exposes as a tool, in resource-group order. */
 export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
@@ -499,9 +572,9 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     group: 'usage',
     operationId: 'getPublicSpend',
     readOnly: true,
-    description: 'Break the workspace\'s spend down by repository, ticket, run or step kind\n\nGroup the board’s spend over a window (`24h`, `7d`, `30d`, `90d`) by ONE dimension: `repo`, `ticket` and `run` are the cost-attribution axes an organisation budgets against, and `model` / `agentKind` / `service` / `taskType` slice the same money the other ways. `meteredCost` is real money and `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage, so never sum them. The EMPTY `key` is the unattributed bucket, a real slice rather than a dropped row, so the rows always sum to `totals`. `source` says which store answered: the short windows scan the live ledger, which resolves a repository or a ticket through today’s links, while the long ones read the durable daily rollup, which froze that attribution while the money was spent and is never pruned. Read `rolledUpThrough` before reporting a quiet quarter, since a rollup that has never run and a board that spent nothing look identical. Workspace-scoped: the account-wide view is not reachable through this surface.\n\nCalls `GET /api/v1/usage/spend` (operation `getPublicSpend`).',
-    inputSchema: {"type":"object","properties":{"dimension":{"type":"string","enum":["model","agentKind","service","repo","taskType","ticket","run"]},"window":{"type":"string","enum":["24h","7d","30d","90d"]}},"additionalProperties":false,"required":["dimension"]},
-    outputSchema: {"type":"object","properties":{"currency":{"type":"string"},"dimension":{"type":"string","description":"One of: model, agentKind, service, repo, taskType, ticket, run. A newer deployment may report a member not in this list."},"generatedAt":{"type":"number"},"rolledUpThrough":{"anyOf":[{"type":"number"},{"type":"null"}]},"rows":{"type":"array","items":{"type":"object","properties":{"calls":{"type":"number"},"inputTokens":{"type":"number"},"key":{"type":"string"},"label":{"anyOf":[{"type":"string"},{"type":"null"}]},"meteredCost":{"type":"number"},"outputTokens":{"type":"number"},"subscriptionCost":{"type":"number"}}}},"since":{"type":"number"},"source":{"type":"string","description":"One of: ledger, daily-rollup. A newer deployment may report a member not in this list."},"totals":{"type":"object","properties":{"calls":{"type":"number"},"inputTokens":{"type":"number"},"meteredCost":{"type":"number"},"outputTokens":{"type":"number"},"subscriptionCost":{"type":"number"}}},"window":{"type":"string","description":"One of: 24h, 7d, 30d, 90d. A newer deployment may report a member not in this list."}}},
+    description: 'Break the workspace\'s spend down by repository, ticket, run or step kind\n\nGroup the board’s spend over a window (`24h`, `7d`, `30d`, `90d`) by ONE dimension: `repo`, `ticket` and `run` are the cost-attribution axes an organisation budgets against, and `model` / `agentKind` / `service` / `taskType` slice the same money the other ways. `meteredCost` is real money and `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage, so never sum them. The EMPTY `key` is the unattributed bucket, a real slice rather than a dropped row, never dropped from the breakdown. `rows` is the heaviest `limit` slices (default 100, max 500) and `truncated` says when there was a tail, while `totals` aggregates the WHOLE window either way, so a capped answer still reports what the board spent. `source` says which store answered: the short windows scan the live ledger, which resolves a repository or a ticket through today’s links, while the long ones read the durable daily rollup, which froze that attribution while the money was spent and is never pruned. Read `rolledUpThrough` before reporting a quiet quarter, since a rollup that has never run and a board that spent nothing look identical. Workspace-scoped: the account-wide view is not reachable through this surface.\n\nCalls `GET /api/v1/usage/spend` (operation `getPublicSpend`).',
+    inputSchema: {"type":"object","properties":{"dimension":{"type":"string","enum":["model","agentKind","service","repo","taskType","ticket","run"]},"window":{"type":"string","enum":["24h","7d","30d","90d"]},"limit":{"type":"integer"}},"additionalProperties":false,"required":["dimension"]},
+    outputSchema: {"type":"object","properties":{"currency":{"type":"string"},"dimension":{"type":"string","description":"One of: model, agentKind, service, repo, taskType, ticket, run. A newer deployment may report a member not in this list."},"generatedAt":{"type":"number"},"rolledUpThrough":{"anyOf":[{"type":"number"},{"type":"null"}]},"rows":{"type":"array","items":{"type":"object","properties":{"calls":{"type":"number"},"inputTokens":{"type":"number"},"key":{"type":"string"},"label":{"anyOf":[{"type":"string"},{"type":"null"}]},"meteredCost":{"type":"number"},"outputTokens":{"type":"number"},"subscriptionCost":{"type":"number"}}}},"since":{"type":"number"},"source":{"type":"string","description":"One of: ledger, daily-rollup. A newer deployment may report a member not in this list."},"totals":{"type":"object","properties":{"calls":{"type":"number"},"inputTokens":{"type":"number"},"meteredCost":{"type":"number"},"outputTokens":{"type":"number"},"subscriptionCost":{"type":"number"}}},"truncated":{"type":"boolean"},"window":{"type":"string","description":"One of: 24h, 7d, 30d, 90d. A newer deployment may report a member not in this list."}}},
     invoke: (client, args) => client.usage.spend(pick(args, QUERY_USAGE_SPEND)),
   },
   {
@@ -996,7 +1069,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: true,
     description: 'Export a run\'s model activity as one bundle\n\nThe whole of a run’s model activity as one self-describing document, for handing straight to a model asked why the run truncated, spent or stalled: the SQL rollups (run totals, per agent kind, per phase, with the carry cost that says which slice burdened everything after it) plus a bounded window of the individual calls behind them. The rollups cover EVERY recorded call and do not move with `limit`, so a windowed bundle still reports what the run actually cost; `truncated` says the calls are a window and `order` says which end was kept. Bodies are omitted unless `bodyChars` asks, and the resumable call list is the way to walk a long run whole.\n\nCalls `GET /api/v1/debug/runs/{runId}/llm-export` (operation `getDebugLlmExport`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."},"limit":{"type":"integer"},"order":{"type":"string","enum":["newest","oldest"]},"bodyChars":{"type":"integer"}},"additionalProperties":false,"required":["runId"]},
-    outputSchema: {"type":"object","properties":{"calls":{"type":"array","items":{"type":"object","properties":{"agentKind":{"type":"string"},"cacheReadTokens":{"type":"number"},"cacheWriteTokens":{"type":"number"},"callId":{"type":"string"},"completionTokens":{"type":"number"},"createdAt":{"type":"number"},"elidedLeadingMessages":{"type":"number"},"errorMessage":{"anyOf":[{"type":"string"},{"type":"null"}]},"finishReason":{"anyOf":[{"type":"string"},{"type":"null"}]},"httpStatus":{"anyOf":[{"type":"number"},{"type":"null"}]},"messageCount":{"type":"number"},"model":{"type":"string"},"ok":{"type":"boolean"},"outcome":{"type":"string","description":"One of: ok, warning, error. A newer deployment may report a member not in this list."},"overheadMs":{"type":"number"},"phase":{"type":"string"},"prompt":{"type":"object","properties":{"chars":{"type":"number"},"matchOffset":{"anyOf":[{"type":"number"},{"type":"null"}]},"offset":{"type":"number"},"text":{"type":"string"},"totalChars":{"type":"number"},"truncated":{"type":"boolean"}}},"promptMessages":{"anyOf":[{"type":"array","items":{"type":"object","properties":{"content":{"type":"object","properties":{"chars":{"type":"number"},"matchOffset":{"anyOf":[{"type":"number"},{"type":"null"}]},"offset":{"type":"number"},"text":{"type":"string"},"totalChars":{"type":"number"},"truncated":{"type":"boolean"}}},"index":{"type":"number"},"name":{"anyOf":[{"type":"string"},{"type":"null"}]},"role":{"type":"string"},"toolCallId":{"anyOf":[{"type":"string"},{"type":"null"}]},"toolCalls":{"type":"array","items":{"type":"object","properties":{"args":{"type":"object","properties":{"chars":{"type":"number"},"matchOffset":{"anyOf":[{"type":"number"},{"type":"null"}]},"offset":{"type":"number"},"text":{"type":"string"},"totalChars":{"type":"number"},"truncated":{"type":"boolean"}}},"name":{"type":"string"}}}}}}},{"type":"null"}]},"promptTokens":{"type":"number"},"provider":{"type":"string"},"reasoning":{"type":"object","properties":{"chars":{"type":"number"},"matchOffset":{"anyOf":[{"type":"number"},{"type":"null"}]},"offset":{"type":"number"},"text":{"type":"string"},"totalChars":{"type":"number"},"truncated":{"type":"boolean"}}},"requestMaxTokens":{"anyOf":[{"type":"number"},{"type":"null"}]},"response":{"type":"object","properties":{"chars":{"type":"number"},"matchOffset":{"anyOf":[{"type":"number"},{"type":"null"}]},"offset":{"type":"number"},"text":{"type":"string"},"totalChars":{"type":"number"},"truncated":{"type":"boolean"}}},"runId":{"anyOf":[{"type":"string"},{"type":"null"}]},"streaming":{"type":"boolean"},"toolCount":{"type":"number"},"totalMs":{"type":"number"},"totalTokens":{"type":"number"},"turnIndex":{"anyOf":[{"type":"number"},{"type":"null"}]},"upstreamMs":{"type":"number"}}}},"generatedAt":{"type":"number"},"kind":{"type":"string"},"llm":{"type":"object","properties":{"byAgentKind":{"type":"array","items":{"type":"object","properties":{"agentKind":{"type":"string"},"cacheHitRate":{"anyOf":[{"type":"number"},{"type":"null"}]},"cacheReadTokens":{"type":"number"},"cacheWriteTokens":{"type":"number"},"calls":{"type":"number"},"completionTokens":{"type":"number"},"costEstimate":{"anyOf":[{"type":"number"},{"type":"null"}]},"errors":{"type":"number"},"maxOutputTokens":{"anyOf":[{"type":"number"},{"type":"null"}]},"outputHeadroomRatio":{"anyOf":[{"type":"number"},{"type":"null"}]},"overheadMs":{"type":"number"},"peakCompletionTokens":{"type":"number"},"promptTokens":{"type":"number"},"transportOverheadRatio":{"anyOf":[{"type":"number"},{"type":"null"}]},"truncatedCalls":{"type":"number"},"upstreamMs":{"type":"number"},"warnings":{"type":"number"}}}},"byPhase":{"type":"array","items":{"type":"object","properties":{"cacheHitRate":{"anyOf":[{"type":"number"},{"type":"null"}]},"cacheReadTokens":{"type":"number"},"cacheWriteTokens":{"type":"number"},"calls":{"type":"number"},"carryCostShare":{"anyOf":[{"type":"number"},{"type":"null"}]},"carryCostTokens":{"type":"number"},"completionTokens":{"type":"number"},"costEstimate":{"anyOf":[{"type":"number"},{"type":"null"}]},"errors":{"type":"number"},"overheadMs":{"type":"number"},"phase":{"type":"string"},"promptTokens":{"type":"number"},"truncatedCalls":{"type":"number"},"upstreamMs":{"type":"number"},"warnings":{"type":"number"}}}},"costCurrency":{"anyOf":[{"type":"string"},{"type":"null"}]},"totals":{"type":"object","properties":{"cacheHitRate":{"anyOf":[{"type":"number"},{"type":"null"}]},"cacheReadTokens":{"type":"number"},"cacheWriteTokens":{"type":"number"},"calls":{"type":"number"},"completionTokens":{"type":"number"},"costEstimate":{"anyOf":[{"type":"number"},{"type":"null"}]},"errors":{"type":"number"},"overheadMs":{"type":"number"},"promptTokens":{"type":"number"},"transportOverheadRatio":{"anyOf":[{"type":"number"},{"type":"null"}]},"truncatedCalls":{"type":"number"},"upstreamMs":{"type":"number"},"warnings":{"type":"number"}}}}},"order":{"type":"string","description":"One of: newest, oldest. A newer deployment may report a member not in this list."},"runId":{"type":"string"},"truncated":{"type":"boolean"},"version":{"type":"number"}}},
+    outputSchema: {"type":"object","properties":{"available":{"type":"boolean"},"calls":{"type":"array","items":{"type":"object","properties":{"agentKind":{"type":"string"},"cacheReadTokens":{"type":"number"},"cacheWriteTokens":{"type":"number"},"callId":{"type":"string"},"completionTokens":{"type":"number"},"createdAt":{"type":"number"},"elidedLeadingMessages":{"type":"number"},"errorMessage":{"anyOf":[{"type":"string"},{"type":"null"}]},"finishReason":{"anyOf":[{"type":"string"},{"type":"null"}]},"httpStatus":{"anyOf":[{"type":"number"},{"type":"null"}]},"messageCount":{"type":"number"},"model":{"type":"string"},"ok":{"type":"boolean"},"outcome":{"type":"string","description":"One of: ok, warning, error. A newer deployment may report a member not in this list."},"overheadMs":{"type":"number"},"phase":{"type":"string"},"prompt":{"type":"object","properties":{"chars":{"type":"number"},"matchOffset":{"anyOf":[{"type":"number"},{"type":"null"}]},"offset":{"type":"number"},"text":{"type":"string"},"totalChars":{"type":"number"},"truncated":{"type":"boolean"}}},"promptMessages":{"anyOf":[{"type":"array","items":{"type":"object","properties":{"content":{"type":"object","properties":{"chars":{"type":"number"},"matchOffset":{"anyOf":[{"type":"number"},{"type":"null"}]},"offset":{"type":"number"},"text":{"type":"string"},"totalChars":{"type":"number"},"truncated":{"type":"boolean"}}},"index":{"type":"number"},"name":{"anyOf":[{"type":"string"},{"type":"null"}]},"role":{"type":"string"},"toolCallId":{"anyOf":[{"type":"string"},{"type":"null"}]},"toolCalls":{"type":"array","items":{"type":"object","properties":{"args":{"type":"object","properties":{"chars":{"type":"number"},"matchOffset":{"anyOf":[{"type":"number"},{"type":"null"}]},"offset":{"type":"number"},"text":{"type":"string"},"totalChars":{"type":"number"},"truncated":{"type":"boolean"}}},"name":{"type":"string"}}}}}}},{"type":"null"}]},"promptTokens":{"type":"number"},"provider":{"type":"string"},"reasoning":{"type":"object","properties":{"chars":{"type":"number"},"matchOffset":{"anyOf":[{"type":"number"},{"type":"null"}]},"offset":{"type":"number"},"text":{"type":"string"},"totalChars":{"type":"number"},"truncated":{"type":"boolean"}}},"requestMaxTokens":{"anyOf":[{"type":"number"},{"type":"null"}]},"response":{"type":"object","properties":{"chars":{"type":"number"},"matchOffset":{"anyOf":[{"type":"number"},{"type":"null"}]},"offset":{"type":"number"},"text":{"type":"string"},"totalChars":{"type":"number"},"truncated":{"type":"boolean"}}},"runId":{"anyOf":[{"type":"string"},{"type":"null"}]},"streaming":{"type":"boolean"},"toolCount":{"type":"number"},"totalMs":{"type":"number"},"totalTokens":{"type":"number"},"turnIndex":{"anyOf":[{"type":"number"},{"type":"null"}]},"upstreamMs":{"type":"number"}}}},"generatedAt":{"type":"number"},"kind":{"type":"string"},"llm":{"type":"object","properties":{"byAgentKind":{"type":"array","items":{"type":"object","properties":{"agentKind":{"type":"string"},"cacheHitRate":{"anyOf":[{"type":"number"},{"type":"null"}]},"cacheReadTokens":{"type":"number"},"cacheWriteTokens":{"type":"number"},"calls":{"type":"number"},"completionTokens":{"type":"number"},"costEstimate":{"anyOf":[{"type":"number"},{"type":"null"}]},"errors":{"type":"number"},"maxOutputTokens":{"anyOf":[{"type":"number"},{"type":"null"}]},"outputHeadroomRatio":{"anyOf":[{"type":"number"},{"type":"null"}]},"overheadMs":{"type":"number"},"peakCompletionTokens":{"type":"number"},"promptTokens":{"type":"number"},"transportOverheadRatio":{"anyOf":[{"type":"number"},{"type":"null"}]},"truncatedCalls":{"type":"number"},"upstreamMs":{"type":"number"},"warnings":{"type":"number"}}}},"byPhase":{"type":"array","items":{"type":"object","properties":{"cacheHitRate":{"anyOf":[{"type":"number"},{"type":"null"}]},"cacheReadTokens":{"type":"number"},"cacheWriteTokens":{"type":"number"},"calls":{"type":"number"},"carryCostShare":{"anyOf":[{"type":"number"},{"type":"null"}]},"carryCostTokens":{"type":"number"},"completionTokens":{"type":"number"},"costEstimate":{"anyOf":[{"type":"number"},{"type":"null"}]},"errors":{"type":"number"},"overheadMs":{"type":"number"},"phase":{"type":"string"},"promptTokens":{"type":"number"},"truncatedCalls":{"type":"number"},"upstreamMs":{"type":"number"},"warnings":{"type":"number"}}}},"costCurrency":{"anyOf":[{"type":"string"},{"type":"null"}]},"totals":{"type":"object","properties":{"cacheHitRate":{"anyOf":[{"type":"number"},{"type":"null"}]},"cacheReadTokens":{"type":"number"},"cacheWriteTokens":{"type":"number"},"calls":{"type":"number"},"completionTokens":{"type":"number"},"costEstimate":{"anyOf":[{"type":"number"},{"type":"null"}]},"errors":{"type":"number"},"overheadMs":{"type":"number"},"promptTokens":{"type":"number"},"transportOverheadRatio":{"anyOf":[{"type":"number"},{"type":"null"}]},"truncatedCalls":{"type":"number"},"upstreamMs":{"type":"number"},"warnings":{"type":"number"}}}}},"order":{"type":"string","description":"One of: newest, oldest. A newer deployment may report a member not in this list."},"runId":{"type":"string"},"truncated":{"type":"boolean"},"version":{"type":"number"}}},
     invoke: (client, args) => client.debug.getLlmExport(str(args, 'runId'), pick(args, QUERY_DEBUG_GET_LLM_EXPORT)),
   },
   {

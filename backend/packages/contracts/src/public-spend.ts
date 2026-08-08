@@ -1,5 +1,4 @@
 import * as v from 'valibot'
-import { reportSpendSourceSchema, reportWindowSchema } from './reports.js'
 
 // ---------------------------------------------------------------------------
 // Public spend analytics (`GET /api/v1/usage/spend`): the workspace's money sliced by the
@@ -17,8 +16,41 @@ import { reportSpendSourceSchema, reportWindowSchema } from './reports.js'
 // The shapes here are deliberately their OWN projection rather than the internal report rows,
 // exactly as `publicUsageRow` is a projection of `UsageBreakdownRow`: everything on this page
 // is frozen by the public-API stability contract, and an internal analytics shape must stay
-// free to change.
+// free to change. That covers the VOCABULARIES too, which are declared below rather than
+// aliased off `reports.ts`: an alias makes an internal rename a silent `/api/v1` break, where a
+// declaration turns the same edit into a failing assertion in `public-spend.test.ts` naming
+// this file as the thing that has to decide.
 // ---------------------------------------------------------------------------
+
+/**
+ * The time window a breakdown aggregates over, measured back from `generatedAt` and snapped
+ * DOWN to a bucket edge (see {@link publicSpendSchema}'s `since`).
+ *
+ * Same members as the internal `reportWindowSchema` in `reports.ts`, and `public-spend.test.ts`
+ * asserts the two stay in step, but this is the FROZEN copy: adding a
+ * window internally does not publish it, and removing one internally has to arrive here as a
+ * deliberate `/api/v1` decision rather than as a member that quietly stopped being accepted.
+ */
+export const publicSpendWindowSchema = v.picklist(['24h', '7d', '30d', '90d'])
+export type PublicSpendWindow = v.InferOutput<typeof publicSpendWindowSchema>
+
+/**
+ * Which store answered a breakdown. Frozen here for the same reason the window is: this is a
+ * value an external consumer branches on, so the internal spelling of it is not free to move.
+ */
+export const publicSpendSourceSchema = v.picklist(['ledger', 'daily-rollup'])
+export type PublicSpendSource = v.InferOutput<typeof publicSpendSourceSchema>
+
+/**
+ * Hard ceiling on the slices one response may carry.
+ *
+ * A real bound rather than a suggestion: two of the published dimensions grow with ACTIVITY
+ * rather than with a catalog (`run` is one row per pipeline execution, `ticket` one per issue
+ * a run touched), so an unbounded `90d` breakdown on a busy board is a response nobody sized.
+ * The rows are heaviest first, so the cap is a prefix by cost: the slice a cost question is
+ * about, with {@link publicSpendSchema}'s `truncated` saying when there was a tail.
+ */
+export const PUBLIC_SPEND_MAX_ROWS = 500
 
 /**
  * What a public spend breakdown groups by.
@@ -60,7 +92,7 @@ export const PUBLIC_SPEND_DIMENSIONS_OMITTED: Record<string, string> = {
  * `key` is the raw dimension value and the row's identity; the EMPTY string is a real bucket
  * meaning UNATTRIBUTED (a call whose run, service, repository or ticket could not be resolved),
  * never a dropped row. Dropping it would under-report the window while the breakdown still
- * looked complete, so a reader summing `rows` gets the same figure `totals` reports.
+ * looked complete, which is the one thing `totals` and `truncated` exist to prevent.
  *
  * The two costs are separate on purpose and must never be summed: only `meteredCost` is money.
  * `subscriptionCost` is what the same tokens WOULD have cost on the metered API, which is what
@@ -87,7 +119,13 @@ export const publicSpendRowSchema = v.object({
 })
 export type PublicSpendRow = v.InferOutput<typeof publicSpendRowSchema>
 
-/** Window-wide totals, folded from the rows below, so the two can never disagree. */
+/**
+ * Window-wide totals, over EVERY slice the window holds rather than only the ones `rows`
+ * carries. So a `truncated` breakdown still reports what the board actually spent, the same
+ * rule the run LLM export states about its own rollups, and a caller reading the top twenty
+ * repositories can still say what share of the bill they are. On an untruncated response the
+ * rows sum to exactly this.
+ */
 export const publicSpendTotalsSchema = v.object({
   inputTokens: v.number(),
   outputTokens: v.number(),
@@ -101,7 +139,27 @@ export type PublicSpendTotals = v.InferOutput<typeof publicSpendTotalsSchema>
 export const publicSpendQuerySchema = v.object({
   dimension: publicSpendDimensionSchema,
   /** Defaults to `7d`, the widest window served live off the ledger. */
-  window: v.optional(reportWindowSchema),
+  window: v.optional(publicSpendWindowSchema),
+  /**
+   * How many SLICES to return, 1..{@link PUBLIC_SPEND_MAX_ROWS} (default 100), heaviest first.
+   * `totals` is unaffected: it aggregates the whole window whatever this says, so a capped
+   * response still reports what the board spent.
+   *
+   * Digit-checked before the numeric coercion, like every other query number on this API:
+   * bare `Number()` also accepts `1e9`, `0x64` and `' '`, which read as plausible values
+   * rather than as the 400 a malformed request has earned.
+   */
+  limit: v.optional(
+    v.pipe(
+      v.string(),
+      v.regex(/^\d+$/, 'Must be a whole number'),
+      v.transform(Number),
+      v.number(),
+      v.integer(),
+      v.minValue(1),
+      v.maxValue(PUBLIC_SPEND_MAX_ROWS),
+    ),
+  ),
 })
 export type PublicSpendQuery = v.InferOutput<typeof publicSpendQuerySchema>
 
@@ -116,7 +174,7 @@ export type PublicSpendQuery = v.InferOutput<typeof publicSpendQuerySchema>
 export const publicSpendSchema = v.object({
   /** Echoes the requested dimension, so a stored response says what it grouped by. */
   dimension: publicSpendDimensionSchema,
-  window: reportWindowSchema,
+  window: publicSpendWindowSchema,
   /** When the breakdown was computed (epoch ms). */
   generatedAt: v.number(),
   /**
@@ -138,7 +196,7 @@ export const publicSpendSchema = v.object({
    * attribution while the money was being spent and is never pruned, at the cost of being only
    * as current as the last sweep. A reader comparing two windows has to know which is talking.
    */
-  source: reportSpendSourceSchema,
+  source: publicSpendSourceSchema,
   /**
    * On a `daily-rollup` window: the newest UTC day (epoch ms, midnight) the rollup sweep has
    * covered, or null when no pass has ever completed. Always null on a `ledger` window, where
@@ -151,10 +209,25 @@ export const publicSpendSchema = v.object({
   rolledUpThrough: v.nullable(v.number()),
   totals: publicSpendTotalsSchema,
   /**
-   * The slices, heaviest first. UNCAPPED: every other dimension's cardinality comes from a
-   * catalog and is naturally bounded, and a silent `LIMIT` on the one that is not (`ticket`,
-   * whose row count grows with activity) would be a smaller number that still read as
-   * complete. A busy board over `90d` can return thousands of ticket rows.
+   * True when the window holds more slices than `limit`, so `rows` is the heaviest prefix of
+   * them rather than all of them. STATED rather than left to be inferred from
+   * `rows.length === limit`, which cannot tell a board with exactly `limit` slices from one
+   * with a tail, and which is the reading that turns a capped list into a complete one.
+   *
+   * `totals` above is unaffected, so the share the returned rows account for is computable:
+   * what a truncated breakdown loses is the identity of the long tail, never its money.
+   */
+  truncated: v.boolean(),
+  /**
+   * The slices, heaviest by metered cost first, capped at `limit`.
+   *
+   * Capped rather than served whole because two of the published dimensions grow with
+   * ACTIVITY rather than with a catalog: `run` is one row per pipeline execution and `ticket`
+   * one per issue a run touched, so a busy board over `90d` is thousands of rows on a
+   * response nobody sized. (`model`, `agentKind`, `service`, `repo` and `taskType` all key on
+   * a catalog and stay small on their own.) The order is what makes the cap honest: a cost
+   * question is about the heavy end, `truncated` says when there was a tail, and `totals`
+   * still covers all of it.
    */
   rows: v.array(publicSpendRowSchema),
 })

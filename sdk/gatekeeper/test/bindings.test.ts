@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   GATEKEEPER_BINDINGS,
   PUBLIC_API_SCOPE_LADDER,
+  TELEMETRY_BINDINGS,
   bindingByName,
   bindingsWithinScope,
   resolveConsequence,
@@ -130,6 +131,12 @@ describe('the generated table', () => {
       ) as CatFactoryClient
       const args: Record<string, unknown> = { body: {} }
       for (const param of binding.pathParams) args[param] = `id-${param}`
+      // The required query parameters too: this test is about WHERE a call is forwarded, and a
+      // binding that declares one is refused before it gets that far (asserted on its own
+      // below). Optional ones stay absent, so the forwarded bag is still only what was supplied.
+      for (const param of binding.queryParams) {
+        if (param.required) args[param.name] = `q-${param.name}`
+      }
       await binding.invoke(client, args)
       expect(calls).toHaveLength(1)
       expect(calls[0]!.group).toBe(binding.group)
@@ -160,7 +167,13 @@ describe('the generated table', () => {
   })
 
   it('drops unknown keys instead of forwarding them as query parameters', async () => {
-    const withQuery = GATEKEEPER_BINDINGS.find((binding) => binding.queryParams.length > 0)
+    // Deliberately a binding whose query is ENTIRELY optional: with a required parameter in play
+    // `pick` refuses before it forwards anything, so the assertion below would be about the
+    // refusal rather than about what a supplied bag turns into.
+    const withQuery = GATEKEEPER_BINDINGS.find(
+      (binding) =>
+        binding.queryParams.length > 0 && binding.queryParams.every((param) => !param.required),
+    )
     expect(withQuery).toBeDefined()
     let forwarded: unknown
     const client = new Proxy(
@@ -182,9 +195,64 @@ describe('the generated table', () => {
     ) as CatFactoryClient
     const args: Record<string, unknown> = { body: {}, typoedFilter: 'x' }
     for (const param of withQuery!.pathParams) args[param] = 'id'
-    const known = withQuery!.queryParams[0]!
+    const known = withQuery!.queryParams[0]!.name
     args[known] = 'kept'
     await withQuery!.invoke(client, args)
     expect(forwarded).toEqual({ [known]: 'kept' })
+  })
+
+  // The query half of the rule the path half states above. `pick` narrows its result to the SDK
+  // method's own query type, and that narrowing is only honest if the required parameters are
+  // known to be there: without the check the binding forwarded a bag it had just been allowed to
+  // drop the one field from, and the caller learned about it as a 400 from a call that never had
+  // to be made. Read off the table rather than named, so a second required parameter is covered
+  // the day it appears.
+  it('rejects when a required query parameter is missing', async () => {
+    const withRequired = GATEKEEPER_BINDINGS.filter((binding) =>
+      binding.queryParams.some((param) => param.required),
+    )
+    expect(
+      withRequired.length,
+      'no binding declares a required query parameter: if the surface genuinely lost its last ' +
+        'one, retire this test deliberately rather than leaving it asserting nothing',
+    ).toBeGreaterThan(0)
+    const client = new Proxy(
+      {},
+      { get: () => new Proxy({}, { get: () => () => Promise.resolve('ok') }) },
+    ) as CatFactoryClient
+    for (const binding of withRequired) {
+      const args: Record<string, unknown> = { body: {} }
+      for (const param of binding.pathParams) args[param] = 'id'
+      // Every OPTIONAL one supplied, so the rejection can only be about the omitted required one
+      // rather than about an empty bag in general.
+      for (const param of binding.queryParams) if (!param.required) args[param.name] = 'x'
+      const missing = binding.queryParams.find((param) => param.required)!
+      let returned: unknown
+      expect(() => {
+        returned = binding.invoke(client, args)
+      }).not.toThrow()
+      await expect(returned).rejects.toThrow(missing.name)
+    }
+  })
+
+  // What the deny set in a Gatekeeper policy is derived from. The relation, not the membership: a
+  // pinned list of names is exactly what let the LLM export ship readable by an oversight tier
+  // that withheld every sibling read of the same sink.
+  it('derives the telemetry deny set from the table itself', () => {
+    const byName = new Map(GATEKEEPER_BINDINGS.map((binding) => [binding.name, binding]))
+    expect(TELEMETRY_BINDINGS.length).toBeGreaterThan(0)
+    for (const name of TELEMETRY_BINDINGS) {
+      expect(byName.get(name)?.telemetrySink, `${name} is on the deny set`).toBeDefined()
+    }
+    for (const binding of GATEKEEPER_BINDINGS) {
+      expect(
+        TELEMETRY_BINDINGS.includes(binding.name),
+        `${binding.name} declares a telemetry sink`,
+      ).toBe(binding.telemetrySink !== undefined)
+      // Withholding them is a POLICY decision, which is only meaningful while the platform's own
+      // floor still admits them: a sink read that needed `admin` would be denied by the key, and
+      // a tier author reading this list would be governing something already out of reach.
+      if (binding.telemetrySink) expect(binding.minScope).toBe('read')
+    }
   })
 })

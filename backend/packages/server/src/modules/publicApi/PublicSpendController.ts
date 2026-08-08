@@ -19,7 +19,7 @@ import { authorize, refuse } from './publicApiAuth.js'
 // is at the size where the ratchet says split rather than grow, and this seam is cohesive (one
 // read, one service, none of the engine the board and job routes are built around).
 //
-// Three things decide the shape:
+// Four things decide the shape:
 //
 //  1. **`read` scope, and workspace-scoped in SQL.** The key's own account AND its own
 //     workspace are both applied to the aggregate, so this can only ever describe the board the
@@ -32,6 +32,10 @@ import { authorize, refuse } from './publicApiAuth.js'
 //  3. **The response says which STORE answered.** A `24h`/`7d` window scans the live ledger and
 //     a `30d`/`90d` one reads the frozen rollup, and the two attribute a repository or a ticket
 //     differently on purpose (see the contract). A reader comparing windows has to be told.
+//  4. **The rows are BOUNDED and the totals are not.** `run` and `ticket` grow with activity,
+//     so an uncapped `90d` breakdown is a response nobody sized; the rows come back heaviest
+//     first, `truncated` says when there was a tail, and `totals` still aggregates the whole
+//     window, so a capped answer never under-reports what the board spent.
 
 /**
  * The window served when a request names none: the widest one answered LIVE off the ledger, so
@@ -39,6 +43,14 @@ import { authorize, refuse } from './publicApiAuth.js'
  * a sweep behind.
  */
 const DEFAULT_SPEND_WINDOW = '7d' as const
+
+/**
+ * Slices returned when a request names no `limit`. Comfortably above every catalog-keyed
+ * dimension's whole cardinality (a board's models, agent kinds, services, repositories and task
+ * types all fit), so the default truncates only the two axes that grow with activity, which are
+ * also the two a caller reads the heavy end of. The hard ceiling is the contract's.
+ */
+const DEFAULT_SPEND_ROWS = 100
 
 export function publicSpendController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -55,12 +67,13 @@ export function publicSpendController(): Hono<AppEnv> {
         503,
       )
     }
-    const { dimension, window } = c.req.valid('query')
+    const { dimension, window, limit } = c.req.valid('query')
     const breakdown = await reports.breakdown(
       gate.auth.accountId,
       dimension,
       window ?? DEFAULT_SPEND_WINDOW,
       gate.auth.workspaceId,
+      limit ?? DEFAULT_SPEND_ROWS,
     )
     return c.json(
       {
@@ -71,6 +84,7 @@ export function publicSpendController(): Hono<AppEnv> {
         currency: breakdown.currency,
         source: breakdown.source,
         rolledUpThrough: breakdown.rolledUpThrough,
+        truncated: breakdown.truncated,
         totals: {
           inputTokens: breakdown.totals.inputTokens,
           outputTokens: breakdown.totals.outputTokens,

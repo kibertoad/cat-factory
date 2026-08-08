@@ -111,6 +111,14 @@ const INLINE_ENUM_NAMES = {
   // member the walk reached first, silently RENAMING a type in four released SDKs — a break
   // `/api/v1` does not do, and one that would arrive as a clean diff nobody read.
   'exceeded,incorporated,incorporating,merged,ready,reviewing': 'PublicRequirementsDecisionStatus',
+  // The spend breakdown's three vocabularies. Pinned for the reason stated above rather than left
+  // to the positional hint: unnamed they take the first path that reaches them
+  // (`GetPublicSpendWindow`, `GetPublicSpendResponseSource`), so a later operation sharing a value
+  // set would RENAME a type in four released SDKs, arriving as a clean generated diff nobody
+  // reads. The window and the source are ordinary enough sets for that to be a matter of time.
+  '24h,30d,7d,90d': 'PublicSpendWindow',
+  'daily-rollup,ledger': 'PublicSpendSource',
+  'agentKind,model,repo,run,service,taskType,ticket': 'PublicSpendDimension',
 }
 
 /** OpenAPI/JSON-Schema scalar → IR primitive. */

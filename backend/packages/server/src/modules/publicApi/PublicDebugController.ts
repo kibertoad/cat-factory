@@ -51,11 +51,16 @@ const DEFAULT_CONTEXT_PAGE = 25
 const DEFAULT_SMALL_ROW_PAGE = 50
 
 /**
- * Call rows the LLM export carries when the caller names no `limit`. Smaller than a list page's
- * default on purpose: the bundle's value is that it fits in a reader's context beside the
- * rollups, and the resumable list is one hop away for the run that needs walking whole.
+ * Call rows the LLM export carries when the caller names no `limit`: the CALL LIST's own
+ * default, so an unbudgeted bundle costs a reader's context no more than the page it replaces.
+ *
+ * DERIVED from `DEFAULT_CALL_PAGE` rather than chosen beside it, because the two are one
+ * decision about the same rows under the same `limit x 3 x bodyChars` worst case, and the
+ * bundle pays for the rollups on top. Written as the relation so it cannot drift into
+ * contradicting the sentence explaining it, which is what a second literal did. The run that
+ * needs walking whole pages `/llm-calls`, which is resumable where this is not.
  */
-const DEFAULT_EXPORT_CALL_ROWS = 50
+const DEFAULT_EXPORT_CALL_ROWS = DEFAULT_CALL_PAGE
 
 /**
  * The per-body budget a point read uses when the caller names none: the whole stored body, up

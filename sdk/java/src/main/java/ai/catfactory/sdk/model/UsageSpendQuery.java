@@ -14,15 +14,22 @@ import org.jspecify.annotations.Nullable;
  */
 public record UsageSpendQuery(
     /** Required: null is refused by the deployment with a 400 naming this parameter. */
-    @Nullable GetPublicSpendDimension dimension,
+    @Nullable PublicSpendDimension dimension,
 
     /** Null means "not sent". */
-    @Nullable GetPublicSpendWindow window
+    @Nullable PublicSpendWindow window,
+
+    /** Null means "not sent". */
+    @Nullable Integer limit
 ) {
 
-    /** An empty parameter set. */
-    public static UsageSpendQuery none() {
-        return builder().build();
+    /**
+     * The required parameters, with every optional one unset.
+     * There is deliberately no empty factory on this record: the deployment refuses a call that
+     * omits any parameter above, so an empty parameter set has no use that is not a bug.
+     */
+    public static UsageSpendQuery of(PublicSpendDimension dimension) {
+        return builder().dimension(dimension).build();
     }
 
     /** A new builder for {@link UsageSpendQuery}. */
@@ -39,29 +46,39 @@ public record UsageSpendQuery(
         if (window != null) {
             out.put("window", String.valueOf(window));
         }
+        if (limit != null) {
+            out.put("limit", String.valueOf(limit));
+        }
         return out;
     }
 
     /** Fluent builder for {@link UsageSpendQuery}. */
     public static final class Builder {
-        private @Nullable GetPublicSpendDimension dimension;
-        private @Nullable GetPublicSpendWindow window;
+        private @Nullable PublicSpendDimension dimension;
+        private @Nullable PublicSpendWindow window;
+        private @Nullable Integer limit;
 
         /** Set {@code dimension}. */
-        public Builder dimension(@Nullable GetPublicSpendDimension dimension) {
+        public Builder dimension(@Nullable PublicSpendDimension dimension) {
             this.dimension = dimension;
             return this;
         }
 
         /** Set {@code window}. */
-        public Builder window(@Nullable GetPublicSpendWindow window) {
+        public Builder window(@Nullable PublicSpendWindow window) {
             this.window = window;
+            return this;
+        }
+
+        /** Set {@code limit}. */
+        public Builder limit(@Nullable Integer limit) {
+            this.limit = limit;
             return this;
         }
 
         /** Build the {@link UsageSpendQuery}. */
         public UsageSpendQuery build() {
-            return new UsageSpendQuery(dimension, window);
+            return new UsageSpendQuery(dimension, window, limit);
         }
     }
 }
