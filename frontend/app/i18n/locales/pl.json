@@ -4653,6 +4653,7 @@
       "rounds": "Rundy",
       "purposeLabel": "Cel",
       "purposePlaceholder": "Wybierz cel",
+      "purposeUnrecognized": "Nierozpoznany ({purpose})",
       "purposeOption": {
         "build": "Programowanie",
         "document": "Dokumentacja",
@@ -4903,7 +4904,8 @@
   },
   "palette": {
     "hint": "Kliknij agenta, aby dodać go do pipeline'u.",
-    "customAgents": "Agenci niestandardowi"
+    "customAgents": "Agenci niestandardowi",
+    "purposeHidden": "{count} agent ukryty dla tego celu. | {count} agenci ukryci dla tego celu. | {count} agentów ukrytych dla tego celu."
   },
   "gates": {
     "subtitle": {

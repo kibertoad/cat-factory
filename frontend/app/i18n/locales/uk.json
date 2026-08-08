@@ -4653,6 +4653,7 @@
       "rounds": "Раунди",
       "purposeLabel": "Призначення",
       "purposePlaceholder": "Виберіть призначення",
+      "purposeUnrecognized": "Нерозпізнано ({purpose})",
       "purposeOption": {
         "build": "Розробка",
         "document": "Документація",
@@ -4903,7 +4904,8 @@
   },
   "palette": {
     "hint": "Натисніть агента, щоб додати його до пайплайну.",
-    "customAgents": "Власні агенти"
+    "customAgents": "Власні агенти",
+    "purposeHidden": "{count} агента приховано для цього призначення. | {count} агентів приховано для цього призначення. | {count} агентів приховано для цього призначення."
   },
   "gates": {
     "subtitle": {

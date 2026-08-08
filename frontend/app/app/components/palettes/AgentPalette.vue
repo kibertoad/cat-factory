@@ -1,53 +1,46 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
-import { purposeAllowsAgentCategory } from '@cat-factory/contracts'
 import type { AgentKind, PipelinePurpose } from '~/types/domain'
 import AgentTierSelect from '~/components/palettes/AgentTierSelect.vue'
-import { filterByAgentTier } from '~/utils/agentTier'
+import PipelinePurposeSelect from '~/components/palettes/PipelinePurposeSelect.vue'
+import { groupAgentPalette, narrowAgentPalette } from '~/utils/agentPalette'
 import { AGENT_CATEGORIES, OBSERVABILITY_GATE_ARCHETYPE } from '~/utils/catalog'
 
 const { t } = useI18n()
 const agents = useAgentsStore()
 const agentTier = useAgentTierStore()
 const releaseHealth = useReleaseHealthStore()
-defineEmits<{ (e: 'add', kind: AgentKind): void }>()
-// The purpose of the pipeline being built. When set to a non-`build` classifier, the
-// Implementation (`build`) and Testing (`test`) categories are hidden — such a pipeline writes
-// no product code and runs no tests (see `purposeAllowsAgentCategory`). `null`/`build` shows all.
+defineEmits<{
+  (e: 'add', kind: AgentKind): void
+  (e: 'update:purpose', purpose: PipelinePurpose): void
+}>()
+// The purpose of the pipeline being built, edited right here by the control above the catalog.
+// It narrows the palette to the categories that purpose has any use for (a review pipeline
+// designs nothing and builds nothing, see `purposeSuggestsAgentCategory`); `null` shows all.
 const props = defineProps<{ purpose?: PipelinePurpose | null }>()
 
 // The post-release-health gate is only meaningful — and only accepted by the backend —
 // with an observability integration connected, so it appears in the palette ONLY then.
-const offered = computed(() => {
-  const all = releaseHealth.connection.connected
+const connected = computed(() =>
+  releaseHealth.connection.connected
     ? [...agents.archetypes, OBSERVABILITY_GATE_ARCHETYPE]
-    : agents.archetypes
-  // Hide the categories the pipeline's purpose doesn't build from (an uncategorized custom kind
-  // has no category to gate, so it always shows).
-  return all.filter((a) => !a.category || purposeAllowsAgentCategory(props.purpose, a.category))
-})
+    : agents.archetypes,
+)
 
-// Then narrow to the selected tier. Applied AFTER the purpose gate so the "n hidden" hint
-// counts only what the TIER is holding back — a kind the pipeline's purpose rules out is not
-// something a wider tier would reveal, so counting it would send the user chasing a control
-// that cannot help them.
-const palette = computed(() => filterByAgentTier(offered.value, agentTier.tier))
-const hiddenByTier = computed(() => offered.value.length - palette.value.length)
+// Then narrow on the two dials above the catalog, each hint counting what relaxing THAT dial
+// alone would reveal. `narrowAgentPalette` owns that rule so it is unit-testable, and so neither
+// count can be quietly re-derived here as a subtraction that measures the wrong population.
+const narrowed = computed(() => narrowAgentPalette(connected.value, props.purpose, agentTier.tier))
+const palette = computed(() => narrowed.value.offered)
 
-// Group the palette into the ordered catalog categories, plus a trailing "Custom" bucket
-// for runtime-added agents that carry no category. Empty groups are dropped.
-const groups = computed(() => {
-  const ordered = AGENT_CATEGORIES.map((cat) => ({
-    id: cat.id as string,
-    label: cat.label,
-    agents: palette.value.filter((a) => a.category === cat.id),
-  }))
-  const custom = palette.value.filter((a) => !a.category)
-  if (custom.length)
-    ordered.push({ id: 'custom', label: t('palette.customAgents'), agents: custom })
-  return ordered.filter((g) => g.agents.length)
-})
+// Group the palette into the ordered catalog categories, plus a trailing "Custom" bucket for
+// whatever none of them claimed. `groupAgentPalette` owns the placement rule for the same reason
+// `narrowAgentPalette` owns the counting one: it decides what is VISIBLE, and the version living
+// here as an inline computed dropped a kind whose category had no section outright.
+const groups = computed(() =>
+  groupAgentPalette(palette.value, AGENT_CATEGORIES, t('palette.customAgents')),
+)
 
 // Persist which category sections are collapsed across builder opens.
 const collapsed = useLocalStorage<string[]>('cf.pipelineBuilder.collapsedAgentCategories', [])
@@ -64,7 +57,19 @@ function toggle(id: string) {
 <template>
   <div class="space-y-2">
     <p class="px-1 text-[11px] text-slate-500">{{ t('palette.hint') }}</p>
-    <AgentTierSelect :hidden-count="hiddenByTier" />
+    <!-- The two catalog dials, one above the other: what this pipeline is for, and how deep into
+         the agent catalog to look. Both narrow the sections below, and each states its own count.
+         Stacked rather than side by side because the palette column is a third of the slideover:
+         two half-width buttons truncate to "Purpose: Doc…", which is the one thing a filter
+         control may not do. -->
+    <div class="space-y-2">
+      <PipelinePurposeSelect
+        :purpose="props.purpose"
+        :hidden-count="narrowed.hiddenByPurpose"
+        @update:purpose="$emit('update:purpose', $event)"
+      />
+      <AgentTierSelect :hidden-count="narrowed.hiddenByTier" />
+    </div>
     <div class="space-y-2">
       <section v-for="g in groups" :key="g.id">
         <button
