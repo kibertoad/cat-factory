@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
-import { purposeSuggestsAgentCategory } from '@cat-factory/contracts'
 import type { AgentKind, PipelinePurpose } from '~/types/domain'
 import AgentTierSelect from '~/components/palettes/AgentTierSelect.vue'
 import PipelinePurposeSelect from '~/components/palettes/PipelinePurposeSelect.vue'
-import { filterByAgentTier } from '~/utils/agentTier'
+import { narrowAgentPalette } from '~/utils/agentPalette'
 import { AGENT_CATEGORIES, OBSERVABILITY_GATE_ARCHETYPE } from '~/utils/catalog'
 
 const { t } = useI18n()
@@ -29,21 +28,11 @@ const connected = computed(() =>
     : agents.archetypes,
 )
 
-// Then hide the categories the pipeline's purpose has no use for (an uncategorized custom kind
-// has no category to judge, so it always shows).
-const offered = computed(() =>
-  connected.value.filter(
-    (a) => !a.category || purposeSuggestsAgentCategory(props.purpose, a.category),
-  ),
-)
-const hiddenByPurpose = computed(() => connected.value.length - offered.value.length)
-
-// Then narrow to the selected tier. Applied AFTER the purpose gate so each hint counts what its
-// OWN dial is holding back and the two never double-count: a kind the purpose rules out is not
-// something a wider tier would reveal, so counting it there would send the user chasing a
-// control that cannot help them.
-const palette = computed(() => filterByAgentTier(offered.value, agentTier.tier))
-const hiddenByTier = computed(() => offered.value.length - palette.value.length)
+// Then narrow on the two dials above the catalog, each hint counting what relaxing THAT dial
+// alone would reveal. `narrowAgentPalette` owns that rule so it is unit-testable, and so neither
+// count can be quietly re-derived here as a subtraction that measures the wrong population.
+const narrowed = computed(() => narrowAgentPalette(connected.value, props.purpose, agentTier.tier))
+const palette = computed(() => narrowed.value.offered)
 
 // Group the palette into the ordered catalog categories, plus a trailing "Custom" bucket
 // for runtime-added agents that carry no category. Empty groups are dropped.
@@ -82,10 +71,10 @@ function toggle(id: string) {
     <div class="space-y-2">
       <PipelinePurposeSelect
         :purpose="props.purpose"
-        :hidden-count="hiddenByPurpose"
+        :hidden-count="narrowed.hiddenByPurpose"
         @update:purpose="$emit('update:purpose', $event)"
       />
-      <AgentTierSelect :hidden-count="hiddenByTier" />
+      <AgentTierSelect :hidden-count="narrowed.hiddenByTier" />
     </div>
     <div class="space-y-2">
       <section v-for="g in groups" :key="g.id">

@@ -4653,6 +4653,7 @@
       "rounds": "Tur",
       "purposeLabel": "Amaç",
       "purposePlaceholder": "Bir amaç seçin",
+      "purposeUnrecognized": "Tanınmayan ({purpose})",
       "purposeOption": {
         "build": "Geliştirme",
         "document": "Dokümantasyon",

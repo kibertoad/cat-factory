@@ -4653,6 +4653,7 @@
       "rounds": "Раунди",
       "purposeLabel": "Призначення",
       "purposePlaceholder": "Виберіть призначення",
+      "purposeUnrecognized": "Нерозпізнано ({purpose})",
       "purposeOption": {
         "build": "Розробка",
         "document": "Документація",

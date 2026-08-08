@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentArchetype } from '~/types/domain'
-import { filterByAgentTier, filterByAgentTierKeeping, isAgentTier } from '~/utils/agentTier'
+import { filterByAgentTierKeeping, isAgentTier } from '~/utils/agentTier'
 
 const archetype = (kind: string, tier?: AgentArchetype['tier']): AgentArchetype => ({
   kind: kind as AgentArchetype['kind'],
@@ -18,22 +18,6 @@ const CATALOG: AgentArchetype[] = [
   // A deployment-registered kind that declared no tier.
   archetype('acme-auditor'),
 ]
-
-describe('filterByAgentTier', () => {
-  it('shows only the basic kinds at the default level', () => {
-    expect(filterByAgentTier(CATALOG, 'basic').map((a) => a.kind)).toEqual(['coder'])
-  })
-
-  it('accumulates the levels, with advanced showing the whole catalog', () => {
-    expect(filterByAgentTier(CATALOG, 'intermediate').map((a) => a.kind)).toEqual([
-      'coder',
-      'researcher',
-      // An undeclared tier defaults to intermediate, so it appears here.
-      'acme-auditor',
-    ])
-    expect(filterByAgentTier(CATALOG, 'advanced')).toHaveLength(CATALOG.length)
-  })
-})
 
 describe('filterByAgentTierKeeping', () => {
   it('keeps a pinned kind the tier would otherwise hide, in catalog order', () => {

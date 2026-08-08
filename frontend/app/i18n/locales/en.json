@@ -4796,6 +4796,10 @@
       "rounds": "Rounds",
       "purposeLabel": "Purpose",
       "purposePlaceholder": "Select a purpose",
+      "purposeUnrecognized": "Unrecognized ({purpose})",
+      "@purposeUnrecognized": {
+        "description": "Shown on the pipeline-purpose control when the pipeline carries a purpose this build has no label for (a member added by a newer build, or one since retired). The raw stored value is quoted back so it can be recognised and re-picked."
+      },
       "purposeOption": {
         "build": "Build",
         "document": "Documentation",

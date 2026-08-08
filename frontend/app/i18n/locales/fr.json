@@ -4653,6 +4653,7 @@
       "rounds": "Tours",
       "purposeLabel": "Objectif",
       "purposePlaceholder": "Sélectionner un objectif",
+      "purposeUnrecognized": "Non reconnu ({purpose})",
       "purposeOption": {
         "build": "Développement",
         "document": "Documentation",

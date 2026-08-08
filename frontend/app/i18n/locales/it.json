@@ -4214,6 +4214,7 @@
       "rounds": "Giri",
       "purposeLabel": "Scopo",
       "purposePlaceholder": "Seleziona uno scopo",
+      "purposeUnrecognized": "Non riconosciuto ({purpose})",
       "purposeOption": {
         "build": "Sviluppo",
         "document": "Documentazione",

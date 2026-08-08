@@ -4653,6 +4653,7 @@
       "rounds": "Rondas",
       "purposeLabel": "Propósito",
       "purposePlaceholder": "Seleccionar un propósito",
+      "purposeUnrecognized": "No reconocido ({purpose})",
       "purposeOption": {
         "build": "Desarrollo",
         "document": "Documentación",

@@ -8,7 +8,7 @@
 // which task pickers offer it (`pipelineAllowedForTaskType`). So the control writes through to
 // the draft rather than to a store of its own.
 import { computed } from 'vue'
-import { PIPELINE_PURPOSES, type PipelinePurpose } from '@cat-factory/contracts'
+import { isPipelinePurpose, PIPELINE_PURPOSES, type PipelinePurpose } from '@cat-factory/contracts'
 
 const { t } = useI18n()
 
@@ -34,9 +34,19 @@ const PURPOSE_LABELS = computed<Record<PipelinePurpose, string>>(() => ({
 // The button text: the chosen purpose, or the placeholder while the draft carries none. An
 // unclassified draft reads as an unmade choice rather than as a purpose called "none", because
 // that is what it is: nothing is filtered until one is picked.
-const current = computed(() =>
-  props.purpose ? PURPOSE_LABELS.value[props.purpose] : t('pipeline.builder.purposePlaceholder'),
-)
+//
+// A stored purpose this build has no label for is NAMED as unrecognised and quoted back, not
+// folded into the placeholder and not left to render as an empty string after the colon. It is
+// the one state the user cannot diagnose from the control: the palette is unfiltered (see
+// `purposeSuggestsAgentCategory`), so a blank label would read as a pipeline nobody classified
+// while the saved row says otherwise. The menu still lists every current member, so naming the
+// value is also the way out of it.
+const current = computed(() => {
+  const purpose = props.purpose
+  if (!purpose) return t('pipeline.builder.purposePlaceholder')
+  if (!isPipelinePurpose(purpose)) return t('pipeline.builder.purposeUnrecognized', { purpose })
+  return PURPOSE_LABELS.value[purpose]
+})
 
 const items = computed(() => [
   PIPELINE_PURPOSES.map((purpose) => ({

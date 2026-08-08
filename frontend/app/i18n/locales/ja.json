@@ -4653,6 +4653,7 @@
       "rounds": "ラウンド",
       "purposeLabel": "目的",
       "purposePlaceholder": "目的を選択",
+      "purposeUnrecognized": "認識できません ({purpose})",
       "purposeOption": {
         "build": "開発",
         "document": "ドキュメント",

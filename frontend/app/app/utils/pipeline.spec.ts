@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   agentCategorySchema,
+  isAgentCategory,
+  isPipelinePurpose,
   PIPELINE_PURPOSES,
   pipelineAllowedForBlockLevel,
   pipelineAllowedForTaskType,
@@ -18,6 +20,13 @@ import {
 // The palette categories, read off the schema the predicates themselves are typed against, so a
 // new category joins these sweeps instead of quietly going unasserted behind a hand-listed tuple.
 const AGENT_CATEGORIES = agentCategorySchema.options
+
+// A `purpose` typed as a member and only DECLARED to be one: `Pipeline.purpose` is persisted and
+// no boundary re-checks it against the union this build compiled, so a browser on a cached bundle
+// sees a member shipped after it and a retired member goes on living in saved rows. Same story for
+// a `presentation.category`, which arrives in the snapshot from a deployment-registered kind.
+const UNKNOWN_PURPOSE = 'acme-migration' as never
+const UNKNOWN_CATEGORY = 'observability' as never
 
 // A minimal pipeline: only the fields the launch/task-type filters read matter here.
 function pipeline(over: Partial<Pipeline> = {}): Pipeline {
@@ -190,13 +199,39 @@ describe('purposeSuggestsAgentCategory (builder palette filter)', () => {
   it('never offers what the save gate would refuse', () => {
     // The invariant that keeps the two tables honest, over the whole grid rather than the cells
     // that happen to differ today: relevance may hide more than compatibility, never less, or
-    // the palette would offer a kind whose step then blocks the save.
-    for (const purpose of PIPELINE_PURPOSES) {
+    // the palette would offer a kind whose step then blocks the save. The unknown purpose rides
+    // the same sweep because it is the case where the two could most easily read the same value
+    // in opposite directions, one narrowing by it and the other not.
+    for (const purpose of [...PIPELINE_PURPOSES, UNKNOWN_PURPOSE]) {
       for (const cat of AGENT_CATEGORIES) {
         if (purposeSuggestsAgentCategory(purpose, cat)) {
           expect(purposeAllowsAgentCategory(purpose, cat)).toBe(true)
         }
       }
+    }
+  })
+})
+
+describe('a purpose or category this build does not recognise', () => {
+  it('is recognised as unknown rather than trusted', () => {
+    for (const purpose of PIPELINE_PURPOSES) expect(isPipelinePurpose(purpose)).toBe(true)
+    for (const cat of AGENT_CATEGORIES) expect(isAgentCategory(cat)).toBe(true)
+    expect(isPipelinePurpose('acme-migration')).toBe(false)
+    expect(isPipelinePurpose('')).toBe(false)
+    expect(isAgentCategory('observability')).toBe(false)
+  })
+
+  it('narrows nothing, in the palette or the save gate', () => {
+    // Both predicates index a table by these values, so before the guards an unknown purpose threw
+    // inside the palette's computed and white-screened the builder, while an unknown category read
+    // as `undefined` and silently dropped a registered kind the save gate would have accepted.
+    // Unknown means this build has nothing to narrow by, which is exactly what absent already means.
+    for (const cat of AGENT_CATEGORIES) {
+      expect(purposeSuggestsAgentCategory(UNKNOWN_PURPOSE, cat)).toBe(true)
+      expect(purposeAllowsAgentCategory(UNKNOWN_PURPOSE, cat)).toBe(true)
+    }
+    for (const purpose of PIPELINE_PURPOSES) {
+      expect(purposeSuggestsAgentCategory(purpose, UNKNOWN_CATEGORY)).toBe(true)
     }
   })
 })

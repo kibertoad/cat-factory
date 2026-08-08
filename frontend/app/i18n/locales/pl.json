@@ -4653,6 +4653,7 @@
       "rounds": "Rundy",
       "purposeLabel": "Cel",
       "purposePlaceholder": "Wybierz cel",
+      "purposeUnrecognized": "Nierozpoznany ({purpose})",
       "purposeOption": {
         "build": "Programowanie",
         "document": "Dokumentacja",

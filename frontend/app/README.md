@@ -290,6 +290,25 @@ it that way: the palette may hide what the save gate tolerates, so tightening th
 never turns a stored pipeline into one its own editor refuses, but offering a kind the save gate
 then rejects would be a dead end with the refusal arriving after the work.
 
+**Each hint counts what relaxing THAT dial alone would reveal**, which is why the reduction is one
+function (`utils/agentPalette.ts`) rather than two chained filters at the call site. Chaining them
+and subtracting the lengths gives the second dial an honest count and hands the first one the whole
+rest of the catalog: at the default `basic` tier a `planning` pipeline claimed thirteen kinds hidden
+for its purpose when switching back to Build revealed three, the other ten being tier-hidden either
+way. So a kind BOTH dials hide is counted by neither, correctly, and a new dial measures itself
+against what the others already admit rather than against the raw catalog.
+
+**A purpose or category this build does not recognise narrows nothing.** Both are closed
+vocabularies and both are persisted, so a reader is total against the type and partial against the
+data: a `Pipeline.purpose` outlives the build that wrote it, and a `presentation.category` arrives
+in the snapshot from a kind a deployment registered. Narrow with the schema-derived
+`isPipelinePurpose` / `isAgentCategory` before indexing anything by one, never with an optional
+call, so adding a member still fails the build. The two predicates read the unknown value through
+one helper because they have to agree about it: one narrowing by a purpose the other no longer
+recognises is exactly the subset violation above. On the control itself an unrecognised purpose is
+NAMED and quoted back rather than left to render blank, which would read as a pipeline nobody
+classified while the saved row says otherwise.
+
 ## In-app tutorial tours
 
 On first launch (once the board is up and no other startup advisory is open) the app asks

@@ -4214,6 +4214,7 @@
       "rounds": "Runden",
       "purposeLabel": "Zweck",
       "purposePlaceholder": "Zweck auswählen",
+      "purposeUnrecognized": "Nicht erkannt ({purpose})",
       "purposeOption": {
         "build": "Entwicklung",
         "document": "Dokumentation",

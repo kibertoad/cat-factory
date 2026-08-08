@@ -4653,6 +4653,7 @@
       "rounds": "סבבים",
       "purposeLabel": "מטרה",
       "purposePlaceholder": "בחר מטרה",
+      "purposeUnrecognized": "לא מזוהה ({purpose})",
       "purposeOption": {
         "build": "פיתוח",
         "document": "תיעוד",
