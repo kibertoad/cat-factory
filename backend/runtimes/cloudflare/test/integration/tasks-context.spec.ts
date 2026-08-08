@@ -54,6 +54,7 @@ describe('task context injection', () => {
     // Run a one-step pipeline on the task and drive it to completion.
     const pipeline = await app.call<{ id: string }>('POST', `/workspaces/${ws}/pipelines`, {
       name: 'Build',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     await app.call('POST', `/workspaces/${ws}/blocks/${task.body.id}/executions`, {

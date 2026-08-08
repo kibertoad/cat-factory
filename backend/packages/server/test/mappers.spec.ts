@@ -482,6 +482,7 @@ describe('rowToWorkspace / rowToPipeline', () => {
       {
         id: 'pl_1',
         name: 'P',
+        purpose: 'build',
         agentKinds: ['coder'],
       },
     )
@@ -489,6 +490,21 @@ describe('rowToWorkspace / rowToPipeline', () => {
       rowToPipeline({ id: 'pl_2', name: 'P', agent_kinds: '["coder"]', gates: '[true,false]' })
         .gates,
     ).toEqual([true, false])
+  })
+
+  it('reads the mandatory purpose totally, telling an empty column from an unnameable member', () => {
+    // The two states the column can hold that the required `Pipeline.purpose` cannot, and they get
+    // OPPOSITE dispositions. An empty column is a row written before the classifier was mandatory,
+    // and `build` is what such a row has always behaved as, so resolving it changes nothing. A
+    // value this build cannot name is a member it does not have, so it passes through untouched:
+    // dropping it would erase a deployment's own classifier on the next write, and folding it onto
+    // `build` would state a classification nobody chose. The narrowing predicates handle it.
+    const base = { id: 'pl_p', name: 'P', agent_kinds: '["coder"]', gates: null }
+    expect(rowToPipeline(base).purpose).toBe('build')
+    expect(rowToPipeline({ ...base, purpose: null }).purpose).toBe('build')
+    expect(rowToPipeline({ ...base, purpose: '' }).purpose).toBe('build')
+    expect(rowToPipeline({ ...base, purpose: 'review' }).purpose).toBe('review')
+    expect(rowToPipeline({ ...base, purpose: 'acme-migration' }).purpose).toBe('acme-migration')
   })
 
   it('surfaces the truthy flag columns as literal true, omitting them otherwise', () => {

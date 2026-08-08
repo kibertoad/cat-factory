@@ -256,6 +256,9 @@ export function registerIntroduceApiOperation(
     // non-builtin, so the org could never roll a fix out to the boards already holding it.
     builtin: true,
     version: 1,
+    // Designs, implements and tests an API: the classifier that keeps the operation's own task
+    // type offering it, and the palette showing the implementation kinds it is built from.
+    purpose: 'build',
     agentKinds: ['architect', 'coder', 'tester-api', 'conflicts', 'ci', 'merger'],
     stepOptions: [
       { agentVariantId: ORG_ARCHITECT_API_VARIANT_ID },

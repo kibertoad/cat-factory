@@ -4652,7 +4652,6 @@
       "strategy": "Estrategia",
       "rounds": "Rondas",
       "purposeLabel": "Propósito",
-      "purposePlaceholder": "Seleccionar un propósito",
       "purposeUnrecognized": "No reconocido ({purpose})",
       "purposeOption": {
         "build": "Desarrollo",
@@ -4671,6 +4670,10 @@
       "removeParticipant": "Quitar participante (mín. 2)",
       "addParticipant": "Añadir participante",
       "savedPipelines": "Pipelines guardados",
+      "purposeHiddenPipelines": "{count} pipeline guardado oculto para este propósito. | {count} pipelines guardados ocultos para este propósito.",
+      "everyPurposeListed": "Se muestran los pipelines guardados de todos los propósitos.",
+      "listEveryPurpose": "Mostrar todos los propósitos",
+      "narrowToDraftPurpose": "Limitar a este propósito",
       "hideArchived": "Ocultar archivados",
       "archivedCount": "Archivados ({count})",
       "allLabels": "Todas",

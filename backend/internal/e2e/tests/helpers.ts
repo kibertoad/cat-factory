@@ -437,7 +437,7 @@ export async function createSimplePipeline(
 ): Promise<Pipeline> {
   return json<Pipeline>(
     await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/pipelines`, {
-      data: { name: 'E2E pipeline', agentKinds, ...(gates ? { gates } : {}) },
+      data: { name: 'E2E pipeline', purpose: 'build', agentKinds, ...(gates ? { gates } : {}) },
     }),
   )
 }

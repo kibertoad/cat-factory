@@ -174,6 +174,7 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Coder only',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const started = await app.call<ExecutionInstance>(
@@ -274,6 +275,7 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Coder only',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const started = await app.call<ExecutionInstance>(
@@ -322,6 +324,7 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Coder only',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const started = await app.call<ExecutionInstance>(
@@ -473,6 +476,7 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${theirs.id}/pipelines`, {
         name: 'Coder only',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const started = await app.call<ExecutionInstance>(

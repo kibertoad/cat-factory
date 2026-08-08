@@ -190,12 +190,18 @@ describe('pipeline registry', () => {
   it('appends a registered (new-id) pipeline after the built-ins', () => {
     const builtins = seedPipelines().map((p) => p.id)
     const registry = defaultPipelineRegistry()
-    registry.register({ id: 'pl_org_audit', name: 'Audit & ship', agentKinds: ['org-auditor'] })
+    registry.register({
+      id: 'pl_org_audit',
+      name: 'Audit & ship',
+      purpose: 'build',
+      agentKinds: ['org-auditor'],
+    })
     const pipelines = seedPipelines(registry)
     expect(pipelines.map((p) => p.id)).toEqual([...builtins, 'pl_org_audit'])
     expect(pipelines.at(-1)).toEqual({
       id: 'pl_org_audit',
       name: 'Audit & ship',
+      purpose: 'build',
       agentKinds: ['org-auditor'],
     })
   })
@@ -204,7 +210,12 @@ describe('pipeline registry', () => {
     const builtins = seedPipelines().map((p) => p.id)
     expect(builtins).toContain('pl_simple') // precondition: overriding an existing built-in
     const registry = defaultPipelineRegistry()
-    registry.register({ id: 'pl_simple', name: 'Org quick', agentKinds: ['coder', 'merger'] })
+    registry.register({
+      id: 'pl_simple',
+      name: 'Org quick',
+      purpose: 'build',
+      agentKinds: ['coder', 'merger'],
+    })
     const pipelines = seedPipelines(registry)
     // Same ids in the same order — replaced in place, not appended.
     expect(pipelines.map((p) => p.id)).toEqual(builtins)
@@ -446,7 +457,12 @@ describe('validateRegistrations', () => {
   it('accepts retiring a pipeline the SAME registry had registered', () => {
     // `retire` drops the registration, so the id is no longer live and the tombstone stands.
     const pipelines = defaultPipelineRegistry()
-    pipelines.register({ id: 'pl_org_flow', name: 'Org flow', agentKinds: ['coder'] })
+    pipelines.register({
+      id: 'pl_org_flow',
+      name: 'Org flow',
+      purpose: 'build',
+      agentKinds: ['coder'],
+    })
     pipelines.retire('pl_org_flow')
     expect(
       collectRegistrationProblems({
@@ -1079,6 +1095,7 @@ describe('agent-kind variant validation', () => {
     pipelines.register({
       id: 'pl_org_flow',
       name: 'Org flow',
+      purpose: 'build',
       agentKinds: ['architect', 'coder'],
       stepOptions: [{ agentVariantId: 'org:tdd' }, null],
     })
@@ -1101,6 +1118,7 @@ describe('agent-kind variant validation', () => {
     pipelines.register({
       id: 'pl_org_flow',
       name: 'Org flow',
+      purpose: 'build',
       agentKinds: ['architect', 'coder'],
       enabled: [false, true],
       stepOptions: [{ agentVariantId: 'org:tdd' }, null],
@@ -1122,6 +1140,7 @@ describe('agent-kind variant validation', () => {
     pipelines.register({
       id: 'pl_org_flow',
       name: 'Org flow',
+      purpose: 'build',
       agentKinds: ['architect', 'coder'],
       stepOptions: [null, { agentVariantId: 'org:tdd' }],
     })

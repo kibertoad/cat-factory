@@ -124,6 +124,7 @@ function registerFragmentSetTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Code + document',
+        purpose: 'build',
         agentKinds: ['coder', 'documenter', 'doc-outliner'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -191,6 +192,7 @@ function registerFragmentSetTests(harness: ConformanceHarness): void {
       // The engine folds the seeded default into a code-aware step's prompt.
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Code',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const start = await app.call(
@@ -230,6 +232,7 @@ function registerFragmentSetTests(harness: ConformanceHarness): void {
     })
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Code',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -260,6 +263,7 @@ function registerFragmentSetTests(harness: ConformanceHarness): void {
     })
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Code',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -306,6 +310,7 @@ function registerFragmentSetTests(harness: ConformanceHarness): void {
     })
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Code',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -341,6 +346,7 @@ function registerFragmentBriefTests(harness: ConformanceHarness): void {
   async function runCoder(app: ReturnType<ConformanceHarness['makeApp']>, wsId: string) {
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Code',
+      purpose: 'build',
       agentKinds: ['coder'],
     })
     const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -516,6 +522,7 @@ function registerFragmentBriefTests(harness: ConformanceHarness): void {
     })
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Plan',
+      purpose: 'build',
       agentKinds: ['architect'],
     })
     const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {

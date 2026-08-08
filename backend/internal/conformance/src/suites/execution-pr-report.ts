@@ -38,6 +38,7 @@ export function defineExecutionPrReportConformance(harness: ConformanceHarness):
         // absent rather than omit them (a missing section reads exactly like a clean one).
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Build + CI',
+          purpose: 'build',
           agentKinds: ['coder', 'ci'],
         })
         const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -100,6 +101,7 @@ export function defineExecutionPrReportConformance(harness: ConformanceHarness):
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Build + CI',
+          purpose: 'build',
           agentKinds: ['coder', 'ci'],
         })
         await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -131,6 +133,7 @@ export function defineExecutionPrReportConformance(harness: ConformanceHarness):
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Build + CI',
+          purpose: 'build',
           agentKinds: ['coder', 'ci'],
         })
         await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -180,6 +183,7 @@ export function defineExecutionPrReportConformance(harness: ConformanceHarness):
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Build + CI',
+          purpose: 'build',
           agentKinds: ['coder', 'ci'],
         })
         await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -203,6 +207,7 @@ export function defineExecutionPrReportConformance(harness: ConformanceHarness):
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Build + CI',
+          purpose: 'build',
           agentKinds: ['coder', 'ci'],
         })
         await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -249,6 +254,7 @@ export function defineExecutionPrReportConformance(harness: ConformanceHarness):
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Build + CI',
+          purpose: 'build',
           agentKinds: ['coder', 'ci'],
         })
         await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -339,6 +345,7 @@ function registerCapturedEvidenceTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Build + CI',
+      purpose: 'build',
       agentKinds: ['coder', 'ci'],
     })
     await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -397,6 +404,7 @@ function registerCapturedEvidenceTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Reproduce & fix',
+      purpose: 'build',
       agentKinds: ['repro-test', 'coder'],
     })
     await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -444,6 +452,7 @@ function registerCapturedEvidenceTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Reproduce & fix',
+      purpose: 'build',
       agentKinds: ['repro-test', 'coder'],
     })
     await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -495,6 +504,7 @@ function registerCapturedEvidenceTests(harness: ConformanceHarness): void {
 
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Build + test',
+      purpose: 'build',
       agentKinds: ['coder', 'tester-api'],
     })
     await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {

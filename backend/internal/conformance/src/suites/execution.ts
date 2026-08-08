@@ -6,6 +6,7 @@ import { defineJudgeConformance } from './execution-judge.js'
 import { defineExecutionPrReportConformance } from './execution-pr-report.js'
 import { defineExecutionPrReportEnvironmentsConformance } from './execution-pr-report-environments.js'
 import { defineExecutionReviewConformance } from './execution-review.js'
+import { defineReviewStoreConcurrencyConformance } from './execution-review-store.js'
 import { defineExecutionTesterConformance } from './execution-tester.js'
 
 // The execution-engine conformance, split into cohesive sibling files so no single suite file
@@ -16,6 +17,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
   describe(`[${harness.name}] conformance`, () => {
     defineExecutionTesterConformance(harness)
     defineExecutionReviewConformance(harness)
+    defineReviewStoreConcurrencyConformance(harness)
     defineExecutionGatesConformance(harness)
     defineInputGateConformance(harness)
     defineExecutionPrReportConformance(harness)

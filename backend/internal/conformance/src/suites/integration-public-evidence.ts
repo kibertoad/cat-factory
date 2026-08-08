@@ -52,6 +52,7 @@ async function startRun(
 ): Promise<string> {
   const pipeline = await app.call<Pipeline>('POST', `/workspaces/${workspaceId}/pipelines`, {
     name: 'Coder only',
+    purpose: 'build',
     agentKinds: ['coder'],
   })
   const started = await app.call<ExecutionInstance>(
@@ -569,6 +570,7 @@ function defineKeyProvisioningCases(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Coder only',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const started = await app.call(
@@ -626,6 +628,7 @@ function defineKeyProvisioningCases(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Coder only',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const started = await app.call(
@@ -666,6 +669,7 @@ function defineKeyProvisioningCases(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Coder only',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       expect(

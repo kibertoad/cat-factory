@@ -90,6 +90,7 @@ export function defineAgentGateConformance(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build + license check',
+        purpose: 'build',
         agentKinds: ['coder', 'license-check'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -123,6 +124,7 @@ export function defineAgentGateConformance(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build + license check',
+        purpose: 'build',
         agentKinds: ['coder', 'license-check'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -165,6 +167,7 @@ export function defineAgentGateConformance(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Audit',
+        purpose: 'build',
         agentKinds: ['conformance-auditor'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -239,6 +242,7 @@ function registerCiGateTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build + CI',
+        purpose: 'build',
         agentKinds: ['coder', 'ci'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -295,6 +299,7 @@ function registerCiGateTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build + CI',
+        purpose: 'build',
         agentKinds: ['coder', 'ci'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -328,6 +333,7 @@ function registerCiGateTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build + CI',
+        purpose: 'build',
         agentKinds: ['coder', 'ci'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -380,6 +386,7 @@ function registerCiGateTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build + CI',
+        purpose: 'build',
         agentKinds: ['coder', 'ci'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -457,6 +464,7 @@ function registerCiGateTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build + conflicts',
+        purpose: 'build',
         agentKinds: ['coder', 'conflicts'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -504,6 +512,7 @@ function registerDocAndHealthGateTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Doc + quality',
+        purpose: 'build',
         agentKinds: ['coder', 'doc-quality'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -532,6 +541,7 @@ function registerDocAndHealthGateTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Doc + quality',
+        purpose: 'build',
         agentKinds: ['coder', 'doc-quality'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -587,6 +597,7 @@ function registerDocAndHealthGateTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build + merge + post-release-health',
+        purpose: 'build',
         agentKinds: ['coder', 'merger', 'post-release-health'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -641,6 +652,7 @@ function registerDocAndHealthGateTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build + review',
+        purpose: 'build',
         agentKinds: ['coder', 'human-review'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -702,6 +714,7 @@ function registerDocAndHealthGateTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build + review',
+        purpose: 'build',
         agentKinds: ['coder', 'human-review'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {

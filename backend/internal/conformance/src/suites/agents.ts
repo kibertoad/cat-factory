@@ -306,6 +306,7 @@ function registerSandboxAndCustomKindTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Compliance audit',
+        purpose: 'build',
         agentKinds: ['conformance-auditor'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -393,6 +394,7 @@ function registerSandboxAndCustomKindTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Compliance audit',
+        purpose: 'build',
         agentKinds: ['conformance-auditor'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -463,6 +465,7 @@ function registerKindCapabilityTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Compliance audit',
+        purpose: 'build',
         agentKinds: ['conformance-auditor'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -594,6 +597,7 @@ function registerKindCapabilityTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Reasoned failure',
+        purpose: 'build',
         agentKinds: ['conformance-reasoned-failure'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -851,6 +855,7 @@ function registerSpikeAndPostOpTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Map service',
+        purpose: 'build',
         agentKinds: ['blueprints'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -934,6 +939,7 @@ function registerSpikeAndPostOpTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Write spec',
+        purpose: 'build',
         agentKinds: ['spec-writer'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -1075,6 +1081,7 @@ function registerEstimatorAndGateTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Test only',
+        purpose: 'build',
         agentKinds: ['tester-api'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -1108,6 +1115,7 @@ function registerEstimatorAndGateTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Estimate + code',
+        purpose: 'build',
         agentKinds: ['task-estimator', 'coder'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -1143,6 +1151,7 @@ function registerEstimatorAndGateTests(harness: ConformanceHarness): void {
         }
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Spec phase',
+          purpose: 'build',
           agentKinds: ['spec-writer', 'spec-companion'],
         })
         const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
@@ -1190,6 +1199,7 @@ function registerEstimatorAndGateTests(harness: ConformanceHarness): void {
 
       const created = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Consensus architect',
+        purpose: 'build',
         agentKinds: ['architect', 'coder'],
         consensus: [
           {
@@ -1239,6 +1249,7 @@ function registerEstimatorAndGateTests(harness: ConformanceHarness): void {
 
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Build + human test',
+        purpose: 'build',
         agentKinds: ['coder', 'human-test'],
       })
       const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {

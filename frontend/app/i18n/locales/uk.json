@@ -4652,7 +4652,6 @@
       "strategy": "Стратегія",
       "rounds": "Раунди",
       "purposeLabel": "Призначення",
-      "purposePlaceholder": "Виберіть призначення",
       "purposeUnrecognized": "Нерозпізнано ({purpose})",
       "purposeOption": {
         "build": "Розробка",
@@ -4671,6 +4670,10 @@
       "removeParticipant": "Прибрати учасника (мін. 2)",
       "addParticipant": "Додати учасника",
       "savedPipelines": "Збережені пайплайни",
+      "purposeHiddenPipelines": "{count} збережений пайплайн приховано для цього призначення. | {count} збережені пайплайни приховано для цього призначення. | {count} збережених пайплайнів приховано для цього призначення.",
+      "everyPurposeListed": "Показано збережені пайплайни всіх призначень.",
+      "listEveryPurpose": "Показати всі призначення",
+      "narrowToDraftPurpose": "Звузити до цього призначення",
       "hideArchived": "Сховати архівовані",
       "archivedCount": "Архівовані ({count})",
       "allLabels": "Усі",

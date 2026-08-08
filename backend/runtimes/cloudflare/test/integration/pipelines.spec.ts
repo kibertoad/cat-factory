@@ -40,6 +40,7 @@ describe('pipelines', () => {
   it('creates a custom pipeline', async () => {
     const res = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Docs only',
+      purpose: 'document',
       agentKinds: ['documenter'],
     })
     expect(res.status).toBe(201)
@@ -50,6 +51,7 @@ describe('pipelines', () => {
   it('rejects a pipeline with no agents', async () => {
     const res = await app.call('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Empty',
+      purpose: 'build',
       agentKinds: [],
     })
     expect(res.status).toBe(400)
@@ -66,6 +68,7 @@ describe('pipelines', () => {
 
     const custom = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Docs only',
+      purpose: 'document',
       agentKinds: ['documenter'],
     })
     expect(custom.body.builtin ?? false).toBe(false)
@@ -163,6 +166,7 @@ describe('pipelines', () => {
     // test deployment has no Datadog connection wired, so the controller must reject it.
     const res = await app.call('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Ship + watch',
+      purpose: 'build',
       agentKinds: ['coder', 'post-release-health'],
     })
     expect(res.status).toBe(422)
@@ -173,6 +177,7 @@ describe('pipelines', () => {
     // `reviewer` enabled would orphan the companion at run start, so it is rejected.
     const res = await app.call('POST', `/workspaces/${wsId}/pipelines`, {
       name: 'Orphaned reviewer',
+      purpose: 'build',
       agentKinds: ['coder', 'reviewer'],
       enabled: [false, true],
     })

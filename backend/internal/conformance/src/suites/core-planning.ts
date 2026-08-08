@@ -820,6 +820,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const custom = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Custom',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       const res = await call('POST', `/workspaces/${wsId}/pipelines/${custom.body.id}/reseed`)
@@ -836,6 +837,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
       live.register({
         id: 'pl_org_flow',
         name: 'Org flow',
+        purpose: 'build',
         agentKinds: ['coder', 'reviewer'],
         builtin: true,
         version: 1,
@@ -902,6 +904,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Nightly custom',
+        purpose: 'build',
         agentKinds: ['coder', 'reviewer'],
       })
       const schedule = await app.call<PipelineSchedule>(
@@ -945,6 +948,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
 
       const created = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Toggles',
+        purpose: 'build',
         // The prose description rides the same symmetric-persistence contract (its own
         // `description` column on both stores) and must round-trip identically.
         description: 'A custom pipeline for the toggles test.',
@@ -999,6 +1003,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
       }
       const created = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Gated',
+        purpose: 'build',
         agentKinds: ['coder', 'ci', 'merger'],
         gates: [true, false, false],
         stepOptions: [{ gateConfig }, { gateConfig: { fields: { maxAttempts: 3 } } }, null],
@@ -1024,6 +1029,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
 
       const ungated = await call('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Policy without a gate',
+        purpose: 'build',
         agentKinds: ['coder', 'merger'],
         stepOptions: [{ gateConfig: { approvers: { roles: ['admin'] } } }, null],
       })
@@ -1031,6 +1037,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
 
       const unreachableQuorum = await call('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Quorum nobody can reach',
+        purpose: 'build',
         agentKinds: ['coder', 'merger'],
         gates: [true, false],
         stepOptions: [
@@ -1042,6 +1049,7 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
 
       const undeclaredParameter = await call('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Parameter no gate declares',
+        purpose: 'build',
         agentKinds: ['coder', 'ci', 'merger'],
         stepOptions: [null, { gateConfig: { fields: { nosuchknob: 3 } } }, null],
       })
@@ -1157,6 +1165,7 @@ function registerBoardPlanningTests(harness: ConformanceHarness): void {
 
       const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
         name: 'Code only',
+        purpose: 'build',
         agentKinds: ['coder'],
       })
       // Cap the auth service at one concurrently-running task.

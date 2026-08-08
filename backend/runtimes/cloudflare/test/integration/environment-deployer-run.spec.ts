@@ -46,6 +46,7 @@ describe('deployer agent + environment discovery', () => {
 
     const pipeline = await app.call<{ id: string }>('POST', `/workspaces/${ws}/pipelines`, {
       name: 'Deploy & test',
+      purpose: 'build',
       agentKinds: ['deployer', 'tester-api'],
     })
     await app.call('POST', `/workspaces/${ws}/blocks/${task.body.id}/executions`, {

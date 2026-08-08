@@ -4652,7 +4652,6 @@
       "strategy": "Strateji",
       "rounds": "Tur",
       "purposeLabel": "Amaç",
-      "purposePlaceholder": "Bir amaç seçin",
       "purposeUnrecognized": "Tanınmayan ({purpose})",
       "purposeOption": {
         "build": "Geliştirme",
@@ -4671,6 +4670,10 @@
       "removeParticipant": "Katılımcıyı kaldır (en az 2)",
       "addParticipant": "Katılımcı ekle",
       "savedPipelines": "Kayıtlı pipeline'lar",
+      "purposeHiddenPipelines": "Bu amaç için {count} kayıtlı pipeline gizli.",
+      "everyPurposeListed": "Tüm amaçlara ait kayıtlı pipeline'lar listeleniyor.",
+      "listEveryPurpose": "Tüm amaçları göster",
+      "narrowToDraftPurpose": "Bu amaca daralt",
       "hideArchived": "Arşivlenenleri gizle",
       "archivedCount": "Arşivlenen ({count})",
       "allLabels": "Tümü",

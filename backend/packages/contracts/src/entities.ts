@@ -965,9 +965,19 @@ export const pipelineSchema = v.object({
   availability: v.optional(
     v.union([v.literal('one-off'), v.literal('recurring'), v.literal('both')]),
   ),
-  // The use-case classifier ({@link PIPELINE_PURPOSES}) the task pickers + builder palette filter
-  // on. Absent ⇒ unclassified (pre-1.0, no back-fill): unrestricted, but hidden from a document task.
-  purpose: v.optional(pipelinePurposeSchema),
+  /**
+   * The use-case classifier ({@link PIPELINE_PURPOSES}) the task pickers, the builder palette and
+   * the builder's saved-pipeline library filter on. MANDATORY: every pipeline says what it exists
+   * to do, whether it comes from the built-in catalog, a `PipelineRegistry` registration or the
+   * builder. A field four surfaces narrow by cannot be optional without each of them owning a
+   * private policy for the rows that skipped it.
+   *
+   * DECLARED to be a member, not verified to be one: the value is persisted, so a stored row can
+   * name a member retired since it was written, and a browser can hold a bundle older than the
+   * member it reads. Narrow with `isPipelinePurpose` (or `classifierFor`, which states what an
+   * unnameable classifier means) before indexing anything by it.
+   */
+  purpose: pipelinePurposeSchema,
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
 export type PipelineAvailability = NonNullable<Pipeline['availability']>

@@ -57,6 +57,7 @@ function memoryStore(over: { failOn?: string } = {}) {
     listByExecution: async () => [],
     countByExecution: async () => 0,
     listByBlock: async () => [],
+    countByBlock: async () => 0,
     listByDocument: async (_ws, document) =>
       rows.filter(
         (r) =>
