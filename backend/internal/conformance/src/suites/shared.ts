@@ -18,6 +18,8 @@ const EMPTY_BINARY_ARTIFACT_STORE: BinaryArtifactStore = {
   listByExecution: () => Promise.resolve([]),
   countByExecution: () => Promise.resolve(0),
   listByBlock: () => Promise.resolve([]),
+  listByDocument: () => Promise.resolve([]),
+  pruneByDocument: () => Promise.resolve(0),
   delete: () => Promise.resolve(),
   pruneOlderThan: () => Promise.resolve(0),
   deleteByWorkspace: () => Promise.resolve(0),
@@ -42,6 +44,12 @@ export function memoryBinaryArtifactStore(): BinaryArtifactStore & {
   const owned = (workspaceId: string, id: string) => {
     const held = rows.get(id)
     return held && held.record.workspaceId === workspaceId ? held : null
+  }
+  /** Drop every row matching `match` (bytes and metadata together), returning how many went. */
+  const reclaim = (match: (record: BinaryArtifactRecord) => boolean) => {
+    const doomed = [...rows.values()].filter((held) => match(held.record))
+    for (const held of doomed) rows.delete(held.record.id)
+    return doomed.length
   }
   return {
     seed(record, bytes) {
@@ -74,12 +82,45 @@ export function memoryBinaryArtifactStore(): BinaryArtifactStore & {
           .filter((r) => r.record.workspaceId === workspaceId && r.record.blockId === blockId)
           .map((r) => r.record),
       ),
+    listByDocument: (workspaceId, document) =>
+      Promise.resolve(
+        [...rows.values()]
+          .filter(
+            (r) =>
+              r.record.workspaceId === workspaceId &&
+              r.record.document?.source === document.source &&
+              r.record.document.externalId === document.externalId,
+          )
+          .map((r) => r.record),
+      ),
+    // The reclaims REMOVE, rather than answering 0 and keeping the rows. A double whose reads are
+    // real and whose deletes are not is worse than an unimplemented one: a suite asserting that a
+    // re-import REPLACES a document's renders would see both revisions accumulate and still pass,
+    // which is exactly the bug such a suite is written to catch.
+    pruneByDocument: (workspaceId, document) =>
+      Promise.resolve(
+        reclaim(
+          (record) =>
+            record.workspaceId === workspaceId &&
+            record.document?.source === document.source &&
+            record.document.externalId === document.externalId,
+        ),
+      ),
     delete: (workspaceId, id) => {
       if (owned(workspaceId, id)) rows.delete(id)
       return Promise.resolve()
     },
-    pruneOlderThan: () => Promise.resolve(0),
-    deleteByWorkspace: () => Promise.resolve(0),
+    // Carries the port's document-keyed exemption: a design's renders expire with their document,
+    // never on the retention clock.
+    pruneOlderThan: (workspaceId, olderThan) =>
+      Promise.resolve(
+        reclaim(
+          (record) =>
+            record.workspaceId === workspaceId && record.createdAt < olderThan && !record.document,
+        ),
+      ),
+    deleteByWorkspace: (workspaceId) =>
+      Promise.resolve(reclaim((record) => record.workspaceId === workspaceId)),
   }
 }
 /** Storage off: the account has no content storage, so the start gate must refuse the run. */

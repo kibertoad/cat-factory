@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { documentFreshnessChangeSchema, documentFreshnessGapSchema } from '@cat-factory/contracts'
+import {
+  documentFreshnessChangeSchema,
+  documentFreshnessGapSchema,
+  documentRenderStatusSchema,
+} from '@cat-factory/contracts'
 import { missingI18nKeys } from '../../../test/i18nKeys'
-import { CHANGE_KEYS, GAP_KEYS } from './DocumentSyncState.logic'
+import { CHANGE_KEYS, GAP_KEYS, RENDER_STATUS_KEYS } from './DocumentSyncState.logic'
 
 /**
  * The half of these tables' correctness that no guard can see.
@@ -24,10 +28,20 @@ describe('DocumentSyncState freshness tables', () => {
     expect(missingI18nKeys(Object.values(CHANGE_KEYS))).toEqual([])
   })
 
+  it('names a key the base catalog holds for every render status that states one', () => {
+    // The `null` half is deliberate (see the table): only the statuses that name a FIX render.
+    expect(missingI18nKeys(Object.values(RENDER_STATUS_KEYS).filter((k) => k !== null))).toEqual([])
+  })
+
   it('covers exactly the contracts vocabularies, with no entry for a member that is gone', () => {
     expect(Object.keys(GAP_KEYS).sort()).toEqual([...documentFreshnessGapSchema.options].sort())
     expect(Object.keys(CHANGE_KEYS).sort()).toEqual(
       [...documentFreshnessChangeSchema.options].sort(),
+    )
+    // A new render status has to be CLASSIFIED (a key or an explicit null), never omitted into
+    // silence: an unclassified one would render nothing and read as "the images are fine".
+    expect(Object.keys(RENDER_STATUS_KEYS).sort()).toEqual(
+      [...documentRenderStatusSchema.options].sort(),
     )
   })
 })

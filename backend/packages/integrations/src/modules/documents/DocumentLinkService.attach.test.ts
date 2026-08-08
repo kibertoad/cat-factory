@@ -79,6 +79,7 @@ function doc(externalId: string, linkedBlockId: string | null = null): DocumentR
     linkedBlockId,
     role: null,
     docKind: null,
+    renderStatus: null,
     syncedAt: 1,
     deletedAt: null,
   }

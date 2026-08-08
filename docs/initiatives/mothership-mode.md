@@ -148,7 +148,10 @@
   self-hosted runner-backend connection settings panel, its credentials a SEALED `secretsCipher`
   blob (the observability/environment-connection precedent); (2) the visual-confirmation gate's
   `binaryArtifactMetadataStore` metadata surface (`insert` via `workspaceField`;
-  `get`/`listByExecution`/`countByExecution`/`listByBlock`/`delete` via `workspace`); the blob
+  `get`/`listByExecution`/`countByExecution`/`listByBlock`/`delete` via `workspace`, joined later by
+  the design-render pair `listByDocument`/`deleteByDocument` on the same rule, so an import running
+  on a node retains a design source's frames and replaces the previous revision's rather than
+  silently keeping neither); the blob
   BYTES stay per-account local, only the metadata is proxied, and the retention sweep
   (`listOlderThan`/`deleteOlderThan`) stays mothership-internal. This one is NOT a pure allow-list
   change: `binaryArtifactMetadataStore` isn't in `CoreDependencies` (it's composed into

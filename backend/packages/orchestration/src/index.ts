@@ -69,6 +69,7 @@ export {
   type DriveConfig,
   type DriveOptions,
   type DriveOutcome,
+  type StepOutcome,
 } from './modules/execution/drive.js'
 export {
   failureFromAdvanceError,

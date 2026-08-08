@@ -4311,6 +4311,11 @@
       },
       "refreshFailed": "Nie udało się sprawdzić zmian"
     },
+    "renders": {
+      "partial": "Niektórych ramek projektu nie udało się zapisać jako obrazy.",
+      "failed": "Nie udało się pobrać obrazów projektu ze źródła.",
+      "storage_unavailable": "Obrazy projektu nie zostały zapisane: to wdrożenie nie ma skonfigurowanego magazynu obrazów."
+    },
     "connect": {
       "title": "Połącz źródło",
       "sourceFallback": "Źródło",

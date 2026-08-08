@@ -4448,6 +4448,11 @@
       },
       "refreshFailed": "Could not check for changes"
     },
+    "renders": {
+      "partial": "Some design frames could not be saved as images.",
+      "failed": "The design images could not be retrieved from the source.",
+      "storage_unavailable": "Design images were not saved: this deployment has no image storage configured."
+    },
     "connect": {
       "title": "Connect source",
       "sourceFallback": "Source",

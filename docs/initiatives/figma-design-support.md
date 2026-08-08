@@ -66,6 +66,10 @@ design under active iteration it meant the agent routinely built the previous re
 
 ### 4. Pixels exist upstream and reach nobody
 
+**Closed on the RETENTION half by Track D slice 1**: an import now downloads the frames and keeps
+them as `reference` artifacts. Delivery (the gate, then the model) is what remains, and the survey
+finding is kept below because it is what the remaining two slices are measured against.
+
 The provider asks Figma for a rendered PNG URL, stores the URL as a `### References` line, and
 never downloads the bytes (`fetchPreviewUrl`); the `design.context` fragment then explicitly
 tells the agent not to fetch it (headless containers cannot). Downstream, the visual-confirmation
@@ -351,12 +355,60 @@ The bridge is the binary-artifact store that visual confirmation already reads
 (`kind:'reference'`), so the first two slices need no harness change and close a documented
 visual-confirmation leftover. Multimodal delivery is the long pole and is deliberately LAST.
 
-- [ ] **Download renders at import.** For a node link, fetch the node's PNG bytes server-side
-      (size-capped, best-effort); for a whole-file link, the first N top frames. Store through
-      the workspace's binary-artifact store as `kind:'reference'` artifacts keyed to the
-      document; re-import replaces them. Where no artifact store is wired the import proceeds
-      textually and the document row says renders were not retained ("absent" and "zero" must not
-      render the same).
+- [x] **Download renders at import.** The kernel `DocumentSourceProvider.fetchRenders` port, called
+      by the import that WRITES a body, storing `kind:'reference'` artifacts keyed to the document
+      (`binary_artifacts.document_source` / `document_external_id`, D1 0087 ⇄ Drizzle) and pruning the
+      previous set first, so a design's pictures are never a mix of two revisions.
+      **A separate port method rather than a field on `fetchDocument`, which is the decision the
+      plan above missed.** The freshness ladder re-fetches the TEXT on every dispatch whose probe
+      finds a moved version, and a design file's version moves on any edit anywhere in it, so most
+      of those re-fetches write nothing but a token; carrying the images on the same call would put
+      megabytes of PNGs on the critical path of a dispatch that had no reason to spend them. The
+      render pass is therefore gated on the write that actually changes a body, and a token-only
+      write carries the previous status forward untouched.
+      **The status is `documents.render_status`, a five-member vocabulary plus NULL**, because
+      every way of ending up with no images renders as the same absence and each asks for a
+      different fix: `storage_unavailable` (configure storage, and the download is not even
+      attempted), `failed` / `partial` (retry the source), `none` (the design had no frames),
+      `stored`. NULL is the fourth state and the commonest, meaning the question does not apply.
+      It is derived from what was RETAINED rather than downloaded, so a store that rejects half the
+      bytes reads as `partial` exactly like a source that rendered half the frames: claiming
+      `stored` over an artifact that never landed is the one answer that sends a reader to the
+      wrong place. The SPA states the three that name a fix and stays silent on the other two.
+      **A CAP is retention too**, so `DocumentRenderResult.capped` counts the frames a provider
+      declined to rasterise and pushes the row to `partial`; reported as nothing, six pictures of a
+      twenty-frame file land as `stored` and the design reads as having six screens. It is kept
+      apart from `failed` because a retry fixes one and never the other.
+      **`storage_unavailable` is a DEPLOYMENT fact, so an account-settings read that FAILED is
+      `failed` instead**: naming an unconfigured capability sends an operator to change a setting
+      that is already right, and the status then rides forward untouched through every token-only
+      re-import, outliving the outage.
+      **The order is prune-then-FETCH**, not prune-then-store: the reverse leaves the new body
+      beside the previous revision's pictures, and a `failed` row over a full set of frames reads
+      to everyone as a transient blip rather than as a document illustrating a screen that no
+      longer exists. A `view` must also name ONE screen (it is the pairing key), so a frame name
+      repeated across pages qualifies EVERY occurrence with its id, including the first: leaving
+      the first bare hands that view to whichever frame the file lists first, and re-ordering a
+      page would silently re-point a stored view at a different screen.
+      **The renders are exempt from the age-based artifact retention sweep**
+      (`listOlderThan`/`deleteOlderThan` skip a row carrying a document ref, D1 ⇄ Drizzle with a
+      conformance assertion). Age fits run debris, produced once and never referenced again; a
+      document's renders are a projection of a live row, replaced by the next body-changing import
+      and by nothing else. Swept on a clock they would vanish while the row still said `stored`,
+      with nothing to re-download them, since an unedited design is never re-imported.
+      **The structural read is done ONCE.** `fetchDocument` already learns the frame ids and names
+      a render pass needs, so it carries them out as `DocumentContent.renderPlan` and `fetchRenders`
+      takes the plan rather than re-issuing the same request against the rate-limited API. The plan
+      is a HINT: a provider handed none discovers the frames itself, which is what keeps the two
+      port methods independent.
+      Two smaller traps. The signed asset URL arrives inside a response BODY, which is the shape an
+      SSRF comes in, so the download is host-pinned to Figma's own asset hosts and carries NO
+      credential (the signature is the auth, and a bucket host has no business holding the
+      workspace's token); the shared host-pinned fetch grew a fixed host SET for it, still a
+      constant and still not a per-connection value. And the artifact is keyed by the DOCUMENT's
+      source identity rather than by the block: an import runs before the document is attached to
+      anything, the attachment can move later, and a hand-uploaded reference on the same block must
+      survive a re-import that replaces the design's own frames.
 - [ ] **Feed the visual-confirmation gate.** Auto-pair a block's design-origin reference
       artifacts into the gate gallery beside the hand-uploaded ones, and write them into
       `.cat-context/reference-screenshots/` via the reference pre-op the handover doc already
@@ -457,6 +509,11 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
 - **Anything the harness writes is per-job state.** Reference renders materialised for a job
   (Track D) go under the job's own context dir, never HOME, and the slice that changes the
   harness is an image bump with the pinned-tag rollout recipe.
+- **A render is fetched on the write, not on the probe.** `fetchRenders` is a SEPARATE port method
+  from `fetchDocument`, and the split is a cost decision rather than a tidiness one: the freshness
+  ladder re-fetches the text whenever a version moves, which for a whole-file source is any edit
+  anywhere in the file. Anything new that rides the import path has to answer the same question:
+  does it belong to the BODY (refresh it only when the body changed) or to the probe.
 - **A refusal already guards this corpus.** Linked-context delivery is load-bearing
   (`context_document_unreadable` / `context_documents_over_budget` refusals): richer Figma
   renders (Track B) enlarge bodies, so watch the ~256 KB corpus budget; the caps must state what

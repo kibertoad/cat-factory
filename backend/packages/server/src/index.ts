@@ -336,6 +336,18 @@ export {
   MAX_TIMER_DELAY_MS,
   type TimerEnvParse,
 } from './config/numeric.js'
+export {
+  parseConfigDuration,
+  resolveDurationEnv,
+  type ConfigDuration,
+  type DurationParse,
+} from './config/duration.js'
+export {
+  DEFAULT_ADVANCE_TIMEOUT,
+  DEFAULT_CI_POLL_INTERVAL,
+  DEFAULT_DECISION_TIMEOUT,
+  DEFAULT_JOB_POLL_INTERVAL,
+} from './config/executionDurations.js'
 export { base64url, base64urlToBytes, pkcs8PemToDer, timingSafeEqual } from './crypto/encoding.js'
 // Runtime-neutral (Web Crypto) credential encryption + GitHub-App authentication,
 // shared by both facades so the Node service can mint installation tokens and

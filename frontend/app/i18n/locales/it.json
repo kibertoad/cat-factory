@@ -3925,6 +3925,11 @@
       },
       "refreshFailed": "Impossibile verificare le modifiche"
     },
+    "renders": {
+      "partial": "Alcuni frame del design non è stato possibile salvarli come immagini.",
+      "failed": "Non è stato possibile recuperare le immagini del design dalla sorgente.",
+      "storage_unavailable": "Le immagini del design non sono state salvate: questa installazione non ha uno spazio di archiviazione per le immagini configurato."
+    },
     "connect": {
       "title": "Collega sorgente",
       "sourceFallback": "Sorgente",

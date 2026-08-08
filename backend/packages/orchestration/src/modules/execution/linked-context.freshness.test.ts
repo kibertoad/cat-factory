@@ -30,6 +30,7 @@ function record(over: Partial<DocumentRecord> = {}): DocumentRecord {
     linkedBlockId: 'task_1',
     role: null,
     docKind: null,
+    renderStatus: null,
     syncedAt: 0,
     deletedAt: null,
     ...over,

@@ -21,6 +21,8 @@ import type {
   AgentToolCallTrajectoryQuery,
   BinaryArtifactMetadataStore,
   BinaryArtifactRecord,
+  DocumentArtifactRef,
+  DocumentOrigin,
   LlmCallBodyWindow,
   LlmCallMetric,
   LlmCallMetricPage,
@@ -1103,6 +1105,12 @@ function rowToBinaryArtifact(row: typeof binaryArtifacts.$inferSelect): BinaryAr
     hash: row.hash,
     storage: row.storage as BinaryArtifactRecord['storage'],
     storageKey: row.storage_key,
+    // Both halves or neither: a row with only one is not a document reference, and treating it as
+    // one would key a reclaim on a half-identity that matches the wrong artifacts.
+    document:
+      row.document_source && row.document_external_id
+        ? { source: row.document_source as DocumentOrigin, externalId: row.document_external_id }
+        : null,
     createdAt: row.created_at,
   }
 }
@@ -1125,6 +1133,8 @@ export class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadat
       hash: record.hash,
       storage: record.storage,
       storage_key: record.storageKey,
+      document_source: record.document?.source ?? null,
+      document_external_id: record.document?.externalId ?? null,
       created_at: record.createdAt,
     })
   }
@@ -1176,6 +1186,44 @@ export class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadat
     return rows.map(rowToBinaryArtifact)
   }
 
+  async listByDocument(
+    workspaceId: string,
+    document: DocumentArtifactRef,
+  ): Promise<BinaryArtifactRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(binaryArtifacts)
+      .where(this.documentScope(workspaceId, document))
+      .orderBy(asc(binaryArtifacts.created_at), asc(binaryArtifacts.id))
+    return rows.map(rowToBinaryArtifact)
+  }
+
+  async deleteByIds(workspaceId: string, ids: readonly string[]): Promise<number> {
+    let removed = 0
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < ids.length; i += 500) {
+      const deleted = await this.db
+        .delete(binaryArtifacts)
+        .where(
+          and(
+            eq(binaryArtifacts.workspace_id, workspaceId),
+            inArray(binaryArtifacts.id, ids.slice(i, i + 500) as string[]),
+          ),
+        )
+        .returning({ id: binaryArtifacts.id })
+      removed += deleted.length
+    }
+    return removed
+  }
+
+  private documentScope(workspaceId: string, document: DocumentArtifactRef) {
+    return and(
+      eq(binaryArtifacts.workspace_id, workspaceId),
+      eq(binaryArtifacts.document_source, document.source),
+      eq(binaryArtifacts.document_external_id, document.externalId),
+    )
+  }
+
   async delete(workspaceId: string, id: string): Promise<void> {
     await this.db
       .delete(binaryArtifacts)
@@ -1186,26 +1234,29 @@ export class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadat
     const rows = await this.db
       .select()
       .from(binaryArtifacts)
-      .where(
-        and(
-          eq(binaryArtifacts.workspace_id, workspaceId),
-          lt(binaryArtifacts.created_at, olderThan),
-        ),
-      )
+      .where(this.agedScope(workspaceId, olderThan))
     return rows.map(rowToBinaryArtifact)
   }
 
   async deleteOlderThan(workspaceId: string, olderThan: number): Promise<number> {
     const deleted = await this.db
       .delete(binaryArtifacts)
-      .where(
-        and(
-          eq(binaryArtifacts.workspace_id, workspaceId),
-          lt(binaryArtifacts.created_at, olderThan),
-        ),
-      )
+      .where(this.agedScope(workspaceId, olderThan))
       .returning({ id: binaryArtifacts.id })
     return deleted.length
+  }
+
+  /**
+   * The age sweep's scope, shared by its list and its delete so the two cannot drift: run debris
+   * past the window, EXCLUDING a document's renders, which expire with their document rather than
+   * on a clock (see the port).
+   */
+  private agedScope(workspaceId: string, olderThan: number) {
+    return and(
+      eq(binaryArtifacts.workspace_id, workspaceId),
+      lt(binaryArtifacts.created_at, olderThan),
+      isNull(binaryArtifacts.document_source),
+    )
   }
 
   async listByWorkspace(workspaceId: string): Promise<BinaryArtifactRecord[]> {

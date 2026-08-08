@@ -38,6 +38,94 @@ export interface DocumentContent {
    * of re-fetching the whole page. `''` when the source exposes no version.
    */
   version: string
+  /**
+   * The blocks a render pass over this same revision would rasterise, when the structural read
+   * that produced {@link body} already learned them.
+   *
+   * A HINT, not a contract: absent (a prose source, or a provider that discovers its blocks some
+   * other way) simply means {@link DocumentSourceProvider.fetchRenders} does its own discovery.
+   * What it buys is the duplicate read: a design provider learns its frames' ids and names from
+   * exactly the file read the body came from, and re-issuing that read against a rate-limited API
+   * moments later spends a second call to relearn what it just had.
+   *
+   * It does NOT fold the render pass back into {@link DocumentSourceProvider.fetchDocument}. The
+   * split exists because the EXPENSIVE half (rasterising, then downloading megabytes of images)
+   * must not ride the dispatch-time freshness path; a list of ids and names costs nothing and is
+   * discarded unread when the body turns out not to have changed.
+   */
+  renderPlan?: DocumentRenderPlan
+}
+
+/** One block a render pass will ask the source to rasterise. */
+export interface DocumentRenderTarget {
+  /** The source's own id for the block, as its render endpoint names it. */
+  readonly id: string
+  /** What to call the resulting image: the {@link DesignRender.view} it becomes. */
+  readonly view: string
+}
+
+/**
+ * Which of a document's blocks a render pass covers, and how many it left out.
+ *
+ * `capped` is the whole reason this is a pair rather than a bare list. A provider bounds what it
+ * will rasterise (blob storage is the budget), and a design of twenty frames that yields six
+ * pictures is PARTLY illustrated — indistinguishable, from a bare list of six, from a design that
+ * only ever had six. The count travels so the caller can say which.
+ */
+export interface DocumentRenderPlan {
+  readonly targets: readonly DocumentRenderTarget[]
+  /** Blocks the source offered that the provider's own cap excluded, before any request. */
+  readonly capped: number
+}
+
+/**
+ * One rendered image of a design block (a Figma frame, a Zeplin screen), downloaded server-side.
+ *
+ * The BYTES rather than the URL, deliberately. A design source hands out a short-lived signed URL
+ * that nothing downstream can use: a headless container cannot fetch it, the visual-confirmation
+ * gate compares stored artifacts, and the link is expired by the time anyone opens the document a
+ * second time. Retaining the bytes is what turns "the design has a picture somewhere" into an
+ * artifact the platform owns.
+ */
+export interface DesignRender {
+  /**
+   * The block's own name (a frame/screen title), which is also the pairing key a captured
+   * screenshot is matched to. Never an id: a `view` is what a human and a UI tester both call the
+   * screen, and an id pairs with nothing.
+   */
+  view: string
+  /** MIME type of {@link bytes}, e.g. `image/png`. */
+  contentType: string
+  bytes: Uint8Array
+}
+
+/**
+ * What one attempt to render a document's blocks produced.
+ *
+ * Retrieved and NOT-retrieved are counted separately rather than reduced to a list plus a boolean,
+ * because "this design has no images" and "six of its eight frames would not render" are different
+ * facts that a bare list renders identically. `causes` carries the distinct reasons (an HTTP
+ * status, a blocked host) so a caller can state the one that asks for a fix.
+ */
+export interface DocumentRenderResult {
+  /** The images retrieved, in the order the source presents its blocks. Possibly empty. */
+  readonly renders: readonly DesignRender[]
+  /** How many the source named but could not be retrieved. */
+  readonly failed: number
+  /**
+   * How many blocks the provider's own cap excluded before any request was made.
+   *
+   * Kept APART from {@link failed} because the two ask for different things: a failure is worth a
+   * retry, while a capped frame will be capped again forever and is fixed by linking a narrower
+   * reference. Both leave the document partly illustrated, which is what the caller records.
+   *
+   * It exists at all because a cap that reports nothing is a cap that reads as completeness: six
+   * pictures of a twenty-frame file would otherwise land as "every image the source offered was
+   * retrieved and retained", and the reader would conclude the design has six screens.
+   */
+  readonly capped: number
+  /** Distinct short causes for the failures above (empty when `failed` is 0). */
+  readonly causes: readonly string[]
 }
 
 /**
@@ -193,6 +281,33 @@ export interface DocumentSourceProvider {
     externalId: string,
     workspaceId: string | null,
   ): Promise<DocumentContent>
+  /**
+   * Download rendered images of the document's blocks, bounded by the provider's own caps.
+   *
+   * OPTIONAL, and its absence is a real answer: a prose source has nothing to render, so the caller
+   * records "not applicable" rather than "none were retained". Kept OFF {@link fetchDocument} on
+   * purpose. The two are wanted at different moments and cost different things: the text is
+   * re-fetched on every dispatch whose freshness probe finds a moved version (a design file's
+   * version moves on any edit anywhere in it), while the images are only worth re-downloading when
+   * the body a reader sees has actually changed. Folded into one call, every unrelated edit in the
+   * file would pull megabytes of PNGs onto the critical path of a step dispatch.
+   *
+   * BEST-EFFORT by contract: a provider reports what it could not retrieve through
+   * {@link DocumentRenderResult.failed} instead of throwing, because an image is an enrichment and
+   * an import must never fail for the lack of one. Scoped to `workspaceId` for the same
+   * tenant-isolation reason as {@link fetchDocument}, `null` included.
+   *
+   * `plan` is the {@link DocumentContent.renderPlan} the caller's own fetch just produced, when it
+   * has one, so the provider skips rediscovering blocks it was handed. A provider MUST behave
+   * identically without it (discovering the blocks itself), because the plan is an optimisation
+   * and every caller is free to omit it.
+   */
+  fetchRenders?(
+    credentials: DocumentCredentials,
+    externalId: string,
+    workspaceId: string | null,
+    plan?: DocumentRenderPlan,
+  ): Promise<DocumentRenderResult>
   /**
    * Cheaply read the page's current version token — the {@link DocumentContent.version}
    * value {@link fetchDocument} would return, fetched with metadata only (no body

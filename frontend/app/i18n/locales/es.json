@@ -4311,6 +4311,11 @@
       },
       "refreshFailed": "No se han podido buscar cambios"
     },
+    "renders": {
+      "partial": "Algunos marcos del diseño no se pudieron guardar como imágenes.",
+      "failed": "No se pudieron obtener las imágenes del diseño desde el origen.",
+      "storage_unavailable": "Las imágenes del diseño no se guardaron: esta instalación no tiene almacenamiento de imágenes configurado."
+    },
     "connect": {
       "title": "Conectar fuente",
       "sourceFallback": "Fuente",

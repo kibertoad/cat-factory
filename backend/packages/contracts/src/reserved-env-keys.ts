@@ -121,6 +121,12 @@ export const PLATFORM_RESERVED_ENV_PREFIXES: readonly string[] = [
  * the real key on a developer's laptop while passing a case-sensitive check.
  */
 export const PLATFORM_RESERVED_ENV_KEYS: readonly string[] = [
+  // An exact name, not an `ADVANCE_` family, for the reason `MCP_OAUTH_REDIRECT_URL` below is:
+  // reserving a prefix is only free where the platform OWNS the namespace, and this one owns a
+  // single variable in it. A family here would newly refuse credential keys a deployment may
+  // already have registered (`ADVANCE_API_TOKEN` for a vendor called Advance), which is a
+  // capability taken away from a live integration to protect one name.
+  'ADVANCE_TIMEOUT',
   'ANTHROPIC_API_KEY',
   'APP_BASE_URL',
   'AUDIT_EVENT_RETENTION_DAYS',

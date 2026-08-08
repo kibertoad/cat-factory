@@ -3925,6 +3925,11 @@
       },
       "refreshFailed": "Prüfung auf Änderungen fehlgeschlagen"
     },
+    "renders": {
+      "partial": "Einige Design-Frames konnten nicht als Bilder gespeichert werden.",
+      "failed": "Die Design-Bilder konnten nicht von der Quelle abgerufen werden.",
+      "storage_unavailable": "Design-Bilder wurden nicht gespeichert: für diese Installation ist kein Bildspeicher konfiguriert."
+    },
     "connect": {
       "title": "Quelle verbinden",
       "sourceFallback": "Quelle",

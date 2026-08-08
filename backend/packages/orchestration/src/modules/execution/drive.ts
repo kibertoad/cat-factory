@@ -15,7 +15,20 @@ export interface DriveConfig {
   jobPollFailureTolerance: number
   ciPollIntervalMs: number
   ciMaxPolls: number
+  /**
+   * Ceiling on ONE engine call this loop waits on — an `advanceInstance` or a status read —
+   * enforced through {@link DriveOptions.withStepCeiling}. It bounds BOTH for the same reason the
+   * Worker wraps both in one `stepConfig`: either can hang on the same external dependency, and a
+   * hung poll wedges the run exactly as a hung advance does.
+   *
+   * `0` means unbounded, which is what the deterministic conformance/unit fakes want: they own
+   * no clock, and a call that never settles there is a test bug, not a production hang.
+   */
+  advanceTimeoutMs: number
 }
+
+/** What {@link DriveOptions.withStepCeiling} answers: the call settled, or the ceiling won. */
+export type StepOutcome<T> = { timedOut: false; value: T } | { timedOut: true }
 
 /** Runtime seams the driver loop needs; both have inert defaults. */
 export interface DriveOptions {
@@ -28,6 +41,17 @@ export interface DriveOptions {
   sleep?: (ms: number) => Promise<void>
   /** Where to log lifecycle breadcrumbs. Defaults to a no-op. */
   log?: Logger
+  /**
+   * Bound ONE engine call at `cfg.advanceTimeoutMs`. Same seam shape as `sleep`, and for the same
+   * reason: orchestration owns no timers, so the facade supplies the clock (the Node `drive.ts`
+   * wrapper injects a `Promise.race`; the Cloudflare driver never runs this loop, it wraps the
+   * same calls in a `step.do` carrying the same timeout).
+   *
+   * The work is ABANDONED rather than aborted on a timeout (a promise cannot be cancelled), so a
+   * late writer can still land afterwards; every run write goes through the rev-guarded
+   * `casPersist`, which is what makes abandoning it safe rather than a lost-update race.
+   */
+  withStepCeiling?: <T>(work: Promise<T>, ms: number) => Promise<StepOutcome<T>>
 }
 
 /** What a drive ended on, so the runner can schedule follow-up work (a decision timeout). */
@@ -45,6 +69,30 @@ export interface DriveOutcome {
 }
 
 const instantSleep = (): Promise<void> => Promise.resolve()
+
+/** No facade clock wired (or `advanceTimeoutMs: 0`): await the work as this loop always did. */
+const unbounded = async <T>(work: Promise<T>): Promise<StepOutcome<T>> => ({
+  timedOut: false,
+  value: await work,
+})
+
+/**
+ * The ceiling in the coarsest unit that still states it truthfully, for the run's user-facing
+ * failure ("did not complete within 30 minutes"). Production values are minutes; the smaller
+ * units exist so a deployment that tightens the knob is quoted its own number back rather than
+ * a rounded-to-nothing "0 seconds".
+ */
+function describeCeiling(ms: number): string {
+  if (ms >= 60_000) {
+    const minutes = Math.round(ms / 60_000)
+    return `${minutes} minute${minutes === 1 ? '' : 's'}`
+  }
+  if (ms >= 1000) {
+    const seconds = Math.round(ms / 1000)
+    return `${seconds} second${seconds === 1 ? '' : 's'}`
+  }
+  return `${ms}ms`
+}
 
 /**
  * Drive one run to a standstill. The runtime-neutral driver loop: it contains NO
@@ -69,6 +117,9 @@ export async function driveExecution(
   opts: DriveOptions = {},
 ): Promise<DriveOutcome> {
   const sleep = opts.sleep ?? instantSleep
+  // `advanceTimeoutMs: 0` is the explicit opt-out, so a facade that wires the clock still gets
+  // the unbounded await rather than a zero-length ceiling that fails every advance instantly.
+  const withStepCeiling = cfg.advanceTimeoutMs > 0 ? (opts.withStepCeiling ?? unbounded) : unbounded
   // Bind the run's correlation ids ONCE, so every line the driver emits — including the
   // poll-failure warnings below, which fire deep inside `pollUntil` — is greppable by run
   // without each call site re-spreading them.
@@ -113,7 +164,19 @@ export async function driveExecution(
       if (p > 0 || !pollOpts.pollFirst) await sleep(intervalMs)
       let result: AdvanceResult
       try {
-        result = await poll()
+        // The same ceiling the advance gets, with the Worker's disposition rather than the
+        // advance's: over there a poll runs inside a `step.do` carrying the same `stepConfig`,
+        // and a timed-out step THROWS into `pollOnce`, which counts it as one unreadable poll.
+        // That is the honest reading — a status read that never answered is a status that could
+        // not be read — and it keeps the tolerance below as the one thing deciding when enough
+        // of them is terminal. Without it a hung poll wedged the run exactly as a hung advance
+        // did: pg-boss keeps heartbeating the active job, so the sweeper still reads it `live`
+        // (stuck-run audit F9).
+        const attempt = await withStepCeiling(poll(), cfg.advanceTimeoutMs)
+        if (attempt.timedOut) {
+          throw new Error(`no answer within ${describeCeiling(cfg.advanceTimeoutMs)}`)
+        }
+        result = attempt.value
       } catch (error) {
         // A bare `catch` used to discard the cause, so a run killed by three unreadable polls
         // reported "status was unreadable (3 polls)" with the actual reason (DNS, TLS, a 502)
@@ -144,9 +207,17 @@ export async function driveExecution(
   }
 
   for (;;) {
-    let result: AdvanceResult
+    let outcome: StepOutcome<AdvanceResult>
     try {
-      result = await exec.advanceInstance(workspaceId, executionId, { rethrowAgentErrors: true })
+      // Bounded, because nothing else bounds it: pg-boss heartbeats an ACTIVE job regardless of
+      // handler progress, so a hung call inside an advance leaves the run `running` with a live
+      // job and a frozen `updated_at`: the sweeper classifies it `live` and skips it, and the
+      // run wedges until the queue's expire cap (up to 24h). Cloudflare has always capped the
+      // same call at its `step.do` timeout; this restores the symmetry (stuck-run audit F9).
+      outcome = await withStepCeiling(
+        exec.advanceInstance(workspaceId, executionId, { rethrowAgentErrors: true }),
+        cfg.advanceTimeoutMs,
+      )
     } catch (error) {
       // A thrown `DomainError` carries a machine-readable `details.reason` (e.g. a
       // `providers_unconfigured` conflict) — precisely the failure class the SPA has a
@@ -156,6 +227,20 @@ export async function driveExecution(
       await fail(failureFromAdvanceError(error))
       return {}
     }
+
+    if (outcome.timedOut) {
+      // A `timeout` kind, not the `agent` one a thrown advance records: nothing reached an
+      // agent, and the operator's fix is the wedged dependency, not a transcript.
+      log.warn('advance exceeded its ceiling; failing the run', { ceilingMs: cfg.advanceTimeoutMs })
+      await fail(
+        failureFromDriver(
+          `Step advance did not complete within ${describeCeiling(cfg.advanceTimeoutMs)}`,
+          'timeout',
+        ),
+      )
+      return {}
+    }
+    let result: AdvanceResult = outcome.value
 
     // Drain whatever gate the step parked on. A gate poll can resolve to a DIFFERENT
     // gate — e.g. a `ci` step that finds CI red dispatches a `ci-fixer` and returns

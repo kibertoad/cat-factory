@@ -363,6 +363,33 @@ pickers through `frontend/app/app/utils/sourcePicker.ts` (see
   per-workspace toggle therefore fails the typecheck at this surface rather than rendering
   "Connect X" over something already connected.
 
+## A design document is imported twice: as text, and as pixels
+
+A prose source has one representation; a design source has two, and only one of them fits in a
+Markdown body. `DocumentSourceProvider.fetchRenders` is the optional second half: it downloads the
+rendered images of the document's blocks, which the import retains as `kind: 'reference'` binary
+artifacts keyed to the document (`binary_artifacts.document_source` / `document_external_id`). It is
+implemented by Figma today; a source that omits it has nothing to rasterise, and that absence is a
+real answer rather than a gap. Details of the Figma mapping and its caps:
+[`figma-claude-design-context.md`](./figma-claude-design-context.md#renders).
+
+Three rules bind anything that touches it:
+
+- **It is a SEPARATE port method from `fetchDocument`, and only runs on the import that WRITES a
+  body.** The freshness ladder below re-fetches the text whenever a probe finds a moved version, and
+  a whole-file design source moves its token on any edit anywhere in the file, so most of those
+  re-fetches write nothing but a token. Carrying the images on the same call would put megabytes of
+  PNGs on the critical path of a step dispatch that had no reason to spend them. A token-only write
+  therefore carries the previous render status forward untouched.
+- **`documents.render_status` is what says how it went**, because every way of ending up with no
+  images is the same absence: `stored`, `partial`, `none`, `failed`, `storage_unavailable`, and NULL
+  for a document the question does not apply to. It is derived from what was RETAINED rather than
+  downloaded, so a blob backend that rejects half the bytes reads as `partial` exactly like a source
+  that rendered half the frames. Where the account has no image storage the download is not even
+  attempted, and the row says so rather than reporting an empty design.
+- **The whole pass is BEST-EFFORT.** The text is the load-bearing half (a run refuses on an
+  unreadable context document); an image is an enrichment, so nothing about it may fail an import.
+
 ## Freshness: a stored document is a projection of a page someone keeps editing
 
 Import writes the projection once. Nothing used to look at the source again, so a run started a
