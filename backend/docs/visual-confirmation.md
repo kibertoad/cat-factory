@@ -146,6 +146,37 @@ are attached), and folds those in beside the hand-uploaded set. The fold itself 
 The reads are LIVE at gather time, like the hand-uploaded ones: **recapture** is the action a person
 takes after attaching something mid-review, and linking a design is that same act.
 
+### Reference designs on disk: what the container is handed ✅
+
+The gate's reference SET (which artifact is the reference for each view) is now read by two callers,
+so it lives in one module (`orchestration/.../block-reference-set.ts`) rather than being derived
+twice: the gate pairs captures against it, and a dispatch of a CAPTURING kind hands the same set to
+the container. A second derivation would let the two disagree about a view name, and the view name is
+exactly the join the gate performs, so the pairing would fall apart with both halves still looking
+correct on their own.
+
+- **The gate is the kind's declared `ui` image**, the same fact the transport routes the job by, not
+  a kind-name list: a deployment's own browser-driven kind is served without registering anywhere
+  else, and every other kind never pays the two reads.
+- **The job body carries a MANIFEST, never the bytes.** A design frame is a full-page PNG and a job
+  body is JSON that crosses every transport and is persisted with the dispatch, so only
+  `{ artifactId, fileName, view }` travels. The harness fetches the bytes from
+  `GET ${proxyBaseUrl}/artifacts/reference/:id` with the SAME container session token it already
+  holds for the LLM proxy: no new credential, no publicly reachable URL, and the mirror image of the
+  ingest route beside it. That route serves `kind:'reference'` only, within the token's workspace,
+  so it cannot become a way to read another run's captured screenshots (`security-model.md`).
+- **The file NAME is chosen by the engine, not the container.** The name is how the agent learns the
+  view name; derived in the harness, a sanitiser change in an image a deployment has not rolled out
+  yet would rename every view a run reports. Two views that slug to one name are suffixed rather
+  than deduped: dropping one hands the agent a directory quietly missing a screen it was asked to
+  compare.
+- **A reference that could not be fetched is NAMED in the prompt.** On disk an absent file and a
+  screen the design does not have are identical, so the guidance lists the misses beside the files
+  and tells the agent to capture those views anyway, under the same names.
+- **An empty set sends no manifest at all.** The engine resolving `[]` (the task has no reference) and
+  a kind that captures nothing are different facts, but neither should produce an empty directory:
+  that reads to the agent as designs that gave nothing.
+
 ---
 
 ## What's LEFT (deploy-time, intentionally not landed)
@@ -195,16 +226,12 @@ flags them as predating the fix). Auto re-running `tester-ui` after a fix to ref
 needs the gate to dispatch a `tester-ui` job and consume its result back into the gate (a small
 extension of `onHelperComplete` + the `pollAgentJob` capture-result path).
 
-### 3. Reference screenshots INSIDE the container
+### 3. Reference screenshots INSIDE the container: DONE
 
-The gate itself no longer needs a manual upload: a task that links a Figma/Zeplin design has that
-design's retained frames folded into the gallery automatically (see "Design references" below). What
-is still unwired is the CONTAINER half. The UI-tester prompt references
-`.cat-context/reference-screenshots/`, and nothing writes it: an `InjectedContextFile` is UTF-8 text
-by type and the harness flattens a context file's path to a bare name, so putting real PNG bytes in
-a subdirectory of the job's context needs a harness change, which is an image bump. Until then the
-tester names its own views and the gate pairs by view from the store, so the comparison works
-regardless.
+The container half is wired (see "Reference designs on disk" below): a dispatch of a kind declaring
+the `ui` image resolves the task's reference set, the job body carries it as a MANIFEST, and the
+harness downloads the images into `.cat-context/reference-screenshots/` before the agent's first
+turn. The tester is told each file's view name, so what it captures pairs with what the gate holds.
 
 ### 4. Non-redundant capture heuristic
 

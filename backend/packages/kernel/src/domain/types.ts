@@ -681,3 +681,23 @@ export interface InjectedContextFile {
   path: string
   content: string
 }
+
+/**
+ * One reference design image the platform holds for a run's task, named for delivery INTO the
+ * container: the UI tester reads these off disk under `.cat-context/reference-screenshots/` and
+ * captures the matching views, so the gate it feeds pairs actual-vs-reference by name.
+ *
+ * The bytes do NOT ride this shape, and that is the point: a design frame is a full-page PNG and
+ * a run's set of them is megabytes, while a job body is JSON that crosses every transport and is
+ * persisted with the dispatch. Only the artifact's IDENTITY travels, and the harness fetches the
+ * bytes back through the same container-session-authed seam the tester already uploads through.
+ *
+ * `view` is the pairing key (the gate's own view name, qualified when two designs claim one
+ * name); `fileName` is the single safe path segment that view is written under, resolved by the
+ * engine rather than the container so the name the agent sees is the name the gate recorded.
+ */
+export interface ReferenceScreenshot {
+  view: string
+  artifactId: string
+  fileName: string
+}

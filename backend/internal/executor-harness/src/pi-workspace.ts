@@ -1,7 +1,8 @@
 import { mkdir, mkdtemp, readdir, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { RepoSpec } from './job.js'
+import type { RepoSpec, ReferenceScreenshotsSpec } from './job.js'
+import { deliverReferenceScreenshots } from './reference-screenshots.js'
 import type { McpServerSpec, SkillSpec } from './agent-capabilities.js'
 import { readEffortReport } from './effort.js'
 import { log } from './logger.js'
@@ -213,6 +214,12 @@ export interface AgentRunSpec {
    */
   contextFiles?: ContextFileInfo[]
   /**
+   * The task's reference design images. Downloaded into `.cat-context/reference-screenshots/`
+   * before the run and named in the agent's prompt, so a capturing agent can compare against them
+   * and use their view names. Absent ⇒ nothing is downloaded and nothing is said.
+   */
+  referenceScreenshots?: ReferenceScreenshotsSpec
+  /**
    * The skills to make available for this run — a `skill` step's picked skill and/or the playbooks
    * the running agent kind declares. Installed HARNESS-AWARE: the claude-code runner writes them
    * natively into the config dir's `skills/`; for Pi/codex the resource files are materialised
@@ -283,6 +290,14 @@ export async function runAgentInWorkspace(
   // harness paths; kept out of the agent's commits via a local git exclude entry.
   const contextFiles = spec.contextFiles ?? []
   await materializeContextFiles(spec.dir, contextFiles)
+  // The task's reference designs, fetched into `.cat-context/reference-screenshots/` for the kinds
+  // that capture views. Delivered here (beside the linked context, before either harness path
+  // branches) so the Pi and subscription runs are handed the SAME directory and the SAME view
+  // names; a per-path copy is how one of them would end up silently without it.
+  const referenceGuidance = await deliverReferenceScreenshots(spec.dir, spec.referenceScreenshots, {
+    ...(opts.signal ? { signal: opts.signal } : {}),
+    log: opts.log ?? log,
+  })
   // Skills: claude-code installs them natively into its ISOLATED config dir, so it reads from
   // there. Everything else reads the checkout, so materialise each skill's resources under
   // `.cat-context/skill/<name>/` (their instructions are folded into the prompt by the backend) —
@@ -306,7 +321,7 @@ export async function runAgentInWorkspace(
     const subOutcome = await runSubscriptionHarness(spec.harness, {
       cwd: spec.dir,
       model: spec.model,
-      systemPrompt: subscriptionSystemPrompt(spec.systemPrompt, contextFiles),
+      systemPrompt: `${subscriptionSystemPrompt(spec.systemPrompt, contextFiles)}${referenceGuidance}`,
       userPrompt: spec.userPrompt,
       ...(spec.subscriptionToken ? { subscriptionToken: spec.subscriptionToken } : {}),
       subscriptionBaseUrl: spec.subscriptionBaseUrl,
@@ -376,6 +391,7 @@ export async function runAgentInWorkspace(
     serviceDirectory: spec.serviceDirectory,
     contextFiles,
     hasBlueprints,
+    ...(referenceGuidance ? { referenceGuidance } : {}),
     ...(spec.multiRepo ? { multiRepo: true } : {}),
   })
   // Pi's calls are metered server-side by the LLM proxy, which sees only an HTTP request — so

@@ -115,6 +115,19 @@ Bootstrap differs at the ends: it may start from an empty dir, and **resets
 history to one commit and force-pushes** the default branch instead of opening a
 PR. Blueprint **commits onto a branch** (no history reset) and returns the tree.
 
+### Reference designs
+
+A job body for a kind that CAPTURES views (the UI tester, or a deployment's own browser-driven kind)
+may carry `referenceScreenshots`: the reference images the platform holds for the task, as
+`{ url, token, files: [{ artifactId, fileName, view }] }`. The harness downloads each into
+`.cat-context/reference-screenshots/` before the agent's first turn and lists them, by view name, at
+the end of the agent's context.
+
+Only identities travel in the body (a design frame is a full-page PNG), and the bytes come back
+from the backend over the SAME container session token the run already holds for the LLM proxy, so
+this needs no extra credential. The FILE NAMES are the backend's, never derived here: the name is
+how the agent learns the view name, and the platform pairs its capture against that name later.
+
 ### Skills and tool servers
 
 A job body may carry `skills[]` (procedural playbooks) and `mcpServers[]` (MCP tool servers): the
@@ -229,6 +242,7 @@ Kimi / DeepSeek) and meters spend. The provider key never enters the container.
 | `src/validation-checks.ts` | Pre-PR validation: runs the job's check commands in the checkout (bounded, secret-scrubbed capture, per-command watchdog) and drives the retry-until-green loop that gates the PR. Generic: keyed off the job body, never the agent kind. |
 | `src/reproduction-proof.ts` | Bugfix reproduction proof: runs the job's declared reproduction command against two symmetric fresh worktrees (the pre-fix tree and the final tree) and computes red-then-green from the exit codes, with a repair loop that never fails the run. Generic: keyed off the job body, never the agent kind. |
 | `src/agent-capabilities.ts` | The agent CAPABILITIES a job body carries: the run's `skills` (a `SKILL.md` payload + resources) and its `mcpServers` (tool servers): with their defensive parsing and the per-CLI config writers (`--mcp-config` JSON for claude-code, `[mcp_servers.*]` TOML for Codex). Backend-authored data the harness only MATERIALISES: adding a skill or a tool server is a backend registration, never a harness change. |
+| `src/reference-screenshots.ts` | The task's REFERENCE DESIGN images: downloads the manifest a capturing job body carries into `.cat-context/reference-screenshots/` (on the run's own container session token) and composes the prompt block naming each file's view. Best-effort and time-bounded: a reference that could not be fetched is NAMED to the agent, because on disk an absent file and a screen the design does not have are the same thing. Backend-authored throughout, including the file names. |
 | `src/bootstrap-mode.ts` | The repo-bootstrap MODE: clone-a-reference-or-scaffold → run the agent → refuse to push an empty tree → reinit + force-push to the pre-created target repo. |
 | `src/agent-shared.ts` | The few helpers every agent MODE shares (effort-report folding, the capability fields forwarded to `runAgentInWorkspace`). |
 | `src/logger.ts`    | Structured logging.                                                                                     |

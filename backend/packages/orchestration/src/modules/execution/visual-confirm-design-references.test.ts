@@ -59,8 +59,8 @@ describe('foldDesignReferences', () => {
     // Ordered oldest-first by the store, so the LAST assignment for a view is the current
     // revision's frame — the same rule the hand-uploaded references follow.
     expect(references).toEqual([
-      { view: 'Checkout', artifactId: newer.id },
-      { view: 'Confirm', artifactId: other.id },
+      { view: 'Checkout', artifactId: newer.id, contentType: 'image/png' },
+      { view: 'Confirm', artifactId: other.id, contentType: 'image/png' },
     ])
     expect(summary).toEqual({ documents: 1, images: 2 })
   })
@@ -80,9 +80,9 @@ describe('foldDesignReferences', () => {
     // whichever design happens to be listed first, so re-ordering the links would silently
     // re-point a reviewed view at a different screen.
     expect(references).toEqual([
-      { view: 'Summary (Checkout flow)', artifactId: a.id },
-      { view: 'Summary (Billing)', artifactId: b.id },
-      { view: 'Card entry', artifactId: unique.id },
+      { view: 'Summary (Checkout flow)', artifactId: a.id, contentType: 'image/png' },
+      { view: 'Summary (Billing)', artifactId: b.id, contentType: 'image/png' },
+      { view: 'Card entry', artifactId: unique.id, contentType: 'image/png' },
     ])
   })
 
@@ -191,7 +191,9 @@ describe('foldDesignReferences', () => {
 
     // Counted twice it would take two shares of the budget, state its gap twice, and look to the
     // qualifier like two designs sharing a title, which would qualify its views against itself.
-    expect(references).toEqual([{ view: 'Checkout', artifactId: frame.id }])
+    expect(references).toEqual([
+      { view: 'Checkout', artifactId: frame.id, contentType: 'image/png' },
+    ])
     expect(summary).toEqual({ documents: 1, images: 1 })
   })
 
@@ -204,7 +206,9 @@ describe('foldDesignReferences', () => {
 
     const { references } = foldDesignReferences(documents, [mine, foreign, upload, screenshot])
 
-    expect(references).toEqual([{ view: 'Checkout', artifactId: mine.id }])
+    expect(references).toEqual([
+      { view: 'Checkout', artifactId: mine.id, contentType: 'image/png' },
+    ])
   })
 
   it('counts a view-less render as retained but shows it against nothing', () => {
