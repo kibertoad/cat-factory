@@ -294,7 +294,7 @@ export type {
   ResolveBinaryArtifactStore,
   StoreBinaryArtifactInput,
 } from './binary-artifacts.js'
-export { createBinaryArtifactStore } from './binary-artifacts.js'
+export { createBinaryArtifactStore, dedupeDocumentRefs } from './binary-artifacts.js'
 export type {
   AgentCloneSpec,
   AgentDispatchContext,
