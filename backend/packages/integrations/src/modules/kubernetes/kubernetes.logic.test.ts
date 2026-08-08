@@ -181,9 +181,24 @@ describe('describePodTermination', () => {
     expect(described).toContain('Pod Evicted: The node was low on resource: memory.')
   })
 
+  it("reports the kubelet's prose when it came with no machine-readable reason", () => {
+    // The apiserver does not guarantee `reason` beside `message`, and the message is the
+    // evidence: a preemption notice, a disk-pressure eviction. Gating the prose on the code
+    // renders an evidence-carrying pod as an EMPTY detail, which is indistinguishable from a pod
+    // that vanished saying nothing at all, and the transport reports those two differently on purpose.
+    expect(
+      describePodTermination({
+        status: { phase: 'Failed', message: 'Pod was preempted by a higher-priority pod.' },
+      }),
+    ).toBe('Pod reports: Pod was preempted by a higher-priority pod.')
+  })
+
   it('returns empty string when the status says nothing about a termination', () => {
     expect(describePodTermination({ status: { phase: 'Running' } })).toBe('')
     expect(describePodTermination(null)).toBe('')
+    // A blank message is nothing said, not an account: reporting it verbatim would announce a
+    // pod-level explanation and then give none.
+    expect(describePodTermination({ status: { phase: 'Failed', message: '   ' } })).toBe('')
   })
 })
 

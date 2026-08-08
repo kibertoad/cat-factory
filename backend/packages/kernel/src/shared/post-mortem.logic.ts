@@ -32,9 +32,9 @@ export const MAX_POST_MORTEM_CHARS = 4_000
  *
  * ORDER MATTERS: the cap keeps the HEAD, so the caller's own one-line verdict ("the container
  * exited with code 137") must come first and any bulk material (a log tail, a kubelet message)
- * after it. A caller passing bulk is expected to have tailed it already: this cap is the
- * backstop, not the sizing decision, and it says what it dropped rather than ending mid-word
- * and reading like the whole of what was there.
+ * after it. A caller passing bulk is expected to have bounded it already, with
+ * {@link tailPostMortemMaterial}: this cap is the backstop, not the sizing decision, and it says
+ * what it dropped rather than ending mid-word and reading like the whole of what was there.
  */
 export function composePostMortem(parts: Array<string | undefined>): string | undefined {
   const joined = parts
@@ -48,4 +48,24 @@ export function composePostMortem(parts: Array<string | undefined>): string | un
   if (scrubbed.length <= MAX_POST_MORTEM_CHARS) return scrubbed
   const dropped = scrubbed.length - MAX_POST_MORTEM_CHARS
   return `${scrubbed.slice(0, MAX_POST_MORTEM_CHARS)}\n…(${dropped} more characters of post-mortem detail dropped)`
+}
+
+/**
+ * Bound BULK post-mortem material (a container's captured output, a harness's stderr) to its
+ * LAST `maxChars` characters, saying what it dropped.
+ *
+ * The TAIL, and that direction is the whole reason this exists beside {@link composePostMortem}.
+ * The compose cap keeps the head because what it bounds is a composed detail whose one-line
+ * verdict comes first; a log is the opposite shape, and its value is at the end, where the crash
+ * is. Let bulk reach the compose cap unbounded and the two rules combine into the worst possible
+ * one: the boot chatter is kept and the death is dropped.
+ *
+ * A LINE bound (`docker logs --tail 50`, a stderr ring) is not this bound. Fifty lines of an
+ * agent echoing a base64 payload is not a short tail, and a producer that only counts lines has
+ * no idea how many characters it just handed over.
+ */
+export function tailPostMortemMaterial(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text
+  const dropped = text.length - maxChars
+  return `…(${dropped} earlier characters dropped)\n${text.slice(-maxChars)}`
 }

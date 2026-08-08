@@ -61,6 +61,14 @@ it only reaches the logger the Worker writes through while both imports resolve 
     agent gets. One stop explains exactly one eviction (the record is CLAIMED, not deleted, so a
     replayed durable poll re-reads it), and both hooks that see a stop MERGE onto it, since
     `onError` knows the churn and `onStop` knows the exit code and they fire in either order.
+    Three rules keep that honest, each guarding a way the two halves lie about each other. The
+    merge is bounded to ONE stop (`STOP_MERGE_WINDOW_MS`): records are not reliably cleared
+    between stops, and merging onto a stale one back-dates the new observation out of its own
+    attribution window. A stop the container ASKED for (its idle reclaim, its shutdown RPC)
+    records no exit at all, because that code is its own signal echoed back, escalating to
+    SIGKILL 137 on a slow exit. And a named cause is passed to `describeContainerExit`, so the
+    detail reports the mechanics of a stop already accounted for rather than offering
+    "out-of-memory kill" as a second cause of death under a reclaim verdict.
   - `CacheGenerationDirectory` is the cache-coherency
     directory (per-group generation counters); its Worker-side client, the module-scope
     app-cache bag (one per ISOLATE, profile picked by the `CACHE_GENERATIONS` binding) and

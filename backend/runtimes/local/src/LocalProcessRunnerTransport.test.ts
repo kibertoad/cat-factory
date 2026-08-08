@@ -200,6 +200,78 @@ describe('LocalProcessRunnerTransport', () => {
     expect(view.detail).not.toContain('DIFFERENT run')
   })
 
+  it('gives a job killed with its process that crash, not the live process’s innocence', async () => {
+    // One host process serves every concurrent job, so its death evicts all of them, and
+    // answering the FIRST eviction re-dispatches, which spawns the replacement while the
+    // siblings have yet to poll. Two things used to go wrong in that gap, and they compound.
+    // The crash record was cleared on spawn, so the evidence was gone. And the 404 the sibling
+    // then gets comes from the replacement, which read off the current process alone looks like
+    // "alive and has simply forgotten the job", so the run was told its harness "is still
+    // serving other local runs", a sentence about somebody else's process offered in place of
+    // the crash that killed it.
+    const first = fakeChildWithStderr()
+    const second = fakeChildWithStderr()
+    const children = [first, second]
+    let jobsAre404 = false
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.includes('/jobs/') && jobsAre404) return new Response('no such job', { status: 404 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      harnessEntry: '/h.js',
+      spawnImpl: (() => children.shift()) as unknown as typeof import('node:child_process').spawn,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      pickPort: async () => 6021,
+    })
+    await transport.dispatch({ runId: 'r2', jobId: 'b' }, {}, 'agent')
+
+    first.stderr.emit('data', 'FATAL: the harness died under every job it was serving\n')
+    first.emit('exit', null, 'SIGKILL')
+    // A re-dispatch (another run recovering) brings the replacement up; it never heard of `b`.
+    await transport.dispatch({ runId: 'r1', jobId: 'a2' }, {}, 'agent')
+    jobsAre404 = true
+
+    const view = await transport.poll({ runId: 'r2', jobId: 'b' })
+    expect(view.evicted).toBe('crash')
+    expect(view.detail).toContain('the one this job was dispatched to is gone')
+    // The record survived the respawn, which is the only reason there is anything to say.
+    expect(view.detail).toContain('killed by SIGKILL')
+    expect(view.detail).toContain('died under every job')
+    expect(view.detail).not.toContain('still serving other local runs')
+  })
+
+  it('refuses to hand a job a LATER process’s death', async () => {
+    // Retaining the record and misattributing it are one edit apart. Only the process a job was
+    // actually dispatched to can explain that job, so a record from a generation the job never
+    // ran under is reported as no record at all.
+    const first = fakeChildWithStderr()
+    const second = fakeChildWithStderr()
+    const children = [first, second]
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = mkTransport({
+      harnessEntry: '/h.js',
+      spawnImpl: (() => children.shift()) as unknown as typeof import('node:child_process').spawn,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      pickPort: async () => 6023,
+    })
+    await transport.dispatch({ runId: 'r2', jobId: 'b' }, {}, 'agent')
+    first.emit('exit', 1, null)
+    // A second process starts and dies too, overwriting the single retained record.
+    await transport.dispatch({ runId: 'r1', jobId: 'a2' }, {}, 'agent')
+    second.stderr.emit('data', "this is the SECOND process's crash\n")
+    second.emit('exit', 2, null)
+
+    const view = await transport.poll({ runId: 'r2', jobId: 'b' })
+    expect(view.detail).toContain('no record of how it ended survives')
+    expect(view.detail).not.toContain('SECOND')
+    expect(view.detail).not.toContain('exited with code 2')
+  })
+
   it('scrubs the stderr tail, which is free text the harness never redacts', async () => {
     // The harness logger emits its fields verbatim (finding A5), and this text is persisted on
     // the run and rendered to a person, so the scrub happens here at the emit site.

@@ -6,7 +6,9 @@ import {
   ATTRIBUTION_WINDOW_MS,
   clearStopCause,
   EXIT_ATTRIBUTION_WINDOW_MS,
+  observationForStop,
   recordStopCause,
+  STOP_MERGE_WINDOW_MS,
   type StopCauseStorage,
   type StopObservation,
   takeStopCause,
@@ -149,6 +151,25 @@ describe('stop-cause bookkeeping', () => {
     })
   })
 
+  it('never merges onto a record from an EARLIER stop', async () => {
+    // The merge exists for two hooks describing ONE death, moments apart. Records are not
+    // reliably cleared between stops (an expired one is deliberately left in place, and only an
+    // accepted dispatch deletes one), so a stale record is the ordinary state of a container
+    // that idled out and was re-driven. Merging onto it back-dates the new observation to the
+    // old stop's `at`, which ages it out of its own attribution window on arrival: the crash
+    // that just happened is recorded, read back, and dropped as too old to explain itself.
+    const storage = fakeStorage()
+    await recordStopCause(storage, { cause: 'idle' }, NOW)
+
+    const later = NOW + STOP_MERGE_WINDOW_MS + 1
+    await recordStopCause(storage, { exit: { code: 137, reason: 'exit' } }, later)
+
+    // The new stop stands alone, dated to itself, and is still attributable a poll-gap later.
+    expect(await takeStopCause(storage, later + EXIT_ATTRIBUTION_WINDOW_MS, JOB)).toEqual({
+      exit: { code: 137, reason: 'exit' },
+    })
+  })
+
   it('never merges onto a record that already explained somebody', async () => {
     // A claimed record is spent. Anything observed after it belongs to the NEXT death, so
     // merging would resurrect a claimed record under a second job's name.
@@ -179,6 +200,28 @@ describe('stop-cause bookkeeping', () => {
 
     expect(await takeStopCause(storage, NOW + ATTRIBUTION_WINDOW_MS.rollout + 1, JOB)).toEqual({
       exit: { code: 143, reason: 'runtime_signal' },
+    })
+  })
+
+  it('records nothing for a stop the container itself asked for', async () => {
+    // The idle reclaim and the shutdown RPC both work by SIGNALLING the container, so the exit
+    // that comes back is this container's own request echoed at it, and it escalates to a
+    // SIGKILL 137 whenever the workload does not exit inside the grace period. Recorded, that
+    // is read back as a cause of death and reported as an out-of-memory kill under a verdict
+    // saying the platform reclaimed an idle container.
+    expect(observationForStop({ exitCode: 137, reason: 'exit' }, true)).toBeUndefined()
+  })
+
+  it('reads a runtime-signalled 143 as the rollout drain, whichever hook saw it', () => {
+    // The same churn reaches `onError` or `onStop` depending on the runtime version, so the
+    // cause has to be recognisable from the exit pair alone.
+    expect(observationForStop({ exitCode: 143, reason: 'runtime_signal' }, false)).toEqual({
+      cause: 'rollout',
+      exit: { code: 143, reason: 'runtime_signal' },
+    })
+    // A plain workload exit of 143 is not a drain: the runtime did not signal it.
+    expect(observationForStop({ exitCode: 143, reason: 'exit' }, false)).toEqual({
+      exit: { code: 143, reason: 'exit' },
     })
   })
 
@@ -244,6 +287,25 @@ describe('CloudflareContainerTransport 404 classification', () => {
     // operator to look at poll scheduling rather than at the last deploy.
     expect(view.evicted).toBe('transient')
     expect(view.error).toContain('idle container reclaimed between polls')
+  })
+
+  it('never lets the exit sentence contradict the verdict beside it', async () => {
+    // The two halves are recorded independently and both are reported, so they routinely
+    // describe one event twice. A reclaim is PERFORMED by signalling the container, and it
+    // escalates to a SIGKILL when the workload does not exit in time, so a run correctly
+    // reported as an idle reclaim can carry exit 137, and read as an unexplained death that
+    // code says "most often an out-of-memory kill". The operator is then holding a verdict and
+    // a detail that cannot both be true, with nothing to say which one to act on.
+    const view = await new CloudflareContainerTransport(
+      namespace404({ cause: 'idle', exit: { code: 137, reason: 'exit' } }),
+    ).poll(ref)
+
+    expect(view.error).toContain('idle container reclaimed between polls')
+    // The mechanics still ride the detail: "reclaimed" and "reclaimed with a SIGKILL" are worth
+    // telling apart. What is withheld is the second, competing cause of death.
+    expect(view.detail).toContain('exit code 137')
+    expect(view.detail).toContain('SIGKILL')
+    expect(view.detail).not.toContain('out-of-memory')
   })
 
   it('keeps the rollout wording distinct from the idle one', async () => {

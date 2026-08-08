@@ -55,9 +55,14 @@ const TRANSIENT_EVICTION_ERROR: Record<ContainerStopCause, string> = {
  * `exit` state decides the DETAIL, and is attached whether or not a cause was recognised: on a
  * runtime that cannot hand a log tail back to the Worker it is the only post-mortem there is,
  * and a crash is exactly the case with no cause to name (finding D1).
+ *
+ * Independent does not mean unaware of each other. The cause is handed to the detail's wording
+ * so the two cannot contradict: the same reclaim that mints the `transient` verdict here is
+ * performed with a SIGKILL, and an exit code read as if nothing else explained it would tell the
+ * operator "out-of-memory kill" directly underneath "idle container reclaimed between polls".
  */
 function evictionView(observed: StopObservation): RunnerJobView {
-  const detail = composePostMortem([describeContainerExit(observed.exit)])
+  const detail = composePostMortem([describeContainerExit(observed.exit, observed.cause)])
   const { cause } = observed
   return {
     state: 'failed',

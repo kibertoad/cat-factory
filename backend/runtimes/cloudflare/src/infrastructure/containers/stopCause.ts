@@ -98,6 +98,23 @@ export const ATTRIBUTION_WINDOW_MS = {
  */
 export const EXIT_ATTRIBUTION_WINDOW_MS = 30 * 60_000
 
+/**
+ * How far apart two hook calls may be and still be treated as observations of ONE stop, i.e. the
+ * bound on {@link recordStopCause}'s merge.
+ *
+ * The merge exists for a single reason: `onError` and `onStop` are two views of the same death,
+ * fired by the runtime within moments of each other. Anything older is a DIFFERENT, earlier
+ * stop, and merging onto it is not conservative, it is destructive twice over: the new
+ * observation inherits the old record's `at`, so it is born already aged, and both halves then
+ * fall out of their own attribution windows and explain nothing. A record that is 40 minutes old
+ * would silently swallow the crash that just happened.
+ *
+ * Sized generously against what it models (two hooks, milliseconds apart) and far below the
+ * narrowest attribution window, so it cannot be the thing that decides an attribution: what a
+ * merge may do is complete an account of one stop, never date it.
+ */
+export const STOP_MERGE_WINDOW_MS = 60_000
+
 /** What a container observed about its own stop, once attributed to the job that reads it. */
 export interface StopObservation {
   cause?: ContainerStopCause
@@ -114,6 +131,34 @@ export function isRolloutSignal(error: unknown): boolean {
   const message =
     error instanceof Error ? error.message : typeof error === 'string' ? error : String(error)
   return /new version rollout|runtime signalled the container to exit/i.test(message)
+}
+
+/**
+ * What a container should record about a stop the runtime just reported, or undefined when it
+ * should record nothing.
+ *
+ * Two rules, both about what the stop MEANS rather than what it says:
+ *
+ * - A `runtime_signal` 143 is the rollout drain surfacing through this hook instead of (or as
+ *   well as) `onError`, depending on the runtime version, so it names the same cause.
+ * - A stop the container ASKED for records nothing at all. Its idle reclaim and its shutdown RPC
+ *   both work by signalling the container, so the exit that comes back is this container's own
+ *   request echoed at it (escalating to a SIGKILL 137 when the workload does not exit inside the
+ *   grace period), not an observation of how anything died. Recorded anyway, it is read back as
+ *   the container's cause of death and reported to the operator as "most often an out-of-memory
+ *   kill" underneath a verdict that says the platform reclaimed an idle container. The cause the
+ *   caller recorded when it decided to stop is the whole account, and it is already stored.
+ */
+export function observationForStop(
+  params: { exitCode: number; reason: 'exit' | 'runtime_signal' },
+  selfInitiated: boolean,
+): StopObservation | undefined {
+  if (selfInitiated) return undefined
+  const rollout = params.reason === 'runtime_signal' && params.exitCode === 143
+  return {
+    ...(rollout ? { cause: 'rollout' as const } : {}),
+    exit: { code: params.exitCode, reason: params.reason },
+  }
 }
 
 /**
@@ -191,7 +236,7 @@ export interface StopCauseStorage {
 
 /**
  * Persist what this container just observed about its own stop, MERGING onto an unclaimed record
- * from the same stop rather than replacing it.
+ * of the SAME stop rather than replacing it.
  *
  * Merging is the point. One stop reaches this container through up to two hooks carrying
  * different halves of the answer: `onError` recognises a rollout drain and knows no exit state,
@@ -200,21 +245,29 @@ export interface StopCauseStorage {
  * silently discarded the other's half: either the recovery budget or the only account of the
  * death, depending on the ordering that day.
  *
- * A CLAIMED record is never merged onto: it has already explained somebody's eviction, and
- * anything observed after that belongs to the next one. The kept `at` is the EARLIEST of the two
- * observations, because both describe one stop and the window measures how long ago it happened.
+ * Two records are never merged:
+ *
+ * - a CLAIMED one, which has already explained somebody's eviction, so anything observed after
+ *   it belongs to the next one;
+ * - one older than {@link STOP_MERGE_WINDOW_MS}, which is a different stop entirely. This
+ *   container's records are not reliably cleared between stops (`takeStopCause` deliberately
+ *   leaves an expired record in place, and only an accepted dispatch deletes one), so a stale
+ *   record is the ORDINARY state of a container that idled out and was re-driven, not an edge
+ *   case. Merging onto it would back-date the new observation to the old stop's `at` and age it
+ *   out of its own attribution window on arrival: the crash that just happened would be
+ *   recorded, read back, and dropped as too old to explain the eviction it caused.
+ *
+ * The kept `at` is the EARLIEST of the two observations, which within the merge window is a
+ * choice between timestamps moments apart: both describe one stop, and the window measures how
+ * long ago that stop happened.
  */
 export async function recordStopCause(
   storage: StopCauseStorage,
   observed: StopObservation,
   now: number,
 ): Promise<void> {
-  const previous = await storage.get(STOP_CAUSE_KEY)
-  const mergeable =
-    previous && typeof previous === 'object' && !(previous as StopCauseRecord).claimedBy
-      ? (previous as Partial<StopCauseRecord>)
-      : undefined
-  const at = typeof mergeable?.at === 'number' ? Math.min(mergeable.at, now) : now
+  const mergeable = mergeableRecord(await storage.get(STOP_CAUSE_KEY), now)
+  const at = mergeable ? Math.min(mergeable.at, now) : now
   const cause = observed.cause ?? mergeable?.cause
   const exit = observed.exit ?? mergeable?.exit
   await storage.put(STOP_CAUSE_KEY, {
@@ -225,39 +278,92 @@ export async function recordStopCause(
 }
 
 /**
- * How a container's own exit reads on a run's failure detail.
- *
- * The signal names are a bounded map rather than a `128 + n` derivation on purpose: the platform
- * reports one number and only a couple of them are worth translating, while decoding an
- * arbitrary code into a signal name would confidently mislabel an application exit code that
- * merely happens to exceed 128. An unmapped code is reported as itself.
+ * The stored record a new observation may complete, i.e. an unclaimed one describing the same
+ * stop. Anything else (absent, malformed, claimed, or from an earlier stop) is undefined, and
+ * the new observation stands alone.
  */
-const EXIT_CODE_NOTES: Record<number, string> = {
-  // SIGKILL. The container was killed outright rather than exiting: on this runtime that is
-  // overwhelmingly the instance running out of memory, which is why it is worth saying.
-  137: 'SIGKILL, most often an out-of-memory kill or a forced stop',
-  // SIGTERM: something asked it to stop (a drain, a reclaim, our own shutdown RPC).
-  143: 'SIGTERM, i.e. something asked the container to stop',
+function mergeableRecord(
+  stored: unknown,
+  now: number,
+): (Partial<StopCauseRecord> & { at: number }) | undefined {
+  if (!stored || typeof stored !== 'object') return undefined
+  const record = stored as Partial<StopCauseRecord>
+  if (record.claimedBy !== undefined) return undefined
+  if (typeof record.at !== 'number') return undefined
+  // `now - at` rather than an absolute difference: a record stamped in the FUTURE (a clock
+  // adjustment between two hook calls) is one of ours moments ago, not a stale one.
+  if (now - record.at > STOP_MERGE_WINDOW_MS) return undefined
+  return record as Partial<StopCauseRecord> & { at: number }
+}
+
+/**
+ * What an exit code IS, independent of why the container stopped.
+ *
+ * A bounded map rather than a `128 + n` derivation on purpose: the platform reports one number
+ * and only a couple of them are worth translating, while decoding an arbitrary code into a
+ * signal name would confidently mislabel an application exit code that merely happens to exceed
+ * 128. An unmapped code is reported as itself.
+ */
+const EXIT_SIGNAL_NAMES: Record<number, string> = {
+  137: 'SIGKILL',
+  143: 'SIGTERM',
+}
+
+/**
+ * What an exit code SUGGESTS about a death nothing else explains. Read only when no
+ * {@link ContainerStopCause} was recognised, which is what makes the guess worth offering: the
+ * alternative there is silence.
+ *
+ * Kept apart from {@link EXIT_SIGNAL_NAMES} because the two are different kinds of claim. The
+ * signal name is a fact about the number; this is an inference from the absence of any other
+ * account, and it is false exactly when that absence is false.
+ */
+const UNEXPLAINED_EXIT_NOTES: Record<number, string> = {
+  // Killed outright rather than exiting. With nothing else to explain it, on this runtime that
+  // is overwhelmingly the instance running out of memory, which is why it is worth saying.
+  137: 'most often an out-of-memory kill or a forced stop',
+  // Something asked it to stop, and whatever it was left no cause behind for us to name.
+  143: 'something asked the container to stop',
 }
 
 /**
  * The one-line account of a container's stop for the eviction `detail`, or undefined when
  * nothing was recorded.
  *
- * States the platform's own limit rather than leaving it to be inferred: a Cloudflare Container
- * writes its stdout to the deployment's Workers logs, and nothing inside the Durable Object can
- * read it back, so an operator who reads this and goes looking for a log tail here should be
- * told where the tail actually is.
+ * `cause` is the account the run has ALREADY been given, and passing it is what keeps the detail
+ * from arguing with the verdict beside it. The two halves are recorded independently and the
+ * exit state is attached whether or not a cause was recognised, so they routinely describe one
+ * event twice: an idle reclaim is performed BY the platform with a SIGKILL, so a run correctly
+ * reported as "idle container reclaimed between polls" carries exit 137, and read as an
+ * unexplained death that code says "most often an out-of-memory kill". The operator is then
+ * holding a verdict and a detail that cannot both be true, which is worse than either alone,
+ * because there is no way to tell which one to act on.
+ *
+ * So the interpretation is offered only where it is the only account there is. Where a cause was
+ * named, the exit code is reported as the MECHANICS of that stop: still the difference between
+ * "reclaimed" and "reclaimed with a SIGKILL", and never a second, competing cause of death.
+ *
+ * Either way it states the platform's own limit rather than leaving it to be inferred: a
+ * Cloudflare Container writes its stdout to the deployment's Workers logs, and nothing inside
+ * the Durable Object can read it back, so an operator who reads this and goes looking for a log
+ * tail here should be told where the tail actually is.
  */
-export function describeContainerExit(exit: ContainerExitState | undefined): string | undefined {
+export function describeContainerExit(
+  exit: ContainerExitState | undefined,
+  cause?: ContainerStopCause,
+): string | undefined {
   if (!exit) return undefined
-  const note = EXIT_CODE_NOTES[exit.code]
-  const how =
-    exit.reason === 'runtime_signal'
-      ? 'the runtime signalled it to exit'
-      : 'the workload inside it exited'
+  const signal = EXIT_SIGNAL_NAMES[exit.code]
+  const note = cause
+    ? signal
+    : [signal, UNEXPLAINED_EXIT_NOTES[exit.code]].filter(Boolean).join(', ')
+  const how = cause
+    ? 'the runtime reported it as'
+    : exit.reason === 'runtime_signal'
+      ? 'the runtime signalled it to exit, with'
+      : 'the workload inside it exited, with'
   return (
-    `The run's container stopped while the job was running: ${how}, exit code ${exit.code}` +
+    `The run's container stopped while the job was running: ${how} exit code ${exit.code}` +
     `${note ? ` (${note})` : ''}. The container's own output is not readable from the Worker; ` +
     `it is in this deployment's Workers logs.`
   )

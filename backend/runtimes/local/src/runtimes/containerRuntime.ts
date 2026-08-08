@@ -10,6 +10,7 @@
 // `container` gets its own (`AppleContainerRuntimeAdapter`).
 
 import { createHash } from 'node:crypto'
+import { tailPostMortemMaterial } from '@cat-factory/kernel'
 
 /** The in-container port the executor-harness listens on. */
 export const HARNESS_PORT = 8080
@@ -18,17 +19,32 @@ export const HARNESS_PORT = 8080
 export type ContainerExec = (args: string[]) => Promise<{ stdout: string; stderr: string }>
 
 /**
+ * How much of a container's captured output any consumer of {@link formatContainerLogs} may see.
+ *
+ * A LINE bound is not a bound. `docker logs --tail 50` counts lines, and fifty lines of an agent
+ * echoing a diff, a lockfile or a base64 blob is tens of kilobytes, which then meets
+ * `composePostMortem`'s head-keeping cap and loses precisely the crash the tail was read for.
+ * Sized well under that cap so the composed verdict in front of the logs always survives, and
+ * matched to the native transport's own `STDERR_TAIL_CHARS` so the two local backends bound
+ * their post-mortems alike.
+ */
+export const MAX_CONTAINER_LOG_CHARS = 2_000
+
+/**
  * Shape a container's captured `logs` output into a short tail for a fail-fast spin-up
- * error: trim + drop empty stdout/stderr, join with newlines, and (when the CLI can't
- * `--tail` itself, e.g. Apple `container`) keep only the last `tailLines`. Shared by the
- * adapters' `logs()` impls so they can't drift in how they shape the tail.
+ * error: trim + drop empty stdout/stderr, join with newlines, (when the CLI can't `--tail`
+ * itself, e.g. Apple `container`) keep only the last `tailLines`, and bound the result to
+ * {@link MAX_CONTAINER_LOG_CHARS}. Shared by the adapters' `logs()` impls so they can't drift
+ * in how they shape the tail, and the one place the character bound is applied: every reader
+ * of a container's output goes through here, so none of them can forget it.
  */
 export function formatContainerLogs(stdout: string, stderr: string, tailLines?: number): string {
   const out = [stdout, stderr]
     .map((s) => s.trim())
     .filter(Boolean)
     .join('\n')
-  return tailLines ? out.split('\n').slice(-tailLines).join('\n') : out
+  const lineBounded = tailLines ? out.split('\n').slice(-tailLines).join('\n') : out
+  return tailPostMortemMaterial(lineBounded, MAX_CONTAINER_LOG_CHARS)
 }
 
 /** Where the orchestrator connects to reach a run's harness. */

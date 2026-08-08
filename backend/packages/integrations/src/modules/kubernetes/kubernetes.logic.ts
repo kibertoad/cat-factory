@@ -407,6 +407,15 @@ function joinReasonMessage(reason: string, message?: string): string {
 }
 
 /**
+ * A pod-status string worth reporting, or undefined. A whitespace-only value is treated as
+ * absent: the apiserver does write `message: ""`, and reporting it verbatim yields a line that
+ * announces an account and then gives none.
+ */
+function readPodStatusText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+/**
  * One pass over a pod's container statuses + conditions, yielding BOTH readings the readiness
  * loop needs so the pod JSON isn't walked (and the two views aren't kept in sync) twice:
  * - `terminal`: the first container whose `state.waiting.reason` is a known-unrecoverable
@@ -531,9 +540,16 @@ export function describePodTermination(pod: unknown): string {
   // A pod-level reason (`Evicted`, `NodeAffinity`, `Shutdown`) is the kubelet's own account of
   // taking the pod away, which no container status reports: it is ADDITIONAL to the lines above,
   // never a substitute for them.
-  const reason = typeof status?.reason === 'string' ? status.reason : undefined
-  const message = typeof status?.message === 'string' ? status.message : undefined
+  //
+  // The two halves are read INDEPENDENTLY. `message` is the kubelet's prose ("The node was low on
+  // resource: ephemeral-storage", a preemption notice) and the apiserver does not guarantee the
+  // machine-readable `reason` beside it; gating the prose on the code drops the only evidence a
+  // pod carried and renders it as an empty detail, which is indistinguishable from a pod that
+  // said nothing at all.
+  const reason = readPodStatusText(status?.reason)
+  const message = readPodStatusText(status?.message)
   if (reason) lines.push(`Pod ${joinReasonMessage(reason, message)}`)
+  else if (message) lines.push(`Pod reports: ${message}`)
   return lines.join('\n')
 }
 
