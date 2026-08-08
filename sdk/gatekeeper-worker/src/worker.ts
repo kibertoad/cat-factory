@@ -10,7 +10,7 @@
 //   ALL  /rpc            the Cap'n Web endpoint the paired Cloudflare OS talks to
 //   POST /admin/enroll   re-assert this Worker's webhook registration on demand
 //   POST /admin/retire   revoke every key minted for one OS user, for offboarding
-//   GET  /health         liveness plus whether the policy compiles
+//   GET  /health         liveness plus whether this deployment could serve at all
 //
 // Two conventions are worth stating because they look like sloppiness and are not.
 //
@@ -26,7 +26,7 @@
 // it, and a capability surface whose only defence is obscurity is not one.
 
 import { newWorkersRpcResponse, RpcTarget } from 'capnweb'
-import { ConfigError, type GatekeeperEnv } from './env.js'
+import { ConfigError, describeMissingBindings, missingBindings, type GatekeeperEnv } from './env.js'
 import { GatekeeperError, PolicyError } from './errors.js'
 import { Gatekeeper } from './gatekeeper.js'
 import type { Actor } from './keys.js'
@@ -114,11 +114,24 @@ export function createGatekeeperWorker(
       const url = new URL(request.url)
 
       try {
-        const gatekeeper = Gatekeeper.create(env, policy)
-
+        // Health runs BEFORE the assembly below, and asks the whole configuration rather than the
+        // two bindings that assembly happens to read. A monitor keyed on this route is asking
+        // "could a call served right now get past setup", and a Gatekeeper missing only its
+        // WEBHOOK_SECRET or OS_SHARED_TOKEN answers every /rpc call with a 503 while its liveness
+        // is perfect: green here and refusing everything there is the one answer this route must
+        // never give.
         if (url.pathname === '/health') {
+          const missing = missingBindings(env)
+          if (missing.length > 0) {
+            return problem(503, 'not_configured', describeMissingBindings(missing))
+          }
+          // Assembling IS the rest of the check: it compiles the policy against the live operation
+          // table, and a policy that does not compile is a Gatekeeper that serves nothing.
+          Gatekeeper.create(env, policy)
           return Response.json({ ok: true })
         }
+
+        const gatekeeper = Gatekeeper.create(env, policy)
 
         if (url.pathname === '/webhook') {
           if (request.method !== 'POST') return problem(405, 'method_not_allowed', 'POST only.')

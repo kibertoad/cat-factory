@@ -429,8 +429,44 @@ suite covers.
 - [x] Slice 6: base/template split (`@cat-factory/gatekeeper-worker` published, `deploy/gatekeeper`
       down to its policy, bindings and wiring)
 
+## Open documentation gaps
+
+Registered by the 2026-08-08 documentation revision
+([#1845](https://github.com/kibertoad/cat-factory/pull/1845)), which restructured the three READMEs
+(bindings, machinery, template) around what each piece is, its purpose, usage, configuration and
+customization, added the Gatekeeper naming map to `docs/glossary.md`, documented `deny`, masking
+semantics, the reserved capability methods and the error split, and fixed the template README's
+withheld-reason list (it named three of the four). What that sweep could NOT close stays open
+here:
+
+- [ ] **A rendered protocol reference for the OS side.** The shapes an OS consumer receives
+      (`ApprovalCard`, `CardInspection`, the `runs_watched` entries, the `/webhook` response
+      envelope) are documented only as exported TypeScript types in
+      `sdk/gatekeeper-worker/src/`. A TypeScript consumer reads them; a non-TypeScript OS
+      integration has nothing rendered. Worth doing only when such a consumer appears, and then
+      preferably generated from the types rather than transcribed.
+- [ ] **A `WEBHOOK_SECRET` rotation recipe.** The provisioning-key rotation story is documented
+      (a 401 drops the cached key and re-mints once), but rotating the webhook secret is not:
+      what order to update the secret and re-enrol in, and what happens to deliveries signed
+      with the old secret while the two disagree. Needs verifying against the enrolment and
+      verification code before it can be written down honestly.
+
 ## Gotchas the pilot surfaced
 
+- **A health route that assembles is not a health route that checks.** `/health` answered
+  `{ ok: true }` off `Gatekeeper.create`, which reads three of the seven bindings, so a Worker with
+  no `OS_SHARED_TOKEN` or `WEBHOOK_SECRET` was green while `/rpc` refused every call and the
+  receiver verified no delivery. The failure is worse than an absent check, because a monitor keyed
+  on it AGREES the deployment is fine. Two rules came out of it: a health check asks the whole
+  configuration rather than whatever the request path it borrows happens to read, and it asks in
+  ONE pass, because an operator who learns the next unset binding only after redeploying wires a
+  deployment one restart at a time. The check is derived from `GatekeeperEnv` through an exhaustive
+  `Record`, so a binding this check would silently pass over fails the build instead.
+- **"Set it in wrangler.toml or with `wrangler secret put`" is a refusal that leaks credentials.**
+  Offered both mechanisms, an operator picks the one that is a file, and the file is committed. The
+  mechanism each binding takes is now a fact stated once (`BINDING_KINDS`) and cited by both
+  READMEs, which had independently drifted into telling operators that the three secrets live in
+  `wrangler.toml`: a documentation error whose worst case is an `admin` API key in a git history.
 - **"Card type" and "decision kind" are two vocabularies, and neither maps onto the other.** A
   `decision_required` notification can be an approval gate or an agent question; `merge_review` maps
   to no `/runs/:runId/decisions` entry at all; a run that parked twice is holding the SECOND park by

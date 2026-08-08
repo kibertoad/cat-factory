@@ -1,5 +1,128 @@
 # @cat-factory/worker
 
+## 0.177.0
+
+### Minor Changes
+
+- 35bc18f: Say what killed a container, on every transport that can run one.
+
+  The post-mortem machinery was wired into exactly one path (the local per-run poll), so on the
+  DEPLOYED runtime a container death reached the operator as `Job not found (container evicted or
+crashed)` and nothing else. Each of the three remaining transports already held the evidence and
+  discarded it at the moment it became the only evidence there was.
+
+  **Cloudflare.** A per-run container recorded only a rollout drain, so an OOM kill recorded
+  nothing. It now records `{ exitCode, reason }` for EVERY stop, and the transport attaches it to
+  the eviction detail. That state is deliberately a SECOND, independent half of the stop record: the
+  churn cause decides the recovery budget (unchanged, so the crash-eviction backstop behaves exactly
+  as before), while the exit state decides the detail and is kept for the cause-less deaths, which
+  are precisely the ones nobody could diagnose. The two hooks that see a stop now merge onto one
+  record instead of overwriting: `onError` recognises the churn and knows no exit code, `onStop`
+  knows the exit code and cannot name the churn, and they fire in either order. The merge is bounded
+  to observations of ONE stop, since records are not reliably cleared between stops and merging onto
+  a stale one would back-date a fresh crash out of its own attribution window. A stop the container
+  asked for (its idle reclaim, its shutdown RPC) records no exit, because that code is its own signal
+  echoed back; the shutdown also clears the record, so it stays transient rather than outliving the
+  run in a per-run Durable Object. And where a cause was recognised, the detail reports the mechanics
+  of that stop rather than offering a second cause of death: a reclaim escalating to SIGKILL used to
+  read as "most often an out-of-memory kill" directly under a verdict saying the container was
+  reclaimed while idle. What this runtime cannot supply is a log tail: a Container's stdout goes to
+  the deployment's Workers logs and no API returns it to the Durable Object, so the detail says where
+  the output actually is rather than implying it was withheld.
+
+  **Kubernetes.** The pod object outlives its workload (`restartPolicy: Never`), so the kubelet's
+  account of the death was one GET away and never read. The 404 poll now reads `state.terminated`,
+  falls back to `lastState.terminated` for a container between lives (where a crash loop's real
+  cause sits), and adds the pod-level account on top rather than instead, since a kubelet eviction
+  under node pressure names itself only there and the container never saw it. That account is read as
+  two independent halves: the apiserver does not guarantee a machine-readable `reason` beside its
+  prose, and gating the prose on the code renders an evidence-carrying pod as an empty detail. A pod
+  that is GONE and a pod that could not be READ are reported as themselves, because an unreachable
+  control plane must not read like a clean death.
+
+  **The native host-process transport** was spawned `stdio: 'ignore'`, discarding both the exit code
+  and the stderr the harness routes its warn/error lines to. It now keeps a bounded stderr tail
+  (nothing is forwarded onward, so the developer's console is as quiet as before) and retains the
+  last exit past the process handle, which is dropped before the poll that needs it. Because this
+  backend outlives a run, the tail is attached only when the process serving a job is confirmed gone;
+  a live process that merely forgot the job says so, the same rule the warm pool follows. "The
+  process serving this job" is tracked as a generation rather than as "the process": one death evicts
+  every concurrent job, and answering the first eviction re-dispatches, which spawns the replacement
+  while the siblings have yet to poll, so without the pairing a sibling is told its harness is
+  "still serving other local runs", which is a fact about a different process. The same tail is
+  folded lazily into a dispatch that never got the harness healthy, so a harness that will not boot
+  at all stops failing with a sentence that names only the symptom.
+
+  Kernel gains `composePostMortem`, the one place the two obligations every such detail carries
+  (scrub through `redactSecrets`, then cap and state what was dropped) are implemented, and
+  `tailPostMortemMaterial`, which bounds BULK material from the other end: a log's value is at its
+  end, so letting one reach the head-keeping cap unbounded keeps the boot chatter and drops the
+  crash. The local runtimes' shared log shaping now bounds by characters rather than by lines only,
+  which is what a `--tail 50` of an agent echoing a payload needs.
+
+  Internal break: the per-run container's `recentEvictionCause` RPC is replaced by
+  `recentStopObservation`, which answers both halves. Worker and container deploy together, so
+  nothing spans the change.
+
+- 882b94f: Feed the visual-confirmation gate from the designs a task links. The frames an import retained for
+  a linked Figma/Zeplin document now populate the gate's actual-vs-reference gallery on their own, so
+  a designer who linked a frame gets screenshot-vs-design comparison with no manual upload at all.
+
+  A reference that was explicitly chosen for a view still wins: an upload is a deliberate act against
+  that one task and survives every re-import, while a design render is a projection the next
+  body-changing import replaces wholesale. So an upload assigns over the fold, and a view whose
+  reference the capture itself named is left alone. Each pair now says which of the two it is showing,
+  and says nothing when the capture named its own, because a reference the gate did not source is one
+  whose provenance it can only guess at.
+
+  A view name two designs both claim is qualified with its design on BOTH sides rather than just the
+  second, the same rule the Figma import applies to a frame name repeated across pages: leaving the
+  first bare would hand the plain name to whichever design is listed first, and re-ordering the links
+  would then silently re-point a reviewed view at a different screen.
+
+  The gate also states what the linked designs contributed whenever a design is attached, including
+  when everything worked, so "no design is linked" stays distinguishable from "one is and it gave
+  nothing". The latter carries a per-design reason, since retaining part of a design, failing to
+  download it, having no frames at all, and having had nowhere to store them each ask for a different
+  fix. That verdict is derived from what the artifact store actually holds rather than from the
+  recorded render status alone, so any status claiming retention over an empty shelf reports the
+  absence rather than describing a gallery that is not there. The gallery's ceiling on design views is
+  shared round-robin across the linked designs instead of being spent in read order, and each design
+  that loses frames to it is named, so a design the ceiling shut out cannot read as one with no
+  frames.
+
+  Gathering the pairs no longer confuses a gallery ROW with a captured screenshot. A reference-only row
+  (a design frame, an uploaded mock) makes a pair too, so a run that captured nothing had been losing
+  the warning that gates the gate's approve button behind an acknowledgement, reporting a verified
+  gallery of blanks in its run outcome, and summoning reviewers to screenshots that were not there. The
+  rule now lives once in `@cat-factory/contracts` and all three ask it.
+
+  `BinaryArtifactStore` grows a batched `listByDocuments`, mirrored D1 ⇄ Drizzle with a conformance
+  assertion and allow-listed for mothership mode, so a task linking several designs still costs the
+  driver path one read.
+
+### Patch Changes
+
+- Updated dependencies [35bc18f]
+- Updated dependencies [882b94f]
+- Updated dependencies [f2ead2a]
+  - @cat-factory/kernel@0.272.0
+  - @cat-factory/integrations@0.150.0
+  - @cat-factory/contracts@0.274.0
+  - @cat-factory/orchestration@0.240.0
+  - @cat-factory/server@0.252.0
+  - @cat-factory/agents@0.117.12
+  - @cat-factory/caching@0.18.13
+  - @cat-factory/consensus@0.14.58
+  - @cat-factory/eks@0.1.270
+  - @cat-factory/gates@0.9.38
+  - @cat-factory/gitlab@0.18.5
+  - @cat-factory/observability-langfuse@0.10.42
+  - @cat-factory/observability-otel@0.18.5
+  - @cat-factory/prompt-fragments@1.0.22
+  - @cat-factory/provider-cloudflare@0.7.420
+  - @cat-factory/spend@0.15.40
+
 ## 0.176.0
 
 ### Minor Changes

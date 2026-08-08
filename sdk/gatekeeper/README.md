@@ -1,18 +1,37 @@
 # @cat-factory/gatekeeper-bindings
 
-A policy-annotated operation table for the cat-factory **public API** (`/api/v1`), for building
-credential-holding front-ends: services that hold the API key themselves and meter what their own
-callers may do. The motivating consumer is a [Cloudflare OS](https://github.com/cloudflare/cloudflare-os)
-Gatekeeper Worker (see the
+## What it is
+
+A policy-annotated table of every cat-factory **public API** (`/api/v1`) operation, plus the
+scope-ladder helpers a policy layer ranks keys and classifies calls with. Like
+[`sdk/mcp`](https://github.com/kibertoad/cat-factory/tree/main/sdk/mcp), this is **not a fifth
+client**: it is the same operations the four SDKs expose, projected as a table and generated from
+the same OpenAPI spec (`pnpm gen:sdk`), so it cannot drift from the surface it meters. The thunks
+call [`@cat-factory/sdk`](https://www.npmjs.com/package/@cat-factory/sdk) and re-implement none of
+its behaviour.
+
+It is the data half of the cat-factory **Gatekeeper** family, three pieces taken two different
+ways:
+
+| Piece                                                                                            | What it is                                                                                                  | How you take it                         |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `@cat-factory/gatekeeper-bindings` (this package)                                                | the generated operation table and the scope helpers                                                         | install, to build your own policy layer |
+| [`@cat-factory/gatekeeper-worker`](https://www.npmjs.com/package/@cat-factory/gatekeeper-worker) | the full Gatekeeper Worker machinery: Cap'n Web capability surface, key broker, webhook receiver, approvals | install, and write only a policy        |
+| [`deploy/gatekeeper`](https://github.com/kibertoad/cat-factory/tree/main/deploy/gatekeeper)      | the deployment template: a policy file, wrangler bindings, three lines of wiring                            | copy, and edit `src/policy.config.ts`   |
+
+## Purpose and goal
+
+For building **credential-holding front-ends**: services that hold the cat-factory API key
+themselves and meter what their own callers may do. The motivating consumer is a
+[Cloudflare OS](https://github.com/cloudflare/cloudflare-os) Gatekeeper Worker (design record: the
 [initiative tracker](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/cloudflare-os-gatekeeper.md)),
 but nothing here is Cloudflare-specific: any proxy, bot or governance layer that fronts a
 cat-factory key can use it.
 
-Like [`sdk/mcp`](https://github.com/kibertoad/cat-factory/tree/main/sdk/mcp), this is **not a
-fifth client**: it is the same operations the four SDKs expose, projected as a table and
-generated from the same OpenAPI spec, so it cannot drift from the surface it meters. The thunks
-call [`@cat-factory/sdk`](https://www.npmjs.com/package/@cat-factory/sdk) and re-implement none
-of its behaviour.
+The goal is that such a layer enforces policy against the operations the deployment actually
+serves, at the scope floors it actually enforces, never against a hand-curated list that drifts.
+The floors come from the spec's `x-min-scope`, which the server generates from the same contract
+field its controllers enforce, so the declared scope and the enforced scope are one value.
 
 ## What each binding carries
 
@@ -20,8 +39,7 @@ One `GatekeeperBinding` per `/api/v1` operation:
 
 - `name` (`tasks_create`): the policy spelling, identical to the MCP facade's tool name.
 - `minScope`: the key-scope floor the deployment enforces for the route (`read` / `write` /
-  `decide` / `admin`), read off the spec's `x-min-scope`, which the server generates from the
-  same contract field its controllers enforce. This is the STATIC floor: a run-starting
+  `decide` / `admin`), read off the spec's `x-min-scope`. This is the STATIC floor: a run-starting
   operation can still be refused `pipeline_requires_decide_scope` at request time when the named
   pipeline can park on a human.
 - `readOnly`, `consequence`: what a front-end needs to decide which calls get waved through,
@@ -36,11 +54,27 @@ One `GatekeeperBinding` per `/api/v1` operation:
   convention is the MCP facade's (path params and query keys at the top level, body under
   `body`; unknown keys are dropped, never forwarded).
 
-Hand-written beside the table: `scopeSatisfies(have, need)`, `bindingsWithinScope(scope)`,
-`bindingByName(name)` and `resolveConsequence(binding)`, the helpers a policy layer ranks keys
-and classifies calls with.
+## The helpers
 
-## Example
+Hand-written beside the table (`src/index.ts`), because every consumer needs them and deriving
+them independently is how one gets them backwards:
+
+- `scopeSatisfies(have, need)`: whether a key of scope `have` clears a floor of `need`. The
+  ladder is inclusive: every rung can do everything below it.
+- `bindingsWithinScope(scope)`: every operation a key of that scope can call.
+- `bindingByName(name)`: one operation by its policy spelling; `undefined` for a name the surface
+  does not have, so a misspelled or retired name is a condition the caller reports rather than a
+  thrown surprise.
+- `resolveConsequence(binding)`: the consequence annotation with the cautious default applied (an
+  unannotated mutation counts as destructive and non-idempotent).
+- `PUBLIC_API_SCOPE_LADDER`: the scope ranking itself, emitted from the spec's
+  `x-public-api-scopes`.
+
+The ladder helpers **throw on a scope they do not carry** rather than ranking it below `read`:
+a deployment one release ahead of this package must read as version skew, never as a key with no
+permissions.
+
+## How to use it
 
 ```ts
 import { CatFactoryClient } from '@cat-factory/sdk'
@@ -67,10 +101,24 @@ const result = await binding.invoke(client, {
 })
 ```
 
-The full API reference (keys, scopes, endpoint semantics) is
-[`backend/docs/public-api.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/public-api.md);
-the client family and generation chain are described in
-[`sdk/README.md`](https://github.com/kibertoad/cat-factory/blob/main/sdk/README.md).
+Two routes are deliberately absent from the table because they have no honest operation shape:
+`GET /api/v1/openapi.json` (spec discovery) and `ALL /api/v1/mcp` (the hosted MCP endpoint). Both
+gate at `read` on the server.
 
-`src/bindings.generated.ts` is GENERATED (`pnpm gen:sdk`); change the route contracts, never the
-file.
+## Configuration and customization
+
+Nothing in this package is configured or customized: it is generated data plus pure helpers, and
+the policy built on top of it belongs to the consumer (see `@cat-factory/gatekeeper-worker` for a
+ready-made one). `src/bindings.generated.ts` is GENERATED (`pnpm gen:sdk`); change the route
+contracts, never the file.
+
+## References
+
+- [`backend/docs/public-api.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/public-api.md):
+  the full API reference (keys, scopes, endpoint semantics).
+- [`sdk/README.md`](https://github.com/kibertoad/cat-factory/blob/main/sdk/README.md): the client
+  family and the generation chain this table rides.
+- [`@cat-factory/gatekeeper-worker`](https://www.npmjs.com/package/@cat-factory/gatekeeper-worker):
+  the Worker machinery that compiles deployment policy against this table.
+- [The initiative tracker](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/cloudflare-os-gatekeeper.md):
+  design record, decisions and gotchas.
