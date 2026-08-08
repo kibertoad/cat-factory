@@ -25,6 +25,8 @@ rather than as excluding everything.
 
 The built-ins that belong to one use-case now say so (the document-authoring family, the bug
 triage and PR-review kinds, the spec/blueprint/architecture kinds, the initiative breakdown), which
-is a visible narrowing of what the palette offers at every non-`build` purpose. Nothing changes
+is a visible narrowing of what the palette offers at every purpose, `build` included: the six
+document-authoring kinds belong to `document` alone and the initiative breakdown to `planning`
+alone, so a build pipeline stops being offered them as well. Nothing changes
 about what an existing pipeline may CONTAIN or save: `purposeAllowsAgentCategory` is untouched, so
 a stored pipeline stays editable in the builder it was built in.

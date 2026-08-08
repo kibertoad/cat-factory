@@ -130,7 +130,7 @@ test.describe('pipeline builder (author a pipeline by hand, then run it)', () =>
 
   // The other half of the same surface: what the palette OFFERS before anything is drawn.
   //
-  // The purpose dial narrows the catalog live, and its reduction is unit-tested — but only the
+  // The purpose dial narrows the catalog live, and its reduction is unit-tested, but only the
   // assembled product shows that moving the dial reaches the rendered list at all, which is the
   // regression this pins: a control whose every setting looked the same.
   test('picking a purpose narrows the palette to the kinds that purpose has a use for', async ({
@@ -151,7 +151,7 @@ test.describe('pipeline builder (author a pipeline by hand, then run it)', () =>
     await page.getByRole('menuitem', { name: 'Review', exact: true }).click()
 
     // LIVE, with no reload: a pipeline that reviews an existing pull request writes no code, so
-    // the Implementation section goes with its whole category — and `documenter` goes on its OWN,
+    // the Implementation section goes with its whole category, and `documenter` goes on its OWN,
     // because it authors documentation into the repo while its section-mate the Domain Rules
     // Reviewer belongs here. That second one is the assertion worth having: it is exactly what a
     // filter keyed on the display category cannot express, so it fails if relevance regresses to

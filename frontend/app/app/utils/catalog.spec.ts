@@ -108,6 +108,18 @@ describe('catalog', () => {
     }
   })
 
+  it('never declares an EMPTY `purposes` (which reads as no declaration, not as "nowhere")', () => {
+    // `agentPresentationSchema` refuses an empty list at registration, but this catalog is
+    // authored in TypeScript and parsed by nothing, so the same guard has to be asserted for the
+    // half valibot never sees. Left empty, a kind someone meant to offer NOWHERE is offered
+    // everywhere its section is: `purposeSuggestsAgentKind` cannot tell an authored `[]` from a
+    // kind that declared nothing at all.
+    for (const a of [...AGENT_ARCHETYPES, ...Object.values(SYSTEM_AGENT_META)]) {
+      if (!a.purposes) continue
+      expect(a.purposes.length, `${a.kind} declares an empty purposes list`).toBeGreaterThan(0)
+    }
+  })
+
   it('never shadows a companion producer as a system kind', () => {
     // A companion is never placed directly: the builder renders it as a toggle on its producer
     // step, so a producer that cannot be placed takes its companion out of the builder with it.

@@ -1,17 +1,17 @@
 import * as v from 'valibot'
 
 /**
- * The USE-CASE of a pipeline — what kind of work it exists to do. Chosen in the pipeline
+ * The USE-CASE of a pipeline: what kind of work it exists to do. Chosen in the pipeline
  * builder and stamped on every built-in preset, it is the classifier the SPA filters on:
  *
- *   - `build`      — produces or changes application code (the default for engineering
- *                    pipelines: full builds, bug fixes, refactors, dependency updates, …).
- *   - `document`   — authors or updates documentation (a PRD/RFC/runbook, business rules, …);
- *                    a `document` task offers ONLY these.
- *   - `review`     — reviews existing code / a pull request and reports findings; writes no code.
- *   - `research`   — timeboxed investigation / analysis that delivers findings (a spike, an
- *                    environment analysis).
- *   - `planning`   — decomposes and plans an initiative (no code, no repo write of its own).
+ *   - `build`      produces or changes application code (the default for engineering
+ *                  pipelines: full builds, bug fixes, refactors, dependency updates, …).
+ *   - `document`   authors or updates documentation (a PRD/RFC/runbook, business rules, …);
+ *                  a `document` task offers ONLY these.
+ *   - `review`     reviews existing code / a pull request and reports findings; writes no code.
+ *   - `research`   timeboxed investigation / analysis that delivers findings (a spike, an
+ *                  environment analysis).
+ *   - `planning`   decomposes and plans an initiative (no code, no repo write of its own).
  *
  * The gating predicates that read it live in `pipeline-purpose.ts`, which re-exports this
  * module. The vocabulary sits apart from them because `agent-presentation.ts` has to name a

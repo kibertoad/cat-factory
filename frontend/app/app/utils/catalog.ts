@@ -90,8 +90,8 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     icon: 'i-lucide-clipboard-check',
     color: '#6366f1',
     category: 'review',
-    // Reviews an EXISTING open pull request — the whole of the review use-case, and available to
-    // a build pipeline that wants a deep pass over the pull request it just opened.
+    // Reviews an EXISTING open pull request, which is the whole of the review use-case, and is
+    // available to a build pipeline that wants a deep pass over the pull request it just opened.
     purposes: ['build', 'review'],
     description:
       'Deep, token-bounded review of an open pull request: slices a large diff into cohesive ' +

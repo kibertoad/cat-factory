@@ -323,7 +323,10 @@ to one use-case says so in `presentation.purposes` and leaves a section its sibl
 section keeps deciding for every kind that declares nothing, which is the normal case and the one
 a deployment-registered kind falls into for free. Declare it only to opt OUT: it can never widen,
 and a list naming only purposes this build cannot name is read as no declaration at all rather
-than as excluding everything, the same default-open reading the unknown `purpose` gets.
+than as excluding everything, the same default-open reading the unknown `purpose` gets. An EMPTY
+list is refused at registration instead (`agentPresentationSchema`, and `catalog.spec.ts` for the
+static half valibot never parses): the reader cannot tell one from declaring nothing, so it would
+offer the kind everywhere its section is offered, which is the inverse of what writing it means.
 
 **Each hint counts what relaxing THAT dial alone would reveal**, which is why each reduction is one
 function (`utils/agentPalette.ts` for the catalog, `utils/pipelineLibrary.ts` for the library)

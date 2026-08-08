@@ -107,8 +107,17 @@ export const agentPresentationSchema = v.object({
    * Rules Reviewer down with it. It never widens anything, in the palette or in what the
    * builder will SAVE (`purposeAllowsAgentCategory`), so a kind that opts out of a purpose
    * stays editable in a stored pipeline that already uses it.
+   *
+   * An EMPTY list is refused rather than accepted, because the reader treats "declared nothing"
+   * and "declared an empty list" as the same thing (the category alone decides, so the kind is
+   * offered at every purpose that section admits) and that is the exact inverse of what an author
+   * writing `purposes: []` means by it. Refusing at registration is the only place the two can
+   * still be told apart: by the time the palette reads the list the intent is gone. Note this is
+   * NOT the same case as a list whose every member THIS BUILD cannot name, which the palette
+   * deliberately reads as no declaration: that one is a retired vocabulary member outliving the
+   * bundle reading it, not a statement someone typed.
    */
-  purposes: v.optional(v.array(pipelinePurposeSchema)),
+  purposes: v.optional(v.pipe(v.array(pipelinePurposeSchema), v.minLength(1))),
   /**
    * How specialist this kind is ({@link AGENT_TIERS}). The palette and the model-preset
    * override list show the selected tier and everything below it, so a kind declared

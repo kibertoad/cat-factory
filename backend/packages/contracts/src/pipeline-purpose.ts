@@ -158,7 +158,7 @@ export interface AgentPurposeRelevance {
 }
 
 /**
- * Whether an agent KIND is worth OFFERING to a pipeline of `purpose` — what the builder palette
+ * Whether an agent KIND is worth OFFERING to a pipeline of `purpose`: what the builder palette
  * actually filters on.
  *
  * A category is a SHELF LABEL, not a statement of what a kind does, so
@@ -171,7 +171,7 @@ export interface AgentPurposeRelevance {
  * The two narrowings INTERSECT: a declaration may only ever hide MORE than the section already
  * does, never buy a kind back into a purpose its section is not offered to. That is not a
  * convenience, it is what keeps relevance a SUBSET of compatibility
- * ({@link purposeAllowsAgentCategory}) no matter what a deployment declares — a kind offered
+ * ({@link purposeAllowsAgentCategory}) no matter what a deployment declares: a kind offered
  * outside its category's row would be a palette entry whose step then blocks the save, the one
  * dead end this pair of tables exists to prevent.
  *
@@ -179,7 +179,9 @@ export interface AgentPurposeRelevance {
  * naming only purposes this build cannot NAME is read as declaring nothing rather than as
  * excluding everything, the same default-open reading its siblings give an unrecognised value: a
  * kind whose entire list was retired would otherwise vanish from every palette in the build that
- * has to fix it.
+ * has to fix it. An AUTHORED empty list never reaches here at all: `agentPresentationSchema`
+ * refuses one at registration, so this reading cannot double as a way of saying "offer me
+ * nowhere", which is what someone typing `purposes: []` means and the opposite of what it does.
  */
 export function purposeSuggestsAgentKind(
   purpose: Pipeline['purpose'],
