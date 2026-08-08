@@ -952,6 +952,16 @@ export const notifications = pgTable(
   ],
 )
 
+// The notification manager (mirror of D1 migration 0088): which notification types a workspace
+// delivers on which channel (`in_app` / `email`). `matrix` is a SPARSE JSON map of OVERRIDES —
+// an absent cell means the board never chose, which resolves to the shipped default — so a new
+// notification type or channel arrives on its default instead of a `false` nobody picked.
+export const notificationSettings = pgTable('notification_settings', {
+  workspace_id: text('workspace_id').primaryKey(),
+  matrix: text('matrix').notNull().default('{}'),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
 // Per-workspace merge threshold presets (mirror of D1 migration 0024's
 // `merge_threshold_presets`). A task selects one via `blocks.merge_preset_id`; none →
 // the workspace default (`is_default`, exactly one per workspace — the repository

@@ -142,6 +142,13 @@ export {
   NotificationService,
   type NotificationServiceDependencies,
 } from './modules/notifications/NotificationService.js'
+// The notification manager. Exported for the FACADES, which build it from the same
+// repository they pass to Core so the routing gate in front of their channels and the
+// settings API a human edits cannot resolve differently.
+export {
+  NotificationSettingsService,
+  type NotificationSettingsServiceDependencies,
+} from './modules/notifications/NotificationSettingsService.js'
 // `RaiseNotificationInput` lives in @cat-factory/kernel (so runtime-neutral extension
 // seams — e.g. a custom gate's `onExhausted` — can build one without depending on this
 // package); surfaced here for discovery alongside the NotificationService that consumes it.

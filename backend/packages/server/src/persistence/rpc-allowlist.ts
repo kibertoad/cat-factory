@@ -1331,6 +1331,14 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
   },
+  // Per-workspace notification routing (which types this board delivers on which channel). No
+  // secrets, and the same shape as `slackSettingsRepository` above: `getByWorkspace` takes the
+  // workspaceId as arg0 (the `workspace` rule), the record-based `upsert(record)` binds on the
+  // record's `workspaceId` FIELD (the `workspaceField` rule).
+  notificationSettingsRepository: {
+    getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+  },
   // Per-account GitHub-user → Slack-member mapping (for @-mentions). No secrets. Both methods take
   // the accountId as arg0 positionally (`upsert(accountId, entries, at)` — a positional accountId,
   // not a record), so the `account` rule binds both.

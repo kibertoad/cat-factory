@@ -11,6 +11,7 @@ import type {
   SlackSettingsRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
+import { NOTIFICATION_DELIVERY_REASONS, isAlertingDelivery } from '@cat-factory/kernel'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetch as undiciFetch, getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici'
 import { SlackApiClient } from './SlackApiClient.js'
@@ -147,7 +148,7 @@ describe('SlackNotificationChannel', () => {
       slackClient: new SlackApiClient(),
     })
 
-    await channel.deliver('ws_1', notification)
+    await channel.deliver('ws_1', notification, 'raised')
 
     // The interceptor path guarantees the call hit chat.postMessage.
     expect(calls).toHaveLength(1)
@@ -172,7 +173,7 @@ describe('SlackNotificationChannel', () => {
       slackClient: new SlackApiClient(),
     })
 
-    await channel.deliver('ws_1', notification)
+    await channel.deliver('ws_1', notification, 'raised')
     expect(calls).toHaveLength(0)
   })
 
@@ -188,7 +189,7 @@ describe('SlackNotificationChannel', () => {
       slackClient: new SlackApiClient(),
     })
 
-    await channel.deliver('ws_1', notification)
+    await channel.deliver('ws_1', notification, 'raised')
     expect(calls).toHaveLength(0)
   })
 
@@ -207,7 +208,7 @@ describe('SlackNotificationChannel', () => {
       slackClient: new SlackApiClient(),
     })
 
-    await channel.deliver('ws_1', notification) // merge_review (engineering)
+    await channel.deliver('ws_1', notification, 'raised') // merge_review (engineering)
     expect(calls).toHaveLength(1)
     const blocks = JSON.stringify((calls[0]!.body as { blocks: unknown }).blocks)
     expect(blocks).toContain('<@U7>') // the creator
@@ -230,7 +231,7 @@ describe('SlackNotificationChannel', () => {
       slackClient: new SlackApiClient(),
     })
 
-    await channel.deliver('ws_1', { ...notification, type: 'requirement_review' })
+    await channel.deliver('ws_1', { ...notification, type: 'requirement_review' }, 'raised')
     expect(calls).toHaveLength(1)
     const blocks = JSON.stringify((calls[0]!.body as { blocks: unknown }).blocks)
     expect(blocks).toContain('<@U9>') // product
@@ -257,7 +258,7 @@ describe('SlackNotificationChannel', () => {
     })
 
     // Best-effort: the lifecycle is never broken...
-    await expect(channel.deliver('ws_1', notification)).resolves.toBeUndefined()
+    await expect(channel.deliver('ws_1', notification, 'raised')).resolves.toBeUndefined()
     // ...but the swallowed failure is observable, not silently dropped. A network failure on
     // the global fetch surfaces as a `TypeError: fetch failed` carrying the real cause — the
     // exact shape production sees (the old injected-fake error never wrapped this way).
@@ -271,4 +272,40 @@ describe('SlackNotificationChannel', () => {
       type: 'merge_review',
     })
   })
+
+  // A chat post cannot be unsaid, so Slack is an ALERT transport like email: only the RAISED
+  // edge. Before the edge existed it re-posted the same card on every resolve, dismissal and
+  // escalation, announcing a decision after it had been made.
+  it.each(NOTIFICATION_DELIVERY_REASONS.filter((r) => !isAlertingDelivery(r)))(
+    'does not post on a %s delivery, and decrypts nothing to decide that',
+    async (reason) => {
+      const calls = recordChatPost()
+      let decrypts = 0
+      const channel = new SlackNotificationChannel({
+        workspaceRepository: workspaceRepo('acc_1'),
+        slackConnectionRepository: connectionRepo(connection),
+        slackSettingsRepository: settingsRepo({
+          workspaceId: 'ws_1',
+          routesJson: JSON.stringify({ merge_review: { enabled: true, channel: '#releases' } }),
+          mentionsEnabled: false,
+          updatedAt: 0,
+        }),
+        slackMemberMappingRepository: mappingRepo([]),
+        blockRepository: blockRepo(null),
+        secretCipher: {
+          encrypt: reversingCipher.encrypt.bind(reversingCipher),
+          decrypt: async (value: string) => {
+            decrypts++
+            return reversingCipher.decrypt(value)
+          },
+        },
+        slackClient: new SlackApiClient(),
+      })
+
+      await channel.deliver('ws_1', { ...notification, status: 'dismissed' }, reason)
+
+      expect(calls).toHaveLength(0)
+      expect(decrypts).toBe(0)
+    },
+  )
 })

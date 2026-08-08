@@ -2338,7 +2338,8 @@
         "shortcuts": "Raccourcis clavier",
         "bugHunt": "Chasse aux bugs",
         "toggleUiMode": "Changer le mode d'interface",
-        "foundationalServices": "Services fondamentaux"
+        "foundationalServices": "Services fondamentaux",
+        "notificationSettings": "Gérer le routage des notifications"
       },
       "keywords": {
         "newPipeline": "pipeline agents chaîne",
@@ -2362,7 +2363,8 @@
         "bugHunt": "bug chasse tri backlog tickets non assignés",
         "toggleUiMode": "interface mode simple avancé afficher masquer",
         "tutorial": "tutoriel visite guide aide apprendre découverte",
-        "foundationalServices": "capacité partagée plateforme service api contrat openapi catalogue"
+        "foundationalServices": "capacité partagée plateforme service api contrat openapi catalogue",
+        "notificationSettings": "notifications e-mail routage canaux boîte"
       }
     },
     "integrationsHub": {
@@ -2432,6 +2434,10 @@
         "bugHunt": {
           "label": "Chasse aux bugs",
           "description": "Évaluer les bugs ouverts et non assignés d'un tableau et en choisir un à corriger"
+        },
+        "notificationSettings": {
+          "label": "Notifications",
+          "description": "Choisissez les événements qui arrivent dans la boîte et par e-mail."
         }
       }
     },
@@ -4221,6 +4227,58 @@
     "confirmDisconnect": {
       "title": "Déconnecter Slack ?",
       "body": "Les notifications Slack seront interrompues jusqu'à la reconnexion."
+    }
+  },
+  "notificationSettings": {
+    "panel": {
+      "title": "Notifications",
+      "intro": "Choisissez les événements que ce tableau diffuse, et sur quel canal. Ce que vous ne modifiez pas garde la valeur par défaut.",
+      "inAppNote": "« Dans l'app » ne contrôle que la notification en direct. La carte est enregistrée dans tous les cas et reste dans votre boîte après rechargement.",
+      "emailNote": "L'e-mail nécessite un expéditeur connecté pour le compte (Paramètres du compte). Par défaut, seuls les événements à fort impact sont envoyés.",
+      "otherChannelsNote": "Slack et les webhooks sortants choisissent leur liste d'événements là où leur destination est configurée.",
+      "openSlack": "Routage Slack"
+    },
+    "column": {
+      "event": "Événement",
+      "inApp": "Dans l'app",
+      "email": "E-mail"
+    },
+    "action": {
+      "save": "Enregistrer",
+      "reset": "Rétablir les valeurs par défaut"
+    },
+    "toast": {
+      "saved": "Routage des notifications enregistré"
+    },
+    "error": {
+      "load": "Impossible de charger les paramètres de notification",
+      "save": "Impossible d'enregistrer les paramètres de notification"
+    },
+    "unavailable": "Ce déploiement ne stocke aucun routage de notifications : tous les événements utilisent la valeur par défaut.",
+    "loadFailed": "Impossible de lire le routage des notifications de ce tableau : les interrupteurs ci-dessous ne correspondent donc pas à sa configuration actuelle. Réessayez avant de modifier quoi que ce soit.",
+    "type": {
+      "merge_review": "Revue de fusion",
+      "pipeline_complete": "Pipeline termine",
+      "ci_failed": "Echec de CI",
+      "test_failed": "Echec des tests",
+      "requirement_review": "Revue des exigences",
+      "clarity_review": "Revue de clarte",
+      "release_regression": "Regression de version",
+      "decision_required": "Décision requise",
+      "human_test_ready": "Pret pour les tests humains",
+      "visual_confirmation_ready": "Pret pour la confirmation visuelle",
+      "human_review": "En attente de revue de code",
+      "followup_pending": "Suivis à trancher",
+      "fork_decision_pending": "Approche d'implémentation",
+      "judge_review": "Verdict de revue",
+      "pr_review_ready": "Points de revue de PR",
+      "initiative": "Mises a jour de l'initiative",
+      "platform_health": "Santé de la plateforme",
+      "infra_unreachable": "Pannes d'infrastructure",
+      "budget_paused": "Exécutions en pause (budget)",
+      "budget_threshold": "Alerte de budget",
+      "key_drift": "Dérive de la clé de chiffrement",
+      "merge_tag_request": "Effort de revue demandé"
     }
   },
   "docInterview": {

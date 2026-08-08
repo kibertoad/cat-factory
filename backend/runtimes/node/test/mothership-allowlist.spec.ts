@@ -47,7 +47,10 @@ import {
   DrizzleAccountSkillRepository,
   DrizzleSkillSourceRepository,
 } from '../src/repositories/skills.js'
-import { DrizzleNotificationRepository } from '../src/repositories/notifications.js'
+import {
+  DrizzleNotificationRepository,
+  DrizzleNotificationSettingsRepository,
+} from '../src/repositories/notifications.js'
 import {
   DrizzleNotificationWebhookRepository,
   DrizzleReviewQuestionPostRepository,
@@ -662,6 +665,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     listOpenByType: 'sweeper',
     listLatestByType: 'sweeper',
   },
+  // The notification manager's routing row: workspace-keyed, secret-free, and edited from a
+  // settings surface — the same bucket as `slackSettingsRepository` below, and fully remote so a
+  // mothership-mode node's delivery gate reads the row the mothership's settings API wrote.
+  notificationSettingsRepository: {},
   // The Slack management surface is now remote (the settings panels' connect/disconnect/route/map):
   // `slackConnectionRepository` get/upsert/softDelete (sealed `tokenCipher` — no plaintext crosses
   // the machine API), and the secret-free settings + member-mapping repos. `getByTeam` is the GLOBAL
@@ -872,6 +879,7 @@ function reflectAllRepositories(): Record<string, string[]> {
     skillSourceRepository: DrizzleSkillSourceRepository,
     notificationRepository: DrizzleNotificationRepository,
     notificationWebhookRepository: DrizzleNotificationWebhookRepository,
+    notificationSettingsRepository: DrizzleNotificationSettingsRepository,
     slackConnectionRepository: DrizzleSlackConnectionRepository,
     slackSettingsRepository: DrizzleSlackSettingsRepository,
     slackMemberMappingRepository: DrizzleSlackMemberMappingRepository,

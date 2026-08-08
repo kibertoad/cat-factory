@@ -114,6 +114,7 @@ import type {
   ModelRef,
   NotificationChannel,
   NotificationRepository,
+  NotificationSettingsRepository,
   ObservabilityConnectionRepository,
   OperationalMetrics,
   PackageRegistryConnectionRepository,
@@ -1153,6 +1154,14 @@ export interface CoreDependencies {
   // (CI gate passes through, `done` is a board-only flip, the built-in preset is used).
   notificationRepository?: NotificationRepository
   notificationChannel?: NotificationChannel
+  /**
+   * The notification MANAGER's store: which types this workspace delivers on which channel
+   * (`in_app` / `email`). Powers the settings API here; the facade builds the same service
+   * from the same repository to gate the channels it composes, so the surface a human edits
+   * and the decision the delivery path makes read one row. Absent ⇒ the settings surface
+   * 503s and every type keeps its shipped default.
+   */
+  notificationSettingsRepository?: NotificationSettingsRepository
   /**
    * The outbound RUN-LIFECYCLE push (`run.started` / `run.completed` / `run.failed`) — the other
    * half of what a headless integration needs, since the happy path (a pipeline whose `merger`

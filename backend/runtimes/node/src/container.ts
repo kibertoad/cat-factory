@@ -829,6 +829,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     notificationChannel,
     externalNotificationChannel,
     notificationWebhookSupport,
+    notificationSettingsRepository,
   } = buildNodeRealtimeDeps({
     env,
     config,
@@ -933,6 +934,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     executionEventPublisher,
     agentExecutor,
     notificationChannel,
+    notificationSettingsRepository,
     runLifecycleSink: notificationWebhookSupport?.runLifecycleSink,
     releaseHealthDeps,
     packageRegistryDeps,

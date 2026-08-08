@@ -152,6 +152,8 @@ export interface NodeCoreDepsBundle {
   executionEventPublisher: NodeRealtimeDepsResult['executionEventPublisher']
   agentExecutor: NodeRealtimeDepsResult['agentExecutor']
   notificationChannel: NodeRealtimeDepsResult['notificationChannel']
+  /** The notification manager's store, built beside the channels it routes. */
+  notificationSettingsRepository: NodeRealtimeDepsResult['notificationSettingsRepository']
   /** The run-lifecycle half of the same registered endpoint (absent ⇒ no webhook configured). */
   runLifecycleSink: RunLifecycleSink | undefined
   releaseHealthDeps: NodeAccountDepsResult['releaseHealthDeps']
@@ -289,6 +291,7 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     incidentEnrichmentDeps,
     accountSettings,
     resolveBinaryArtifactStore,
+    notificationSettingsRepository,
   } = bundle
   return {
     ...releaseHealthDeps,
@@ -476,6 +479,8 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
       'notificationRepository',
       (d) => new DrizzleNotificationRepository(d),
     ),
+    // The manager's store — the SAME instance the routed channels were built over.
+    notificationSettingsRepository,
     ...tasks.deps,
     // Recurring pipelines + the workspace tracker selection. The tracker provider
     // files the tech-debt pipeline's issue by resolving the *workspace's* connected

@@ -224,7 +224,8 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   and the node's inbound per-workspace subscription, whose handshake is handed to the SAME
   `gateways.realtime.upgrade` seam the browser stream uses), and `notifications/machineNotifications.ts` +
   `modules/notifications/NotificationRelayController.ts` (notification delivery through the org's
-  external transports), and `telemetry/machineTelemetry.ts` +
+  external transports; the ROUTED half — the notification manager, the per-channel gate and the
+  email transport — is built once for both facades in `notifications/notificationDelivery.ts`), and `telemetry/machineTelemetry.ts` +
   `modules/telemetry/TelemetryIngestController.ts` (the batch upload of a finished run's
   local-first telemetry; its own endpoint precisely because per-row remote writes are what the
   local-first bucket exists to prevent) beside `telemetry/machineTelemetryRead.ts` +

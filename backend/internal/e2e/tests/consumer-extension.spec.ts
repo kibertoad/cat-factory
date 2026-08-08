@@ -4,6 +4,7 @@ import {
   RUN_TERMINAL_TIMEOUT,
   createSimplePipeline,
   createTask,
+  openTaskFocusView,
   setFakeProfile,
   startRun,
   taskCard,
@@ -110,7 +111,7 @@ test.describe('consumer extension (dogfood)', () => {
     // window. The kind resolves its `resultView` (`acme:security-report`) through the merged
     // agent catalog (the consumer `agentKinds` slot), and `StepResultViewHost` mounts the
     // paired consumer component.
-    await card.click()
+    await openTaskFocusView(card)
     const auditorStep = page.locator(
       '[data-testid="pipeline-step"][data-step-kind="security-auditor"]',
     )

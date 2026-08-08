@@ -652,4 +652,15 @@ export {
   type EmailConnectionServiceDependencies,
   type EmailConnection,
 } from './modules/email/EmailConnectionService.js'
+export {
+  EmailNotificationChannel,
+  type EmailNotificationChannelDependencies,
+} from './modules/email/EmailNotificationChannel.js'
+export {
+  notificationDeepLink,
+  notificationTypeLabel,
+  renderNotificationEmail,
+  resolveRecipientAddresses,
+  type RenderedNotificationEmail,
+} from './modules/email/emailNotification.logic.js'
 export { AuditService, type AuditServiceDependencies } from './modules/audit/AuditService.js'

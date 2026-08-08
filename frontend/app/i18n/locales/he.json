@@ -2338,7 +2338,8 @@
         "shortcuts": "קיצורי מקלדת",
         "bugHunt": "ציד באגים",
         "toggleUiMode": "החלפת מצב ממשק",
-        "foundationalServices": "שירותי תשתית"
+        "foundationalServices": "שירותי תשתית",
+        "notificationSettings": "ניהול ניתוב התראות"
       },
       "keywords": {
         "newPipeline": "צינור סוכנים שרשרת",
@@ -2362,7 +2363,8 @@
         "bugHunt": "באג bug ציד מיון צבר פניות לא משויכות",
         "toggleUiMode": "ממשק מצב בסיסי מתקדם הצגה הסתרה",
         "tutorial": "מדריך סיור עזרה הדרכה לימוד",
-        "foundationalServices": "יכולת משותפת פלטפורמה שירות api חוזה openapi קטלוג"
+        "foundationalServices": "יכולת משותפת פלטפורמה שירות api חוזה openapi קטלוג",
+        "notificationSettings": "התראות אימייל ניתוב ערוצים תיבה"
       }
     },
     "integrationsHub": {
@@ -2432,6 +2434,10 @@
         "bugHunt": {
           "label": "ציד באגים",
           "description": "הערך את הבאגים הפתוחים והלא משויכים בלוח ובחר אחד לתיקון"
+        },
+        "notificationSettings": {
+          "label": "התראות",
+          "description": "בחרו אילו אירועים מגיעים לתיבה ולאימייל."
         }
       }
     },
@@ -4221,6 +4227,58 @@
     "confirmDisconnect": {
       "title": "לנתק את Slack?",
       "body": "התראות Slack ייפסקו עד לחיבור מחדש."
+    }
+  },
+  "notificationSettings": {
+    "panel": {
+      "title": "התראות",
+      "intro": "בחרו אילו אירועים הלוח הזה שולח ובאיזה ערוץ. מה שלא שיניתם משתמש בברירת המחדל.",
+      "inAppNote": "„באפליקציה” שולט רק בהתראה החיה. הכרטיס נשמר בכל מקרה ונשאר בתיבה לאחר רענון.",
+      "emailNote": "אימייל דורש שולח מחובר לחשבון (הגדרות החשבון). כברירת מחדל נשלחים רק אירועים בעלי השפעה גבוהה.",
+      "otherChannelsNote": "Slack ו-webhooks יוצאים בוחרים את רשימת האירועים שלהם במקום שבו מוגדר היעד.",
+      "openSlack": "ניתוב Slack"
+    },
+    "column": {
+      "event": "אירוע",
+      "inApp": "באפליקציה",
+      "email": "אימייל"
+    },
+    "action": {
+      "save": "שמירה",
+      "reset": "שחזור ברירות מחדל"
+    },
+    "toast": {
+      "saved": "ניתוב ההתראות נשמר"
+    },
+    "error": {
+      "load": "לא ניתן לטעון את הגדרות ההתראות",
+      "save": "לא ניתן לשמור את הגדרות ההתראות"
+    },
+    "unavailable": "פריסה זו אינה שומרת ניתוב התראות, ולכן כל האירועים משתמשים בברירת המחדל.",
+    "loadFailed": "לא ניתן היה לקרוא את ניתוב ההתראות של לוח זה, ולכן המתגים שלמטה אינם ההגדרות הנוכחיות שלו. נסו שוב לפני שתשנו משהו.",
+    "type": {
+      "merge_review": "סקירת מיזוג",
+      "pipeline_complete": "הצינור הושלם",
+      "ci_failed": "CI נכשל",
+      "test_failed": "הבדיקות נכשלו",
+      "requirement_review": "סקירת דרישות",
+      "clarity_review": "סקירת בהירות",
+      "release_regression": "רגרסיית שחרור",
+      "decision_required": "נדרשת החלטה",
+      "human_test_ready": "מוכן לבדיקה אנושית",
+      "visual_confirmation_ready": "מוכן לאישור חזותי",
+      "human_review": "ממתין לסקירת קוד",
+      "followup_pending": "מעקבים להכרעה",
+      "fork_decision_pending": "גישת מימוש",
+      "judge_review": "פסיקת סקירה",
+      "pr_review_ready": "ממצאי בדיקת PR",
+      "initiative": "עדכוני יוזמה",
+      "platform_health": "תקינות הפלטפורמה",
+      "infra_unreachable": "תקלות תשתית",
+      "budget_paused": "ריצות מושהות (תקציב)",
+      "budget_threshold": "אזהרת תקציב",
+      "key_drift": "סטיית מפתח ההצפנה",
+      "merge_tag_request": "בקשה לתיוג מאמץ הסקירה"
     }
   },
   "docInterview": {
