@@ -139,6 +139,19 @@ export function gitlabWebBaseFromApiBase(apiBase: string | undefined): string | 
 }
 
 /**
+ * The provider's `sameBoard` rule: whether two project paths name the same GitLab project.
+ *
+ * Case-SENSITIVE, unlike the default fold the intake matcher applies to every other source's
+ * board id. GitLab serves `Acme/web` and `acme/web` as two DIFFERENT projects, so folding case
+ * would admit a pushed delivery from one to a schedule scoped to the other, and under the
+ * `per-ticket` dispatch mode that is a block and an agent run on a stranger's issue. Same
+ * asymmetry, and same reason for it living on the source, as {@link gitlabIssueInRepoScope}.
+ */
+export function gitlabSameProject(a: string, b: string): boolean {
+  return a.trim() === b.trim()
+}
+
+/**
  * The provider's `TaskRepoScopeRules` matcher: whether a STORED external id belongs to the
  * scoped project.
  *

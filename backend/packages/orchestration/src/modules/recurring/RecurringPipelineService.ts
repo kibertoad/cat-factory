@@ -524,11 +524,15 @@ export class RecurringPipelineService {
   async triggerForIssueEvent(workspaceId: string, event: TrackerIssueEvent): Promise<number> {
     const schedules = await this.schedules.list(workspaceId)
     const now = this.clock.now()
+    // Hoisted: the delivery is one source's, so the provider whose board-equality rule judges it
+    // is invariant across every schedule in the loop. Absent (no task sources wired) leaves the
+    // matcher on its case-folding default.
+    const provider = this.taskConnectionService?.providerFor(event.source)
     let fired = 0
     for (const schedule of schedules) {
       if (!schedule.enabled || !schedule.issueIntake) continue
       const dispatch = dispatchOf(schedule.issueIntake)
-      const verdict = judgeIssueEventForIntake(schedule.issueIntake, event)
+      const verdict = judgeIssueEventForIntake(schedule.issueIntake, event, provider)
       if (!dispatchAdmits(verdict, dispatch)) {
         // A withheld PER-TICKET dispatch is REPORTED, never merely skipped. A per-ticket schedule
         // is on-demand, so no cadence sweep will pick the ticket up later: "the delivery could not

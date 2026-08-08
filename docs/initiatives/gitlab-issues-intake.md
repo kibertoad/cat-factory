@@ -1,6 +1,7 @@
 # Initiative: GitLab Issues as a task source
 
-**Status:** in progress (read path + both predicate scans landed; push and writeback are open) ·
+**Status:** in progress (read path, both predicate scans, push intake and writeback landed;
+conformance + the docs sweep are open) ·
 **Owner:** core · **Started:** 2026-08-05
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
@@ -136,8 +137,9 @@ tracker rather than a one-PR change.
 | 3c  | **Registry-driven scope + settings surface** (review follow-up: three `github` hard-codings)            | 🟩 done | this |
 | 4   | `searchIssues` (recurring `bug-intake`) + the `board.gitlabProject` scope field                         | 🟩 done | this |
 | 5   | `listBoards` + `listBugCandidates` (interactive bug hunt), ONE vendor call per scan                     | 🟩 done | this |
-| 6   | Webhook adapter: `X-Gitlab-Token` verification on the RAW body, push intake + ticket replies            | ⬜ todo |      |
-| 7   | Ticket writeback (`tracker` step + review-question posts) against a GitLab issue                        | ⬜ todo |      |
+| 6   | Webhook adapter: `X-Gitlab-Token` verification on the RAW body, push intake + ticket replies            | 🟩 done | this |
+| 7a  | Writeback as a `TaskSourceProvider` capability, GitLab implemented (PR notices, pickup, Q&A, acks)      | 🟩 done | this |
+| 7b  | The `tracker` STEP filing a new GitLab issue (`TicketTrackerProvider`, still GitHub/Jira/Linear)        | ⬜ todo |      |
 | 8   | Conformance: the task-source suite parameterised over the new provider on both facades                  | ⬜ todo |      |
 | 9   | Docs sweep: root README "What it supports", `vcs-providers.md`, `gitlab-parity.md` cross-links          | ⬜ todo |      |
 
@@ -279,6 +281,44 @@ this before slice 6 (webhooks) or 7 (writeback).
   are case-SENSITIVE, the same asymmetry `repoScope` states). It is unreachable until a GitLab
   webhook adapter exists, and the fix belongs with it: thread the comparison off the provider's
   own `repoScope` rules rather than guessing per leg.
+
+## Findings (slices 6-7a: push and writeback)
+
+- **The writeback was not a GitLab gap, it was a SEAM gap, and fixing it as one was cheaper than
+  fixing it as four.** `IssueWritebackService` dispatched on `source === 'github' | 'jira' |
+'linear'`, so "GitLab has no writeback" and "a deployment-registered tracker can never have one"
+  were the same bug wearing two labels. It is now `TaskSourceProvider.writeback`, the outbound
+  mirror of the `webhook` capability: the service keeps the shared half (settings gating, the
+  linked-issue fan-out and its isolation, the per-source connection read, the parked-review
+  idempotency marker) and every vendor detail rides its own provider. Both facades lost their
+  GitHub writeback seams entirely (`commentOnGitHubIssue` / `closeGitHubIssue` /
+  `labelGitHubIssue`), which were a SECOND installation resolution living beside the source's own.
+- **`GitHubClient.comment` cannot carry an issue comment on GitLab, and the failure looks like
+  success.** The two are one call only on GitHub, where issues and pull requests share a number
+  space and a comment API. GitLab gives them separate `iid` spaces and separate notes endpoints,
+  and `vcsBackedGitHubClient` maps `comment` to MERGE-REQUEST notes (that is what the gates use it
+  for), so an issue writeback routed through it lands on whatever MR happens to carry the number:
+  a comment on a stranger's work that still reports as delivered. The port now declares
+  `commentOnIssue` beside it (plus `applyIssueLabel` on `VcsClient`), both implemented on the
+  GitLab client and forwarded, and the shared repo-backed adapter REFUSES rather than falling back
+  when a client lacks it.
+- **A workspace with no connection now REFUSES instead of returning quietly, and that is a
+  behaviour change worth knowing.** The old Jira/Linear legs returned normally when the workspace
+  had no stored credentials, so the parked-review echo recorded its idempotency marker for a
+  comment the vendor never saw: the questions were swallowed and the retry permanently suppressed.
+  Every adapter throws now, which the fire-and-forget hooks still swallow (with a log) and the
+  question echo records as `failed`, i.e. retried.
+- **The board comparison the previous slice flagged is fixed at the source rather than per leg.**
+  `TaskSourceProvider.sameBoard` is declared by GitLab (case-sensitive project paths) and defaulted
+  to the case fold everywhere else. Threading it off `repoScope`, as slice 5 suggested, would not
+  have worked: `repoScope.matches` compares an EXTERNAL ID to a repo scope, where this compares two
+  board ids, and Jira and Linear have boards with no `repoScope` at all.
+- **What the conformance slice inherits.** Both facades build the writeback from the same
+  expression that registers the providers, so production cannot desync them, but a test harness
+  that OVERRIDES `taskSourceProviders` re-points only the tasks module: the writeback keeps the
+  config-built array. Wiring it over the FINAL dependency object (the "post-override wiring over
+  the FINAL provider" pattern both facades already use for `envConfigRepairer`) is the prerequisite
+  for driving a writeback assertion through the conformance fakes, and belongs with slice 8.
 
 When the committed scope completes, convert this tracker into a numbered ADR under
 `backend/docs/adr/` and `git rm` this file, per CLAUDE.md.

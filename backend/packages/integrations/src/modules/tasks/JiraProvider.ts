@@ -15,6 +15,7 @@ import {
 import { JIRA_DESCRIPTOR } from './jira.logic.js'
 import * as jiraLogic from './jira.logic.js'
 import { jiraWebhookAdapter } from './webhook/adapters.js'
+import { jiraWriteback } from './writeback/jira.writeback.js'
 
 // JiraProvider: the task-source provider for Jira Cloud. It authenticates with
 // HTTP Basic (account email + API token, the same scheme as Confluence), fetches
@@ -78,6 +79,12 @@ export class JiraProvider implements TaskSourceProvider {
    * `backend/docs/adr/0032-tracker-webhook-intake.md`.
    */
   readonly webhook = jiraWebhookAdapter
+  /**
+   * Outbound writeback (comment / resolve / claim), the mirror of the webhook capability above:
+   * the run's progress is written back onto the linked Jira issue, and a reporter's answers are
+   * acknowledged on the ticket they arrived on.
+   */
+  readonly writeback = jiraWriteback
   readonly descriptor = JIRA_DESCRIPTOR
 
   normalizeConnection(input: TaskCredentials): NormalizedTaskConnection {

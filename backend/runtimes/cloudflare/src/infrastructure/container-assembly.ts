@@ -584,6 +584,9 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     clock,
     logger,
   })
+  // Resolved before the literal below rather than spread inline, because the recurring selector's
+  // issue-writeback provider dispatches through these same providers (see the spread site).
+  const tasksDeps = selectTasksDeps(env, config, db, clock, idGenerator)
 
   return {
     // The structured logger every domain service emits through. Must be wired on BOTH facades
@@ -699,9 +702,19 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     ...selectSlackDeps(config, db),
     ...selectEmailInvitationDeps(config, db),
     ...selectTraceSink(config),
-    ...selectRecurringDeps(env, config, db, clock, idGenerator),
+    // Ordered, not merely spread: the writeback provider `selectRecurringDeps` builds dispatches
+    // through the task sources themselves, so it is handed the SAME array `selectTasksDeps`
+    // registers rather than a second wiring of the same vendors.
+    ...selectRecurringDeps(
+      env,
+      config,
+      db,
+      clock,
+      idGenerator,
+      tasksDeps.taskSourceProviders ?? [],
+    ),
     ...selectDocumentsDeps(env, config, db, clock, idGenerator),
-    ...selectTasksDeps(env, config, db, clock, idGenerator),
+    ...tasksDeps,
     ...selectRequirementsDeps(env, config, db),
     ...selectSandboxDeps(env.SANDBOX_DB),
     ...selectEnvironmentsDeps(env, config, db),

@@ -164,9 +164,17 @@ export { judgeIssueEventForIntake } from './modules/tasks/intakeMatch.logic.js'
 export type { IntakeMatchVerdict, IntakePredicateName } from './modules/tasks/intakeMatch.logic.js'
 export {
   githubIssuesWebhookAdapter,
+  gitlabIssuesWebhookAdapter,
   jiraWebhookAdapter,
   linearWebhookAdapter,
 } from './modules/tasks/webhook/adapters.js'
+export {
+  DEFAULT_IN_PROGRESS_LABEL,
+  createRepoIssueWriteback,
+  type RepoIssueWritebackDependencies,
+} from './modules/tasks/writeback/repo-issue.writeback.js'
+export { jiraWriteback } from './modules/tasks/writeback/jira.writeback.js'
+export { linearWriteback } from './modules/tasks/writeback/linear.writeback.js'
 export {
   MapTaskSourceRegistry,
   type TaskContextView,
@@ -192,7 +200,6 @@ export * as linearCreateLogic from './modules/tracker/linear.create.logic.js'
 export * as linearWritebackLogic from './modules/tracker/linear.writeback.logic.js'
 export { extractReferences, type ExtractedReferences } from './modules/corpus/references.logic.js'
 export {
-  DEFAULT_IN_PROGRESS_LABEL,
   IssueWritebackService,
   type IssueWritebackServiceDependencies,
 } from './modules/writeback/IssueWritebackService.js'

@@ -10,6 +10,7 @@ import type {
   TrackerBoard,
 } from '../domain/types.js'
 import type { TaskSourceWebhookAdapter } from './tracker-webhook.js'
+import type { TaskSourceWritebackAdapter } from './task-source-writeback.js'
 
 // Port for a single task source (Jira, …). A provider is the only place that
 // knows a source's specifics: how to validate its credentials, how to turn user
@@ -336,6 +337,31 @@ export interface TaskSourceProvider {
    * receiver owns only the transport (raw body, ack fast, hand off to the facade's queue).
    */
   readonly webhook?: TaskSourceWebhookAdapter
+  /**
+   * Outbound-writeback capability: comment on / resolve / claim one of this source's issues, so
+   * the engine can write a run's progress back where the work was requested. Optional: a
+   * provider without it never receives a writeback call, which is the outbound counterpart of a
+   * provider without {@link TaskSourceProvider.webhook} never receiving a delivery.
+   *
+   * It rides the provider for the same reason the webhook adapter does: the writeback was a
+   * per-vendor `if`-chain in one service, so a source outside the chain (GitLab Issues, anything
+   * a deployment registers) got the whole intake path and none of the loop that answers it.
+   */
+  readonly writeback?: TaskSourceWritebackAdapter
+  /**
+   * Whether two of this source's BOARD ids name the same board (a Jira project key, a Linear team
+   * id, an `owner/repo` slug, a GitLab project path). Absent ⇒ compared case-INSENSITIVELY, which
+   * is right for every vendor that folds case itself and harmless for an opaque id.
+   *
+   * Declared here because the answer is the source's, exactly as {@link TaskRepoScopeRules.matches}
+   * is: GitHub owner/repo names and Jira project keys fold case, GitLab project paths do NOT, and
+   * a shared comparator has to pick one. Getting it wrong is invisible rather than loud: the
+   * caller is the push-intake matcher, so a folded GitLab comparison silently admits a delivery
+   * from `Acme/web` to a schedule scoped to `acme/web`, two different projects at the vendor,
+   * and under the `per-ticket` dispatch mode that is a real block and a real agent run on a
+   * stranger's issue.
+   */
+  sameBoard?(a: string, b: string): boolean
 }
 
 /** A lookup of the providers wired for this deployment, keyed by source. */

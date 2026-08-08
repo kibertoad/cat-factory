@@ -4,8 +4,15 @@ import type {
   TrackerIssueEvent,
 } from '@cat-factory/kernel'
 import { githubIssueExternalId } from '../github-issues.logic.js'
+import { parseGitLabIssueRef } from '../gitlab-issues.logic.js'
 import { adfToMarkdown } from '../jira.logic.js'
-import { parseJsonBody, readObject, readString, verifyHmacSignature } from './hmac.js'
+import {
+  parseJsonBody,
+  readObject,
+  readString,
+  verifyHmacSignature,
+  verifySharedToken,
+} from './hmac.js'
 
 // The per-vendor half of tracker webhook ingest: verify a delivery's signature and map its
 // payload onto the neutral `TrackerWebhookEvent`. Everything transport-shaped (raw body, fast
@@ -30,6 +37,9 @@ const JIRA_SCHEME = { header: 'x-hub-signature', prefix: 'sha256=' }
 
 /** Linear deliveries: bare HMAC-SHA256 hex in `Linear-Signature` (no scheme prefix). */
 const LINEAR_SCHEME = { header: 'linear-signature', prefix: '' }
+
+/** GitLab deliveries: the shared secret itself, echoed in `X-Gitlab-Token` (no signature). */
+const GITLAB_TOKEN_HEADER = 'x-gitlab-token'
 
 /**
  * GitHub Issues.
@@ -227,6 +237,122 @@ export const linearWebhookAdapter: TaskSourceWebhookAdapter = {
     }
     return null
   },
+}
+
+/**
+ * GitLab.
+ *
+ * Two differences from the three above, both load-bearing:
+ *
+ *  - **There is no signature.** GitLab echoes the caller-chosen secret in `X-Gitlab-Token`, so
+ *    verification is a constant-time compare of that header (see {@link verifySharedToken}).
+ *  - **The payload is keyed by `object_kind` in the BODY**, like Jira's `webhookEvent`, so the
+ *    delivery's `eventName` header is ignored here.
+ *
+ * The external id is built through {@link parseGitLabIssueRef} rather than concatenated, so a
+ * project path the id grammar cannot express (one GitLab would serve but our parser does not
+ * admit) maps to `null` (an unrecognised delivery, which the receiver acks) instead of minting an id that no
+ * imported row can ever match.
+ */
+export const gitlabIssuesWebhookAdapter: TaskSourceWebhookAdapter = {
+  verify: async (secret, delivery) =>
+    verifySharedToken(secret, delivery.headers, GITLAB_TOKEN_HEADER),
+  parse(delivery) {
+    const payload = parseJsonBody(delivery.raw)
+    if (!payload) return null
+    const project = readString(payload, 'project', 'path_with_namespace')
+    if (!project) return null
+    const kind = readString(payload, 'object_kind')
+
+    if (kind === 'note') {
+      // Notes cover merge requests, commits and snippets too; only an issue note drives the loop.
+      // (A reply command typed on an MR therefore does nothing, exactly as on GitHub, where the
+      // shared issue/PR number space makes the same comment simply find no linked task.)
+      if (readString(payload, 'object_attributes', 'noteable_type') !== 'Issue') return null
+      const externalId = gitlabExternalId(project, readString(payload, 'issue', 'iid'))
+      const commentId = readString(payload, 'object_attributes', 'id')
+      const body = readString(payload, 'object_attributes', 'note')
+      if (!externalId || !commentId || !body) return null
+      return {
+        kind: 'comment',
+        source: 'gitlab',
+        externalId,
+        commentId,
+        body,
+        author: gitlabAuthor(readObject(payload, 'user')),
+      }
+    }
+
+    if (kind === 'issue') {
+      const attrs = readObject(payload, 'object_attributes')
+      const externalId = gitlabExternalId(project, readString(attrs, 'iid'))
+      if (!externalId) return null
+      return {
+        kind: 'issue',
+        source: 'gitlab',
+        externalId,
+        action: gitlabIssueAction(readString(attrs, 'action'), readString(attrs, 'state')),
+        title: readString(attrs, 'title') ?? '',
+        // GitLab labels carry `title`, not the `name` the other three read. Both the
+        // top-level list and the one nested on the issue are sent depending on the instance's
+        // version, so read whichever is populated rather than picking one and reporting an
+        // unlabelled issue (which an intake label predicate would read as `unconfirmed`).
+        labels: readTitleList(payload, 'labels').length
+          ? readTitleList(payload, 'labels')
+          : readTitleList(attrs, 'labels'),
+        // GitLab's issue TYPE vocabulary (`issue`/`incident`/`test_case`/`task`) has no member
+        // meaning "bug", which is why `GitLabIssuesProvider` declares `issueType` among its
+        // `ignoredIntakePredicates` and omits it from the vendor query. Reporting the payload's
+        // type here would make the push path evaluate a predicate the polling path ignores, so
+        // the same delivery would be admitted by a schedule fire and refused by a webhook.
+        issueType: null,
+        // The full path with namespace, exactly what `IssueIntakeQuery.board.gitlabProject`
+        // carries and what `listBoards` hands the picker.
+        board: project,
+        url: readString(attrs, 'url'),
+      }
+    }
+    return null
+  },
+}
+
+/**
+ * The canonical `group/sub/project#iid` id for a delivery's project path + issue iid, or null when
+ * either is missing or the pair does not parse as a reference we could have imported.
+ */
+function gitlabExternalId(project: string, iid: string | null): string | null {
+  if (!iid) return null
+  return parseGitLabIssueRef(`${project}#${iid}`)
+}
+
+/** GitLab's issue actions collapsed onto the neutral lifecycle triple. */
+function gitlabIssueAction(
+  action: string | null,
+  state: string | null,
+): TrackerIssueEvent['action'] {
+  if (action === 'open') return 'created'
+  // `close` is the explicit action; the state check catches an `update` delivered for an issue
+  // that is already closed, which must not be re-offered to intake as live work.
+  if (action === 'close' || state === 'closed') return 'closed'
+  return 'updated'
+}
+
+function gitlabAuthor(user: Record<string, unknown> | null): TrackerCommentAuthor {
+  return {
+    id: readString(user, 'id'),
+    handle: readString(user, 'username') ?? readString(user, 'name'),
+    email: readString(user, 'email'),
+    // GitLab's webhook `user` object carries no bot flag, so an integration's own notes are
+    // caught by the identity allow-list rather than here, and reported honestly as `false` instead
+    // of guessed at from the username, exactly as on Linear.
+    bot: false,
+  }
+}
+
+/** Read a list of `{ title }` objects (GitLab labels) as plain names. */
+function readTitleList(payload: unknown, ...path: string[]): string[] {
+  const list = readList(payload, path)
+  return list.map((entry) => readString(entry, 'title')).filter((v): v is string => v != null)
 }
 
 /** GitHub's issue actions collapsed onto the neutral lifecycle triple. */

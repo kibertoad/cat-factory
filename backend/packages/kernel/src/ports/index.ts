@@ -373,6 +373,11 @@ export type {
   TaskSourceProvider,
   TaskSourceRegistry,
 } from './task-source.js'
+export type {
+  TaskInProgressMark,
+  TaskSourceWritebackAdapter,
+  TaskWritebackContext,
+} from './task-source-writeback.js'
 export type { BugHuntAssessor, BugHuntSubject } from './bug-hunt.js'
 export type {
   BuiltinTaskSourceKind,

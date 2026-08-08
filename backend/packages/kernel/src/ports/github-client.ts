@@ -930,6 +930,28 @@ export interface GitHubClient {
     body: string,
   ): Promise<void>
   /**
+   * Add a comment to an ISSUE specifically, by its issue number.
+   *
+   * It exists because {@link GitHubClient.comment} is the same call as this one ONLY on GitHub,
+   * where issues and pull requests share one number space and one comment API. They are NOT the
+   * same anywhere else: a GitLab issue and a merge request have separate `iid` spaces and separate
+   * notes endpoints, so the neutral `comment(number)` has to pick one, and it picks the merge
+   * request (that is what the gates use it for). An issue writeback routed through it would
+   * therefore land on whatever MR happens to carry the same number: a comment on a stranger's
+   * work that still reads as delivered.
+   *
+   * Optional, and a caller does NOT probe for it: whether a vendor separates the two is a fact
+   * about the vendor, so the SOURCE declares which method carries its issue comments (see the
+   * repo-backed writeback adapter in `@cat-factory/integrations`) and a client that declares
+   * `dedicated` and lacks this method is refused rather than silently falling back.
+   */
+  commentOnIssue?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    issueNumber: number,
+    body: string,
+  ): Promise<void>
+  /**
    * Merge one branch into another via the repo Merges API (`POST /repos/.../merges`),
    * server-side — no checkout. Used by the human-testing gate's "pull latest main into the
    * branch" action: `base` is the branch to merge INTO (the PR head branch), `head` is the

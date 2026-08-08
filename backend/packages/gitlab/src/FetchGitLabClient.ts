@@ -865,6 +865,43 @@ export class FetchGitLabClient implements VcsClient {
     })
   }
 
+  /**
+   * Comment on an ISSUE, which on GitLab is a different endpoint from {@link comment} (merge
+   * request notes) over a different `iid` space. See the port doc for why they cannot be one
+   * call. Both are "notes"; only the noteable differs.
+   */
+  async commentOnIssue(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    issueNumber: number,
+    body: string,
+  ): Promise<void> {
+    const params = new URLSearchParams({ body })
+    await this.request(
+      `/projects/${projectPath(ref)}/issues/${issueNumber}/notes?${params.toString()}`,
+      { connection, method: 'POST' },
+    )
+  }
+
+  /**
+   * Apply a label to an issue. `add_labels` is additive server-side (unlike `labels`, which
+   * REPLACES the whole set), so an existing label survives the call and re-applying one is a
+   * no-op. GitLab also creates a project label on first use, so there is no create-then-attach
+   * pair to mirror the GitHub client's.
+   */
+  async applyIssueLabel(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    number: number,
+    label: string,
+  ): Promise<void> {
+    const params = new URLSearchParams({ add_labels: label })
+    await this.request(`/projects/${projectPath(ref)}/issues/${number}?${params.toString()}`, {
+      connection,
+      method: 'PUT',
+    })
+  }
+
   async openPullRequest(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,

@@ -105,6 +105,22 @@ describe('judgeIssueEventForIntake', () => {
     it('does not evaluate a board the config left unscoped', () => {
       expect(outcome(config({}, {}), event({ board: null }))).toBe('match')
     })
+
+    it("defers to the SOURCE's own equality rule where it declares one", () => {
+      // GitLab project paths are case-SENSITIVE at the vendor, so the default fold above would
+      // admit a delivery from `Acme/web` to a schedule scoped to `acme/web`: two different
+      // projects, and under per-ticket dispatch a real run on a stranger's issue.
+      const cfg = {
+        source: 'gitlab',
+        board: { gitlabProject: 'acme/web' },
+        predicates: {},
+      } as IssueIntakeConfig
+      const delivery = event({ source: 'gitlab', board: 'Acme/web' })
+      expect(judgeIssueEventForIntake(cfg, delivery).outcome).toBe('match')
+      expect(
+        judgeIssueEventForIntake(cfg, delivery, { sameBoard: (a, b) => a === b }).outcome,
+      ).toBe('miss')
+    })
   })
 
   describe('a predicate the delivery cannot answer', () => {
