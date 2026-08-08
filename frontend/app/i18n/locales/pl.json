@@ -530,7 +530,8 @@
       "description": {
         "binary_generators_unreachable": "Nie udało się teraz odczytać integracji generatywnych tego wdrożenia, więc uruchomienie nie wystartowało. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
         "foundational_builtins_unreachable": "Nie udało się teraz odczytać wbudowanych usług podstawowych tego wdrożenia. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
-        "connection_credentials_unreadable": "Nie udało się odczytać zapisanych poświadczeń tego połączenia. Jeśli to wdrożenie ma dostęp do usługi przechowującej jego klucz, połącz źródło ponownie, aby je zastąpić; w przeciwnym razie spróbuj ponownie, gdy to połączenie wróci."
+        "connection_credentials_unreadable": "Nie udało się odczytać zapisanych poświadczeń tego połączenia. Jeśli to wdrożenie ma dostęp do usługi przechowującej jego klucz, połącz źródło ponownie, aby je zastąpić; w przeciwnym razie spróbuj ponownie, gdy to połączenie wróci.",
+        "vcs_capability_unsupported": "Dostawca kontroli źródeł połączony z tą przestrzenią roboczą nie obsługuje tej operacji. Nic nie jest źle skonfigurowane i zmiana ustawień nie pomoże: dla tego dostawcy ta operacja jest niedostępna."
       }
     },
     "action": {
@@ -2020,8 +2021,11 @@
           "fs": "Lokalny system plików",
           "s3": "Amazon S3 / zgodny z S3",
           "r2": "Cloudflare R2",
-          "db": "Baza danych Postgres"
+          "db": "Baza danych Postgres",
+          "custom": "Własny magazyn (to wdrożenie)"
         },
+        "unregisteredStore": "{store} (niezarejestrowany w tym wdrożeniu)",
+        "unregisteredStoreWarning": "To konto zapisuje artefakty w „{store}”, którego to wdrożenie nie rejestruje. Nic nie jest zapisywane, dopóki nie wybierzesz zarejestrowanego magazynu lub magazyn nie zostanie ponownie zarejestrowany w kodzie.",
         "basePath": "Ścieżka bazowa (domyślnie: .file-storage)",
         "region": "Region (np. us-east-1)",
         "bucket": "Bucket",
@@ -2334,7 +2338,8 @@
         "shortcuts": "Skróty klawiszowe",
         "bugHunt": "Polowanie na błędy",
         "toggleUiMode": "Zmień tryb interfejsu",
-        "foundationalServices": "Usługi fundamentalne"
+        "foundationalServices": "Usługi fundamentalne",
+        "notificationSettings": "Zarządzaj routingiem powiadomień"
       },
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
@@ -2358,7 +2363,8 @@
         "bugHunt": "błąd bug polowanie triage zaległości zgłoszenia nieprzypisane",
         "toggleUiMode": "interfejs tryb podstawowy zaawansowany pokaż ukryj",
         "tutorial": "samouczek przewodnik pomoc nauka wprowadzenie",
-        "foundationalServices": "wspólna możliwość platforma usługa api kontrakt openapi katalog"
+        "foundationalServices": "wspólna możliwość platforma usługa api kontrakt openapi katalog",
+        "notificationSettings": "powiadomienia e-mail routing kanały skrzynka"
       }
     },
     "integrationsHub": {
@@ -2428,6 +2434,10 @@
         "bugHunt": {
           "label": "Polowanie na błędy",
           "description": "Oceń otwarte, nieprzypisane błędy z tablicy i wybierz jeden do naprawy"
+        },
+        "notificationSettings": {
+          "label": "Powiadomienia",
+          "description": "Wybierz, które zdarzenia trafiają do skrzynki i na e-mail."
         }
       }
     },
@@ -4219,6 +4229,58 @@
       "body": "Powiadomienia Slack zostaną wstrzymane do ponownego połączenia."
     }
   },
+  "notificationSettings": {
+    "panel": {
+      "title": "Powiadomienia",
+      "intro": "Wybierz, które zdarzenia ta tablica dostarcza i którym kanałem. Nietknięte pozycje używają wartości domyślnej.",
+      "inAppNote": "„W aplikacji” steruje tylko powiadomieniem na żywo. Karta i tak jest zapisywana i pozostaje w skrzynce po odświeżeniu.",
+      "emailNote": "E-mail wymaga nadawcy połączonego z kontem (Ustawienia konta). Domyślnie wysyłane są tylko zdarzenia o dużym wpływie.",
+      "otherChannelsNote": "Slack i wychodzące webhooki wybierają własną listę zdarzeń tam, gdzie konfiguruje się ich miejsce docelowe.",
+      "openSlack": "Routing Slacka"
+    },
+    "column": {
+      "event": "Zdarzenie",
+      "inApp": "W aplikacji",
+      "email": "E-mail"
+    },
+    "action": {
+      "save": "Zapisz",
+      "reset": "Przywróć domyślne"
+    },
+    "toast": {
+      "saved": "Zapisano routing powiadomień"
+    },
+    "error": {
+      "load": "Nie udało się wczytać ustawień powiadomień",
+      "save": "Nie udało się zapisać ustawień powiadomień"
+    },
+    "unavailable": "To wdrożenie nie przechowuje routingu powiadomień, więc wszystkie zdarzenia używają wartości domyślnej.",
+    "loadFailed": "Nie udało się odczytać routingu powiadomień tej tablicy, więc przełączniki poniżej nie są jej bieżącymi ustawieniami. Spróbuj ponownie przed wprowadzeniem zmian.",
+    "type": {
+      "merge_review": "Przeglad scalenia",
+      "pipeline_complete": "Pipeline ukonczony",
+      "ci_failed": "Niepowodzenie CI",
+      "test_failed": "Niepowodzenie testow",
+      "requirement_review": "Przeglad wymagan",
+      "clarity_review": "Przeglad klarownosci",
+      "release_regression": "Regresja wydania",
+      "decision_required": "Wymagana decyzja",
+      "human_test_ready": "Gotowe do testow przez czlowieka",
+      "visual_confirmation_ready": "Gotowe do potwierdzenia wizualnego",
+      "human_review": "Oczekuje na przegląd kodu",
+      "followup_pending": "Działania do rozstrzygnięcia",
+      "fork_decision_pending": "Podejście do implementacji",
+      "judge_review": "Werdykt przeglądu",
+      "pr_review_ready": "Uwagi z przeglądu PR",
+      "initiative": "Aktualizacje inicjatywy",
+      "platform_health": "Kondycja platformy",
+      "infra_unreachable": "Awarie infrastruktury",
+      "budget_paused": "Uruchomienia wstrzymane (budżet)",
+      "budget_threshold": "Ostrzeżenie o budżecie",
+      "key_drift": "Rozbieżność klucza szyfrowania",
+      "merge_tag_request": "Prośba o nakład przeglądu"
+    }
+  },
   "docInterview": {
     "title": "Dopracuj dokument",
     "subtitle": "Odpowiedz na pytania ankietera, aby ukształtować dokument",
@@ -5597,6 +5659,19 @@
     "history": {
       "heading": "Historia ({count} runda) | Historia ({count} rundy) | Historia ({count} rund)",
       "fixRequested": "Poproszono o poprawkę"
+    },
+    "design": {
+      "summary": "1 klatka z połączonego projektu. | {count} klatki z połączonego projektu. | Klatek z połączonego projektu: {count}.",
+      "dropped": "Jeszcze 1 nie jest tu pokazana. | Jeszcze {count} nie są tu pokazane. | Nie pokazano tu jeszcze {count}.",
+      "gapDropped": "1 jej klatka nie jest tu pokazana. | {count} jej klatki nie są tu pokazane. | Nie pokazano tu {count} jej klatek.",
+      "gapLine": "{title}:",
+      "gap": {
+        "partial": "zachowano tylko część jego klatek; odśwież dokument, aby spróbować ponownie.",
+        "failed": "przy ostatnim imporcie nie udało się pobrać jego klatek; odśwież dokument, aby spróbować ponownie.",
+        "none": "nie ma klatek do pokazania.",
+        "storage_unavailable": "podczas importu nie skonfigurowano magazynu obrazów, więc nic nie pobrano.",
+        "not_retained": "nie ma dla niego zapisanych obrazów. Jego źródło może nie generować klatek albo został zaimportowany, zanim klatki były zachowywane; ponowny import to rozstrzygnie."
+      }
     }
   },
   "outcome": {
@@ -5843,6 +5918,7 @@
       },
       "actual": "Rzeczywiste",
       "reference": "Wzorzec",
+      "fromLinkedDesign": "· z połączonego projektu",
       "actualAlt": "{view} (rzeczywiste)",
       "referenceAlt": "{view} (wzorzec)",
       "replace": "Zamień",

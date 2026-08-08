@@ -9,13 +9,20 @@ import {
 } from '@cat-factory/integrations'
 import { wireIncidentEnrichment, wireReleaseHealthProvider } from '@cat-factory/gates'
 import type { CoreDependencies } from '@cat-factory/orchestration'
-import type { AppCaches, Clock, IdGenerator, ProviderRegistry } from '@cat-factory/kernel'
+import type {
+  AppCaches,
+  BinaryStoreRegistry,
+  Clock,
+  IdGenerator,
+  ProviderRegistry,
+} from '@cat-factory/kernel'
 import {
   type AppConfig,
   type BuildBlobBackend,
   WebCryptoSecretCipher,
   logger,
   makeResolveBinaryArtifactStore,
+  withRegisteredBinaryStores,
 } from '@cat-factory/server'
 import type { ContentStorageBackend, ContentStorageCapability } from '@cat-factory/contracts'
 import { S3BinaryBlobBackend } from '@cat-factory/provider-s3'
@@ -46,6 +53,12 @@ export interface NodeAccountDepsInput {
    */
   secretDelegate?: CoreDependencies['secretDelegate']
   contentStorageDefaultBackend?: ContentStorageBackend
+  /**
+   * The deployment's own binary artifact stores, registered in code. Offered in the account
+   * settings picker as `custom` and built per account by the resolver below; absent ⇒ this
+   * deployment registers none and the picker offers the built-in backends alone.
+   */
+  binaryStoreRegistry?: BinaryStoreRegistry
   caches?: AppCaches
 }
 
@@ -68,6 +81,7 @@ export function buildNodeAccountDeps(input: NodeAccountDepsInput) {
     providerRegistry,
     packageRegistrySecretCipher,
     contentStorageDefaultBackend,
+    binaryStoreRegistry,
     caches,
   } = input
 
@@ -75,10 +89,16 @@ export function buildNodeAccountDeps(input: NodeAccountDepsInput) {
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI (no env vars):
   // the metadata always lives in Postgres; the bytes go to the account's chosen blob backend
   // (`fs` → the local filesystem; `db` → a Postgres `bytea` table; `s3` → an S3 bucket).
-  const contentStorageCapability: ContentStorageCapability = {
-    supportedBackends: ['off', 'fs', 's3', 'db'],
-    defaultBackend: contentStorageDefaultBackend ?? 'off',
-  }
+  // The runtime's own backends, plus whatever stores the DEPLOYMENT registered in code (which
+  // add the `custom` option, and only when there is at least one to select).
+  const contentStorageCapability: ContentStorageCapability = withRegisteredBinaryStores(
+    {
+      supportedBackends: ['off', 'fs', 's3', 'db'],
+      defaultBackend: contentStorageDefaultBackend ?? 'off',
+      customStores: [],
+    },
+    binaryStoreRegistry,
+  )
   const buildBlobBackend: BuildBlobBackend = (kind, opts) => {
     switch (kind) {
       case 'fs':
@@ -198,6 +218,7 @@ export function buildNodeAccountDeps(input: NodeAccountDepsInput) {
     clock,
     buildBlobBackend,
     defaultBackend: contentStorageCapability.defaultBackend,
+    ...(binaryStoreRegistry ? { binaryStoreRegistry } : {}),
     logger,
   })
 

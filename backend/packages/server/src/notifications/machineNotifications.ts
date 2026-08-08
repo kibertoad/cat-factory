@@ -1,4 +1,8 @@
-import type { Notification, NotificationChannel } from '@cat-factory/kernel'
+import type {
+  Notification,
+  NotificationChannel,
+  NotificationDeliveryReason,
+} from '@cat-factory/kernel'
 
 // Mothership-mode notification DELIVERY delegation (docs/initiatives/mothership-mode.md, PR 4).
 //
@@ -29,10 +33,19 @@ import type { Notification, NotificationChannel } from '@cat-factory/kernel'
  * from its own store and delivers THAT. A compromised node token can therefore only ask the
  * mothership to re-deliver a notification that already exists in an account it can already reach —
  * it can never inject forged text into the org's Slack channel.
+ *
+ * The one thing the row does NOT carry is `reason`: which lifecycle edge this delegation is for.
+ * The mothership cannot re-derive it, because the two edges that decide whether its alert
+ * transports fire are indistinguishable in the persisted row (an escalation and a fresh raise are
+ * both `open`). Left off the wire, every dismissal a laptop made would reach the org's Slack as a
+ * fresh "Decision needed". So it is REQUIRED, and a body without it is refused rather than
+ * defaulted: guessing `raised` mails a decision already made, guessing `settled` silences the
+ * alert the delegation exists to send, and a node one build behind is better off failing loudly.
  */
 export interface DelegatedNotificationRequest {
   workspaceId: string
   notificationId: string
+  reason: NotificationDeliveryReason
 }
 
 /** The client half: asks a mothership to deliver one of its own notification rows. */
@@ -42,7 +55,11 @@ export interface MachineNotificationClient {
    * channels. Rejects on a transport/HTTP failure so the caller can surface it; delivery itself is
    * best-effort on the mothership side (the persisted row is the source of truth).
    */
-  deliver(workspaceId: string, notificationId: string): Promise<void>
+  deliver(
+    workspaceId: string,
+    notificationId: string,
+    reason: NotificationDeliveryReason,
+  ): Promise<void>
 }
 
 export interface HttpMachineNotificationClientOptions {
@@ -69,7 +86,11 @@ const DEFAULT_TIMEOUT_MS = 10_000
 export class HttpMachineNotificationClient implements MachineNotificationClient {
   constructor(private readonly opts: HttpMachineNotificationClientOptions) {}
 
-  async deliver(workspaceId: string, notificationId: string): Promise<void> {
+  async deliver(
+    workspaceId: string,
+    notificationId: string,
+    reason: NotificationDeliveryReason,
+  ): Promise<void> {
     const token = typeof this.opts.token === 'function' ? this.opts.token() : this.opts.token
     // No token yet (a node booted before the mothership login): there is nothing to delegate to,
     // and a guaranteed-403 round-trip per notification is pure waste. The row is still persisted.
@@ -83,6 +104,7 @@ export class HttpMachineNotificationClient implements MachineNotificationClient 
         body: JSON.stringify({
           workspaceId,
           notificationId,
+          reason,
         } satisfies DelegatedNotificationRequest),
         signal: AbortSignal.timeout(this.opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
       },
@@ -114,9 +136,13 @@ export interface RemoteNotificationChannelOptions {
 export class RemoteNotificationChannel implements NotificationChannel {
   constructor(private readonly opts: RemoteNotificationChannelOptions) {}
 
-  async deliver(workspaceId: string, notification: Notification): Promise<void> {
+  async deliver(
+    workspaceId: string,
+    notification: Notification,
+    reason: NotificationDeliveryReason,
+  ): Promise<void> {
     try {
-      await this.opts.client.deliver(workspaceId, notification.id)
+      await this.opts.client.deliver(workspaceId, notification.id, reason)
     } catch (error) {
       this.opts.onError?.(error, { workspaceId, notificationId: notification.id })
     }

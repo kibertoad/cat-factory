@@ -36,7 +36,7 @@ It is close, and that is the trap worth stating before anyone re-derives it.
 
 `FetchGitLabClient` **already implements the issue half of the `VcsClient` port**:
 `listIssues`, `getIssue`, `searchIssues`, `listIssueComments`, `createIssue`, `closeIssue`.
-`vcsBackedGitHubClient` presents it as a `GitHubClient`, and `ProviderRoutingGitHubClient`
+`vcsBackedGitHubClient` presents it as a `GitHubClient`, and `providerRoutingGitHubClient`
 dispatches per installation by stored provider. So the CLIENT layer is done, and no new HTTP
 client is needed.
 
@@ -62,7 +62,7 @@ holds `provider: 'gitlab'` rows carrying the sealed PAT).
    the external-id grammar, the ref parser, the intake-query builder. Pure, so it is unit
    testable with no live API.
 3. **Provider**: `GitLabIssuesProvider` implementing `TaskSourceProvider` over the kernel
-   `GitHubClient` port (i.e. `engineVcsClient` / `ProviderRoutingGitHubClient`) plus
+   `GitHubClient` port (i.e. `engineVcsClient` / `providerRoutingGitHubClient`) plus
    `GitHubInstallationRepository`, exactly as the GitHub one does. Runtime-neutral by
    construction: both facades then wire the SAME class.
 4. **Webhook adapter**: a `TaskSourceWebhookAdapter` in `tasks/webhook/adapters.ts`. GitLab
@@ -121,7 +121,7 @@ tracker rather than a one-PR change.
 - **Per-workspace engine routing is still open on the VCS side.** The engine reads gates and
   merges through the single-token `GITLAB_TOKEN` client, so a deployment serving several
   GitLab workspaces is already constrained there (see `gitlab-parity.md`'s accepted gaps). The
-  intake path should ride `ProviderRoutingGitHubClient` from the start rather than inherit that
+  intake path should ride `providerRoutingGitHubClient` from the start rather than inherit that
   constraint, and the two should not be conflated when the VCS gap is closed.
 
 ## Prioritized checklist

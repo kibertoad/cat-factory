@@ -1086,13 +1086,19 @@ describe('composeMothership notification delivery delegation', () => {
       BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
     )
     try {
-      await composed.notificationChannel.deliver('ws_1', notification)
+      await composed.notificationChannel.deliver('ws_1', notification, 'raised')
       expect(seen).toHaveLength(1)
       expect(seen[0]!.url).toBe('https://m.test/internal/notifications/deliver')
       expect(seen[0]!.auth).toBe('Bearer env-tok')
       // Identifiers ONLY — the mothership re-reads its own row, so this node can never inject
       // forged notification text into the org's Slack.
-      expect(seen[0]!.body).toEqual({ workspaceId: 'ws_1', notificationId: 'ntf_1' })
+      // …plus the delivery EDGE, which the row cannot supply: the mothership's alert transports
+      // stand down on anything but a raise, and a raise and an escalation are both `open`.
+      expect(seen[0]!.body).toEqual({
+        workspaceId: 'ws_1',
+        notificationId: 'ntf_1',
+        reason: 'raised',
+      })
     } finally {
       composed.close()
     }
@@ -1107,7 +1113,7 @@ describe('composeMothership notification delivery delegation', () => {
     )
     try {
       await expect(
-        composed.notificationChannel.deliver('ws_1', notification),
+        composed.notificationChannel.deliver('ws_1', notification, 'raised'),
       ).resolves.toBeUndefined()
     } finally {
       composed.close()
@@ -1124,7 +1130,7 @@ describe('composeMothership notification delivery delegation', () => {
     // is still persisted remotely and the in-app card still renders; only delegation is skipped.
     const composed = composeMothership(BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test' }))
     try {
-      await composed.notificationChannel.deliver('ws_1', notification)
+      await composed.notificationChannel.deliver('ws_1', notification, 'raised')
       expect(calls).toBe(0)
     } finally {
       composed.close()
@@ -1158,7 +1164,7 @@ describe('composeMothership notification delivery delegation', () => {
     })
     try {
       expect(container.machineNotificationDelivery).toBeDefined()
-      await container.machineNotificationDelivery!.deliver('ws_1', notification)
+      await container.machineNotificationDelivery!.deliver('ws_1', notification, 'raised')
       // Containment, not equality: booting the container also fires background persistence RPCs.
       expect(posted).toContain('https://m.test/internal/notifications/deliver')
     } finally {

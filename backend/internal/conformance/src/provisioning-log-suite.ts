@@ -89,11 +89,17 @@ export function defineProvisioningLogSuite(
       })
     })
 
-    it('filters by subsystem and execution', async () => {
+    it('filters by subsystem, execution and target', async () => {
       const repo = makeRepo()
       const { ws, e1, e2 } = ids()
       await repo.append(
-        record({ id: `${ws}-env`, workspaceId: ws, subsystem: 'environment', executionId: e1 }),
+        record({
+          id: `${ws}-env`,
+          workspaceId: ws,
+          subsystem: 'environment',
+          executionId: e1,
+          targetId: `${ws}-job`,
+        }),
       )
       await repo.append(
         record({
@@ -102,6 +108,7 @@ export function defineProvisioningLogSuite(
           subsystem: 'runner-pool',
           operation: 'dispatch',
           executionId: e1,
+          targetId: `${ws}-job`,
         }),
       )
       await repo.append(
@@ -111,6 +118,7 @@ export function defineProvisioningLogSuite(
           subsystem: 'container',
           operation: 'dispatch',
           executionId: e2,
+          targetId: `${ws}-elsewhere`,
         }),
       )
 
@@ -120,6 +128,13 @@ export function defineProvisioningLogSuite(
       expect((await repo.list(ws, { executionId: e1 })).map((r) => r.id).sort()).toEqual(
         [`${ws}-env`, `${ws}-pool`].sort(),
       )
+      // `targetId` is the axis an operator follows one container job / one environment by, and it
+      // cuts ACROSS subsystems (a job is dispatched by one and reclaimed by another), so it must
+      // narrow on its own rather than only alongside a subsystem.
+      expect((await repo.list(ws, { targetId: `${ws}-job` })).map((r) => r.id).sort()).toEqual(
+        [`${ws}-env`, `${ws}-pool`].sort(),
+      )
+      expect(await repo.list(ws, { targetId: `${ws}-absent` })).toEqual([])
     })
 
     it('honours the limit (newest first)', async () => {

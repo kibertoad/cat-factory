@@ -472,6 +472,10 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   const githubOpen = ref(false)
   // Slack integration panel (connect the account's Slack + per-workspace routing).
   const slackOpen = ref(false)
+  // The notification manager: which notification types this board delivers on which channel
+  // (the in-app push and email). Distinct from `slackOpen`, which configures Slack's
+  // DESTINATION per type — this one decides the channels whose delivery is a plain yes/no.
+  const notificationSettingsOpen = ref(false)
   // Observability integration: the post-release-health connection panel (Datadog
   // today, pluggable). NB: distinct from `observabilityInstanceId`, which is the
   // LLM per-call observability panel (see the result-views slice).
@@ -515,6 +519,13 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   }
   function closeSlack() {
     slackOpen.value = false
+  }
+  function openNotificationSettings() {
+    resetHubReturn()
+    notificationSettingsOpen.value = true
+  }
+  function closeNotificationSettings() {
+    notificationSettingsOpen.value = false
   }
   function openObservabilityConnection() {
     resetHubReturn()
@@ -586,6 +597,7 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
   return {
     githubOpen,
     slackOpen,
+    notificationSettingsOpen,
     observabilityConnectionOpen,
     operatorDashboardOpen,
     reportsOpen,
@@ -600,6 +612,8 @@ function createIntegrationPanelModals(resetHubReturn: ResetHubReturn) {
     closeGitHub,
     openSlack,
     closeSlack,
+    openNotificationSettings,
+    closeNotificationSettings,
     openObservabilityConnection,
     closeObservabilityConnection,
     openOperatorDashboard,

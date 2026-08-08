@@ -33,6 +33,14 @@ import {
 // OpenAI-compatible `/models` server-side so the UI can validate a base URL and list the
 // models the runner actually serves before the user enables them.
 
+/**
+ * HKDF domain tag separating a local runner's sealed bearer key from every other cipher (mirrors
+ * {@link TEST_SECRETS_CIPHER_INFO} et al). Both facades build their `WebCryptoSecretCipher` from
+ * this constant: the tag derives the key, so a facade spelling it differently seals credentials
+ * its sibling cannot unseal.
+ */
+export const LOCAL_MODEL_ENDPOINTS_CIPHER_INFO = 'cat-factory:local-model-endpoints'
+
 export interface LocalModelEndpointServiceDependencies {
   localModelEndpointRepository: LocalModelEndpointRepository
   /** System encryption layer (master key) for the optional bearer key at rest. */

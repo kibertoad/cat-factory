@@ -530,7 +530,8 @@
       "description": {
         "binary_generators_unreachable": "No se han podido leer las integraciones generativas de esta instalación en este momento, así que no se ha iniciado la ejecución. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión.",
         "foundational_builtins_unreachable": "No se han podido leer los servicios fundamentales integrados de esta instalación en este momento. No hay nada mal configurado ni hace falta ningún cambio: inténtalo de nuevo cuando se restablezca la conexión.",
-        "connection_credentials_unreadable": "No se han podido leer las credenciales guardadas de esta conexión. Si esta instalación puede acceder al servicio que custodia su clave, vuelve a conectar la fuente para reemplazarlas; si no, inténtalo de nuevo cuando se restablezca esa conexión."
+        "connection_credentials_unreadable": "No se han podido leer las credenciales guardadas de esta conexión. Si esta instalación puede acceder al servicio que custodia su clave, vuelve a conectar la fuente para reemplazarlas; si no, inténtalo de nuevo cuando se restablezca esa conexión.",
+        "vcs_capability_unsupported": "El proveedor de control de código conectado a este espacio de trabajo no ofrece esta operación. No hay nada mal configurado y configurar algo no servirá de nada: no está disponible para este proveedor."
       }
     },
     "action": {
@@ -2020,8 +2021,11 @@
           "fs": "Sistema de archivos local",
           "s3": "Amazon S3 / compatible con S3",
           "r2": "Cloudflare R2",
-          "db": "Base de datos Postgres"
+          "db": "Base de datos Postgres",
+          "custom": "Almacén propio (este despliegue)"
         },
+        "unregisteredStore": "{store} (no registrado en este despliegue)",
+        "unregisteredStoreWarning": "Esta cuenta guarda los artefactos en «{store}», que este despliegue no registra. No se guarda nada hasta que elijas un almacén registrado o vuelvas a registrarlo en el código.",
         "basePath": "Ruta base (predeterminada: .file-storage)",
         "region": "Región (p. ej. us-east-1)",
         "bucket": "Bucket",
@@ -2334,7 +2338,8 @@
         "shortcuts": "Atajos de teclado",
         "bugHunt": "Caza de errores",
         "toggleUiMode": "Cambiar el modo de interfaz",
-        "foundationalServices": "Servicios fundamentales"
+        "foundationalServices": "Servicios fundamentales",
+        "notificationSettings": "Gestionar el enrutamiento de notificaciones"
       },
       "keywords": {
         "newPipeline": "canalización agentes cadena pipeline",
@@ -2358,7 +2363,8 @@
         "bugHunt": "error bug caza triaje backlog incidencias sin asignar",
         "toggleUiMode": "interfaz modo básico avanzado mostrar ocultar",
         "tutorial": "tutorial recorrido guía ayuda aprender introducción",
-        "foundationalServices": "capacidad compartida plataforma servicio api contrato openapi catálogo"
+        "foundationalServices": "capacidad compartida plataforma servicio api contrato openapi catálogo",
+        "notificationSettings": "notificaciones correo enrutamiento canales bandeja"
       }
     },
     "integrationsHub": {
@@ -2428,6 +2434,10 @@
         "bugHunt": {
           "label": "Caza de errores",
           "description": "Valora los errores abiertos y sin asignar de un tablero y elige uno para arreglar"
+        },
+        "notificationSettings": {
+          "label": "Notificaciones",
+          "description": "Elige qué eventos llegan a la bandeja y al correo."
         }
       }
     },
@@ -4219,6 +4229,58 @@
       "body": "Las notificaciones de Slack se detendrán hasta que vuelvas a conectar."
     }
   },
+  "notificationSettings": {
+    "panel": {
+      "title": "Notificaciones",
+      "intro": "Elige qué eventos entrega este tablero y por qué canal. Lo que no cambies usa el valor predeterminado.",
+      "inAppNote": "«En la app» controla solo el aviso en vivo. La tarjeta se guarda igualmente y sigue en tu bandeja tras recargar.",
+      "emailNote": "El correo requiere un remitente conectado en la cuenta (Ajustes de cuenta). De forma predeterminada solo se envían los eventos de alto impacto.",
+      "otherChannelsNote": "Slack y los webhooks salientes eligen su propia lista de eventos donde se configura su destino.",
+      "openSlack": "Enrutamiento de Slack"
+    },
+    "column": {
+      "event": "Evento",
+      "inApp": "En la app",
+      "email": "Correo"
+    },
+    "action": {
+      "save": "Guardar",
+      "reset": "Restaurar valores predeterminados"
+    },
+    "toast": {
+      "saved": "Enrutamiento de notificaciones guardado"
+    },
+    "error": {
+      "load": "No se pudieron cargar los ajustes de notificaciones",
+      "save": "No se pudieron guardar los ajustes de notificaciones"
+    },
+    "unavailable": "Esta instalación no almacena enrutamiento de notificaciones, así que todos los eventos usan el valor predeterminado.",
+    "loadFailed": "No se pudo leer el enrutamiento de notificaciones de este tablero, así que los interruptores de abajo no son su configuración actual. Vuelve a intentarlo antes de cambiar nada.",
+    "type": {
+      "merge_review": "Revision de fusion",
+      "pipeline_complete": "Pipeline completado",
+      "ci_failed": "CI fallido",
+      "test_failed": "Pruebas fallidas",
+      "requirement_review": "Revision de requisitos",
+      "clarity_review": "Revision de claridad",
+      "release_regression": "Regresion de version",
+      "decision_required": "Decisión necesaria",
+      "human_test_ready": "Listo para pruebas humanas",
+      "visual_confirmation_ready": "Listo para confirmacion visual",
+      "human_review": "Esperando revisión de código",
+      "followup_pending": "Seguimientos por decidir",
+      "fork_decision_pending": "Enfoque de implementación",
+      "judge_review": "Veredicto de revisión",
+      "pr_review_ready": "Hallazgos de revisión de PR",
+      "initiative": "Actualizaciones de la iniciativa",
+      "platform_health": "Estado de la plataforma",
+      "infra_unreachable": "Interrupciones de infraestructura",
+      "budget_paused": "Ejecuciones en pausa (presupuesto)",
+      "budget_threshold": "Aviso de presupuesto",
+      "key_drift": "Desfase de la clave de cifrado",
+      "merge_tag_request": "Solicitud de esfuerzo de revisión"
+    }
+  },
   "docInterview": {
     "title": "Refinar el documento",
     "subtitle": "Responde a las preguntas del entrevistador para dar forma al documento",
@@ -5597,6 +5659,19 @@
     "history": {
       "heading": "Historial (sin rondas) | Historial ({count} ronda) | Historial ({count} rondas)",
       "fixRequested": "Corrección solicitada"
+    },
+    "design": {
+      "summary": "Ningún marco procede del diseño vinculado. | 1 marco del diseño vinculado. | {count} marcos del diseño vinculado.",
+      "dropped": "No hay otros ocultos. | 1 más no se muestra aquí. | {count} más no se muestran aquí.",
+      "gapDropped": "Ninguno de sus marcos está oculto. | 1 de sus marcos no se muestra aquí. | {count} de sus marcos no se muestran aquí.",
+      "gapLine": "{title}:",
+      "gap": {
+        "partial": "solo se conservó parte de sus marcos; actualiza el documento para volver a intentarlo.",
+        "failed": "no se pudieron descargar sus marcos en la última importación; actualiza el documento para reintentarlo.",
+        "none": "no tiene marcos que mostrar.",
+        "storage_unavailable": "no había almacenamiento de imágenes configurado cuando se importó, así que no se descargó nada.",
+        "not_retained": "no hay imágenes guardadas para él. Puede que su origen no genere marcos, o que se importara antes de que se conservaran; volver a importarlo lo aclara."
+      }
     }
   },
   "outcome": {
@@ -5843,6 +5918,7 @@
       },
       "actual": "Real",
       "reference": "Referencia",
+      "fromLinkedDesign": "· del diseño vinculado",
       "actualAlt": "{view} (real)",
       "referenceAlt": "{view} (referencia)",
       "replace": "Reemplazar",

@@ -1,5 +1,7 @@
 # Cloudflare OS Gatekeeper (deployment template)
 
+## What it is
+
 A Cloudflare Worker that lets a [Cloudflare OS](https://github.com/cloudflare/cloudflare-os)
 workspace drive cat-factory without any agent ever seeing a credential. It is a **consumer of the
 stable public surface**: it rides `/api/v1` and the outbound webhook contract, and a cat-factory
@@ -24,18 +26,27 @@ a merge against files you have edited, and what a reviewer sees in your reposito
 rather than a fork of somebody else's Worker. What the machinery does, in full, is
 [its README](../../sdk/gatekeeper-worker/README.md).
 
+The short version of what you do with this template: **configure** the deployment (three vars and
+the Durable Object binding in `wrangler.toml`; the three credentials through
+`wrangler secret put`, never in a file this repository carries), and **customize** the policy in
+`src/policy.config.ts`, together with `test/policy.test.ts`, which pins what that policy grants
+and is meant to move with it. Nothing else in the template is meant to be edited.
+
 ## Configure
 
-Three vars in [`wrangler.toml`](./wrangler.toml) and three secrets:
+Three vars and the Durable Object namespace go in [`wrangler.toml`](./wrangler.toml). The three
+credentials are secrets: they are put into the platform's secret store and belong in no config
+file, which is the point of the split.
 
-| Binding                | Kind   | What it is                                                                    |
-| ---------------------- | ------ | ----------------------------------------------------------------------------- |
-| `CAT_FACTORY_BASE_URL` | var    | The cat-factory deployment this Gatekeeper is paired with.                    |
-| `PUBLIC_URL`           | var    | This Worker's own public origin; deliveries arrive at `<PUBLIC_URL>/webhook`. |
-| `WEBHOOK_ID`           | var    | The outbound-webhook id to enrol under. Keep it stable.                       |
-| `PROVISIONING_KEY`     | secret | An `admin` cat-factory API key. Mints per-actor keys; nothing else.           |
-| `WEBHOOK_SECRET`       | secret | 16-200 chars. Registered with the endpoint and verified on every delivery.    |
-| `OS_SHARED_TOKEN`      | secret | The bearer your Cloudflare OS deployment presents on every RPC call.          |
+| Binding                | Kind           | What it is                                                                    |
+| ---------------------- | -------------- | ----------------------------------------------------------------------------- |
+| `CAT_FACTORY_BASE_URL` | var            | The cat-factory deployment this Gatekeeper is paired with.                    |
+| `PUBLIC_URL`           | var            | This Worker's own public origin; deliveries arrive at `<PUBLIC_URL>/webhook`. |
+| `WEBHOOK_ID`           | var            | The outbound-webhook id to enrol under. Keep it stable.                       |
+| `STATE`                | Durable Object | A namespace bound to `GatekeeperState`: cards, dedupe log, minted keys.       |
+| `PROVISIONING_KEY`     | secret         | An `admin` cat-factory API key. Mints per-actor keys; nothing else.           |
+| `WEBHOOK_SECRET`       | secret         | 16-200 chars. Registered with the endpoint and verified on every delivery.    |
+| `OS_SHARED_TOKEN`      | secret         | The bearer your Cloudflare OS deployment presents on every RPC call.          |
 
 ```sh
 cd deploy/gatekeeper
@@ -46,8 +57,8 @@ pnpm deploy
 curl -X POST -H "Authorization: Bearer $OS_SHARED_TOKEN" https://your-gatekeeper/admin/enroll
 ```
 
-A missing binding is answered as a `503` naming it, never defaulted: there is no safe stand-in for
-a credential or for the identity of the deployment it talks to.
+A missing binding is answered as a `503` naming it and the mechanism it takes, never defaulted:
+there is no safe stand-in for a credential or for the identity of the deployment it talks to.
 
 The Worker serves five routes:
 
@@ -57,7 +68,7 @@ The Worker serves five routes:
 | `ALL /rpc`                     | `OS_SHARED_TOKEN` | The Cap'n Web endpoint your OS deployment talks to.           |
 | `POST /admin/enroll`           | `OS_SHARED_TOKEN` | Re-assert the webhook registration. Also runs hourly on cron. |
 | `POST /admin/retire?actorId=…` | `OS_SHARED_TOKEN` | Offboarding: revoke every key minted for one OS user.         |
-| `GET /health`                  | none              | Liveness, plus whether the policy compiles.                   |
+| `GET /health`                  | none              | Green only when every binding is set and the policy compiles. |
 
 `/rpc` is bearer-gated even though the intended path is a Worker service binding, which never
 traverses the internet: a Worker with a route attached is reachable by anyone who finds it, and a
@@ -68,7 +79,12 @@ capability surface whose only defence is obscurity is not one.
 Tiers are declared in `src/policy.config.ts` and compiled against the LIVE operation table, so a
 policy that names a retired operation, or grants one above its own key's scope, fails to serve
 rather than serving methods that 403. Three tiers ship as a starting point (`observer`, `operator`,
-`approver`); they are examples, not defaults to keep.
+`approver`); they are examples, not defaults to keep. A tier carries a `keyScope` (the scope of
+the key minted for its actors, and the ceiling on its grants), an `allow` list (or `'*'`), an
+optional `deny` list subtracted last (the shipped `observer` uses it to keep the debug surface's
+model prompts and captured output away from a `'*'` read tier), and an optional `mask` of dotted
+result paths, redacted rather than removed. The full field reference is in
+[the machinery README](../../sdk/gatekeeper-worker/README.md#what-to-customize-the-policy).
 
 ```ts
 approver: {
@@ -89,10 +105,11 @@ Two rules are worth keeping whatever else you change:
 - **Keep `keyScope` as low as the grants allow.** It is the scope of the key minted for each actor,
   so it is the blast radius of that actor's credential.
 
-A capability answers `withheld()` beside `bindings()`, and the two reasons are kept apart on
-purpose: `denied_by_policy` is a question for you, `above_key_scope` is a question for you too but
-a different one, and `not_relayable` is neither (an SSE stream or a binary blob cannot cross a
-Cap'n Web call, so those operations are withheld by transport and the caller is told so).
+A capability answers `withheld()` beside `bindings()`, and the four reasons are kept apart on
+purpose: `not_in_policy` and `denied_by_policy` are questions for you (the first an omission, the
+second a decision), `above_key_scope` is a question for you too but a different one, and
+`not_relayable` is neither (an SSE stream or a binary blob cannot cross a Cap'n Web call, so those
+operations are withheld by transport and the caller is told so).
 
 ## Talk to it
 
@@ -130,8 +147,9 @@ for (const card of await cat.approvals_list()) {
 await cat.runs_watched() // [{ runId, event: 'run.completed', terminal: true, run }, …]
 ```
 
-`connect()` takes the identity your OS deployment authenticated, and NOTHING else the caller sends
-picks a tier: an agent that could name its own tier would be its own authorization.
+`connect()` takes the identity your OS deployment authenticated (plus an optional display
+`label`), and NOTHING else the caller sends picks a tier: an agent that could name its own tier
+would be its own authorization.
 
 `approvals_answer` returns one of three statuses, and collapsing them is the mistake to avoid:
 
@@ -183,3 +201,16 @@ be wiped.
 `allowedTools`-style scoping is not a substitute for the scope floor, and neither is this Worker.
 What it enforces is which operations an actor may reach and on whose credential; what a run then
 does inside cat-factory is governed by cat-factory's own merge policy and approvals.
+
+## References
+
+- [`sdk/gatekeeper-worker`](../../sdk/gatekeeper-worker/README.md): the machinery this template
+  installs, its policy field reference and the capability surface.
+- [`sdk/gatekeeper`](../../sdk/gatekeeper/README.md): the generated operation table and scope
+  helpers policy is compiled against.
+- [`backend/docs/public-api.md`](../../backend/docs/public-api.md): the API this rides (keys,
+  scopes, webhooks, endpoint semantics).
+- [`docs/initiatives/cloudflare-os-gatekeeper.md`](../../docs/initiatives/cloudflare-os-gatekeeper.md):
+  the design record, slice by slice, and the gotchas the pilot surfaced.
+- [`docs/glossary.md`](../../docs/glossary.md): the Gatekeeper naming map (bindings vs machinery
+  vs template).

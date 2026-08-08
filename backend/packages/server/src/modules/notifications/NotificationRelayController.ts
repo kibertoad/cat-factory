@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import type { Notification } from '@cat-factory/kernel'
+import { NOTIFICATION_DELIVERY_REASONS, isNotificationDeliveryReason } from '@cat-factory/kernel'
 import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { AppEnv } from '../../http/env.js'
 import type { DelegatedNotificationRequest } from '../../notifications/machineNotifications.js'
@@ -84,6 +85,21 @@ export function notificationRelayController(): Hono<AppEnv> {
         422,
       )
     }
+    // The delivery EDGE, which the persisted row cannot supply (a raise and an escalation are
+    // both `open`). Refused rather than defaulted: see `DelegatedNotificationRequest`.
+    if (!isNotificationDeliveryReason(body.reason)) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'validation',
+            message: `reason must be one of ${NOTIFICATION_DELIVERY_REASONS.join(', ')}`,
+          },
+        },
+        422,
+      )
+    }
+    const reason = body.reason
 
     const log = logger.child({
       scope: 'notificationDelegation',
@@ -125,7 +141,7 @@ export function notificationRelayController(): Hono<AppEnv> {
     // caller must not see a delivery hiccup as a failed raise. A channel that throws (the composite
     // already isolates per-channel failures) is logged, not propagated.
     try {
-      await delivery.deliver(body.workspaceId, notification)
+      await delivery.deliver(body.workspaceId, notification, reason)
     } catch (error) {
       log.warn('notification delegation: delivery failed', {
         workspaceId: body.workspaceId,

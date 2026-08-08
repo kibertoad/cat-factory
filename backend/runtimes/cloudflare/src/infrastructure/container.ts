@@ -1,6 +1,5 @@
 import {
   type Clock,
-  CompositeNotificationChannel,
   type EmailSender,
   type ExecutionEventPublisher,
   type GitHubClient,
@@ -67,7 +66,6 @@ import {
   makeResolveDeployCloneTarget,
   RunnerJobClient,
   FanOutEventPublisher,
-  InAppNotificationChannel,
   PatPreferringAppRegistry,
   buildToolSecretChain,
   buildDispatchTokenMint,
@@ -272,21 +270,18 @@ export function selectMergeLifecycleDeps(
     ...selectWorkspaceConfigDeps(db),
     initiativeRepository: new D1InitiativeRepository({ db }),
   }
-  // Compose the delivery channels: in-app push (when the events binding is present), Slack (when
-  // the integration is enabled) and the outbound webhook (when a workspace registered one) all
-  // implement the same NotificationChannel port and fan out via CompositeNotificationChannel —
-  // realizing the seam the kernel port documents, with no change to the engine call sites that
-  // raise notifications. The webhook channel is what a HEADLESS caller relies on: it has no
-  // in-app inbox and no browser WebSocket, so a parked run would otherwise reach it only by
-  // polling (see backend/docs/adr/0047-headless-clarification-loop.md).
-  const channels: NotificationChannel[] = []
-  const publisher = selectEventPublisher(env, db)
-  if (publisher) channels.push(new InAppNotificationChannel(publisher))
-  const externalChannel = buildExternalNotificationChannel(config, db, webhookChannel)
-  if (externalChannel) channels.push(externalChannel)
-  if (channels.length === 1) deps.notificationChannel = channels[0]
-  else if (channels.length > 1)
-    deps.notificationChannel = new CompositeNotificationChannel(channels)
+  // How this deployment tells a human, composed whole in `container-notification-deps.ts`: the
+  // routed in-app push, the external transports, and the manager's store the settings API writes.
+  Object.assign(
+    deps,
+    selectNotificationDeliveryDeps({
+      config,
+      db,
+      clock,
+      publisher: selectEventPublisher(env, db),
+      webhookChannel,
+    }),
+  )
 
   // The engine's CI gate + merge / mergeability / review providers read through a single
   // GitHubClient. Prefer the GitHub App; else fall back to a GitLab-backed client (single-token,
@@ -483,7 +478,7 @@ export {
   cloudflareContentStorage,
 } from './container-artifact-storage'
 import { cloudflareContentStorage } from './container-artifact-storage'
-import { buildExternalNotificationChannel } from './container-notification-deps'
+import { selectNotificationDeliveryDeps } from './container-notification-deps'
 
 /**
  * Wire account invitations + per-account email senders. Invitations are always
@@ -942,7 +937,7 @@ export function buildContainer(
   // changes. The store is resolved per request/run from the account settings
   // (`resolveBinaryArtifactStore`, built below once `accountSettings` exists).
   const { capability: contentStorageCapability, buildBlobBackend: buildCfBlobBackend } =
-    cloudflareContentStorage(env)
+    cloudflareContentStorage(env, registries.binaryStoreRegistry)
 
   // The built-in gates' providers are wired onto the app-owned `providerRegistry` (news'd above,
   // fresh per build unless injected via `overrides`). `selectMergeLifecycleDeps` /
@@ -1012,6 +1007,7 @@ export function buildContainer(
     userSecretKindRegistry,
     contentStorageCapability,
     buildCfBlobBackend,
+    binaryStoreRegistry: registries.binaryStoreRegistry,
     cloudflareModelsEnabledOverride: opts.cloudflareModelsEnabled,
   })
 

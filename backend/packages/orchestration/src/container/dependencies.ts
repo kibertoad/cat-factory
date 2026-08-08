@@ -40,6 +40,7 @@ import type {
   AuditRecorder,
   BinaryGeneratorRegistry,
   BinaryGeneratorSource,
+  BinaryStoreRegistry,
   BlockRepository,
   BootstrapJobRepository,
   BootstrapRunner,
@@ -113,6 +114,7 @@ import type {
   ModelRef,
   NotificationChannel,
   NotificationRepository,
+  NotificationSettingsRepository,
   ObservabilityConnectionRepository,
   OperationalMetrics,
   PackageRegistryConnectionRepository,
@@ -1060,6 +1062,21 @@ export interface CoreDependencies {
    */
   binaryGeneratorRegistry?: BinaryGeneratorRegistry
   /**
+   * The app-owned registry of BINARY ARTIFACT STORES a DEPLOYMENT ships in CODE: its own
+   * implementations of the `BinaryBlobBackend` port, selectable per account beside the platform's
+   * `fs` / `db` / `s3` / `r2` backends. Optional + defaulted to `defaultBinaryStoreRegistry()`
+   * (EMPTY: the platform's own stores are not registry entries), so every existing construction
+   * site behaves exactly as before.
+   *
+   * Unlike its generative sibling above this one does NOT get a mothership `Source`, and the
+   * asymmetry is the point: a generator definition is DATA a run resolves, so a node reading its
+   * own copy can disagree with the picker the mothership fed; a store is a live client that only
+   * the process about to write the bytes can construct, so the process that answers the settings
+   * picker is by construction the one that stores. There is nothing here for a machine API to
+   * carry, and a `Source` would only invite pointing one node at another's credentials.
+   */
+  binaryStoreRegistry?: BinaryStoreRegistry
+  /**
    * Where those integrations are READ from, when that is not this process's own registry.
    * Defaulted to `registryBinaryGeneratorSource(binaryGeneratorRegistry)` — i.e. exactly the
    * behaviour above — and overridden by ONE caller: a MOTHERSHIP-MODE node, which reads the
@@ -1137,6 +1154,14 @@ export interface CoreDependencies {
   // (CI gate passes through, `done` is a board-only flip, the built-in preset is used).
   notificationRepository?: NotificationRepository
   notificationChannel?: NotificationChannel
+  /**
+   * The notification MANAGER's store: which types this workspace delivers on which channel
+   * (`in_app` / `email`). Powers the settings API here; the facade builds the same service
+   * from the same repository to gate the channels it composes, so the surface a human edits
+   * and the decision the delivery path makes read one row. Absent ⇒ the settings surface
+   * 503s and every type keeps its shipped default.
+   */
+  notificationSettingsRepository?: NotificationSettingsRepository
   /**
    * The outbound RUN-LIFECYCLE push (`run.started` / `run.completed` / `run.failed`) — the other
    * half of what a headless integration needs, since the happy path (a pipeline whose `merger`

@@ -117,9 +117,9 @@ export class FollowUpGateController {
     }
     if (shouldLoopCoder(state)) {
       this.loopCoderForFollowUps(instance, step)
-      await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-      await this.runStateMachine.casPersist(workspaceId, instance)
-      await this.runStateMachine.emitInstance(workspaceId, instance)
+      await this.runStateMachine.persistAndEmit(workspaceId, instance, {
+        blockStatus: 'in_progress',
+      })
       return { kind: 'continue' }
     }
     return undefined

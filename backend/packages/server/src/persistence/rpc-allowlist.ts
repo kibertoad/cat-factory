@@ -1104,6 +1104,10 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // workspace, exactly like `executionId`/`blockId`, and `deleteByIds` names rows the caller
     // has already read back under that same scope.
     listByDocument: { scope: { kind: 'workspace', arg: 0 } },
+    // The gate's batched counterpart: the visual-confirmation gate reads the renders of every
+    // design a task links in one call, and it runs on the driver path of a run a mothership-mode
+    // node advances, so leaving it off would make the design references silently empty there.
+    listByDocuments: { scope: { kind: 'workspace', arg: 0 } },
     deleteByIds: { scope: { kind: 'workspace', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },
@@ -1324,6 +1328,14 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // secrets. `getByWorkspace` takes the workspaceId as arg0 (the `workspace` rule); the
   // record-based `upsert(record)` binds on the record's `workspaceId` FIELD (the `workspaceField` rule).
   slackSettingsRepository: {
+    getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+  },
+  // Per-workspace notification routing (which types this board delivers on which channel). No
+  // secrets, and the same shape as `slackSettingsRepository` above: `getByWorkspace` takes the
+  // workspaceId as arg0 (the `workspace` rule), the record-based `upsert(record)` binds on the
+  // record's `workspaceId` FIELD (the `workspaceField` rule).
+  notificationSettingsRepository: {
     getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
   },

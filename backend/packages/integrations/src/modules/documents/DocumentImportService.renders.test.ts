@@ -62,6 +62,13 @@ function memoryStore(over: { failOn?: string } = {}) {
         (r) =>
           r.document?.source === document.source && r.document.externalId === document.externalId,
       ),
+    listByDocuments: async (_ws, documents) =>
+      rows.filter((r) =>
+        documents.some(
+          (document) =>
+            r.document?.source === document.source && r.document.externalId === document.externalId,
+        ),
+      ),
     pruneByDocument: async (ws, document) => {
       const doomed = await store.listByDocument(ws, document)
       for (const r of doomed) rows.splice(rows.indexOf(r), 1)

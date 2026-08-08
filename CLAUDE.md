@@ -462,7 +462,7 @@ GitLab deployments.
   returning GitLab projects via the adapter; do not add a second store.
 - **Per-workspace PAT connect reuses `github_installations`**, writing a `provider: 'gitlab'` row with the
   PAT sealed by the deployment `SecretCipher`. When a facade has BOTH a GitHub App and GitLab connect, the
-  `github` module reads through **`ProviderRoutingGitHubClient`**, which dispatches per installation by
+  `github` module reads through **`providerRoutingGitHubClient`**, which dispatches per installation by
   stored provider (memoised, so no N+1). Don't hand-roll a second per-provider client or fork the module;
   keep facades symmetric (`selectVcsConnectDeps` ⇄ `selectWorkerVcsConnectDeps`).
 - **What the SPA may connect comes from `GET /workspaces/:ws/vcs/connect-options`**; WHERE it links, from

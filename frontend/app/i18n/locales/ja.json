@@ -530,7 +530,8 @@
       "description": {
         "binary_generators_unreachable": "このデプロイメントの生成系インテグレーションを現在読み取れなかったため、実行は開始されませんでした。設定に誤りはなく、変更も不要です。接続が回復してからもう一度お試しください。",
         "foundational_builtins_unreachable": "このデプロイメントの組み込み基盤サービスを現在読み取れませんでした。設定に誤りはなく、変更も不要です。接続が回復してからもう一度お試しください。",
-        "connection_credentials_unreadable": "この接続に保存されている認証情報を読み取れませんでした。このデプロイメントが鍵を保持しているサービスに到達できる場合は、ソースを接続し直して認証情報を置き換えてください。到達できない場合は、その接続が回復してからもう一度お試しください。"
+        "connection_credentials_unreadable": "この接続に保存されている認証情報を読み取れませんでした。このデプロイメントが鍵を保持しているサービスに到達できる場合は、ソースを接続し直して認証情報を置き換えてください。到達できない場合は、その接続が回復してからもう一度お試しください。",
+        "vcs_capability_unsupported": "このワークスペースに接続されているソース管理プロバイダーは、この操作に対応していません。設定に誤りはなく、設定を変更しても解決しません。このプロバイダーでは利用できない操作です。"
       }
     },
     "action": {
@@ -2020,8 +2021,11 @@
           "fs": "ローカルファイルシステム",
           "s3": "Amazon S3 / S3 互換",
           "r2": "Cloudflare R2",
-          "db": "Postgres データベース"
+          "db": "Postgres データベース",
+          "custom": "カスタムストア（このデプロイ）"
         },
+        "unregisteredStore": "{store}（このデプロイには登録されていません）",
+        "unregisteredStoreWarning": "このアカウントは成果物を「{store}」に保存する設定ですが、このデプロイには登録されていません。登録済みのストアを選ぶか、コードで再度登録するまで何も保存されません。",
         "basePath": "ベースパス（デフォルト: .file-storage）",
         "region": "リージョン（例: us-east-1）",
         "bucket": "バケット",
@@ -2334,7 +2338,8 @@
         "shortcuts": "キーボードショートカット",
         "bugHunt": "バグハント",
         "toggleUiMode": "インターフェースモードを切り替え",
-        "foundationalServices": "基盤サービス"
+        "foundationalServices": "基盤サービス",
+        "notificationSettings": "通知ルーティングを管理"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain パイプライン エージェント チェーン",
@@ -2358,7 +2363,8 @@
         "bugHunt": "bug バグ ハント トリアージ バックログ 課題 未割り当て",
         "toggleUiMode": "インターフェース モード 基本 詳細 表示 非表示",
         "tutorial": "チュートリアル ツアー ガイド ヘルプ 使い方 オンボーディング",
-        "foundationalServices": "共通機能 プラットフォーム サービス api コントラクト openapi カタログ"
+        "foundationalServices": "共通機能 プラットフォーム サービス api コントラクト openapi カタログ",
+        "notificationSettings": "通知 メール ルーティング チャネル 受信箱"
       }
     },
     "integrationsHub": {
@@ -2428,6 +2434,10 @@
         "bugHunt": {
           "label": "バグハント",
           "description": "ボードの未割り当ての未解決バグを評価し、修正するものをひとつ選びます"
+        },
+        "notificationSettings": {
+          "label": "通知",
+          "description": "受信箱とメールに届くイベントを選びます。"
         }
       }
     },
@@ -4219,6 +4229,58 @@
       "body": "再接続するまで Slack の通知が停止します。"
     }
   },
+  "notificationSettings": {
+    "panel": {
+      "title": "通知",
+      "intro": "このボードがどのイベントをどのチャネルで通知するかを選びます。変更しない項目は既定値のままです。",
+      "inAppNote": "「アプリ内」はリアルタイム通知のみを制御します。カードは常に保存され、再読み込み後も受信箱に残ります。",
+      "emailNote": "メールにはアカウントに接続された送信元が必要です (アカウント設定)。既定では影響の大きいイベントのみ送信されます。",
+      "otherChannelsNote": "Slack と送信 Webhook は、宛先を設定する画面でそれぞれの対象イベントを選びます。",
+      "openSlack": "Slack のルーティング"
+    },
+    "column": {
+      "event": "イベント",
+      "inApp": "アプリ内",
+      "email": "メール"
+    },
+    "action": {
+      "save": "保存",
+      "reset": "既定に戻す"
+    },
+    "toast": {
+      "saved": "通知のルーティングを保存しました"
+    },
+    "error": {
+      "load": "通知設定を読み込めませんでした",
+      "save": "通知設定を保存できませんでした"
+    },
+    "unavailable": "このデプロイでは通知ルーティングを保存しないため、すべてのイベントが既定値を使用します。",
+    "loadFailed": "このボードの通知ルーティングを読み取れませんでした。以下のスイッチは現在の設定ではありません。変更する前に再試行してください。",
+    "type": {
+      "merge_review": "マージレビュー",
+      "pipeline_complete": "パイプライン完了",
+      "ci_failed": "CI失敗",
+      "test_failed": "テスト失敗",
+      "requirement_review": "要件レビュー",
+      "clarity_review": "明確性レビュー",
+      "release_regression": "リリースリグレッション",
+      "decision_required": "判断が必要",
+      "human_test_ready": "人手テスト準備完了",
+      "visual_confirmation_ready": "ビジュアル確認準備完了",
+      "human_review": "コードレビュー待ち",
+      "followup_pending": "フォローアップの判断",
+      "fork_decision_pending": "実装アプローチ",
+      "judge_review": "レビュー判定",
+      "pr_review_ready": "PRレビューの指摘",
+      "initiative": "イニシアチブの更新",
+      "platform_health": "プラットフォームの健全性",
+      "infra_unreachable": "インフラ障害",
+      "budget_paused": "実行の一時停止 (予算)",
+      "budget_threshold": "予算の警告",
+      "key_drift": "暗号化キーの不一致",
+      "merge_tag_request": "レビュー工数の記録依頼"
+    }
+  },
   "docInterview": {
     "title": "ドキュメントを精緻化",
     "subtitle": "インタビュアーの質問に答えてドキュメントを形作ります",
@@ -5597,6 +5659,19 @@
     "history": {
       "heading": "履歴（ラウンドなし） | 履歴（{count} ラウンド） | 履歴（{count} ラウンド）",
       "fixRequested": "修正をリクエスト済み"
+    },
+    "design": {
+      "summary": "リンクされたデザインからのフレームはありません。 | リンクされたデザインから {count} 件のフレーム。 | リンクされたデザインから {count} 件のフレーム。",
+      "dropped": "非表示のものはありません。 | 他に {count} 件はここに表示されていません。 | 他に {count} 件はここに表示されていません。",
+      "gapDropped": "非表示のフレームはありません。 | このデザインのフレーム {count} 件はここに表示されていません。 | このデザインのフレーム {count} 件はここに表示されていません。",
+      "gapLine": "{title}：",
+      "gap": {
+        "partial": "フレームの一部のみが保持されました。ドキュメントを更新して再試行してください。",
+        "failed": "前回のインポートでフレームをダウンロードできませんでした。ドキュメントを更新して再試行してください。",
+        "none": "表示できるフレームがありません。",
+        "storage_unavailable": "インポート時に画像ストレージが設定されていなかったため、何もダウンロードされていません。",
+        "not_retained": "画像は保持されていません。ソースがフレームを生成しないか、フレームの保持が始まる前にインポートされた可能性があります。再インポートすると判別できます。"
+      }
     }
   },
   "outcome": {
@@ -5843,6 +5918,7 @@
       },
       "actual": "実際",
       "reference": "リファレンス",
+      "fromLinkedDesign": "· リンクされたデザインから",
       "actualAlt": "{view}（実際）",
       "referenceAlt": "{view}（リファレンス）",
       "replace": "置き換え",

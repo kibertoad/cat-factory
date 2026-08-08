@@ -13,6 +13,10 @@ load: a facade statically imports `S3BinaryBlobBackend` to wire its container, b
 that ends up running the `db`/`fs`/no blob backend never pays the SDK's load cost; the SDK is
 pulled in only when an S3 `put`/`get`/`delete` actually executes.
 
+A store the platform does NOT ship is the same port with one more step: register it on your
+deployment's `BinaryStoreRegistry` so an account can select it. See
+[`backend/docs/custom-binary-stores.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/custom-binary-stores.md).
+
 ## Enabling it
 
 The package exports one class:

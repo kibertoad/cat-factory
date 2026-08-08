@@ -18,13 +18,32 @@ import type { Logger } from './logging.js'
 // metadata SQL per backend:
 //   - {@link BinaryArtifactMetadataStore} — per-runtime metadata persistence.
 //   - {@link BinaryBlobBackend} — the pluggable "custom adapter": put/get/delete
-//     bytes by key. R2 / S3 / Postgres-bytea / in-memory all implement it.
+//     bytes by key. R2 / S3 / Postgres-bytea / in-memory all implement it, and so
+//     does a store a DEPLOYMENT defines itself and registers on the app-owned
+//     `BinaryStoreRegistry` (`domain/binary-store-registry.ts`).
 //   - {@link createBinaryArtifactStore} — composes the two into the
 //     {@link BinaryArtifactStore} the rest of the app depends on.
 // ---------------------------------------------------------------------------
 
-/** Where a blob's bytes physically live. The metadata always lives in the DB. */
-export type BinaryArtifactStorageKind = 'db' | 'r2' | 's3' | 'fs' | 'memory'
+/** The blob backends the PLATFORM itself ships. A deployment adds its own; see below. */
+export const BUILTIN_BINARY_ARTIFACT_STORAGE_KINDS = ['db', 'r2', 's3', 'fs', 'memory'] as const
+
+/** One of the platform's own backends: the closed half of {@link BinaryArtifactStorageKind}. */
+export type BuiltinBinaryArtifactStorageKind =
+  (typeof BUILTIN_BINARY_ARTIFACT_STORAGE_KINDS)[number]
+
+/**
+ * Where a blob's bytes physically live. The metadata always lives in the DB.
+ *
+ * OPEN, unlike most of the platform's persisted vocabularies: a deployment registers its own
+ * stores on the app-owned `BinaryStoreRegistry` (`domain/binary-store-registry.ts`) and a
+ * registered store's id is stamped here verbatim. It is stated at the store's grain rather than
+ * a single `custom` tag because the value's whole job is to say WHICH backend holds these bytes,
+ * and a deployment running two custom stores (or migrating between them) would otherwise have
+ * rows that name neither. Nothing branches on it (a read resolves the account's CURRENT store),
+ * so the openness costs no exhaustiveness check anywhere.
+ */
+export type BinaryArtifactStorageKind = BuiltinBinaryArtifactStorageKind | (string & {})
 
 /** What an artifact is — drives actual-vs-reference pairing in the gate UI. */
 export type BinaryArtifactKind = 'screenshot' | 'reference'
@@ -41,6 +60,22 @@ export type BinaryArtifactKind = 'screenshot' | 'reference'
 export interface DocumentArtifactRef {
   source: DocumentOrigin
   externalId: string
+}
+
+/**
+ * Collapse a document list to the distinct `(source, externalId)` pairs a batch read should ask
+ * about. Shared by both metadata stores so a duplicate ref cannot cost one runtime a repeated OR
+ * clause (and duplicate rows in its result) while the other happens to dedupe.
+ */
+export function dedupeDocumentRefs(
+  documents: readonly DocumentArtifactRef[],
+): DocumentArtifactRef[] {
+  const seen = new Map<string, DocumentArtifactRef>()
+  for (const document of documents) {
+    const key = `${document.source}::${document.externalId}`
+    if (!seen.has(key)) seen.set(key, document)
+  }
+  return [...seen.values()]
 }
 
 /** Metadata describing one stored blob (the bytes live in a {@link BinaryBlobBackend}). */
@@ -117,6 +152,19 @@ export interface BinaryArtifactStore {
     workspaceId: string,
     document: DocumentArtifactRef,
   ): Promise<BinaryArtifactRecord[]>
+  /**
+   * The same renders for a LIST of documents, in one batched read: what a reader with a task's
+   * whole set of linked designs in hand calls, rather than {@link listByDocument} per document.
+   *
+   * The visual-confirmation gate is that reader, and it runs on the driver path of every run whose
+   * pipeline carries the gate, so a point read per attached design is exactly the N+1 the batch
+   * ports exist to prevent. Each record still names its own `document`, so a caller that needs the
+   * per-document split indexes the result rather than asking again.
+   */
+  listByDocuments(
+    workspaceId: string,
+    documents: readonly DocumentArtifactRef[],
+  ): Promise<BinaryArtifactRecord[]>
   delete(workspaceId: string, id: string): Promise<void>
   /**
    * Re-import reclaim: delete every artifact rendered from one document — BOTH the metadata rows
@@ -174,6 +222,16 @@ export interface BinaryArtifactMetadataStore {
     document: DocumentArtifactRef,
   ): Promise<BinaryArtifactRecord[]>
   /**
+   * The same records for a LIST of documents, in ONE chunked statement per call rather than a
+   * read per document. Empty input reads nothing; a document naming no row is simply absent.
+   * Ordered like the single-document read (`createdAt`, then `id`) across the whole result, so
+   * "the newest render for a view wins" holds the same way however many documents were asked for.
+   */
+  listByDocuments(
+    workspaceId: string,
+    documents: readonly DocumentArtifactRef[],
+  ): Promise<BinaryArtifactRecord[]>
+  /**
    * Delete exactly the named metadata rows in ONE chunked statement; returns how many went.
    *
    * Every id-scoped reclaim goes through this rather than a predicate, because a predicate
@@ -213,6 +271,11 @@ export interface BinaryArtifactMetadataStore {
  * (tests), or your own store.
  * `kind` is stamped onto the metadata `storage` column so a read knows where the
  * bytes live.
+ *
+ * A deployment's OWN implementation reaches the resolver by being registered on the app-owned
+ * `BinaryStoreRegistry` (`domain/binary-store-registry.ts`) and selected per account, where
+ * `kind` is the registered store's id. Implementing this interface with nowhere to register it
+ * is what that registry exists to fix.
  */
 export interface BinaryBlobBackend {
   readonly kind: BinaryArtifactStorageKind
@@ -380,6 +443,9 @@ export function createBinaryArtifactStore(deps: {
     },
     listByDocument(workspaceId, document) {
       return metadata.listByDocument(workspaceId, document)
+    },
+    listByDocuments(workspaceId, documents) {
+      return metadata.listByDocuments(workspaceId, documents)
     },
     async pruneByDocument(workspaceId, document) {
       const previous = await metadata.listByDocument(workspaceId, document)

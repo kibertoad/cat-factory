@@ -324,8 +324,7 @@ export class PollRunningController {
     step.jobId = undefined
     step.subtasks = undefined
     if (step.gate) step.gate.phase = 'checking'
-    await this.deps.runStateMachine.casPersist(workspaceId, instance)
-    await this.deps.runStateMachine.emitInstance(workspaceId, instance)
+    await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
     return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
   }
 
@@ -371,8 +370,7 @@ export class PollRunningController {
       // The container vanished and a fresh one is about to boot for the re-dispatch, so the
       // details show it spinning up again rather than a stale "up".
       step.container = { status: 'starting' }
-      await this.deps.runStateMachine.casPersist(workspaceId, instance)
-      await this.deps.runStateMachine.emitInstance(workspaceId, instance)
+      await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
       return { kind: 'continue' }
     }
     // Eviction budget spent — the container is gone for good. Mark it errored and persist so the

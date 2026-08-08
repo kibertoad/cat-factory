@@ -27,6 +27,14 @@ import { DEFAULT_USAGE_WINDOW_MS } from './providers.logic.js'
 // feature usable while bounding accidental/abusive unbounded growth.
 const MAX_KEYS_PER_PROVIDER = 25
 
+/**
+ * HKDF domain tag separating the sealed provider API keys from every other cipher (mirrors
+ * {@link TEST_SECRETS_CIPHER_INFO} et al). Both facades build their `WebCryptoSecretCipher` from
+ * this constant: the tag derives the key, so a facade spelling it differently seals credentials
+ * its sibling cannot unseal.
+ */
+export const PROVIDER_API_KEYS_CIPHER_INFO = 'cat-factory:provider-api-keys'
+
 export interface ApiKeyServiceDependencies {
   providerApiKeyRepository: ProviderApiKeyRepository
   workspaceRepository: WorkspaceRepository

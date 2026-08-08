@@ -192,8 +192,7 @@ export class GateStepController {
     if (probe.status === 'pending') {
       // Keep polling. Persist the head sha + phase so the board can reflect it.
       step.gate.phase = 'checking'
-      await this.deps.runStateMachine.casPersist(workspaceId, instance)
-      await this.deps.runStateMachine.emitInstance(workspaceId, instance)
+      await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
       return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
     }
 

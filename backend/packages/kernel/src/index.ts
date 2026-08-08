@@ -356,6 +356,19 @@ export {
   defaultBinaryGeneratorRegistry,
 } from './domain/binary-generator-registry.js'
 
+// Where a binary artifact's BYTES may go: the app-owned registry a DEPLOYMENT registers its own
+// stores on, each an implementation of the `BinaryBlobBackend` port, selected per account beside
+// the platform's own `fs` / `db` / `s3` / `r2` backends. Per-process by design (a store is a live
+// client, not data a run resolves); see `domain/binary-store-registry.ts`.
+export {
+  type BinaryStoreContext,
+  type BinaryStoreDefinition,
+  type BinaryStoreView,
+  BinaryStoreRegistrationError,
+  BinaryStoreRegistry,
+  defaultBinaryStoreRegistry,
+} from './domain/binary-store-registry.js'
+
 // Where those integrations are READ from: the in-process registry by default, the MOTHERSHIP's
 // over `/internal/binary-generators` on a mothership-mode node (whose own build can only hold a
 // second, drifting copy of what the builder's picker offered). See
@@ -475,6 +488,7 @@ export {
   describeVcsApiError,
   VCS_DOC_URLS,
   GITHUB_SETTINGS_URLS,
+  VcsCapabilityUnsupportedError,
 } from './domain/vcs-errors.js'
 export {
   DispatchError,
@@ -750,6 +764,11 @@ export {
   redactSecretsDeep,
 } from './shared/redact-secrets.logic.js'
 export { describeProcessExit } from './shared/process-exit.logic.js'
+export {
+  composePostMortem,
+  MAX_POST_MORTEM_CHARS,
+  tailPostMortemMaterial,
+} from './shared/post-mortem.logic.js'
 export { describeError, runBestEffort } from './shared/best-effort.js'
 export {
   createStoreAgentContextGate,
@@ -812,5 +831,11 @@ export {
   type WorkspaceAccessRow,
   type ResolveWorkspaceAccessInput,
 } from './domain/workspace-access.js'
+
+export {
+  notificationAudienceUserIds,
+  type AudienceAccountMember,
+  type NotificationAudienceInput,
+} from './domain/notification-audience.js'
 
 export { type TaskContextView, renderTaskContext } from './shared/tasks-prompt.logic.js'

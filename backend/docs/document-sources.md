@@ -390,6 +390,12 @@ Three rules bind anything that touches it:
 - **The whole pass is BEST-EFFORT.** The text is the load-bearing half (a run refuses on an
   unreadable context document); an image is an enrichment, so nothing about it may fail an import.
 
+The retained frames are read back by the **visual-confirmation gate**, which folds the designs a
+task links into its actual-vs-reference gallery so a designer gets screenshot-vs-design comparison
+with no manual upload. What that fold does with a name two designs both claim, and how it states a
+design that retained nothing, is in
+[`visual-confirmation.md`](./visual-confirmation.md).
+
 ## Freshness: a stored document is a projection of a page someone keeps editing
 
 Import writes the projection once. Nothing used to look at the source again, so a run started a

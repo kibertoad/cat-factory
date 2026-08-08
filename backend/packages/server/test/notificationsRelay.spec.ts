@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
-import type { Notification } from '@cat-factory/kernel'
+import type { Notification, NotificationDeliveryReason } from '@cat-factory/kernel'
 import { HmacSigner, TOKEN_AUDIENCE } from '../src/auth/signing.js'
 import { mintMachineToken } from '../src/auth/machineToken.js'
 import type { AppEnv, ServerContainer } from '../src/http/env.js'
@@ -52,6 +52,7 @@ const ROWS: Record<string, Notification> = {
 interface Delivered {
   workspaceId: string
   notification: Notification
+  reason: NotificationDeliveryReason
 }
 
 function makeApp(
@@ -69,9 +70,13 @@ function makeApp(
       ? {}
       : {
           machineNotificationDelivery: {
-            deliver: async (workspaceId: string, n: Notification) => {
+            deliver: async (
+              workspaceId: string,
+              n: Notification,
+              reason: NotificationDeliveryReason,
+            ) => {
               if (opts.deliverThrows) throw new Error('slack exploded')
-              delivered.push({ workspaceId, notification: n })
+              delivered.push({ workspaceId, notification: n, reason })
             },
           },
         }),
@@ -118,7 +123,7 @@ function deliver(app: Hono<AppEnv>, token: string | undefined, body: unknown) {
   )
 }
 
-const REQUEST = { workspaceId: 'ws_1', notificationId: 'ntf_1' }
+const REQUEST = { workspaceId: 'ws_1', notificationId: 'ntf_1', reason: 'raised' }
 
 describe('POST /internal/notifications/deliver', () => {
   it('delivers the mothership-held row for an in-scope workspace', async () => {
@@ -126,7 +131,9 @@ describe('POST /internal/notifications/deliver', () => {
     const res = await deliver(makeApp({ delivered }), await machineToken(), REQUEST)
     expect(res.status).toBe(200)
     expect(((await res.json()) as { ok: boolean }).ok).toBe(true)
-    expect(delivered).toEqual([{ workspaceId: 'ws_1', notification: ROWS['ws_1:ntf_1'] }])
+    expect(delivered).toEqual([
+      { workspaceId: 'ws_1', notification: ROWS['ws_1:ntf_1'], reason: 'raised' },
+    ])
   })
 
   it('delivers the STORED content, never anything the caller put in the body', async () => {
@@ -147,6 +154,7 @@ describe('POST /internal/notifications/deliver', () => {
   it('refuses a workspace owned by an out-of-scope account (404, no leak, no delivery)', async () => {
     const delivered: Delivered[] = []
     const res = await deliver(makeApp({ delivered }), await machineToken(), {
+      ...REQUEST,
       workspaceId: 'ws_other',
       notificationId: 'ntf_other',
     })
@@ -167,6 +175,7 @@ describe('POST /internal/notifications/deliver', () => {
     // reach it: the repo read is workspace-scoped, so cross-workspace addressing is a 404.
     const delivered: Delivered[] = []
     const res = await deliver(makeApp({ delivered }), await machineToken(), {
+      ...REQUEST,
       workspaceId: 'ws_1',
       notificationId: 'ntf_other',
     })
@@ -232,6 +241,27 @@ describe('POST /internal/notifications/deliver', () => {
     ).toBe(422)
   })
 
+  // The delivery EDGE cannot be re-derived from the row it names (a raise and an escalation are
+  // both `open`), so it is REQUIRED rather than defaulted. Guessing `raised` would post every
+  // dismissal a node made to the org's Slack; guessing `settled` would silence the alert this
+  // endpoint exists to send. A node one build behind is better off failing loudly.
+  it('422s a missing or unrecognised delivery reason rather than guessing one', async () => {
+    const token = await machineToken()
+    const { reason: _dropped, ...noReason } = REQUEST
+    expect((await deliver(makeApp(), token, noReason)).status).toBe(422)
+    expect((await deliver(makeApp(), token, { ...REQUEST, reason: 'escalated' })).status).toBe(422)
+  })
+
+  it('forwards the edge the node stated, so an alert transport can stand down', async () => {
+    const delivered: Delivered[] = []
+    const res = await deliver(makeApp({ delivered }), await machineToken(), {
+      ...REQUEST,
+      reason: 'settled',
+    })
+    expect(res.status).toBe(200)
+    expect(delivered.map((d) => d.reason)).toEqual(['settled'])
+  })
+
   it('acks even when the channel throws (best-effort delivery, controller-wrapped)', async () => {
     const res = await deliver(makeApp({ deliverThrows: true }), await machineToken(), REQUEST)
     expect(res.status).toBe(200)
@@ -261,8 +291,10 @@ describe('RemoteNotificationChannel (client side)', () => {
     const channel = new RemoteNotificationChannel({
       client: clientAgainst(app, await machineToken()),
     })
-    await channel.deliver('ws_1', notification('ntf_1'))
-    expect(delivered).toEqual([{ workspaceId: 'ws_1', notification: ROWS['ws_1:ntf_1'] }])
+    await channel.deliver('ws_1', notification('ntf_1'), 'raised')
+    expect(delivered).toEqual([
+      { workspaceId: 'ws_1', notification: ROWS['ws_1:ntf_1'], reason: 'raised' },
+    ])
   })
 
   it('skips the round-trip entirely when no token is available yet (no fetch)', async () => {
@@ -276,7 +308,7 @@ describe('RemoteNotificationChannel (client side)', () => {
       token: () => null,
       fetchImpl,
     })
-    await client.deliver('ws_1', 'ntf_1')
+    await client.deliver('ws_1', 'ntf_1', 'raised')
     expect(calls).toBe(0)
   })
 
@@ -287,7 +319,9 @@ describe('RemoteNotificationChannel (client side)', () => {
       client: clientAgainst(makeApp(), await machineToken()),
       onError: (_error, ctx) => errors.push(ctx),
     })
-    await expect(channel.deliver('ws_other', notification('ntf_other'))).resolves.toBeUndefined()
+    await expect(
+      channel.deliver('ws_other', notification('ntf_other'), 'raised'),
+    ).resolves.toBeUndefined()
     expect(errors).toEqual([{ workspaceId: 'ws_other', notificationId: 'ntf_other' }])
   })
 
@@ -303,7 +337,7 @@ describe('RemoteNotificationChannel (client side)', () => {
       }),
       onError: (error) => errors.push(error),
     })
-    await expect(channel.deliver('ws_1', notification('ntf_1'))).resolves.toBeUndefined()
+    await expect(channel.deliver('ws_1', notification('ntf_1'), 'raised')).resolves.toBeUndefined()
     expect(errors).toHaveLength(1)
   })
 })

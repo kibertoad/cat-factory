@@ -44,7 +44,7 @@ import {
   GitHubPullRequestMerger,
   GitHubPullRequestReviewProvider,
   PatPreferringAppRegistry,
-  ProviderRoutingGitHubClient,
+  providerRoutingGitHubClient,
   logger,
   resolveVcsWebUrls,
   WebCryptoSecretCipher,
@@ -549,7 +549,7 @@ function buildNodeGitHubModuleDeps(args: {
   const appClient = config.github.enabled ? githubClient : undefined
   const moduleClient: GitHubClient | undefined =
     appClient && gitlabConnectClient
-      ? new ProviderRoutingGitHubClient({
+      ? providerRoutingGitHubClient({
           installations: githubInstallationRepository,
           github: appClient,
           gitlab: gitlabConnectClient,

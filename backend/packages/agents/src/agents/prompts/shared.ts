@@ -99,24 +99,20 @@ export const INLINE_PANEL_SURFACE =
   'which part you could not see.'
 
 /**
- * Appended to the Coder's system prompt ONLY when the Follow-up companion is enabled for
- * the step. It tells the Coder to be future-looking: as it works, append one JSON line per
- * forward-looking item to the `.cat-follow-ups.jsonl` sentinel file in its working
- * directory — either a `follow_up` (a genuine loose end / useful side-task it noticed but
- * is deliberately NOT acting on in this pass) or a `question` (a clarification it would
- * otherwise have to guess at). The harness streams these out live so a human can triage
- * them while the Coder still runs. The file is NOT part of the deliverable (the platform
- * keeps it out of the commit/PR), so writing to it never affects the implementation. This
- * is a SIDE channel — the Coder still finishes its actual task; it does not wait for
- * answers (an answer arrives later as a fresh task if the human sends one back).
- */
-/**
  * The sentinel file every CONTAINER agent writes its effort self-assessment to. Kept in sync
  * with the harness's own constant (executor-harness has no dependency on this package), exactly
- * like `CONTEXT_DIR` / the follow-ups sentinel. The harness reads + removes it after the run and
+ * like `CONTEXT_DIR` / {@link FOLLOW_UPS_FILE}. The harness reads + removes it after the run and
  * keeps it out of any commit.
  */
 export const EFFORT_REPORT_FILE = '.cat-effort.json'
+
+/**
+ * The sentinel file a follow-up-companion coding agent APPENDS its forward-looking items to, one
+ * JSON object per line, in its working directory. Kept in sync with the harness's own constant
+ * (executor-harness has no dependency on this package), exactly like {@link EFFORT_REPORT_FILE}.
+ * The harness tails it live and keeps it out of any commit.
+ */
+export const FOLLOW_UPS_FILE = '.cat-follow-ups.jsonl'
 
 /**
  * Appended to EVERY container-agent system prompt (at the container-dispatch chokepoint, see
@@ -219,11 +215,23 @@ export const FRAGMENT_ADHERENCE_GUIDANCE_CONTEXT_FILES =
   'an empty array AND state explicitly in your summary that no best-practice standards were ' +
   'available to review against — do not invent any.'
 
+/**
+ * Appended to the Coder's system prompt ONLY when the Follow-up companion is enabled for
+ * the step. It tells the Coder to be future-looking: as it works, append one JSON line per
+ * forward-looking item to the {@link FOLLOW_UPS_FILE} sentinel file in its working
+ * directory: either a `follow_up` (a genuine loose end / useful side-task it noticed but
+ * is deliberately NOT acting on in this pass) or a `question` (a clarification it would
+ * otherwise have to guess at). The harness streams these out live so a human can triage
+ * them while the Coder still runs. The file is NOT part of the deliverable (the platform
+ * keeps it out of the commit/PR), so writing to it never affects the implementation. This
+ * is a SIDE channel: the Coder still finishes its actual task; it does not wait for
+ * answers (an answer arrives later as a fresh task if the human sends one back).
+ */
 export const FOLLOW_UP_GUIDANCE =
   'FORWARD-LOOKING FOLLOW-UPS — be future-looking as you work. Whenever you notice a ' +
   'genuine loose end, useful follow-up or side-task you are NOT acting on in this pass, ' +
   'or a clarifying QUESTION you would otherwise have to guess at, record it by APPENDING ' +
-  'one JSON object per line to a file named `.cat-follow-ups.jsonl` in your working ' +
+  `one JSON object per line to a file named \`${FOLLOW_UPS_FILE}\` in your working ` +
   'directory (create it if absent; never overwrite it). Each line must be a single ' +
   'compact JSON object: {"kind":"follow_up"|"question","title":"<short headline>",' +
   '"detail":"<full explanation>","suggestedAction":"<optional concrete next step>"}. ' +

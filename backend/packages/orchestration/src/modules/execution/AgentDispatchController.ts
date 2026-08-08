@@ -14,7 +14,7 @@ import type {
 } from '@cat-factory/kernel'
 import { getErrorMessage, isAsyncAgentExecutor, parseLocalModelId } from '@cat-factory/kernel'
 import { PR_REVIEWER_KIND, resolvePrNumber } from '@cat-factory/agents'
-import { recordDispatchAttribution } from './step-fold.logic.js'
+import { recordDispatchedJob } from './step-fold.logic.js'
 import { classifyDispatchFailure, type DispatchFailureClassification } from './job.logic.js'
 import { initialPrReviewState } from './prReview.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
@@ -123,7 +123,10 @@ export class AgentDispatchController {
     }
     const executor = this.deps.agentExecutor
     if (isAsyncAgentExecutor(executor) && executor.runsAsync(context)) {
-      if (!step.jobId) {
+      // Held as a local so the `awaiting_job` report below is a `string` on BOTH paths: this
+      // dispatch's own stamp, or the id a Workflows replay re-entered with.
+      let jobId = step.jobId
+      if (!jobId) {
         // The model is fixed the moment its ref resolves (block pin > workspace
         // default > env routing) — long before the container is up — so name it on
         // the very first "spinning up container" emit instead of waiting for the
@@ -157,8 +160,7 @@ export class AgentDispatchController {
         // handle refines this block below with what only the dispatch knows (the repo it
         // resolved, the model it confirmed).
         this.beginDispatchDiagnostics(instance, context, step.model ?? null)
-        await this.deps.runStateMachine.casPersist(workspaceId, instance)
-        await this.deps.runStateMachine.emitInstance(workspaceId, instance)
+        await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
 
         let handle: AgentJobHandle
         try {
@@ -186,13 +188,10 @@ export class AgentDispatchController {
           // carries it. The step's own failure fields are overwritten by a later retry of the
           // step; this survives as the record of what the run's last dispatch attempted.
           this.recordDispatchFailure(instance, classified)
-          await this.deps.runStateMachine.casPersist(workspaceId, instance)
-          await this.deps.runStateMachine.emitInstance(workspaceId, instance)
+          await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
           return { kind: 'job_failed', ...classified }
         }
-        step.jobId = handle.jobId
-        // Record the model at dispatch — the poll site can't resolve it later.
-        recordDispatchAttribution(step, handle, context.agentKind)
+        jobId = recordDispatchedJob(step, handle, context.agentKind)
         // Surface web-search availability + provider on the step (run details), resolved
         // backend-side at dispatch. A static per-run fact, not gated by prompt telemetry.
         if (handle.search) step.search = handle.search
@@ -201,13 +200,9 @@ export class AgentDispatchController {
         // is unknown until the transport reports it on the first poll, so `pollAgentJob`
         // fills that in then.
         this.recordAcceptedDispatch(instance, handle)
-        // The dispatch returned, so the container is up and the job is accepted; the
-        // live phase + the container id/url arrive on the first poll.
-        step.container = { status: 'up' }
-        await this.deps.runStateMachine.casPersist(workspaceId, instance)
-        await this.deps.runStateMachine.emitInstance(workspaceId, instance)
+        await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
       }
-      return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+      return { kind: 'awaiting_job', jobId, stepIndex: instance.currentStep }
     }
 
     // Inline path: the model is resolved before the (blocking) LLM call, so surface
@@ -226,8 +221,7 @@ export class AgentDispatchController {
     // `failRun` re-reads the instance from storage. Gating this on the model having changed left
     // the failure this block exists to explain with no diagnostics whenever the preview resolved
     // nothing or resolved what the step already carried.
-    await this.deps.runStateMachine.casPersist(workspaceId, instance)
-    await this.deps.runStateMachine.emitInstance(workspaceId, instance)
+    await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
 
     const result = await this.runAgent(context, options)
     return this.deps.recordStepResult(workspaceId, instance, step, isFinalStep, result)

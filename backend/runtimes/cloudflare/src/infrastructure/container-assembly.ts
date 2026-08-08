@@ -137,7 +137,11 @@ import { selectDocumentsDeps } from './container-documents-deps'
 import { selectGitHubDeps } from './github-deps.js'
 import { selectTasksDeps } from './tasks-deps.js'
 import type { D1Database } from '@cloudflare/workers-types'
-import { buildExternalNotificationChannel, selectSlackDeps } from './container-notification-deps'
+import {
+  buildExternalNotificationChannel,
+  buildWorkerNotificationDelivery,
+  selectSlackDeps,
+} from './container-notification-deps'
 
 /**
  * The pre-built infrastructure handles + app-owned registries `buildContainer` computes
@@ -562,6 +566,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     initiativePresetRegistry,
     providerRegistry,
     promptFragmentRegistry,
+    binaryStoreRegistry,
   } = registries
   // The Bedrock allow-list that gates `bedrock`-flavour selectability, derived from `env` here
   // (like `baseUrlFor` below) because it is one deployment-level read with nothing
@@ -628,6 +633,10 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // registered on the same instance). `createCore` wraps it in the default `PromptFragmentSource`
     // every prompt-assembly site and the catalog endpoint read through.
     promptFragmentRegistry,
+    // The app-owned registry of the deployment's OWN binary artifact stores. The per-account
+    // resolver above was already composed from it; re-exposed on Core so what this build offers
+    // is readable rather than only observable by storing something.
+    binaryStoreRegistry,
     stepResolverRegistry,
     // The app-owned provider registry the gate providers were wired onto above; the engine's gate
     // machine reads the SAME instance through its GateContext.
@@ -833,6 +842,10 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     config,
     db,
     notificationWebhookSupport?.channel,
+    // The email transport, already wrapped in the notification manager's routing gate. It rides
+    // this set for the same reason Slack does: it sends through the account's sealed provider
+    // key, so a mothership-mode laptop cannot deliver it and this side must.
+    buildWorkerNotificationDelivery(config, db, clock).emailChannel,
   )
 
   return {

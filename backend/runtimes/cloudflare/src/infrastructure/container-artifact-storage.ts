@@ -1,7 +1,16 @@
-import type { Clock, IdGenerator, ResolveBinaryArtifactStore } from '@cat-factory/kernel'
+import type {
+  BinaryStoreRegistry,
+  Clock,
+  IdGenerator,
+  ResolveBinaryArtifactStore,
+} from '@cat-factory/kernel'
 import type { ContentStorageCapability } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
-import { type BuildBlobBackend, makeResolveBinaryArtifactStore } from '@cat-factory/server'
+import {
+  type BuildBlobBackend,
+  makeResolveBinaryArtifactStore,
+  withRegisteredBinaryStores,
+} from '@cat-factory/server'
 import { R2BinaryBlobBackend } from './storage/R2BinaryBlobBackend'
 import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
@@ -13,14 +22,26 @@ import type { Env } from './env'
 // runtime can serve, and the per-account store resolver built from them — which the retention
 // cron also needs OUTSIDE the full container, which is why it was already a standalone pair.
 
-export function cloudflareContentStorage(env: Env): {
+export function cloudflareContentStorage(
+  env: Env,
+  /**
+   * The deployment's own binary artifact stores, registered in code (`createWorker({ overrides:
+   * { binaryStoreRegistry } })`). They add the `custom` option to the account-settings picker
+   * here exactly as they do on Node; the resolver below builds one when an account selects it.
+   */
+  binaryStoreRegistry?: BinaryStoreRegistry,
+): {
   capability: ContentStorageCapability
   buildBlobBackend: BuildBlobBackend
 } {
-  const capability: ContentStorageCapability = {
-    supportedBackends: env.ARTIFACT_BUCKET ? ['off', 'r2'] : ['off'],
-    defaultBackend: env.ARTIFACT_BUCKET ? 'r2' : 'off',
-  }
+  const capability = withRegisteredBinaryStores(
+    {
+      supportedBackends: env.ARTIFACT_BUCKET ? ['off', 'r2'] : ['off'],
+      defaultBackend: env.ARTIFACT_BUCKET ? 'r2' : 'off',
+      customStores: [],
+    },
+    binaryStoreRegistry,
+  )
   const buildBlobBackend: BuildBlobBackend = (kind) => {
     // R2 is the only blob backend the Worker serves; anything else ⇒ storage unavailable.
     return kind === 'r2' && env.ARTIFACT_BUCKET
@@ -40,8 +61,15 @@ export function buildCloudflareArtifactStoreResolver(
   db: D1Database,
   clock: Clock,
   idGenerator: IdGenerator,
+  /**
+   * The deployment's registered stores. The retention cron is the caller that most needs them and
+   * is furthest from where they are registered: without them a sweep resolves NOTHING for every
+   * account on a custom store, so those workspaces' bytes are never reclaimed and their metadata
+   * rows never pruned: a silent leak on exactly the deployments that extended the platform.
+   */
+  binaryStoreRegistry?: BinaryStoreRegistry,
 ): ResolveBinaryArtifactStore {
-  const { capability, buildBlobBackend } = cloudflareContentStorage(env)
+  const { capability, buildBlobBackend } = cloudflareContentStorage(env, binaryStoreRegistry)
   return makeResolveBinaryArtifactStore({
     accountSettings: buildAccountSettings(env, db, clock, capability),
     accountOf: (workspaceId) => new D1WorkspaceRepository({ db }).accountOf(workspaceId),
@@ -50,5 +78,6 @@ export function buildCloudflareArtifactStoreResolver(
     clock,
     buildBlobBackend,
     defaultBackend: capability.defaultBackend,
+    ...(binaryStoreRegistry ? { binaryStoreRegistry } : {}),
   })
 }

@@ -2181,8 +2181,11 @@
           "fs": "Filesystem locale",
           "s3": "Amazon S3 / compatibile S3",
           "r2": "Cloudflare R2",
-          "db": "Database Postgres"
+          "db": "Database Postgres",
+          "custom": "Archivio personalizzato (questo deployment)"
         },
+        "unregisteredStore": "{store} (non registrato in questo deployment)",
+        "unregisteredStoreWarning": "Questo account archivia gli artefatti in «{store}», che questo deployment non registra. Non viene salvato nulla finché non scegli un archivio registrato o non lo registri di nuovo nel codice.",
         "basePath": "Percorso base (predefinito: .file-storage)",
         "region": "Regione (es. us-east-1)",
         "bucket": "Bucket",
@@ -2495,7 +2498,8 @@
         "shortcuts": "Scorciatoie da tastiera",
         "bugHunt": "Caccia ai bug",
         "toggleUiMode": "Cambia modalità interfaccia",
-        "foundationalServices": "Servizi fondamentali"
+        "foundationalServices": "Servizi fondamentali",
+        "notificationSettings": "Gestisci l'instradamento delle notifiche"
       },
       "keywords": {
         "newPipeline": "pipeline agenti catena",
@@ -2519,7 +2523,8 @@
         "bugHunt": "bug caccia triage backlog ticket non assegnati",
         "toggleUiMode": "interfaccia modalità base avanzata mostra nascondi",
         "tutorial": "tutorial tour guida aiuto imparare introduzione",
-        "foundationalServices": "capacità condivisa piattaforma servizio api contratto openapi catalogo"
+        "foundationalServices": "capacità condivisa piattaforma servizio api contratto openapi catalogo",
+        "notificationSettings": "notifiche email instradamento canali casella"
       }
     },
     "shortcuts": {
@@ -2596,6 +2601,10 @@
         "bugHunt": {
           "label": "Caccia ai bug",
           "description": "Valuta i bug aperti e non assegnati di una bacheca e scegline uno da correggere"
+        },
+        "notificationSettings": {
+          "label": "Notifiche",
+          "description": "Scegli quali eventi arrivano in casella e via email."
         }
       }
     },
@@ -5470,7 +5479,8 @@
       "description": {
         "binary_generators_unreachable": "Non è stato possibile leggere le integrazioni generative di questa installazione in questo momento, quindi l'esecuzione non è partita. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
         "foundational_builtins_unreachable": "Non è stato possibile leggere i servizi fondamentali integrati di questa installazione in questo momento. Non c'è nulla di configurato male e non serve alcuna modifica: riprova quando la connessione sarà ripristinata.",
-        "connection_credentials_unreadable": "Non è stato possibile leggere le credenziali memorizzate di questa connessione. Se questa installazione riesce a raggiungere il servizio che ne custodisce la chiave, ricollega la sorgente per sostituirle; altrimenti riprova quando quella connessione sarà ripristinata."
+        "connection_credentials_unreadable": "Non è stato possibile leggere le credenziali memorizzate di questa connessione. Se questa installazione riesce a raggiungere il servizio che ne custodisce la chiave, ricollega la sorgente per sostituirle; altrimenti riprova quando quella connessione sarà ripristinata.",
+        "vcs_capability_unsupported": "Il provider di controllo del codice collegato a questo workspace non offre questa operazione. Non c'è nulla di configurato male e nessuna impostazione può aiutare: non è disponibile per questo provider."
       }
     },
     "action": {
@@ -5675,6 +5685,58 @@
     "confirmDisconnect": {
       "title": "Disconnettere Slack?",
       "body": "Le notifiche Slack si interromperanno finché non ti riconnetti."
+    }
+  },
+  "notificationSettings": {
+    "panel": {
+      "title": "Notifiche",
+      "intro": "Scegli quali eventi questa bacheca consegna e su quale canale. Ciò che non modifichi usa il valore predefinito.",
+      "inAppNote": "«Nell'app» controlla solo l'avviso in tempo reale. La scheda viene salvata comunque e resta in casella dopo un ricaricamento.",
+      "emailNote": "L'email richiede un mittente collegato all'account (Impostazioni account). Per impostazione predefinita vengono inviati solo gli eventi ad alto impatto.",
+      "otherChannelsNote": "Slack e i webhook in uscita scelgono il proprio elenco di eventi dove è configurata la destinazione.",
+      "openSlack": "Instradamento Slack"
+    },
+    "column": {
+      "event": "Evento",
+      "inApp": "Nell'app",
+      "email": "Email"
+    },
+    "action": {
+      "save": "Salva",
+      "reset": "Ripristina predefiniti"
+    },
+    "toast": {
+      "saved": "Instradamento delle notifiche salvato"
+    },
+    "error": {
+      "load": "Impossibile caricare le impostazioni delle notifiche",
+      "save": "Impossibile salvare le impostazioni delle notifiche"
+    },
+    "unavailable": "Questa installazione non memorizza l'instradamento delle notifiche, quindi ogni evento usa il valore predefinito.",
+    "loadFailed": "Non è stato possibile leggere l'instradamento delle notifiche di questa board, quindi gli interruttori qui sotto non sono la sua configurazione attuale. Riprova prima di modificare qualcosa.",
+    "type": {
+      "merge_review": "Revisione del merge",
+      "pipeline_complete": "Pipeline completata",
+      "ci_failed": "CI non riuscita",
+      "test_failed": "Test non riusciti",
+      "requirement_review": "Revisione dei requisiti",
+      "clarity_review": "Revisione della chiarezza",
+      "release_regression": "Regressione della release",
+      "decision_required": "Decisione necessaria",
+      "human_test_ready": "Pronto per il test umano",
+      "visual_confirmation_ready": "Pronto per la conferma visiva",
+      "human_review": "In attesa di revisione del codice",
+      "followup_pending": "Follow-up da decidere",
+      "fork_decision_pending": "Approccio di implementazione",
+      "judge_review": "Verdetto della revisione",
+      "pr_review_ready": "Rilievi revisione PR",
+      "initiative": "Aggiornamenti dell'iniziativa",
+      "platform_health": "Salute della piattaforma",
+      "infra_unreachable": "Interruzioni dell’infrastruttura",
+      "budget_paused": "Esecuzioni in pausa (budget)",
+      "budget_threshold": "Avviso di budget",
+      "key_drift": "Disallineamento della chiave di cifratura",
+      "merge_tag_request": "Richiesta impegno di revisione"
     }
   },
   "docInterview": {
@@ -6153,6 +6215,19 @@
     "history": {
       "heading": "Cronologia (nessun round) | Cronologia ({count} round) | Cronologia ({count} round)",
       "fixRequested": "Correzione richiesta"
+    },
+    "design": {
+      "summary": "Nessun frame proviene dal design collegato. | 1 frame dal design collegato. | {count} frame dal design collegato.",
+      "dropped": "Non ce ne sono altri nascosti. | 1 altro non è mostrato qui. | Altri {count} non sono mostrati qui.",
+      "gapDropped": "Nessuno dei suoi frame è nascosto. | 1 dei suoi frame non è mostrato qui. | {count} dei suoi frame non sono mostrati qui.",
+      "gapLine": "{title}:",
+      "gap": {
+        "partial": "solo una parte dei suoi frame è stata conservata; aggiorna il documento per riprovare.",
+        "failed": "non è stato possibile scaricare i suoi frame nell'ultimo import; aggiorna il documento per riprovare.",
+        "none": "non ha frame da mostrare.",
+        "storage_unavailable": "quando è stato importato non era configurato alcuno spazio per le immagini, quindi non è stato scaricato nulla.",
+        "not_retained": "non ci sono immagini conservate per esso. La sua origine potrebbe non generare frame, oppure è stato importato prima che i frame venissero conservati; un nuovo import chiarisce quale dei due."
+      }
     }
   },
   "outcome": {
@@ -6399,6 +6474,7 @@
       },
       "actual": "Effettivo",
       "reference": "Riferimento",
+      "fromLinkedDesign": "· dal design collegato",
       "actualAlt": "{view} (effettivo)",
       "referenceAlt": "{view} (riferimento)",
       "replace": "Sostituisci",

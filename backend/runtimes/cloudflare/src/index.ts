@@ -36,6 +36,7 @@ import { D1PlatformMetricsRepository } from './infrastructure/repositories/D1Pla
 import { D1AuditEventRepository } from './infrastructure/repositories/D1AuditEventRepository'
 import { D1SpendRollupRepository } from './infrastructure/repositories/D1SpendRollupRepository'
 import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
+import { registeredBinaryStoreRegistry } from './infrastructure/binaryStores'
 // The deployment's OWN document credentials, read from `env`. Shared with the per-request container
 // build so the boot check and the engine agree about what this deployment can read.
 import {
@@ -93,6 +94,7 @@ import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import {
   DEFAULT_WORKSPACE_SETTINGS,
   defaultBinaryGeneratorRegistry,
+  defaultBinaryStoreRegistry,
   defaultFoundationalServiceRegistry,
   defaultPipelineRegistry,
   defaultTaskTypeRegistry,
@@ -207,6 +209,21 @@ export {
 // the platform's. Both are legitimate, which is why both are exported and neither is inferred.
 export { PromptFragmentRegistry, defaultPromptFragmentRegistry } from '@cat-factory/kernel'
 export { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
+// Installation-level extension point for the deployment's OWN BINARY ARTIFACT STORES: a
+// deployment news a `defaultBinaryStoreRegistry()`, registers stores implementing the
+// `BinaryBlobBackend` port (GCS, Azure Blob, an internal object service) on it, and passes it via
+// the `binaryStoreRegistry` override. Each becomes a `custom` choice in the account-settings storage
+// picker, beside the platform's own backends; the per-account resolver builds one when an account
+// selects it, and stamps the store's id onto every artifact row it writes.
+export {
+  BinaryStoreRegistry,
+  BinaryStoreRegistrationError,
+  type BinaryStoreContext,
+  type BinaryStoreDefinition,
+  type BinaryStoreView,
+  type BinaryBlobBackend,
+  defaultBinaryStoreRegistry,
+} from '@cat-factory/kernel'
 // Installation-level extension point for polling GATES and STEP RESOLVERS. `gateRegistryWithBuiltins()`
 // is the one a deployment almost always wants: a bare `defaultGateRegistry()` is EMPTY, so injecting
 // one silently drops `ci` / `conflicts` / `post-release-health` from every pipeline that names them.
@@ -353,6 +370,11 @@ function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
     // ones are what a binary-generating step may produce with, and a malformed definition or a
     // cleartext endpoint fails boot rather than a dispatch.
     binaryGeneratorRegistry: overrides.binaryGeneratorRegistry ?? defaultBinaryGeneratorRegistry(),
+    // The deployment's own binary artifact stores. Resolved here so registration validation sees
+    // the same instance the engine does; `createApp` then registers it PROCESS-WIDE, which is how
+    // it reaches the builders that take no overrides at all (the durable driver, the queue
+    // consumers, the retention cron). See `infrastructure/binaryStores.ts`.
+    binaryStoreRegistry: overrides.binaryStoreRegistry ?? defaultBinaryStoreRegistry(),
     // The best-practice standards pool: the SHIPPED catalog plus whatever a deployment registered
     // onto the same instance. Defaulted to the built-ins by the FACADE (here and, for a container
     // built with no overrides, in `resolveWorkerRegistries`) rather than by `createCore`, because
@@ -527,9 +549,11 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
     }),
   )
   // Binary-artifact retention (UI screenshots + reference designs) is per-workspace, and
-  // the blob backend is per-account (R2 or S3), so it resolves each workspace's store. Run
-  // whenever storage could be configured: the R2 default (ARTIFACT_BUCKET) OR a per-account
-  // S3 backend (which needs the encryption key to unseal its credentials).
+  // the blob backend is per-account (R2, S3, or one the DEPLOYMENT registered), so it resolves
+  // each workspace's store. Run whenever storage could be configured: the R2 default
+  // (ARTIFACT_BUCKET) OR any per-account selection, which is readable only once ENCRYPTION_KEY
+  // can unseal the account's settings, a registered store included, so it needs no clause of
+  // its own here.
   if (env.ARTIFACT_BUCKET || env.ENCRYPTION_KEY) {
     const settingsRepo = new D1WorkspaceSettingsRepository({ db: env.DB })
     tick.run(
@@ -540,6 +564,12 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
           env.DB,
           clock,
           new CryptoIdGenerator(),
+          // Read off the process-wide registration rather than threaded down from `createWorker`:
+          // this sweep builds its resolver outside the container, so it used to be the one caller
+          // an entry point had to remember to hand the registry to, while the durable driver (the
+          // other override-less builder) had no such parameter available and silently got none.
+          // One mechanism now serves both. See `infrastructure/binaryStores.ts`.
+          registeredBinaryStoreRegistry(),
         ),
         listWorkspaceIds: () =>
           new D1WorkspaceRepository({ db: env.DB })

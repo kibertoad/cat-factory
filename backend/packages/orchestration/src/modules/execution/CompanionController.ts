@@ -320,9 +320,9 @@ export class CompanionController {
       feedback: assessment?.summary ?? '',
       ...(assessment?.comments?.length ? { comments: assessment.comments } : {}),
     })
-    await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
+    await this.deps.stateMachine.persistAndEmit(workspaceId, instance, {
+      blockStatus: 'in_progress',
+    })
     return { kind: 'continue' }
   }
 
@@ -428,26 +428,10 @@ export class CompanionController {
       )
       this.deps.stepGraph.pauseStepForInput(step)
       instance.status = 'blocked'
-      await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'blocked')
-      await this.deps.stateMachine.casPersist(workspaceId, instance)
-      await this.deps.stateMachine.emitInstance(workspaceId, instance)
+      await this.deps.stateMachine.persistAndEmit(workspaceId, instance, { blockStatus: 'blocked' })
       return { kind: 'awaiting_decision', decisionId: step.approval.id }
     }
-    if (isFinalStep) {
-      instance.status = 'done'
-      await this.deps.stateMachine.finalizeBlock(workspaceId, instance, undefined)
-      await this.deps.stateMachine.casPersist(workspaceId, instance)
-      await this.deps.stateMachine.emitInstance(workspaceId, instance)
-      await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
-      return { kind: 'done' }
-    }
-    instance.currentStep += 1
-    const next = instance.steps[instance.currentStep]
-    if (next) this.deps.stepGraph.startStep(next)
-    await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'continue' }
+    return this.deps.stateMachine.settleStepAndAdvance(workspaceId, instance, isFinalStep)
   }
 
   /**

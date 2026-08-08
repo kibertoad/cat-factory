@@ -18,6 +18,7 @@ import type { KaizenService } from '../modules/kaizen/KaizenService.js'
 import type { MergeTrackRecordService } from '../modules/merge/MergeTrackRecordService.js'
 import type { RiskPolicyService } from '../modules/merge/RiskPolicyService.js'
 import type { NotificationService } from '../modules/notifications/NotificationService.js'
+import type { NotificationSettingsService } from '../modules/notifications/NotificationSettingsService.js'
 import type { PreviewService } from '../modules/preview/PreviewService.js'
 import type { RecurringPipelineService } from '../modules/recurring/RecurringPipelineService.js'
 import type { ReleaseHealthService } from '../modules/releaseHealth/ReleaseHealthService.js'
@@ -73,6 +74,13 @@ export interface BrainstormModule {
 /** The notifications feature's service, present only when its repository is wired. */
 export interface NotificationsModule {
   service: NotificationService
+  /**
+   * The notification manager (per-workspace, per-channel routing). Present only when its
+   * store is wired; absent ⇒ the settings surface 503s and every type keeps its shipped
+   * default. Separate from `service` because the routing store is optional within the
+   * module exactly as the delivery channel is.
+   */
+  settingsService?: NotificationSettingsService
 }
 
 /** The post-release-health (Datadog) settings service, present only when wired. */

@@ -47,6 +47,21 @@ class FakeMetadataStore implements BinaryArtifactMetadataStore {
       ),
     )
   }
+  listByDocuments(
+    workspaceId: string,
+    documents: readonly DocumentArtifactRef[],
+  ): Promise<BinaryArtifactRecord[]> {
+    return Promise.resolve(
+      [...this.rows.values()].filter((r) =>
+        documents.some(
+          (document) =>
+            r.workspaceId === workspaceId &&
+            r.document?.source === document.source &&
+            r.document.externalId === document.externalId,
+        ),
+      ),
+    )
+  }
   deleteByIds(workspaceId: string, ids: readonly string[]): Promise<number> {
     let n = 0
     for (const id of ids) {

@@ -132,6 +132,21 @@ export {
   type BinaryGeneratorDefinition,
   defaultBinaryGeneratorRegistry,
 } from '@cat-factory/kernel'
+// Installation-level extension point for the deployment's OWN BINARY ARTIFACT STORES: a
+// deployment news a `defaultBinaryStoreRegistry()`, registers stores implementing the
+// `BinaryBlobBackend` port (GCS, Azure Blob, an internal object service) on it, and passes it via
+// the `binaryStoreRegistry` option. Each becomes a `custom` choice in the account-settings storage
+// picker, beside the platform's own backends; the per-account resolver builds one when an account
+// selects it, and stamps the store's id onto every artifact row it writes.
+export {
+  BinaryStoreRegistry,
+  BinaryStoreRegistrationError,
+  type BinaryStoreContext,
+  type BinaryStoreDefinition,
+  type BinaryStoreView,
+  type BinaryBlobBackend,
+  defaultBinaryStoreRegistry,
+} from '@cat-factory/kernel'
 // Installation-level extension point for polling GATES and STEP RESOLVERS. `gateRegistryWithBuiltins()`
 // is the one a deployment almost always wants: a bare `defaultGateRegistry()` is EMPTY, so injecting
 // one silently drops `ci` / `conflicts` / `post-release-health` from every pipeline that names them.

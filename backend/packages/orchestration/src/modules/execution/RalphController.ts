@@ -23,7 +23,7 @@ import {
   RALPH_AGENT_KIND,
   RALPH_NO_PROGRESS_LIMIT,
 } from './ralph.logic.js'
-import { recordDispatchAttribution } from './step-fold.logic.js'
+import { recordDispatchedJob } from './step-fold.logic.js'
 
 /** The engine collaborators the ralph loop drives (kept on the engine, injected here). */
 export interface RalphControllerDeps {
@@ -171,16 +171,12 @@ export class RalphController {
     // the ralph result view shows the container spinning up, then the live phase on first poll.
     step.container = { status: 'starting' }
     step.subtasks = undefined
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
+    await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
 
     const handle = await executor.startJob(context)
-    step.jobId = handle.jobId
-    recordDispatchAttribution(step, handle, context.agentKind)
-    step.container = { status: 'up' }
-    await this.deps.stateMachine.casPersist(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
+    recordDispatchedJob(step, handle, context.agentKind)
+    await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
+    return { kind: 'awaiting_job', jobId: handle.jobId, stepIndex: instance.currentStep }
   }
 
   /**

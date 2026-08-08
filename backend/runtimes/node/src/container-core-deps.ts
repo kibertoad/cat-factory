@@ -152,6 +152,8 @@ export interface NodeCoreDepsBundle {
   executionEventPublisher: NodeRealtimeDepsResult['executionEventPublisher']
   agentExecutor: NodeRealtimeDepsResult['agentExecutor']
   notificationChannel: NodeRealtimeDepsResult['notificationChannel']
+  /** The notification manager's store, built beside the channels it routes. */
+  notificationSettingsRepository: NodeRealtimeDepsResult['notificationSettingsRepository']
   /** The run-lifecycle half of the same registered endpoint (absent ⇒ no webhook configured). */
   runLifecycleSink: RunLifecycleSink | undefined
   releaseHealthDeps: NodeAccountDepsResult['releaseHealthDeps']
@@ -289,6 +291,7 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     incidentEnrichmentDeps,
     accountSettings,
     resolveBinaryArtifactStore,
+    notificationSettingsRepository,
   } = bundle
   return {
     ...releaseHealthDeps,
@@ -327,11 +330,14 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     // …and where that tier is READ from when it is not the registry above (mothership mode).
     foundationalBuiltinSource: options.foundationalBuiltinSource,
-    // The app-owned registry of the deployment's GENERATIVE BINARY INTEGRATIONS (what a
-    // binary-generating step produces WITH, as the catalog above is where its output GOES);
-    // createCore threads it into the execution service and re-exposes it on Core for boot-time
-    // validation.
+    // Two app-owned binary registries, siblings and not the same thing: the GENERATIVE
+    // INTEGRATIONS a binary-generating step produces WITH (the catalog above is where that output
+    // GOES), and the deployment's own artifact STORES, where a screenshot's bytes land. createCore
+    // threads the first into the execution service; the second is read by the per-account store
+    // resolver in `buildNodeAccountDeps`. Both are re-exposed on Core, for boot validation and to
+    // make a boot's offered set readable.
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
+    binaryStoreRegistry: options.binaryStoreRegistry,
     // …and where those integrations are READ from when it is not the registry above (mothership
     // mode), for the same reason its foundational sibling exists.
     binaryGeneratorSource: options.binaryGeneratorSource,
@@ -473,6 +479,8 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
       'notificationRepository',
       (d) => new DrizzleNotificationRepository(d),
     ),
+    // The manager's store — the SAME instance the routed channels were built over.
+    notificationSettingsRepository,
     ...tasks.deps,
     // Recurring pipelines + the workspace tracker selection. The tracker provider
     // files the tech-debt pipeline's issue by resolving the *workspace's* connected

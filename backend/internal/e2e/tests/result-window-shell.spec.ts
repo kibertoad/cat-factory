@@ -3,6 +3,7 @@ import {
   LIVE_TIMEOUT,
   RUN_TERMINAL_TIMEOUT,
   createSimplePipeline,
+  openTaskFocusView,
   setFakeProfile,
   startRun,
   taskCard,
@@ -42,11 +43,11 @@ test.describe('result-window shell (merger)', () => {
     // The run drives through the merger and settles at `pr_ready` (pushed live).
     await expect(card).toHaveAttribute('data-status', 'pr_ready', { timeout: RUN_TERMINAL_TIMEOUT })
 
-    // Clicking the task card opens the full-screen focus view (`ui.focus`), which lists the
-    // run's steps (`PipelineProgress`). Clicking the completed merger step there routes to its
-    // dedicated result window (`dispatchStepView`) — rendered in the shell, teleported above
-    // the focus view.
-    await card.click()
+    // The card's Review affordance opens the full-screen focus view (`ui.focus`), which lists
+    // the run's steps (`PipelineProgress`). Clicking the completed merger step there routes to
+    // its dedicated result window (`dispatchStepView`), rendered in the shell and teleported
+    // above the focus view.
+    await openTaskFocusView(card)
     const mergerStep = page.locator('[data-testid="pipeline-step"][data-step-kind="merger"]')
     await expect(mergerStep).toBeVisible({ timeout: LIVE_TIMEOUT })
 
@@ -111,7 +112,7 @@ test.describe('result-window shell (gate)', () => {
     await expect(card).toHaveAttribute('data-status', 'pr_ready', { timeout: RUN_TERMINAL_TIMEOUT })
 
     // Open the run's step list (the focus view) and route to the finished ci gate's window.
-    await card.click()
+    await openTaskFocusView(card)
     const ciStep = page.locator('[data-testid="pipeline-step"][data-step-kind="ci"]')
     await expect(ciStep).toBeVisible({ timeout: LIVE_TIMEOUT })
 
@@ -174,7 +175,7 @@ test.describe('result-window shell (nested lightbox)', () => {
     await expect(card).toHaveAttribute('data-status', 'pr_ready', { timeout: RUN_TERMINAL_TIMEOUT })
 
     // Open the run's step list (the focus view) and route to the finished tester step's window.
-    await card.click()
+    await openTaskFocusView(card)
     const testerStep = page.locator('[data-testid="pipeline-step"][data-step-kind="tester-api"]')
     await expect(testerStep).toBeVisible({ timeout: LIVE_TIMEOUT })
     await testerStep.click()

@@ -84,6 +84,23 @@ These are used near-interchangeably; the definitions are the kernel ports
 So a "tool server" is always the consuming side; the package literally named `mcp-server` is the
 serving side, and neither imports the other.
 
+## Gatekeeper: one pattern, three packages
+
+"Gatekeeper" names a credential-holding front-end over the public API (the Cloudflare OS
+integration pattern), and it is spread across three packages that a search hits together. None of
+them is part of the backend: all three consume `/api/v1` and the outbound webhook contract as an
+outside integrator would.
+
+| Piece                   | Package                            | What it is                                                                        | Taken by |
+| ----------------------- | ---------------------------------- | --------------------------------------------------------------------------------- | -------- |
+| `sdk/gatekeeper`        | `@cat-factory/gatekeeper-bindings` | the GENERATED per-operation policy table (`minScope`, consequence, invoke thunks) | install  |
+| `sdk/gatekeeper-worker` | `@cat-factory/gatekeeper-worker`   | the hand-written Worker machinery: capability surface, key broker, approval inbox | install  |
+| `deploy/gatekeeper`     | `@cat-factory/deploy-gatekeeper`   | the unpublished deployment template: the policy file and wrangler bindings        | copy     |
+
+So "the bindings" are data, "the worker" is machinery, and "the template" is the one file an
+operator really writes (`policy.config.ts`). Docs: each package's README; design record:
+`docs/initiatives/cloudflare-os-gatekeeper.md`.
+
 ## Concept indexes, where the cross-cutting things live
 
 Short "where X lives" pointers for concepts that are spread across many files with no single

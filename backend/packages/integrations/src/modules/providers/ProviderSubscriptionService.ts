@@ -34,6 +34,14 @@ const MAX_TOKENS_PER_VENDOR = 25
 // Leasing is usage-aware (see providers.logic): least-loaded token wins, with
 // round-robin by lastUsedAt as the tiebreaker. Mirrors RunnerPoolConnectionService.
 
+/**
+ * HKDF domain tag separating the sealed subscription tokens from every other cipher (mirrors
+ * {@link TEST_SECRETS_CIPHER_INFO} et al). Both facades build their `WebCryptoSecretCipher` from
+ * this constant: the tag derives the key, so a facade spelling it differently seals credentials
+ * its sibling cannot unseal.
+ */
+export const PROVIDER_SUBSCRIPTIONS_CIPHER_INFO = 'cat-factory:provider-subscriptions'
+
 export interface ProviderSubscriptionServiceDependencies {
   providerSubscriptionTokenRepository: ProviderSubscriptionTokenRepository
   workspaceRepository: WorkspaceRepository

@@ -5,6 +5,7 @@ import type { ExecutionInstance, PipelineStep } from './execution.js'
 import { reproductionStatusSchema } from './reproduction.js'
 import type { JoinedRequirement } from './run-evidence.js'
 import {
+  countCapturedViews,
   indexRequirementVerdicts,
   isRequirementRegression,
   isTesterKind,
@@ -506,8 +507,19 @@ function composeVisuals(
 ): OutcomeVisuals {
   // The visual-confirmation gate is preferred over the tester's raw captures: its pairs were
   // put in FRONT of a human and carry the reference they were judged against.
+  //
+  // Preferred only when it CAPTURED something, though. A gate row exists for any view either side
+  // names, so a task whose linked designs (or hand-uploaded mocks) contributed references while
+  // the run captured no screenshot has a full set of pairs and nothing to show of the change:
+  // reporting that as this section's evidence would render a gallery of reference-only rows and
+  // claim the run's visuals were verified. That is the "absent vs zero" line, so it falls through
+  // to the absence below, which names the gate's own reason for the emptiness.
   const gate = steps.filter((s) => s.visualConfirm).at(-1)?.visualConfirm ?? null
-  const pairs = (gate?.pairs ?? []).filter((p) => p.actualArtifactId || p.referenceArtifactId)
+  const gatePairs = gate?.pairs ?? []
+  const pairs =
+    countCapturedViews(gatePairs) > 0
+      ? gatePairs.filter((p) => p.actualArtifactId || p.referenceArtifactId)
+      : []
   if (pairs.length > 0) {
     return {
       status: 'reported',

@@ -53,6 +53,7 @@ import { modelPresetController } from './modules/modelPresets/ModelPresetControl
 import { serviceFragmentDefaultsController } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsController.js'
 import { modelController } from './modules/models/ModelController.js'
 import { notificationController } from './modules/notifications/NotificationController.js'
+import { notificationSettingsController } from './modules/notifications/NotificationSettingsController.js'
 import { notificationRelayController } from './modules/notifications/NotificationRelayController.js'
 import { telemetryIngestController } from './modules/telemetry/TelemetryIngestController.js'
 import { telemetryReadController } from './modules/telemetry/TelemetryReadController.js'
@@ -381,6 +382,11 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
   { name: 'initiative', mount: WORKSPACE_MOUNT, build: () => initiativeController() },
   { name: 'notification', mount: WORKSPACE_MOUNT, build: () => notificationController() },
   // ---- the workspace CONFIGURATION surfaces (policies, secrets, presets, integrations) ----
+  {
+    name: 'notificationSettings',
+    mount: WORKSPACE_MOUNT,
+    build: () => notificationSettingsController(),
+  },
   { name: 'riskPolicy', mount: WORKSPACE_MOUNT, build: () => riskPolicyController() },
   { name: 'mergeTrackRecord', mount: WORKSPACE_MOUNT, build: () => mergeTrackRecordController() },
   { name: 'sharedStack', mount: WORKSPACE_MOUNT, build: () => sharedStackController() },

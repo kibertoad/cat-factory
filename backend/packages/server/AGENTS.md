@@ -117,6 +117,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `registry.mapStructuredResult(kind)` lookup — both switches went when the built-ins became
   registrations. What still lives in `agents/prompts.ts` is what is NOT about a kind: the tester
   infra spec (derived per run from the frame's profile and what the run provisioned) and the PR body.
+  `agents/harnessContract.ts` is the BACKEND half of the filesystem contract with the executor
+  harness (the sibling checkout directory's name, the four sentinel paths). The harness image can
+  depend on no workspace package, so both halves are computed independently and pinned against each
+  other by the harness's own `harness-contract.conformity.test.ts`.
   `agents/providerCapabilities.ts` resolves what a workspace (+ its account + the user) has
   configured into kernel's `ProviderCapabilities`, the one join point the model catalog and the
   pipeline-start guard share; `agents/bedrock.ts` parses `BEDROCK_MODELS` for it and is the ONLY
@@ -196,6 +200,11 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `child`-bound fields folded in and behind the same level gate. Patterns and rules:
   [`backend/docs/logging.md`](../../docs/logging.md).
 - `persistence/mappers.ts`: the dialect-agnostic row↔domain mappers shared by **both** stores.
+- `persistence/binaryArtifactStore.ts`: per-ACCOUNT binary-artifact store resolution, composing the
+  runtime's metadata store with the backend an account selected. Both facades' factories serve only
+  the platform's own backends; a store the DEPLOYMENT registered is resolved here, so custom stores
+  work identically on every runtime with neither facade knowing about them
+  ([`custom-binary-stores.md`](../../docs/custom-binary-stores.md)).
 - `test/coverageScan.ts` + the `*.coverage.spec.ts` beside it: the guards for the rules a
   typecheck cannot hold, where a field must stay OPTIONAL because one caller is entitled to the
   default (`initiatedByRole`, `intakeOrigin`). Each classifies every call site and fails on a new
@@ -215,7 +224,8 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   and the node's inbound per-workspace subscription, whose handshake is handed to the SAME
   `gateways.realtime.upgrade` seam the browser stream uses), and `notifications/machineNotifications.ts` +
   `modules/notifications/NotificationRelayController.ts` (notification delivery through the org's
-  external transports), and `telemetry/machineTelemetry.ts` +
+  external transports; the ROUTED half — the notification manager, the per-channel gate and the
+  email transport — is built once for both facades in `notifications/notificationDelivery.ts`), and `telemetry/machineTelemetry.ts` +
   `modules/telemetry/TelemetryIngestController.ts` (the batch upload of a finished run's
   local-first telemetry; its own endpoint precisely because per-row remote writes are what the
   local-first bucket exists to prevent) beside `telemetry/machineTelemetryRead.ts` +
@@ -247,6 +257,11 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
     resource and must not learn failure modes separately), `viewerTokenReads.ts` (the CALLER-token
     repo reads behind the personal-PAT picker; mints, caches and rate-limit-accounts nothing), and
     `githubHttpHelpers.ts` (`GitHubApiError` + the shared request constants).
+  - `github/ProviderRoutingGitHubClient.ts` fronts the `github` module in a deployment running BOTH
+    a GitHub App and GitLab PAT connect, dispatching each installation-keyed call by the
+    connection's stored provider. Reflective (a `Proxy`) rather than a hand-written delegate,
+    because 20 of the port's 53 methods are OPTIONAL: a delegate that omits one still typechecks
+    and reports a capability the deployment HAS as absent. See its header for what that cost.
   - `github/runInitiatorToken.ts` is the ONE answer to "does this run act with its initiator's own
     token, or the deployment credential?": asked by `PatPreferringAppRegistry` (the engine client)
     and by both facades' container-dispatch mints, so an opted-out workspace cannot be honoured on

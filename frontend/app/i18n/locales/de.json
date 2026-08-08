@@ -2181,8 +2181,11 @@
           "fs": "Lokales Dateisystem",
           "s3": "Amazon S3 / S3-kompatibel",
           "r2": "Cloudflare R2",
-          "db": "Postgres-Datenbank"
+          "db": "Postgres-Datenbank",
+          "custom": "Eigener Speicher (dieses Deployment)"
         },
+        "unregisteredStore": "{store} (in diesem Deployment nicht registriert)",
+        "unregisteredStoreWarning": "Dieses Konto speichert Artefakte in „{store}“, was dieses Deployment nicht registriert. Es wird nichts gespeichert, bis Sie einen registrierten Speicher wählen oder der Speicher wieder im Code registriert wird.",
         "basePath": "Basispfad (Standard: .file-storage)",
         "region": "Region (z. B. us-east-1)",
         "bucket": "Bucket",
@@ -2495,7 +2498,8 @@
         "shortcuts": "Tastenkürzel",
         "bugHunt": "Fehlerjagd",
         "toggleUiMode": "Oberflächenmodus wechseln",
-        "foundationalServices": "Basisdienste"
+        "foundationalServices": "Basisdienste",
+        "notificationSettings": "Benachrichtigungs-Routing verwalten"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -2519,7 +2523,8 @@
         "bugHunt": "fehler bug jagd triage backlog tracker nicht zugewiesen",
         "toggleUiMode": "oberfläche modus einfach erweitert anzeigen ausblenden",
         "tutorial": "tutorial tour einführung hilfe onboarding lernen grundlagen",
-        "foundationalServices": "gemeinsame Fähigkeit Plattform Dienst API Vertrag OpenAPI Katalog"
+        "foundationalServices": "gemeinsame Fähigkeit Plattform Dienst API Vertrag OpenAPI Katalog",
+        "notificationSettings": "benachrichtigungen e-mail routing kanäle posteingang"
       }
     },
     "shortcuts": {
@@ -2596,6 +2601,10 @@
         "bugHunt": {
           "label": "Fehlerjagd",
           "description": "Offene, nicht zugewiesene Fehler eines Boards bewerten und einen zum Beheben auswählen"
+        },
+        "notificationSettings": {
+          "label": "Benachrichtigungen",
+          "description": "Wählen Sie, welche Ereignisse den Posteingang und E-Mails erreichen."
         }
       }
     },
@@ -5470,7 +5479,8 @@
       "description": {
         "binary_generators_unreachable": "Die generativen Integrationen dieser Installation konnten gerade nicht gelesen werden, deshalb wurde der Lauf nicht gestartet. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
         "foundational_builtins_unreachable": "Die integrierten Basisdienste dieser Installation konnten gerade nicht gelesen werden. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
-        "connection_credentials_unreadable": "Die gespeicherten Zugangsdaten dieser Verbindung konnten nicht gelesen werden. Wenn diese Installation den Dienst mit dem zugehörigen Schlüssel erreicht, verbinden Sie die Quelle neu, um sie zu ersetzen; andernfalls versuchen Sie es erneut, sobald diese Verbindung wiederhergestellt ist."
+        "connection_credentials_unreadable": "Die gespeicherten Zugangsdaten dieser Verbindung konnten nicht gelesen werden. Wenn diese Installation den Dienst mit dem zugehörigen Schlüssel erreicht, verbinden Sie die Quelle neu, um sie zu ersetzen; andernfalls versuchen Sie es erneut, sobald diese Verbindung wiederhergestellt ist.",
+        "vcs_capability_unsupported": "Der mit diesem Workspace verbundene Quellcode-Anbieter bietet diesen Vorgang nicht an. Es ist nichts falsch konfiguriert und eine Einrichtung hilft hier nicht: Für diesen Anbieter ist der Vorgang nicht verfügbar."
       }
     },
     "action": {
@@ -5675,6 +5685,58 @@
     "confirmDisconnect": {
       "title": "Slack trennen?",
       "body": "Slack-Benachrichtigungen werden gestoppt, bis du die Verbindung wiederherstellst."
+    }
+  },
+  "notificationSettings": {
+    "panel": {
+      "title": "Benachrichtigungen",
+      "intro": "Wählen Sie, welche Ereignisse dieses Board zustellt und über welchen Kanal. Nicht geänderte Einträge verwenden die Voreinstellung.",
+      "inAppNote": "„In der App“ steuert nur die Live-Benachrichtigung. Die Karte wird ohnehin gespeichert und bleibt nach dem Neuladen im Posteingang.",
+      "emailNote": "E-Mail erfordert einen für das Konto verbundenen Versanddienst (Kontoeinstellungen). Standardmäßig werden nur besonders wichtige Ereignisse verschickt.",
+      "otherChannelsNote": "Slack und ausgehende Webhooks wählen ihre Ereignisliste dort, wo ihr Ziel konfiguriert wird.",
+      "openSlack": "Slack-Routing"
+    },
+    "column": {
+      "event": "Ereignis",
+      "inApp": "In der App",
+      "email": "E-Mail"
+    },
+    "action": {
+      "save": "Speichern",
+      "reset": "Standard wiederherstellen"
+    },
+    "toast": {
+      "saved": "Benachrichtigungs-Routing gespeichert"
+    },
+    "error": {
+      "load": "Benachrichtigungseinstellungen konnten nicht geladen werden",
+      "save": "Benachrichtigungseinstellungen konnten nicht gespeichert werden"
+    },
+    "unavailable": "Diese Installation speichert kein Benachrichtigungs-Routing; alle Ereignisse verwenden die Voreinstellung.",
+    "loadFailed": "Das Benachrichtigungs-Routing dieses Boards konnte nicht gelesen werden. Die Schalter unten zeigen daher nicht die aktuellen Einstellungen. Bitte erneut versuchen, bevor Sie etwas ändern.",
+    "type": {
+      "merge_review": "Merge-Review",
+      "pipeline_complete": "Pipeline abgeschlossen",
+      "ci_failed": "CI fehlgeschlagen",
+      "test_failed": "Tests fehlgeschlagen",
+      "requirement_review": "Anforderungs-Review",
+      "clarity_review": "Klarheits-Review",
+      "release_regression": "Release-Regression",
+      "decision_required": "Entscheidung erforderlich",
+      "human_test_ready": "Bereit für manuelle Tests",
+      "visual_confirmation_ready": "Bereit für visuelle Bestätigung",
+      "human_review": "Wartet auf Code-Review",
+      "followup_pending": "Offene Folgepunkte",
+      "fork_decision_pending": "Umsetzungsansatz",
+      "judge_review": "Prüfurteil",
+      "pr_review_ready": "PR-Review-Befunde",
+      "initiative": "Initiativen-Updates",
+      "platform_health": "Plattformzustand",
+      "infra_unreachable": "Infrastrukturausfälle",
+      "budget_paused": "Läufe pausiert (Budget)",
+      "budget_threshold": "Budgetwarnung",
+      "key_drift": "Abweichung des Verschlüsselungsschlüssels",
+      "merge_tag_request": "Review-Aufwand angefragt"
     }
   },
   "docInterview": {
@@ -6153,6 +6215,19 @@
     "history": {
       "heading": "Verlauf (keine Runden) | Verlauf ({count} Runde) | Verlauf ({count} Runden)",
       "fixRequested": "Korrektur angefordert"
+    },
+    "design": {
+      "summary": "Keine Frames stammen aus dem verknüpften Design. | 1 Frame aus dem verknüpften Design. | {count} Frames aus dem verknüpften Design.",
+      "dropped": "Es sind keine weiteren ausgeblendet. | 1 weiterer wird hier nicht angezeigt. | {count} weitere werden hier nicht angezeigt.",
+      "gapDropped": "Keiner seiner Frames ist ausgeblendet. | 1 seiner Frames wird hier nicht angezeigt. | {count} seiner Frames werden hier nicht angezeigt.",
+      "gapLine": "{title}:",
+      "gap": {
+        "partial": "nur ein Teil seiner Frames wurde gespeichert; aktualisiere das Dokument, um es erneut zu versuchen.",
+        "failed": "seine Frames konnten beim letzten Import nicht geladen werden; aktualisiere das Dokument, um es erneut zu versuchen.",
+        "none": "es enthält keine Frames zum Anzeigen.",
+        "storage_unavailable": "beim Import war kein Bildspeicher konfiguriert, daher wurde nichts heruntergeladen.",
+        "not_retained": "es sind keine Bilder dazu gespeichert. Die Quelle rendert möglicherweise keine Frames, oder das Dokument wurde importiert, bevor Frames aufbewahrt wurden; ein erneuter Import zeigt, was zutrifft."
+      }
     }
   },
   "outcome": {
@@ -6399,6 +6474,7 @@
       },
       "actual": "Tatsächlich",
       "reference": "Referenz",
+      "fromLinkedDesign": "· aus dem verknüpften Design",
       "actualAlt": "{view} (tatsächlich)",
       "referenceAlt": "{view} (Referenz)",
       "replace": "Ersetzen",

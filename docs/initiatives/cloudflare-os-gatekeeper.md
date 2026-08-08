@@ -1,6 +1,7 @@
 # Cloudflare OS Gatekeeper integration
 
-Status: in progress. Slices 1 to 4 and slice 6 have landed; slice 5 is open.
+Status: in progress. Slices 1 to 4 and 6 have landed, and slice 5's first leg with them; slice 5's
+second leg (against a real Cloudflare OS) is open and blocked on something this repo does not own.
 
 ## Goal and rationale
 
@@ -309,16 +310,63 @@ Both are ADDITIONS to the slice-4 suite, never replacements for it, and both are
 construction. Neither is a prerequisite for using the Gatekeeper; they exist to catch a
 disagreement the hermetic suite structurally cannot see.
 
-- **Against a real `/api/v1`.** A phase in `backend/internal/sdk-smoketest`, which already boots
-  the real Node facade and mints keys, driving the Gatekeeper's own forwarding path against it.
-  The reason it belongs THERE rather than in `deploy/gatekeeper` is the one the smoketest itself
-  gives: the harness that boots a backend should be the one that owns the boot, and the template an
-  operator copies should not carry a Postgres-shaped devDependency. What it would catch is the
-  Gatekeeper and the live surface disagreeing about a request shape the generated bindings and the
-  SDK both consider correct.
-- **Against a real Cloudflare OS.** Manual/nightly, opt-in behind a `GATEKEEPER_OS_REF` pointing at
-  a partner commit, allowed to go red without blocking anyone. Do not fold it into the PR lane on
-  the grounds that it passed a few times.
+- **Against a real `/api/v1` (landed).** A `--only=gatekeeper` phase in
+  `backend/internal/sdk-smoketest`, which already boots the real Node facade and mints keys, running
+  the machinery package's own `test/live` specs against it. The reason it belongs THERE rather than
+  in `deploy/gatekeeper` is the one the smoketest itself gives: the harness that boots a backend
+  should be the one that owns the boot, and the template an operator copies should not carry a
+  Postgres-shaped devDependency.
+- **Against a real Cloudflare OS (open, and blocked).** Manual/nightly, opt-in behind a
+  `GATEKEEPER_OS_REF` pointing at a partner commit, allowed to go red without blocking anyone. Do
+  not fold it into the PR lane on the grounds that it passed a few times. What it is blocked on is
+  stated below, because "not built yet" and "cannot be built yet" are different facts.
+
+#### What the live leg is, and the four decisions in it
+
+The Worker is not re-composed in Node and nothing about it is substituted: the SAME assembled
+Worker runs in the SAME pool as the hermetic suite, with the scripted origin removed
+(`vitest.live.config.ts` sets no `outboundService`), so the SDK's calls leave workerd and land on the
+harness's deployment. It enrols on the real named-webhook collection, mints a real per-actor key and
+recovers from its revocation, forwards the everyday loop, and answers a run that really parked.
+
+- **The claims live in the SPECS, and the phase grades only that they ran.** They need workerd and a
+  Cap'n Web session, which exist in that package and not in a Node harness; what the harness has and
+  the package must not is a database. So the phase reads the JSON REPORT's per-assertion statuses
+  rather than its exit code or its totals: a suite that collected nothing also exits 0, and so does
+  one whose specs were every one of them SKIPPED, which the totals still count as tests. This
+  repo's own rule is that a phase which reported nothing is not a pass.
+- **The workspace is asked to PARK, per workspace.** `startBackend` clears `E2E_DECISION_ON_STEPS`
+  for every other phase (a park would stop the SDK scenario before it observed any progress), so
+  this phase sets `decisionOnSteps: [0]` for its own workspace over the control channel. A
+  Gatekeeper whose reason to exist is answering parked runs, smoketested against a deployment that
+  never parks one, would be a suite asserting the easy half.
+- **The card is raised from the platform's OWN notification.** A public `https` endpoint is required
+  at registration and rightly so, so no loopback receiver can be registered and no delivery can
+  actually travel. Rather than script a card, the specs read the notification the parked run really
+  raised, assert it is a type this Gatekeeper subscribes to and dispositions as answerable, and wrap
+  THAT object in the envelope the platform's own channel composes. What stays synthetic is the
+  wrapper and the MAC, both of which the hermetic suite pins; what is real is every field a card is
+  built from. The residual gap is stated in the spec's header rather than left to be inferred.
+- **It runs in the Gatekeeper's own NON-BLOCKING lane, not in the blocking smoketest job.** That is
+  also why the phase is asked for BY NAME rather than joining the everything run, and why the
+  summary prints it as NOT RUN there: a section that is simply absent reads as a section that
+  passed. The lane's `paths-filter` gained the publicApi controllers, `orchestration`, and the two
+  harness paths; it did not need the contracts, because a contract change that moves the surface
+  must regenerate `sdk/gatekeeper/src/bindings.generated.ts` (`check:sdk` refuses otherwise), which
+  is already in the filter. BEHAVIOUR that moved under an unchanged contract is the case that
+  needed adding, and it is exactly what this leg exists to catch. `orchestration` is in it for the
+  same reason one layer down and is not optional: the suite's central claim is that a real run
+  parks, raises the notification the card is built from, and leaves the park when answered, none of
+  which lives in the controller that serves them, so a filter naming only the controllers skips the
+  lane on precisely the changes that would break it. The line stops there rather than reaching the
+  repositories, which conformance already covers cross-runtime and this suite adds nothing to.
+
+**What blocks the second leg**: a ref to pin. The opt-in shape is agreed (`GATEKEEPER_OS_REF`,
+nightly, `continue-on-error`), and it is deliberately not landing as a workflow that clones a
+partner repository and guesses at its boot command. That job's whole value is that a red run means
+something; one written against an unverified boot would go red on its own scaffolding and be muted
+within a week, which is worse than not having it. It needs a partner commit that boots
+reproducibly and a documented way to drive one workspace agent; land it then, and not before.
 
 ### 6. Base and template: `@cat-factory/gatekeeper-worker` (landed)
 
@@ -374,12 +422,51 @@ suite covers.
 - [x] Slice 4: reference Gatekeeper Worker (`deploy/gatekeeper`, own CI lane, unpublished), plus
       the review corrections above (every park answerable, card dispositions, atomic delivery,
       claimed minting, `approvals_inspect` / `runs_watched` / `POST /admin/retire`)
-- [ ] Slice 5: the two legs the scripted origin cannot cover (below)
+- [ ] Slice 5: the two legs the scripted origin cannot cover
+  - [x] Against a real `/api/v1`: `sdk/gatekeeper-worker/test/live` + the smoketest's
+        `--only=gatekeeper` phase, in the non-blocking Gatekeeper lane
+  - [ ] Against a real Cloudflare OS: blocked on a partner ref that boots reproducibly (above)
 - [x] Slice 6: base/template split (`@cat-factory/gatekeeper-worker` published, `deploy/gatekeeper`
       down to its policy, bindings and wiring)
 
+## Open documentation gaps
+
+Registered by the 2026-08-08 documentation revision
+([#1845](https://github.com/kibertoad/cat-factory/pull/1845)), which restructured the three READMEs
+(bindings, machinery, template) around what each piece is, its purpose, usage, configuration and
+customization, added the Gatekeeper naming map to `docs/glossary.md`, documented `deny`, masking
+semantics, the reserved capability methods and the error split, and fixed the template README's
+withheld-reason list (it named three of the four). What that sweep could NOT close stays open
+here:
+
+- [ ] **A rendered protocol reference for the OS side.** The shapes an OS consumer receives
+      (`ApprovalCard`, `CardInspection`, the `runs_watched` entries, the `/webhook` response
+      envelope) are documented only as exported TypeScript types in
+      `sdk/gatekeeper-worker/src/`. A TypeScript consumer reads them; a non-TypeScript OS
+      integration has nothing rendered. Worth doing only when such a consumer appears, and then
+      preferably generated from the types rather than transcribed.
+- [ ] **A `WEBHOOK_SECRET` rotation recipe.** The provisioning-key rotation story is documented
+      (a 401 drops the cached key and re-mints once), but rotating the webhook secret is not:
+      what order to update the secret and re-enrol in, and what happens to deliveries signed
+      with the old secret while the two disagree. Needs verifying against the enrolment and
+      verification code before it can be written down honestly.
+
 ## Gotchas the pilot surfaced
 
+- **A health route that assembles is not a health route that checks.** `/health` answered
+  `{ ok: true }` off `Gatekeeper.create`, which reads three of the seven bindings, so a Worker with
+  no `OS_SHARED_TOKEN` or `WEBHOOK_SECRET` was green while `/rpc` refused every call and the
+  receiver verified no delivery. The failure is worse than an absent check, because a monitor keyed
+  on it AGREES the deployment is fine. Two rules came out of it: a health check asks the whole
+  configuration rather than whatever the request path it borrows happens to read, and it asks in
+  ONE pass, because an operator who learns the next unset binding only after redeploying wires a
+  deployment one restart at a time. The check is derived from `GatekeeperEnv` through an exhaustive
+  `Record`, so a binding this check would silently pass over fails the build instead.
+- **"Set it in wrangler.toml or with `wrangler secret put`" is a refusal that leaks credentials.**
+  Offered both mechanisms, an operator picks the one that is a file, and the file is committed. The
+  mechanism each binding takes is now a fact stated once (`BINDING_KINDS`) and cited by both
+  READMEs, which had independently drifted into telling operators that the three secrets live in
+  `wrangler.toml`: a documentation error whose worst case is an `admin` API key in a git history.
 - **"Card type" and "decision kind" are two vocabularies, and neither maps onto the other.** A
   `decision_required` notification can be an approval gate or an agent question; `merge_review` maps
   to no `/runs/:runId/decisions` entry at all; a run that parked twice is holding the SECOND park by
@@ -394,6 +481,14 @@ suite covers.
   item is `pending`, which is deliberately before the run stops. A predicate keyed on the run's
   status misses every early triage, which is the case the surface added it for.
 
+- **A task with only a TITLE parks before any agent runs, and that is the first thing the live leg
+  found.** The pre-dispatch input gate is a deterministic reduction over the task's own authored
+  fields, so `tasks_create` + `tasks_start` with no description stops on an `input-gate` park
+  (`description_missing`) rather than on the step the caller was waiting for. It is correct
+  behaviour and no scripted origin can show it: an integration that files work on a title alone gets
+  a parked run every time, and reports it as the platform being slow. A Gatekeeper's own docs should
+  say what filing a task actually takes; the live specs file one with a description for the same
+  reason.
 - **`minScope` is the STATIC floor, not the whole admission story.** `startPublicTask` and
   `createPublicJob` escalate to `decide` at request time when the named pipeline can park
   (`pipeline_requires_decide_scope`), and two park shapes slip past even that (see

@@ -16,7 +16,50 @@
 // providers' remedies from drifting and lets the mapping be unit-tested in one place.
 // ---------------------------------------------------------------------------
 
+import type { UnavailableReason } from '@cat-factory/contracts'
 import type { VcsProvider } from './vcs-types.js'
+import { UnavailableError } from './errors.js'
+
+/**
+ * Typed against the SHARED vocabulary rather than passed as a bare string, because this reason
+ * only does its job if the SPA has copy keyed to it. `UnavailableError.reason` is `string` on
+ * purpose (most reasons are internal and never reach a human), so nothing else would notice if
+ * the entry were dropped from `UNAVAILABLE_REASONS`: the refusal would keep working and quietly
+ * fall back to the generic "not configured" wording this class exists to avoid. Naming the union
+ * here turns that into a build failure.
+ */
+const VCS_CAPABILITY_UNSUPPORTED: UnavailableReason = 'vcs_capability_unsupported'
+
+/**
+ * A provider-routing VCS client was asked for a member the ROUTED provider's client does not
+ * implement, while the other configured provider's does. Thrown by
+ * `providerRoutingGitHubClient` (`@cat-factory/server`) and lives here so a consumer BELOW the
+ * server layer can catch it.
+ *
+ * A distinct class rather than a bare {@link UnavailableError} because the two facts need
+ * different handling and only the caller knows which it can absorb: the generic 503 says "this
+ * deployment has not configured the capability", a build problem an operator fixes by wiring
+ * something, while this is a permanent property of the provider the workspace CONNECTED, which
+ * no amount of wiring changes. A caller that already models "the client cannot answer this"
+ * (`GitHubService.checkDefaultBranchProtection`'s `capability: 'unavailable'`) reports that;
+ * one that does not lets it surface as the 503 it is.
+ *
+ * Surfacing is only honest because the reason is a member of contracts' `UNAVAILABLE_REASONS`
+ * and the SPA keys its own copy off it. Without that entry the 503 renders as the generic
+ * "not configured" wording, so the class would state the distinction in its own message while
+ * the only text a user reads asserts the opposite.
+ */
+export class VcsCapabilityUnsupportedError extends UnavailableError {
+  constructor(
+    readonly provider: VcsProvider,
+    readonly operation: string,
+  ) {
+    super(`The ${provider} client does not support ${operation}`, VCS_CAPABILITY_UNSUPPORTED, {
+      provider,
+      operation,
+    })
+  }
+}
 
 // In-repo docs are linked as stable GitHub blob URLs on `main`. Kernel sits BELOW the server
 // layer, so it cannot import `@cat-factory/server`'s `config/docs.ts`; per the doc-URL convention

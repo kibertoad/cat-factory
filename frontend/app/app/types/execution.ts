@@ -104,6 +104,10 @@ export type {
   HumanTestStepState,
   VisualConfirmStepState,
   VisualConfirmPair,
+  VisualConfirmReferenceOrigin,
+  VisualConfirmDesignGap,
+  VisualConfirmDesignGapReason,
+  VisualConfirmDesignReferences,
   VisualConfirmRound,
   ExecutionInstance,
   // The historical frontend name for a per-block review comment is the contract's

@@ -771,21 +771,7 @@ export class RunDispatcher {
     step.subtasks = undefined
     this.stepGraph.finishStep(step)
 
-    if (isFinalStep) {
-      instance.status = 'done'
-      await this.runStateMachine.finalizeBlock(workspaceId, instance, undefined)
-      await this.runStateMachine.casPersist(workspaceId, instance)
-      await this.runStateMachine.emitInstance(workspaceId, instance)
-      await this.runStateMachine.stopRunContainer(workspaceId, instance)
-      return { kind: 'done' }
-    }
-    instance.currentStep += 1
-    const next = instance.steps[instance.currentStep]
-    if (next) this.stepGraph.startStep(next)
-    await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-    await this.runStateMachine.casPersist(workspaceId, instance)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'continue' }
+    return this.runStateMachine.settleStepAndAdvance(workspaceId, instance, isFinalStep)
   }
   /**
    * Record a completed agent step's result and report what the driver should do
@@ -962,37 +948,14 @@ export class RunDispatcher {
     // end — which is the point, since a run that fails or parks part-way never reaches an end.
     await this.prVerificationReport.publishForRun(workspaceId, instance)
 
-    if (isFinalStep) {
-      instance.status = 'done'
-      // Merge resolution (and confidence persistence) already happened above,
-      // POSITION-INDEPENDENTLY: confidence at the top of recordStepResult and the merger's
-      // real merge via the step-completion resolver registry (so a trailing
-      // post-release-health gate doesn't disable auto-merge). Nothing merge-specific here.
-      await this.runStateMachine.finalizeBlock(workspaceId, instance, result.confidence)
-      await this.runStateMachine.casPersist(workspaceId, instance)
-      await this.runStateMachine.emitInstance(workspaceId, instance)
-      // The run is finished: reclaim its per-run container now instead of letting it
-      // idle out its sleepAfter window (~10 min of billed-but-useless compute). All
-      // pipeline steps share the one container keyed by the execution id, so this is
-      // only safe on the FINAL step — never between steps. Best-effort/idempotent.
-      await this.runStateMachine.stopRunContainer(workspaceId, instance)
-      return { kind: 'done' }
-    }
-    instance.currentStep += 1
-    const next = instance.steps[instance.currentStep]
-    if (next) this.stepGraph.startStep(next)
-    // A resolver that already set the block's TERMINAL status (the merger flips it to
-    // `done`/`pr_ready` mid-pipeline) must not be clobbered back to `in_progress` as we
-    // advance to a trailing step — refresh progress only, preserving that status. (The
-    // final step's `finalizeBlock` then leaves a `done` block alone.)
-    if (resolverOwnsTerminalStatus) {
-      await this.runStateMachine.refreshBlockProgress(workspaceId, instance)
-    } else {
-      await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'in_progress')
-    }
-    await this.runStateMachine.casPersist(workspaceId, instance)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'continue' }
+    // Merge resolution (and confidence persistence) already happened above,
+    // POSITION-INDEPENDENTLY: confidence at the top of recordStepResult and the merger's real
+    // merge via the step-completion resolver registry (so a trailing post-release-health gate
+    // doesn't disable auto-merge). Nothing merge-specific is left for the settle.
+    return this.runStateMachine.settleStepAndAdvance(workspaceId, instance, isFinalStep, {
+      ...(result.confidence !== undefined ? { confidence: result.confidence } : {}),
+      resolverOwnsTerminalStatus,
+    })
   }
 
   /**
@@ -1008,9 +971,7 @@ export class RunDispatcher {
   ): Promise<AdvanceResult> {
     this.stepGraph.pauseStepForInput(step)
     instance.status = 'blocked'
-    await this.runStateMachine.updateBlockProgress(workspaceId, instance, 'blocked')
-    await this.runStateMachine.casPersist(workspaceId, instance)
-    await this.runStateMachine.emitInstance(workspaceId, instance)
+    await this.runStateMachine.persistAndEmit(workspaceId, instance, { blockStatus: 'blocked' })
     return { kind: 'awaiting_decision', decisionId }
   }
 
@@ -1303,8 +1264,7 @@ export class RunDispatcher {
           chat: [],
           maxChatTurns: DEFAULT_FORK_MAX_CHAT_TURNS,
         }
-        await this.runStateMachine.casPersist(workspaceId, instance)
-        await this.runStateMachine.emitInstance(workspaceId, instance)
+        await this.runStateMachine.persistAndEmit(workspaceId, instance)
         return { kind: 'continue' }
       }
       step.forkDecision = {

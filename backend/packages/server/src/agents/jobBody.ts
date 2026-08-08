@@ -18,6 +18,7 @@ import {
   standardsVerbosityFor,
   userPromptFor,
 } from '@cat-factory/agents'
+import { siblingCheckoutDir } from './harnessContract.js'
 import { prBody, testerInfraSpec } from './prompts.js'
 import { dispatchSystemPromptFor } from './promptOverrides.js'
 import type { RepoTarget } from './ContainerAgentExecutor.js'
@@ -577,23 +578,6 @@ function buildExploreAgentBody(
       ...webTools,
     },
   }
-}
-
-/** Sanitise an owner/name segment for a sibling checkout directory. MUST match the harness's
- * `safeDirSegment` (executor-harness `coding-agent.ts`) — see {@link siblingCheckoutDir}. */
-function safeDirSegment(value: string): string {
-  return value.replace(/[^A-Za-z0-9._-]/g, '-') || '_'
-}
-
-/**
- * The sibling checkout directory the harness creates for a repo under the multi-repo workspace
- * root. MUST stay byte-identical to the harness's `siblingDir` (`owner__name`, computed in
- * executor-harness `coding-agent.ts`): the two are independent, so a divergent rule would name a
- * directory in the agent's prompt that does not exist on disk (the agent would edit the wrong
- * repo). GitHub owners contain no `_`, so `owner__name` is collision-free across the deduped set.
- */
-function siblingCheckoutDir(owner: string, name: string): string {
-  return `${safeDirSegment(owner)}__${safeDirSegment(name)}`
 }
 
 /**

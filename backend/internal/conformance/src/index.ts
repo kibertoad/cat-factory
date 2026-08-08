@@ -91,6 +91,7 @@ export {
   type PlatformMetricsSeedRun,
 } from './platform-metrics-suite.js'
 export { defineGateOutcomeSuite, type GateOutcomeSeed } from './gate-outcome-suite.js'
+export { defineNotificationSettingsSuite } from './notification-settings-suite.js'
 export {
   defineReportsSuite,
   type ReportsSeed,

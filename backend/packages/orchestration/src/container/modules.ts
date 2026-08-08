@@ -73,6 +73,7 @@ import { BugHuntAssessorService } from '../modules/bugHunt/BugHuntAssessorServic
 import { TesterQualityReviewService } from '../modules/execution/TesterQualityReviewService.js'
 import { KaizenService } from '../modules/kaizen/KaizenService.js'
 import { NotificationService } from '../modules/notifications/NotificationService.js'
+import { NotificationSettingsService } from '../modules/notifications/NotificationSettingsService.js'
 import { MergeTrackRecordService } from '../modules/merge/MergeTrackRecordService.js'
 import { RiskPolicyService } from '../modules/merge/RiskPolicyService.js'
 import { SandboxService } from '../modules/sandbox/SandboxService.js'
@@ -816,7 +817,7 @@ export function createKaizenModule(deps: CoreDependencies): KaizenModule | undef
  * pushed; the worker wires the in-app channel, and email/Slack compose in later.
  */
 export function createNotificationsModule(deps: CoreDependencies): NotificationsModule | undefined {
-  const { notificationRepository } = deps
+  const { notificationRepository, notificationSettingsRepository } = deps
   if (!notificationRepository) return undefined
   const service = new NotificationService({
     notificationRepository,
@@ -825,7 +826,13 @@ export function createNotificationsModule(deps: CoreDependencies): Notifications
     clock: deps.clock,
     channel: deps.notificationChannel,
   })
-  return { service }
+  // The manager is present only when its store is wired; the settings controller 503s
+  // without it, and delivery falls back to the shipped defaults (the facade gates its
+  // routed channels on the same service, built from the same repository).
+  const settingsService = notificationSettingsRepository
+    ? new NotificationSettingsService({ notificationSettingsRepository, clock: deps.clock })
+    : undefined
+  return { service, ...(settingsService ? { settingsService } : {}) }
 }
 
 /**

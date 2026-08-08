@@ -469,6 +469,7 @@ function selectTask() {
           variant="soft"
           size="xs"
           icon="i-lucide-scan-eye"
+          data-testid="task-review"
           @click.stop="review"
         >
           {{ t('board.task.review') }}
