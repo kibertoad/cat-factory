@@ -86,6 +86,13 @@ identity of the deployment it talks to.
   id, hourly and idempotently. `POST /admin/retire?actorId=…` revokes every key minted for one
   person, upstream first and then here.
 
+One thing to tell whoever writes the agent on the other side: **a task filed with only a title
+parks immediately**, before any agent runs. cat-factory reduces a task's own authored fields before
+the first dispatch, and a missing description is a blocking finding, so `tasks_create` +
+`tasks_start` with a bare title yields a run stopped on an `input-gate` decision rather than one
+that is working. That park is answerable from here like any other, but the cheaper fix is filing
+work that says what it wants.
+
 The Worker serves `POST /webhook` (delivery HMAC), `ALL /rpc` (`OS_SHARED_TOKEN`),
 `POST /admin/enroll`, `POST /admin/retire?actorId=…` and `GET /health`. `/rpc` is bearer-gated even
 though the intended path is a Worker service binding, which never traverses the internet: a Worker
@@ -131,6 +138,22 @@ nothing about it.
 ```sh
 pnpm --filter @cat-factory/gatekeeper-worker test:run
 ```
+
+`test/live/` is the same Worker with the scripted origin taken away. A fixture agrees with this
+package by construction, so a request shape the bindings and the SDK both consider correct can only
+be wrong against a real deployment: the live specs enrol on the real webhook collection, mint a real
+per-actor key (and recover from its revocation), forward the everyday loop, and answer a run that
+really parked, off the card the platform's own notification raises. They are run by
+`@cat-factory/sdk-smoketest`, which owns the deployment they need, so this package carries no
+Postgres-shaped devDependency:
+
+```sh
+DATABASE_URL=... pnpm --filter @cat-factory/sdk-smoketest run smoketest -- --only=gatekeeper
+```
+
+What that deliberately does not cover is a delivery that TRAVELLED: the platform refuses to register
+a loopback endpoint, so the receiver is driven with an envelope the suite signs around the
+platform's own notification object.
 
 Design notes, the decisions behind each half and what the suite deliberately does not cover:
 [the initiative tracker](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/cloudflare-os-gatekeeper.md).

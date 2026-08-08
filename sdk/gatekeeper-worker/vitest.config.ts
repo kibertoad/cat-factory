@@ -41,4 +41,11 @@ export default defineConfig({
       },
     }),
   ],
+  test: {
+    // `test/live/**` is the same Worker against a REAL deployment and is run by
+    // `vitest.live.config.ts` from `@cat-factory/sdk-smoketest`, which boots one. Excluded rather
+    // than left to vitest's default glob, which would pick it up here and fail on the bindings the
+    // harness supplies — a hermetic suite that needs a database is not hermetic.
+    exclude: ['test/live/**', '**/node_modules/**', '**/dist/**'],
+  },
 })

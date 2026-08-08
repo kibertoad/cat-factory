@@ -1,5 +1,99 @@
 # @cat-factory/orchestration
 
+## 0.239.0
+
+### Minor Changes
+
+- 6e07961: Retain a design document's rendered frames when it is imported. A Figma import now downloads the
+  PNGs (the linked frame, or the first six top-level frames of a whole file) and stores them as
+  `reference` binary artifacts keyed to the document, on the same shelf the visual-confirmation gate
+  already reads from; a re-import that changes the body replaces the previous set wholesale. The
+  download is host-pinned to Figma's signed-asset hosts and carries no credential.
+
+  Renders ride a new `DocumentSourceProvider.fetchRenders` port rather than `fetchDocument`, and only
+  run on an import that actually writes a body: a design file's version moves on any edit anywhere in
+  it, so the dispatch-time freshness ladder re-fetches the text far more often than the pictures
+  change.
+
+  A new `documents.render_status` records what became of them (`stored` / `partial` / `none` /
+  `failed` / `storage_unavailable`, or null where the question does not apply), because every way of
+  ending up with no images is otherwise the same absence. It is derived from what was RETAINED, and
+  counts the frames a provider's own cap excluded as unillustrated, so a six-picture pass over a
+  twenty-frame file reads as `partial` rather than as a complete design with six screens. A
+  deployment with no image storage configured imports the design textually and says so rather than
+  downloading bytes it cannot keep; a settings read that FAILS is `failed`, not
+  `storage_unavailable`, since telling an operator to configure storage they already have sends them
+  to fix the wrong thing.
+
+  A document's renders are exempt from the age-based artifact retention sweep. Age is the right
+  lifetime for run debris and the wrong one for a projection of a live row: renders are replaced by
+  the next import that changes the body and by nothing else, and an unedited design is never
+  re-imported, so a clock-based sweep would leave the row claiming `stored` over an empty set with
+  nothing to re-download them.
+
+  Internal break: `binary_artifacts` rows and `documents` rows written before this change carry no
+  document keying and no render status. Both self-heal on the next import; nothing needs a backfill.
+  `BinaryArtifactMetadataStore.deleteByDocument` is replaced by `deleteByIds`: every id-scoped
+  reclaim now names the rows whose bytes it has already removed, so a concurrent import's fresh row
+  cannot be deleted out from under its blob.
+
+- 9f9c240: Bound a wedged pipeline step on Node, and stop an idle container reclaim from reading as a
+  crash. The last two findings of the stuck-run audit.
+
+  **One hang bound, both facades.** `ExecutionConfig.advanceTimeout` (`ADVANCE_TIMEOUT`, default
+  `30 minutes`) is now the ceiling on a single `advanceInstance` AND on a single status read: the
+  Worker hands it to the durable driver's `step.do` (where it had been a hard-coded constant), and
+  Node races it in `driveExecution` through a new injected `DriveOptions.withStepCeiling` seam.
+  Node previously had no ceiling at all, and nothing else supplies one: pg-boss heartbeats an
+  active job regardless of handler progress, so a hung call left the run `running` with a frozen
+  `updated_at`, invisible to the stale-run sweeper, until the queue's expire cap (up to 24h). A
+  timed-out advance fails the run rather than retrying in-process, because a second concurrent
+  advance would double-drive it; a timed-out poll counts as one unreadable poll against
+  `jobPollFailureTolerance`, which is the disposition the Worker has always had for the same
+  event.
+
+  **One knob now means one parser.** Every duration knob in `ExecutionConfig` resolves through the
+  shared `resolveDurationEnv`, which canonicalises the value both runtimes go on to use. Node's
+  own parser knew four of the units Workflows accepts and silently substituted its built-in
+  default for the rest, so `ADVANCE_TIMEOUT="1 week"` was a week on Cloudflare and five minutes on
+  Node. Values past what a timer can hold, and the calendar units whose length the two runtimes
+  would each have to invent, are refused with one warning rather than honoured differently on each
+  side.
+
+  **A container that reclaims itself says so.** A per-run Cloudflare Container is kept warm only
+  by the driver's job polls, so a poll gap longer than its idle window reclaimed it mid-job; the
+  resulting 404 poll was indistinguishable from an OOM and spent the single crash-eviction budget,
+  so two hiccups in one step failed a healthy run. The container now records the reclaim cause it
+  observed (`idle` alongside the existing `rollout`) and the transport reads it back over one RPC,
+  classifying an idle reclaim as `transient` churn with its own operator-facing wording. A record
+  is claimed by the polling job rather than deleted, so a retried durable poll reads the same
+  answer, and it is dropped when a new job is accepted, so a marker left by a routine idle reclaim
+  cannot excuse a later step's genuine crash. The two per-run container classes collapsed onto a
+  shared `RunContainer` base carrying this bookkeeping.
+
+  Internal break: the old `rolledOutAt` Durable-Object storage key is gone. A rollout in flight
+  across the deploy that ships this loses its attribution and is recovered as a crash instead,
+  which costs one eviction on the smaller budget during a single release.
+
+  `DriveConfig` gained a required `advanceTimeoutMs` (`0` disables the ceiling, which is what the
+  conformance harness and the unit fakes use), so every construction site declares it.
+  `ADVANCE_TIMEOUT` is reserved against capability-credential lookup by exact name, not as an
+  `ADVANCE_` family, so a credential key that merely starts with it stays valid.
+
+### Patch Changes
+
+- Updated dependencies [6e07961]
+- Updated dependencies [9f9c240]
+  - @cat-factory/kernel@0.271.0
+  - @cat-factory/contracts@0.273.0
+  - @cat-factory/integrations@0.149.0
+  - @cat-factory/agents@0.117.11
+  - @cat-factory/caching@0.18.12
+  - @cat-factory/prompt-fragments@1.0.21
+  - @cat-factory/sandbox@0.11.98
+  - @cat-factory/spend@0.15.39
+  - @cat-factory/workspaces@0.26.11
+
 ## 0.238.0
 
 ### Minor Changes
