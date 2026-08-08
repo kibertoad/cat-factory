@@ -4251,6 +4251,7 @@
       "save": "Nie udało się zapisać ustawień powiadomień"
     },
     "unavailable": "To wdrożenie nie przechowuje routingu powiadomień, więc wszystkie zdarzenia używają wartości domyślnej.",
+    "loadFailed": "Nie udało się odczytać routingu powiadomień tej tablicy, więc przełączniki poniżej nie są jej bieżącymi ustawieniami. Spróbuj ponownie przed wprowadzeniem zmian.",
     "type": {
       "merge_review": "Przeglad scalenia",
       "pipeline_complete": "Pipeline ukonczony",

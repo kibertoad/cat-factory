@@ -79,16 +79,31 @@ function notifyError(title: string, e: unknown) {
   })
 }
 
+/**
+ * The grid is editable only once the board's OWN matrix is in hand.
+ *
+ * The switches start on the shipped defaults, which is right while loading and wrong as a
+ * statement about the board: on a failed read the panel used to render them as the current
+ * configuration, and save is a full replace, so one press would write that guess over whatever
+ * overrides were stored. `failed` therefore gets its own state with a retry and no save, kept
+ * distinct from the settled `unavailable`.
+ */
+const editable = computed(() => notifications.settingsStatus === 'ready')
+
+async function load() {
+  try {
+    await notifications.loadSettings()
+    applyMatrix(notifications.settings?.matrix)
+  } catch (e) {
+    notifyError(t('notificationSettings.error.load'), e)
+  }
+}
+
 watch(
   () => open.value,
   async (isOpen) => {
     if (!isOpen) return
-    try {
-      await notifications.loadSettings()
-      applyMatrix(notifications.settings?.matrix)
-    } catch (e) {
-      notifyError(t('notificationSettings.error.load'), e)
-    }
+    await load()
   },
   // Lazy v-if mount: the panel mounts with `open` already true, so load immediately.
   { immediate: true },
@@ -143,10 +158,27 @@ function resetToDefaults() {
         <p class="text-xs text-slate-400">{{ t('notificationSettings.panel.intro') }}</p>
 
         <div
-          v-if="notifications.settingsAvailable === false"
+          v-if="notifications.settingsStatus === 'unavailable'"
           class="rounded-lg border border-slate-700 bg-slate-800/40 p-3 text-xs text-slate-400"
         >
           {{ t('notificationSettings.unavailable') }}
+        </div>
+
+        <div
+          v-else-if="notifications.settingsStatus === 'failed'"
+          class="space-y-3 rounded-lg border border-amber-700/60 bg-amber-950/30 p-3 text-xs text-amber-200"
+        >
+          <p>{{ t('notificationSettings.loadFailed') }}</p>
+          <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-rotate-cw" @click="load">
+            {{ t('common.retry') }}
+          </UButton>
+        </div>
+
+        <div
+          v-else-if="!editable"
+          class="rounded-lg border border-slate-700 bg-slate-800/40 p-3 text-xs text-slate-400"
+        >
+          {{ t('common.loading') }}
         </div>
 
         <template v-else>

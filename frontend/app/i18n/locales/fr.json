@@ -4251,6 +4251,7 @@
       "save": "Impossible d'enregistrer les paramètres de notification"
     },
     "unavailable": "Ce déploiement ne stocke aucun routage de notifications : tous les événements utilisent la valeur par défaut.",
+    "loadFailed": "Impossible de lire le routage des notifications de ce tableau : les interrupteurs ci-dessous ne correspondent donc pas à sa configuration actuelle. Réessayez avant de modifier quoi que ce soit.",
     "type": {
       "merge_review": "Revue de fusion",
       "pipeline_complete": "Pipeline termine",

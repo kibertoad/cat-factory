@@ -38,8 +38,24 @@ Slack and the outbound webhooks answer "which types" where their DESTINATION is 
 route's channel, a webhook endpoint's own `types` filter), so a second switch would be a place to
 look that does not decide. The settings panel says so and links to the Slack routing.
 
-Two behaviours to watch for when reviewing. The in-app push is now gated too: muting a type stops
-the live toast but the card is still persisted and still in the inbox on the next snapshot, which is
-what makes the toggle safe rather than a way to hide a parked run. And a settings read that FAILS
-falls back to the shipped default and logs, rather than defaulting to deliver-everything (a
-mailshot) or deliver-nothing (the parked run nobody hears about).
+Delivery now carries WHICH lifecycle edge it reports (`NotificationDeliveryReason`: `raised` /
+`refreshed` / `settled`), because the service re-delivers a card on every transition it makes and
+the transports split hard on what that means. A STATE transport (the in-app push, the outbound
+webhook) takes every edge, so a board holding an open card sees it settle instead of rendering an
+already-made decision as still actionable. An ALERT transport (email, Slack) takes the `raised` edge
+alone: a mailbox and a chat channel cannot render a correction, so a second "Decision needed" after
+the decision was made is simply false. This also corrects Slack, which re-posted on every resolve
+and dismissal before the edge existed, and it is why the escalation sweep's loop over a workspace's
+overdue cards now performs no routing or audience reads at all. **The edge is a required parameter
+and rides the mothership delegation wire**, where it is refused rather than defaulted: the persisted
+row cannot supply it (a raise and an escalation are both `open`), so a node one build behind fails
+loudly instead of mailing the org about decisions already made.
+
+Two more behaviours to watch for when reviewing. The in-app push is gated too, but only on the raise:
+muting a type stops the live toast, while the card is still persisted, still in the inbox on the next
+snapshot, and still pushed when it settles. And a settings read that FAILS falls back to the shipped
+default and logs, rather than defaulting to deliver-everything (a mailshot) or deliver-nothing (the
+parked run nobody hears about). In the settings panel the same distinction is explicit: a deployment
+with no routing store and a read that broke are separate states, and only the first renders the
+shipped defaults, because saving is a full replace and a grid built from defaults would otherwise
+overwrite overrides nobody had seen.

@@ -51,7 +51,10 @@ prerequisites are configured.
   button: one listing, then only the manifests it proved exist; the rules are pure kernel).
 - `slack/`, `email/`, `notificationWebhook/`: notification channels (`email/` carries both the
   per-account sender connection and the `EmailNotificationChannel` over it; the last one is the
-  outbound HMAC-signed HTTP channel a headless integration registers to be pushed parked decisions); `writeback/`, `providers/`, `corpus/`,
+  outbound HMAC-signed HTTP channel a headless integration registers to be pushed parked decisions).
+  Slack and email are ALERT transports and deliver on the `raised` edge alone (kernel's
+  `isAlertingDelivery`), since neither a chat post nor a mail can be unsaid; the webhook is a
+  STATE transport and takes every edge, its receiver keying on `notification.status`; `writeback/`, `providers/`, `corpus/`,
   `provisioning-logs/`, `accountSettings/`, `localSettings/`: supporting services. `writeback/`
   owns both directions of the tracker clarification loop: `reviewQuestions.logic.ts` (questions
   OUT) and its sibling `reviewReplies.logic.ts` (the reply grammar + the acknowledgement), kept

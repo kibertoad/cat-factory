@@ -9,7 +9,8 @@ import type {
   WorkspaceMemberRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { notificationAudienceUserIds } from '@cat-factory/kernel'
+import type { NotificationDeliveryReason } from '@cat-factory/kernel'
+import { isAlertingDelivery, notificationAudienceUserIds } from '@cat-factory/kernel'
 import {
   notificationDeepLink,
   renderNotificationEmail,
@@ -29,6 +30,13 @@ import {
 //
 // Runtime-neutral (fetch through the account's EmailSender + DB reads), so it lives here in
 // @cat-factory/integrations and serves BOTH runtime facades.
+//
+// An ALERT transport, so it delivers on the RAISED edge alone (`isAlertingDelivery`). Every
+// other edge the NotificationService re-delivers on (a resolve, a dismissal, the auto-clear
+// when a run advances past its gate, the escalation sweep) is a card the audience was already
+// mailed about, and a mailbox has no way to render a correction: a second "Decision needed: …"
+// arriving after the decision was made is simply a false statement. It also means an alert costs
+// exactly one pass of reads, and a settled or escalated card costs none.
 //
 // On deliver: resolve the workspace's account → its configured sender (unconfigured ⇒ silence,
 // the standard opt-in pass-through), resolve the AUDIENCE the same way workspace access does,
@@ -76,7 +84,13 @@ const SEND_CONCURRENCY = 4
 export class EmailNotificationChannel implements NotificationChannel {
   constructor(private readonly deps: EmailNotificationChannelDependencies) {}
 
-  async deliver(workspaceId: string, notification: Notification): Promise<void> {
+  async deliver(
+    workspaceId: string,
+    notification: Notification,
+    reason: NotificationDeliveryReason,
+  ): Promise<void> {
+    // Before any read: a settled/refreshed card must cost neither a message nor a round trip.
+    if (!isAlertingDelivery(reason)) return
     try {
       await this.send(workspaceId, notification)
     } catch (error) {

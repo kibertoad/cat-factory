@@ -4251,6 +4251,7 @@
       "save": "No se pudieron guardar los ajustes de notificaciones"
     },
     "unavailable": "Esta instalación no almacena enrutamiento de notificaciones, así que todos los eventos usan el valor predeterminado.",
+    "loadFailed": "No se pudo leer el enrutamiento de notificaciones de este tablero, así que los interruptores de abajo no son su configuración actual. Vuelve a intentarlo antes de cambiar nada.",
     "type": {
       "merge_review": "Revision de fusion",
       "pipeline_complete": "Pipeline completado",

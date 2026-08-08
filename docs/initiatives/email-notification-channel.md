@@ -88,16 +88,38 @@ hide-an-override rule does not apply.
   per-recipient sends are equally isolated).
 - **Off means silent**: an account with no email sender configured, or a type routed off,
   produces zero attempts and zero warnings — the standard opt-in pass-through shape.
+- **A delivery states WHICH EDGE it is** (`NotificationDeliveryReason`), and that is what
+  separates an ALERT transport from a STATE one. Email and Slack deliver on `raised` alone:
+  a mailbox and a chat channel cannot render a correction, so a "Decision needed" arriving
+  after the decision was made is a false statement, not a stale view. The in-app push and the
+  outbound webhook take every edge, because a board (or a headless receiver) holding an open
+  card has to be told when it settles. Never infer the edge from `notification.status`: a
+  raise and an escalation are both `open`, which is the whole reason the parameter exists.
+  `isAlertingDelivery` is the ONE place the split is decided; a transport reads it.
 - **A routing read that FAILS falls back to the shipped default and logs.** It must not
   default to deliver-everything (a mailshot on a settings-store outage) nor to
   deliver-nothing (the parked run nobody hears about). `RoutedNotificationChannel` owns that.
+- **The gate covers the RAISE only**, which is both halves of one rule. A mute stops the
+  interruption and never a correction, and the routing store is therefore read once per raised
+  card per routed channel and nowhere else: the escalation sweep re-delivers every overdue card
+  in a workspace in one loop, and a gate consulting the store per card would be a read each,
+  plus a mothership round trip each.
+- **The delegation wire carries the edge and REFUSES a body without one.** The mothership
+  re-reads its own row, and the row cannot say which edge this is, so guessing `raised` mails a
+  decision already made and guessing `settled` silences the alert the delegation exists to send.
 - **A cell is an OVERRIDE, not the value.** Absent means "this board never chose", which
   resolves to the default. The panel therefore SAVES ONLY the differences: a full grid would
   freeze today's defaults onto every board that ever pressed save, so a later change to what
   counts as high impact would reach nobody.
-- **Gating `in_app` is a mute on the live PUSH, never on the card.** The row is persisted
-  either way and still lists in the inbox on the next snapshot. Anything that made the toggle
-  hide a parked run would make the whole matrix unsafe.
+- **Gating `in_app` is a mute on the live ALERT, never on the card.** The row is persisted
+  either way and still lists in the inbox on the next snapshot, and the settle/escalate pushes
+  still arrive, so a board that already holds the card keeps rendering it truthfully. Anything
+  that made the toggle hide a parked run would make the whole matrix unsafe.
+- **The settings panel treats "no routing store" and "the read broke" as different states.**
+  Only the first is settled enough to render the shipped defaults as the answer; the second
+  leaves the board's configuration UNKNOWN, and the save is a FULL REPLACE, so offering it
+  there would overwrite overrides nobody had seen. `NotificationSettingsStatus` carries the
+  four outcomes rather than a nullable boolean.
 - **Don't email secrets or prompt content**: bodies carry the same redacted projection the
   inbox shows, nothing from agent contexts or credentials. The HTML part escapes its holes.
 - **Backend does not localize prose**: bodies are assembled from the notification's

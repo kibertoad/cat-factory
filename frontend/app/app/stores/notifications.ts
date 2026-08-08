@@ -1,7 +1,11 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { Notification } from '~/types/domain'
-import type { NotificationRoutingMatrix, NotificationSettings } from '~/types/notifications'
+import type {
+  NotificationRoutingMatrix,
+  NotificationSettings,
+  NotificationSettingsStatus,
+} from '~/types/notifications'
 import { ApiError } from '~/composables/api/errors'
 import type { ReviewEffort } from '~/types/merge'
 import { useUpsertList } from '~/composables/useUpsertList'
@@ -115,25 +119,36 @@ export const useNotificationsStore = defineStore('notifications', () => {
   // Loaded on demand by the settings panel, never with the board: an inbox reader does not
   // need the routing matrix, and the read 503s on a deployment with no routing store.
 
-  /** The workspace's routing settings, or null until loaded. */
+  /** The workspace's routing settings, or null unless {@link settingsStatus} is `ready`. */
   const settings = ref<NotificationSettings | null>(null)
-  /** null = not probed yet; false = the deployment wired no routing store (the panel says so). */
-  const settingsAvailable = ref<boolean | null>(null)
+  /**
+   * How the last load ENDED, as four distinct states rather than a nullable boolean.
+   *
+   * `unavailable` and `failed` need different reactions and must not be collapsed: the first is
+   * settled ("this deployment wired no routing store"), the second is transient and leaves the
+   * board's real configuration UNKNOWN. A panel that cannot tell them apart renders the shipped
+   * defaults as though they were the board's own, and its save (a full replace) then writes
+   * that guess over whatever was stored.
+   */
+  const settingsStatus = ref<NotificationSettingsStatus>('unloaded')
   const savingSettings = ref(false)
 
   async function loadSettings() {
     const ws = useWorkspaceStore()
+    settingsStatus.value = 'loading'
     try {
       settings.value = await api.getNotificationSettings(ws.requireId())
-      settingsAvailable.value = true
+      settingsStatus.value = 'ready'
     } catch (error) {
+      settings.value = null
       // A 503 is the opt-in shape (no routing store wired), not a failure to report: the panel
-      // renders the shipped defaults read-only. Anything else is a real error for the caller.
+      // renders the shipped defaults read-only. Anything else is a real error, which the panel
+      // states as such AND the caller still sees, so the server's own message reaches the toast.
       if (isUnavailable(error)) {
-        settingsAvailable.value = false
-        settings.value = null
+        settingsStatus.value = 'unavailable'
         return
       }
+      settingsStatus.value = 'failed'
       throw error
     }
   }
@@ -159,7 +174,7 @@ export const useNotificationsStore = defineStore('notifications', () => {
     act,
     dismiss,
     settings,
-    settingsAvailable,
+    settingsStatus,
     savingSettings,
     loadSettings,
     updateSettings,
@@ -168,8 +183,8 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
 /**
  * Whether a failed load is the SETTLED "you can't have this" — the facade wired no routing store
- * (503) — rather than a transient fault. Only that latches `settingsAvailable` to false;
- * everything else propagates so a later visit retries and the caller can report it.
+ * (503), rather than a transient fault. Only that resolves to `unavailable`; everything else
+ * becomes `failed` and propagates, so a later visit retries and the caller can report it.
  */
 function isUnavailable(error: unknown): boolean {
   return error instanceof ApiError && error.statusCode === 503

@@ -22,7 +22,14 @@ function build(opts: { extra?: NotificationChannel[]; realtime?: boolean } = {})
     env: {},
     // Slack off (its own wiring is covered by the Slack specs); the external set is then exactly
     // what a downstream facade contributes — which is the local facade's mothership channel.
-    config: { slack: { enabled: false }, agents: { routing: {} } } as unknown as AppConfig,
+    // Email off too: the manager's builder reads `config.email` to decide whether to build the
+    // email transport at all, and a fixture that omits a REQUIRED config section is testing a
+    // shape the composition root can never be handed.
+    config: {
+      slack: { enabled: false },
+      email: { enabled: false },
+      agents: { routing: {} },
+    } as unknown as AppConfig,
     repos: {} as never,
     sourced: (_name, buildRepo) => buildRepo(undefined as never),
     ...(opts.realtime ? { realtimeSink: { broadcast } } : {}),

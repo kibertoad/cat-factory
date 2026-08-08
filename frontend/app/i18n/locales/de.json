@@ -5709,6 +5709,7 @@
       "save": "Benachrichtigungseinstellungen konnten nicht gespeichert werden"
     },
     "unavailable": "Diese Installation speichert kein Benachrichtigungs-Routing; alle Ereignisse verwenden die Voreinstellung.",
+    "loadFailed": "Das Benachrichtigungs-Routing dieses Boards konnte nicht gelesen werden. Die Schalter unten zeigen daher nicht die aktuellen Einstellungen. Bitte erneut versuchen, bevor Sie etwas ändern.",
     "type": {
       "merge_review": "Merge-Review",
       "pipeline_complete": "Pipeline abgeschlossen",

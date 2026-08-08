@@ -4388,6 +4388,7 @@
       "save": "Could not save notification settings"
     },
     "unavailable": "This deployment stores no notification routing, so every event uses the shipped default.",
+    "loadFailed": "Could not read this board's notification routing, so the switches below are not its current settings. Retry before changing anything.",
     "type": {
       "merge_review": "Merge review",
       "pipeline_complete": "Pipeline complete",

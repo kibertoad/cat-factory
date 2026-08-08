@@ -72,6 +72,11 @@ export interface WebhookNotificationChannelDependencies {
 export class WebhookNotificationChannel implements NotificationChannel {
   constructor(private readonly deps: WebhookNotificationChannelDependencies) {}
 
+  // Takes EVERY delivery edge, unlike the alert transports (email, Slack) that gate on
+  // `isAlertingDelivery`. A receiver here is a machine, and a card settling is data it acts on
+  // (ADR 0047's headless clarification loop closes on exactly that edge), not an interruption it
+  // regrets. The edge is therefore not a parameter this channel reads: `notification.status`
+  // already carries what a receiver needs, and it is what the delivery id is keyed on.
   async deliver(workspaceId: string, notification: Notification): Promise<void> {
     try {
       await this.post(workspaceId, notification)

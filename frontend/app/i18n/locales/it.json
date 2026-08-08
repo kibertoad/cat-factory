@@ -5709,6 +5709,7 @@
       "save": "Impossibile salvare le impostazioni delle notifiche"
     },
     "unavailable": "Questa installazione non memorizza l'instradamento delle notifiche, quindi ogni evento usa il valore predefinito.",
+    "loadFailed": "Non è stato possibile leggere l'instradamento delle notifiche di questa board, quindi gli interruttori qui sotto non sono la sua configurazione attuale. Riprova prima di modificare qualcosa.",
     "type": {
       "merge_review": "Revisione del merge",
       "pipeline_complete": "Pipeline completata",

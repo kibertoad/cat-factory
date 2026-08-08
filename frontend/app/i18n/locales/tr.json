@@ -4251,6 +4251,7 @@
       "save": "Bildirim ayarları kaydedilemedi"
     },
     "unavailable": "Bu kurulum bildirim yönlendirmesi saklamaz; tüm olaylar varsayılanı kullanır.",
+    "loadFailed": "Bu panonun bildirim yönlendirmesi okunamadı; aşağıdaki anahtarlar panonun geçerli ayarları değildir. Bir şeyi değiştirmeden önce yeniden deneyin.",
     "type": {
       "merge_review": "Birleştirme incelemesi",
       "pipeline_complete": "Pipeline tamamlandı",

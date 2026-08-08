@@ -8,6 +8,7 @@ import type {
   WorkspaceMemberRecord,
 } from '@cat-factory/kernel'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { NOTIFICATION_DELIVERY_REASONS, isAlertingDelivery } from '@cat-factory/kernel'
 import { EmailNotificationChannel } from './EmailNotificationChannel.js'
 import type { EmailNotificationChannelDependencies } from './EmailNotificationChannel.js'
 
@@ -80,7 +81,7 @@ describe('EmailNotificationChannel', () => {
 
   it('mails every member of an account-mode board once, with a deep link', async () => {
     const h = harness()
-    await h.channel.deliver('ws-1', NOTIFICATION)
+    await h.channel.deliver('ws-1', NOTIFICATION, 'raised')
 
     expect(h.sent.map((m) => m.to).sort()).toEqual(['ada@example.test', 'bo@example.test'])
     expect(h.sent[0]!.subject).toContain('Merge review')
@@ -90,7 +91,7 @@ describe('EmailNotificationChannel', () => {
 
   it('sends nothing when the account has no email sender connected', async () => {
     const h = harness({ resolveSender: async () => null })
-    await h.channel.deliver('ws-1', NOTIFICATION)
+    await h.channel.deliver('ws-1', NOTIFICATION, 'raised')
 
     // Opt-in pass-through: no attempts AND no warnings — an unconfigured integration is
     // not a failure to report.
@@ -119,7 +120,7 @@ describe('EmailNotificationChannel', () => {
         ],
       } as never,
     })
-    await h.channel.deliver('ws-1', NOTIFICATION)
+    await h.channel.deliver('ws-1', NOTIFICATION, 'raised')
 
     // usr-1 is an account ADMIN, so they keep access (and the mail); a developer with no
     // roster row does not — the same answer `resolveWorkspaceAccess` gives.
@@ -135,7 +136,7 @@ describe('EmailNotificationChannel', () => {
         ],
       } as never,
     })
-    await h.channel.deliver('ws-1', NOTIFICATION)
+    await h.channel.deliver('ws-1', NOTIFICATION, 'raised')
 
     expect(h.sent.map((m) => m.to)).toEqual(['bo@example.test'])
     expect(h.errors).toEqual([])
@@ -153,7 +154,7 @@ describe('EmailNotificationChannel', () => {
       }),
       onError: (error) => errors.push(error),
     })
-    await h.channel.deliver('ws-1', NOTIFICATION)
+    await h.channel.deliver('ws-1', NOTIFICATION, 'raised')
 
     expect(sent).toEqual(['bo@example.test'])
     expect(errors).toHaveLength(1)
@@ -168,7 +169,7 @@ describe('EmailNotificationChannel', () => {
       } as never,
     })
 
-    await expect(h.channel.deliver('ws-1', NOTIFICATION)).resolves.toBeUndefined()
+    await expect(h.channel.deliver('ws-1', NOTIFICATION, 'raised')).resolves.toBeUndefined()
     expect(h.errors).toHaveLength(1)
   })
 
@@ -182,9 +183,37 @@ describe('EmailNotificationChannel', () => {
         }),
       } as never,
     })
-    await h.channel.deliver('ws-1', NOTIFICATION)
+    await h.channel.deliver('ws-1', NOTIFICATION, 'raised')
 
     expect(h.sent).toEqual([])
     expect(h.errors).toEqual([])
   })
+
+  // The lifecycle re-delivers a card on every transition it makes (resolve, dismissal, the
+  // auto-clear when a run advances past its gate, the escalation sweep). A mailbox cannot render
+  // a correction, so a second "Decision needed: …" arriving after the decision was made is simply
+  // false. Only the RAISED edge is an alert.
+  it.each(NOTIFICATION_DELIVERY_REASONS.filter((r) => !isAlertingDelivery(r)))(
+    'mails nothing on a %s delivery, and reads nothing to decide that',
+    async (reason) => {
+      let reads = 0
+      const h = harness({
+        workspaceRepository: {
+          accessRowOf: async () => {
+            reads++
+            return { accountId: 'acc-1', ownerUserId: null, accessMode: 'account' }
+          },
+        } as never,
+      })
+
+      await h.channel.deliver('ws-1', { ...NOTIFICATION, status: 'dismissed' }, reason)
+
+      expect(h.sent).toEqual([])
+      expect(h.errors).toEqual([])
+      // Not merely silent: the escalation sweep re-delivers every overdue card in a workspace in
+      // one loop, so a channel that resolved the audience before deciding would be four reads per
+      // card, and a mothership round trip each.
+      expect(reads).toBe(0)
+    },
+  )
 })

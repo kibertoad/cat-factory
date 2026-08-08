@@ -3,6 +3,7 @@ import type {
   IdGenerator,
   Notification,
   NotificationChannel,
+  NotificationDeliveryReason,
   NotificationRepository,
   NotificationType,
   RaiseNotificationInput,
@@ -99,7 +100,7 @@ export class NotificationService {
       await this.notifications.upsert(workspaceId, notification)
     }
     if (!existing || this.contentChanged(existing, notification)) {
-      await this.deliver(workspaceId, persisted)
+      await this.deliver(workspaceId, persisted, 'raised')
     }
     return persisted
   }
@@ -157,10 +158,13 @@ export class NotificationService {
       // it and this revert can't lose an escalation.
       const reopened: Notification = { ...claimed, status: 'open', resolvedAt: null }
       await this.notifications.upsert(workspaceId, reopened)
-      await this.deliver(workspaceId, reopened)
+      // `refreshed`, not `raised`: the human is at the screen they just acted from, and the card
+      // was already alerted on when it was raised. Re-interrupting the whole board because a
+      // merge call 500ed states a new decision that nobody has to make.
+      await this.deliver(workspaceId, reopened, 'refreshed')
       throw err
     }
-    await this.deliver(workspaceId, claimed)
+    await this.deliver(workspaceId, claimed, 'settled')
     return claimed
   }
 
@@ -179,7 +183,7 @@ export class NotificationService {
       resolvedAt: this.clock.now(),
     }
     await this.notifications.upsert(workspaceId, resolved)
-    await this.deliver(workspaceId, resolved)
+    await this.deliver(workspaceId, resolved, 'settled')
     return resolved
   }
 
@@ -230,7 +234,7 @@ export class NotificationService {
       resolvedAt: this.clock.now(),
     }
     await this.notifications.upsert(workspaceId, resolved)
-    await this.deliver(workspaceId, resolved)
+    await this.deliver(workspaceId, resolved, 'settled')
     return resolved
   }
 
@@ -259,7 +263,7 @@ export class NotificationService {
         resolvedAt: this.clock.now(),
       }
       await this.notifications.upsert(workspaceId, resolved)
-      await this.deliver(workspaceId, resolved)
+      await this.deliver(workspaceId, resolved, 'settled')
     }
   }
 
@@ -277,7 +281,10 @@ export class NotificationService {
     // escalated row is then re-delivered so the inbox re-renders it red in real time.
     const escalated = await this.notifications.escalateStaleOpen(workspaceId, now - thresholdMs)
     for (const n of escalated) {
-      await this.deliver(workspaceId, n)
+      // `refreshed`: the colour change is for the boards already holding the card, not a second
+      // ask. It is also what keeps this loop free of per-card routing and email reads: an alert
+      // transport and the routing gate both stand down before touching a store.
+      await this.deliver(workspaceId, n, 'refreshed')
     }
     return escalated.length
   }
@@ -288,10 +295,14 @@ export class NotificationService {
   }
 
   /** Best-effort delivery to the channel — a failure must never break the caller. */
-  private async deliver(workspaceId: string, notification: Notification): Promise<void> {
+  private async deliver(
+    workspaceId: string,
+    notification: Notification,
+    reason: NotificationDeliveryReason,
+  ): Promise<void> {
     if (!this.channel) return
     try {
-      await this.channel.deliver(workspaceId, notification)
+      await this.channel.deliver(workspaceId, notification, reason)
     } catch {
       // The row is persisted; delivery is an optimisation. Swallow channel errors.
     }
