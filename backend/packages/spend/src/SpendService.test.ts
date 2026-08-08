@@ -325,6 +325,70 @@ describe('SpendService forecast batching', () => {
     expect(out.get('ws_2')?.costLimit).toBe(DEFAULT_SPEND_PRICING.monthlyLimit)
   })
 
+  const DAY = 24 * 60 * 60 * 1000
+
+  /**
+   * A ledger whose two grouped reads answer DIFFERENTLY: the period read is what the result is
+   * keyed off, the trailing window read is what the burn rate is derived from. They are the same
+   * method at two `since` points, so a fake that ignores the argument cannot tell them apart.
+   */
+  function windowedLedger(
+    period: Record<string, number>,
+    window: Record<string, { costEstimate: number; firstSeenAt: number }>,
+  ): TokenUsageRepository {
+    return {
+      ...fakeTokenUsage(),
+      meteredSpendByWorkspaceSince: async (_ids: string[], since: number) =>
+        since === PERIOD_START
+          ? new Map(
+              Object.entries(period).map(([id, costEstimate]) => [
+                id,
+                { costEstimate, firstSeenAt: PERIOD_START },
+              ]),
+            )
+          : new Map(Object.entries(window)),
+    } as unknown as TokenUsageRepository
+  }
+
+  const forecastOf = async (repo: TokenUsageRepository, ids: string[]) =>
+    new SpendService({
+      tokenUsageRepository: repo,
+      idGenerator,
+      clock,
+      pricing: DEFAULT_SPEND_PRICING,
+    }).forecastWorkspaces(ids, NOW)
+
+  it("derives the rate from the WINDOW's own cost and first-seen stamp", async () => {
+    // The two window fields are what turn a period total into a rate, and each has a fallback for
+    // the scope that has no window row. A fallback taken while a row exists is silent: the
+    // forecast still comes back, just measuring the wrong span, or no spend at all.
+    const out = await forecastOf(
+      // 120 EUR this period, of which 30 landed in the last two days: 15/day, not 120/7 and not 0.
+      windowedLedger({ ws_1: 120 }, { ws_1: { costEstimate: 30, firstSeenAt: NOW - 2 * DAY } }),
+      ['ws_1'],
+    )
+    expect(out.get('ws_1')?.forecast.burnRatePerDay).toBeCloseTo(15)
+    expect(out.get('ws_1')?.forecast.confidence).toBe('ok')
+    expect(out.get('ws_1')?.costSpent).toBe(120)
+  })
+
+  it('forecasts a scope that spent this period but nothing lately as a confident zero', async () => {
+    // `ws_2` is in the period read and absent from the window read, which is what "spent early in
+    // the month, quiet since" looks like. Its rate is zero, and the absence must be tolerated
+    // rather than dereferenced.
+    const out = await forecastOf(
+      windowedLedger(
+        { ws_1: 120, ws_2: 40 },
+        { ws_1: { costEstimate: 30, firstSeenAt: NOW - 2 * DAY } },
+      ),
+      ['ws_1', 'ws_2'],
+    )
+    expect(out.get('ws_2')?.forecast.burnRatePerDay).toBe(0)
+    expect(out.get('ws_2')?.forecast.confidence).toBe('ok')
+    expect(out.get('ws_2')?.forecast.projectedTotal).toBe(40)
+    expect(out.get('ws_1')?.forecast.burnRatePerDay).toBeGreaterThan(0)
+  })
+
   it('resolves every account limit in ONE batched account read, skipping inactive tiers', async () => {
     const accountRepository = {
       get: vi.fn(async () => null),

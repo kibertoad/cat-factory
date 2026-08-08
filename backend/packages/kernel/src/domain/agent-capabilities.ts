@@ -598,7 +598,7 @@ function parseMcpHttpUrl(raw: string): { scheme: string; host: string } | undefi
   const host = (
     hostPort.startsWith('[') && closingBracket !== -1
       ? hostPort.slice(1, closingBracket) // IPv6 literal, e.g. [::1]:8080
-      : (hostPort.split(':')[0] ?? '')
+      : hostPort.split(':')[0]!
   ).toLowerCase()
   return { scheme: match[1]!.toLowerCase(), host }
 }
