@@ -26,6 +26,7 @@ import {
   startPublicTaskSchema,
   updatePublicTaskSchema,
 } from '../public-api.js'
+import { publicSpendQuerySchema, publicSpendSchema } from '../public-spend.js'
 import { publicTaskTypeListSchema } from '../public-task-types.js'
 import { errorResponses, singleStringParam, withMinScope } from './_shared.js'
 
@@ -374,6 +375,27 @@ export const getPublicUsageContract = withMinScope(
     method: 'get',
     pathResolver: () => '/api/v1/usage',
     responsesByStatusCode: { 200: publicUsageSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * The workspace's spend over a window, sliced by ONE dimension: the TCO read the period
+ * breakdown above cannot produce: it groups by `(billing, vendor, provider, model)` within the
+ * current calendar month, and carries no board-shape axis at all.
+ *
+ * A sub-resource of `/usage` rather than a surface of its own, because it is the same money
+ * from the same ledger: `/usage` answers the budget question ("what has this period cost, and
+ * are runs paused"), this answers the attribution one ("what did this repository / ticket /
+ * run cost"). Scoped in SQL to the key's own workspace and its account, so `read` is the whole
+ * scope story here too.
+ */
+export const getPublicSpendContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    pathResolver: () => '/api/v1/usage/spend',
+    requestQuerySchema: publicSpendQuerySchema,
+    responsesByStatusCode: { 200: publicSpendSchema, ...errorResponses },
   }),
 )
 

@@ -577,6 +577,18 @@ import org.jspecify.annotations.NullMarked;
 `
 }
 
+/**
+ * Whether the operation has a query parameter the deployment REFUSES the call without.
+ *
+ * The one thing that decides whether a "call it with no query" affordance is a convenience or a
+ * trap, so both the client overload and the record's own empty factory ask it. Before this
+ * surface had such a parameter every query bag was legitimately omittable, which is why the two
+ * were emitted unconditionally.
+ */
+function hasRequiredQuery(operation) {
+  return operation.queryParams.some((param) => param.required)
+}
+
 /** The generated query-parameter record name for an operation, or null when it takes none. */
 function queryTypeName(operation) {
   return operation.queryParams.length > 0
@@ -589,7 +601,7 @@ function emitQueryRecord(operation) {
   const components = operation.queryParams
     .map(
       (param) =>
-        `    ${javadocInline([param.doc, 'Null means "not sent".'].filter(Boolean))}@Nullable ${javaType(param.type)} ${member(param.wireName, param.type)}`,
+        `    ${javadocInline([param.doc, param.required ? 'Required: null is refused by the deployment with a 400 naming this parameter.' : 'Null means "not sent".'].filter(Boolean))}@Nullable ${javaType(param.type)} ${member(param.wireName, param.type)}`,
     )
     .join(',\n\n')
   const entries = operation.queryParams
@@ -620,18 +632,47 @@ function emitQueryRecord(operation) {
     .join('\n')
   const args = operation.queryParams.map((param) => member(param.wireName, param.type)).join(', ')
 
+  // The factory a caller reaches for first. With every parameter optional that is "none of
+  // them"; with a required one it is "the required ones", because an empty bag is a request the
+  // deployment refuses and a static named `none()` is how a caller is talked into making it.
+  // Same reason the client's no-query overload is withheld for these operations.
+  const required = operation.queryParams.filter((param) => param.required)
+  const factory = hasRequiredQuery(operation)
+    ? javadoc(
+        [
+          `The required parameters, with every optional one unset.`,
+          '',
+          'There is deliberately no empty factory on this record: the deployment refuses a call ' +
+            'that omits any parameter above, so an empty parameter set has no use that is not a bug.',
+        ],
+        '    ',
+      ) +
+      `    public static ${name} of(${required
+        .map((param) => `${javaType(param.type)} ${member(param.wireName, param.type)}`)
+        .join(', ')}) {\n` +
+      `        return builder()${required
+        .map((param) => {
+          const memberName = member(param.wireName, param.type)
+          return `.${memberName}(${memberName})`
+        })
+        .join('')}.build();\n` +
+      '    }\n'
+    : `    /** An empty parameter set. */\n` +
+      `    public static ${name} none() {\n` +
+      `        return builder().build();\n` +
+      '    }\n'
+
   const body =
     javadoc([
       `Query parameters for {@code ${operation.group}().${operation.method}()}.`,
       '',
-      'Every parameter is optional; a null one is not sent at all.',
+      hasRequiredQuery(operation)
+        ? 'A null parameter is not sent at all; the ones marked required above must be set, or the deployment refuses the call.'
+        : 'Every parameter is optional; a null one is not sent at all.',
     ]) +
     `public record ${name}(\n${components}\n) {\n` +
     '\n' +
-    `    /** An empty parameter set. */\n` +
-    `    public static ${name} none() {\n` +
-    `        return builder().build();\n` +
-    '    }\n' +
+    factory +
     '\n' +
     `    /** A new builder for {@link ${name}}. */\n` +
     '    public static Builder builder() {\n' +
@@ -735,15 +776,22 @@ function emitMethod(operation) {
 
   // Java has no default arguments and Kotlin cannot synthesise them for a Java method, so every
   // trailing thing a caller may leave out has to be a real OVERLOAD or nobody can leave it out.
-  // Two are droppable and they compose: a query parameter set (always optional) and a body whose
-  // every field is optional. Emitting the cross-product rather than the one combination that
-  // exists today is what keeps `act(id)` and `start(taskId)` reading the same as their siblings
-  // when an operation later gains the other half.
+  // Two are droppable and they compose: a body whose every field is optional, and a query bag
+  // with no REQUIRED parameter in it. Emitting the cross-product rather than one hard-coded
+  // combination is what keeps `act(id)` and `start(taskId)` reading like their siblings when an
+  // operation carries both.
+  //
+  // The query half is WITHHELD where a query parameter is required: the convenience it buys is a
+  // method that cannot succeed. It would compile, read as the obvious call (its javadoc says "no
+  // query parameters"), and 400 on every invocation, which is worse than the two extra words the
+  // caller writes instead.
   const droppable = [
     operation.body && operation.bodyOptional
       ? { param: 'body', fill: `${javaType(operation.body)}.builder().build()`, note: 'no body' }
       : null,
-    query ? { param: 'query', fill: `${query}.none()`, note: 'no query parameters' } : null,
+    query && !hasRequiredQuery(operation)
+      ? { param: 'query', fill: `${query}.none()`, note: 'no query parameters' }
+      : null,
   ].filter(Boolean)
 
   /** Every non-empty subset of the droppable params, as one forwarding overload each. */

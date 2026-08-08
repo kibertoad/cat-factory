@@ -435,15 +435,21 @@ function methodParams(operation) {
         : `body: ${pyType(operation.body)}`,
     )
   }
-  // EVERYTHING after the positional path params and the body is keyword-only. Query parameters
-  // are all optional and unordered, so a positional call site would silently re-bind if the spec
-  // reordered them; `timeout` sits behind the same bar for a sharper reason. It used to be
-  // positional on any operation with no query parameters, which meant an operation that LATER
-  // gained an optional body would rebind an existing `act(id, 30.0)` onto the body and send the
-  // timeout as the payload. A keyword-only `timeout` makes that call a loud TypeError instead.
+  // EVERYTHING after the path params and the body is keyword-only, for two reasons that stack.
+  // Query parameters are unordered, so a positional call site would silently re-bind if the spec
+  // reordered them, and keyword-only is what lets a REQUIRED one keep its required-ness without
+  // dictating where it sits: emitted with no default, omitting it is a TypeError at the call site
+  // rather than a 400 from the deployment several layers away. `timeout` joins them for a sharper
+  // reason. It used to be positional on any operation with no query parameters, which meant an
+  // operation that LATER gained an optional body would rebind an existing `act(id, 30.0)` onto
+  // the body and send the timeout as the payload.
   params.push('*')
   for (const param of operation.queryParams) {
-    params.push(`${attr(param.wireName)}: ${pyType(param.type)} | None = None`)
+    params.push(
+      param.required
+        ? `${attr(param.wireName)}: ${pyType(param.type)}`
+        : `${attr(param.wireName)}: ${pyType(param.type)} | None = None`,
+    )
   }
   params.push('timeout: float | None = None')
   return params

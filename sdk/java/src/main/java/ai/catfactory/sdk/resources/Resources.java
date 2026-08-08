@@ -88,7 +88,7 @@ public abstract class Resources {
         return webhook;
     }
 
-    /** The billing period's metered budget position and the per-model breakdown behind it. */
+    /** The workspace's money, two ways: the billing period's metered budget position with the per-model breakdown behind it, and spend over a window sliced by the dimension a budget is kept against (a repository, a tracker ticket, one run). */
     public UsageClient usage() {
         return usage;
     }
@@ -103,7 +103,7 @@ public abstract class Resources {
         return decisions;
     }
 
-    /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
+    /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs, and the whole model-activity bundle as one document. */
     public DebugClient debug() {
         return debug;
     }

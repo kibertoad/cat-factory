@@ -23,6 +23,7 @@ import type {
   DebugRunOverview,
   DetachPublicTaskDocumentRequest,
   GetDebugLlmCallView,
+  GetDebugLlmExportResponse,
   GetPublicMergeRecordResponse,
   GetPublicRunOutcomeResponse,
   ListDebugAgentContextResponse,
@@ -74,6 +75,9 @@ import type {
   PublicService,
   PublicServiceList,
   PublicSetFindingStatus,
+  PublicSpend,
+  PublicSpendDimension,
+  PublicSpendWindow,
   PublicTask,
   PublicTaskList,
   PublicUsage,
@@ -96,6 +100,20 @@ export type DebugGetLlmCallQuery = {
   bodyChars?: number
   bodyOffset?: number
   view?: GetDebugLlmCallView
+}
+
+/** Query parameters for `client.debug.getLlmExport()`. */
+export type DebugGetLlmExportQuery = {
+  limit?: number
+  order?: ListDebugLlmCallsOrder
+  bodyChars?: number
+}
+
+/** Query parameters for `client.usage.spend()`. */
+export type UsageSpendQuery = {
+  dimension: PublicSpendDimension
+  window?: PublicSpendWindow
+  limit?: number
 }
 
 /** Query parameters for `client.debug.listAgentContext()`. */
@@ -734,7 +752,7 @@ export class WebhookResource {
   }
 }
 
-/** The billing period's metered budget position and the per-model breakdown behind it. */
+/** The workspace's money, two ways: the billing period's metered budget position with the per-model breakdown behind it, and spend over a window sliced by the dimension a budget is kept against (a repository, a tracker ticket, one run). */
 export class UsageResource {
   readonly #transport: Transport
 
@@ -751,6 +769,20 @@ export class UsageResource {
     return this.#transport.request<PublicUsage>({
       method: 'GET',
       path: `/api/v1/usage`,
+      options,
+    })
+  }
+
+  /**
+   * Break the workspace's spend down by repository, ticket, run or step kind
+   * Group the board’s spend over a window (`24h`, `7d`, `30d`, `90d`) by ONE dimension: `repo`, `ticket` and `run` are the cost-attribution axes an organisation budgets against, and `model` / `agentKind` / `service` / `taskType` slice the same money the other ways. `meteredCost` is real money and `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage, so never sum them. The EMPTY `key` is the unattributed bucket, a real slice rather than a dropped row, never dropped from the breakdown. `rows` is the heaviest `limit` slices (default 100, max 500) and `truncated` says when there was a tail, while `totals` aggregates the WHOLE window either way, so a capped answer still reports what the board spent. `source` says which store answered: the short windows scan the live ledger, which resolves a repository or a ticket through today’s links, while the long ones read the durable daily rollup, which froze that attribution while the money was spent and is never pruned. Read `rolledUpThrough` before reporting a quiet quarter, since a rollup that has never run and a board that spent nothing look identical. Workspace-scoped: the account-wide view is not reachable through this surface.
+   * `GET /api/v1/usage/spend` — operation `getPublicSpend`.
+   */
+  spend(query: UsageSpendQuery, options: RequestOptions = {}): Promise<PublicSpend> {
+    return this.#transport.request<PublicSpend>({
+      method: 'GET',
+      path: `/api/v1/usage/spend`,
+      query,
       options,
     })
   }
@@ -1346,7 +1378,7 @@ export class DecisionsResource {
   }
 }
 
-/** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
+/** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs, and the whole model-activity bundle as one document. */
 export class DebugResource {
   readonly #transport: Transport
 
@@ -1377,6 +1409,20 @@ export class DebugResource {
     return this.#transport.request<DebugLlmCall>({
       method: 'GET',
       path: `/api/v1/debug/llm-calls/${encodePathSegment(callId)}`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * Export a run's model activity as one bundle
+   * The whole of a run’s model activity as one self-describing document, for handing straight to a model asked why the run truncated, spent or stalled: the SQL rollups (run totals, per agent kind, per phase, with the carry cost that says which slice burdened everything after it) plus a bounded window of the individual calls behind them. The rollups cover EVERY recorded call and do not move with `limit`, so a windowed bundle still reports what the run actually cost; `truncated` says the calls are a window and `order` says which end was kept. Bodies are omitted unless `bodyChars` asks, and the resumable call list is the way to walk a long run whole.
+   * `GET /api/v1/debug/runs/{runId}/llm-export` — operation `getDebugLlmExport`.
+   */
+  getLlmExport(runId: string, query: DebugGetLlmExportQuery = {}, options: RequestOptions = {}): Promise<GetDebugLlmExportResponse> {
+    return this.#transport.request<GetDebugLlmExportResponse>({
+      method: 'GET',
+      path: `/api/v1/debug/runs/${encodePathSegment(runId)}/llm-export`,
       query,
       options,
     })
@@ -1773,13 +1819,13 @@ export abstract class CatFactoryResources {
   readonly notifications: NotificationsResource
   /** The workspace's outbound endpoints: register, inspect or remove the receivers that notifications, run-lifecycle events and health alerts are pushed to. The unnamed calls address the `default` endpoint; the named ones let an integration enroll its own receiver, with its own signing secret and filters, beside whatever else is registered. */
   readonly webhook: WebhookResource
-  /** The billing period's metered budget position and the per-model breakdown behind it. */
+  /** The workspace's money, two ways: the billing period's metered budget position with the per-model breakdown behind it, and spend over a window sliced by the dimension a budget is kept against (a repository, a tracker ticket, one run). */
   readonly usage: UsageResource
   /** What the calling key is and what it may do — the self-check an integration runs at startup. */
   readonly me: MeResource
   /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates. */
   readonly decisions: DecisionsResource
-  /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
+  /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs, and the whole model-activity bundle as one document. */
   readonly debug: DebugResource
   /** What a run proved: the engine's verification report, the outcome summary behind it, and the artifacts it captured, bytes included. */
   readonly evidence: EvidenceResource

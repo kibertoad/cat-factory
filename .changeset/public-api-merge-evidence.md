@@ -7,7 +7,7 @@
 '@cat-factory/gatekeeper-bindings': minor
 ---
 
-Public API (`/api/v1`, spec 1.32.0): the merge-EVIDENCE loop. Additive.
+Public API (`/api/v1`, spec 1.33.0): the merge-EVIDENCE loop. Additive.
 
 Four new operations: `GET /api/v1/runs/:runId/merge-record` (the merge decision a run left behind,
 carrying the backend-derived change class, the merger's scores and the preset they were compared

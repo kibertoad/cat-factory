@@ -14,7 +14,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made,
- * infra logs.
+ * infra logs, and the whole model-activity bundle as one document.
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
 public final class DebugClient {
@@ -59,6 +59,29 @@ public final class DebugClient {
      */
     public DebugLlmCall getLlmCall(String callId, DebugGetLlmCallQuery query) {
         return transport.request("GET", "/api/v1/debug/llm-calls/" + Transport.pathSegment(callId), null, query.toQuery(), new TypeReference<DebugLlmCall>() {});
+    }
+
+    /**
+     * Export a run's model activity as one bundle (no query parameters).
+     */
+    public GetDebugLlmExportResponse getLlmExport(String runId) {
+        return getLlmExport(runId, DebugGetLlmExportQuery.none());
+    }
+
+    /**
+     * Export a run's model activity as one bundle
+     * The whole of a run’s model activity as one self-describing document, for handing straight to
+     * a model asked why the run truncated, spent or stalled: the SQL rollups (run totals, per
+     * agent kind, per phase, with the carry cost that says which slice burdened everything after
+     * it) plus a bounded window of the individual calls behind them. The rollups cover EVERY
+     * recorded call and do not move with `limit`, so a windowed bundle still reports what the run
+     * actually cost; `truncated` says the calls are a window and `order` says which end was kept.
+     * Bodies are omitted unless `bodyChars` asks, and the resumable call list is the way to walk a
+     * long run whole.
+     * {@code GET /api/v1/debug/runs/{runId}/llm-export} (operation {@code getDebugLlmExport}).
+     */
+    public GetDebugLlmExportResponse getLlmExport(String runId, DebugGetLlmExportQuery query) {
+        return transport.request("GET", "/api/v1/debug/runs/" + Transport.pathSegment(runId) + "/llm-export", null, query.toQuery(), new TypeReference<GetDebugLlmExportResponse>() {});
     }
 
     /**

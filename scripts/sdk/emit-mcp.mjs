@@ -346,9 +346,12 @@ function description(operation) {
 function emitTool(operation, ir) {
   const queryConst =
     operation.queryParams.length > 0
-      ? `const QUERY_${snake(toolName(operation)).toUpperCase()} = [${operation.queryParams
-          .map((param) => lit(param.wireName))
-          .join(', ')}] as const\n`
+      ? `const QUERY_${snake(toolName(operation)).toUpperCase()}: readonly QueryParam[] = [\n${operation.queryParams
+          .map(
+            (param) =>
+              `  { name: ${lit(param.wireName)}, required: ${Boolean(param.required)} },\n`,
+          )
+          .join('')}]\n`
       : ''
   const output = outputSchema(operation, ir)
   const hints = MCP_TOOL_HINTS[operation.id]
@@ -509,6 +512,12 @@ function str(args: Record<string, unknown>, name: string): string {
   return value
 }
 
+/** One query parameter of a tool, and whether the deployment insists on it. */
+interface QueryParam {
+  name: string
+  required: boolean
+}
+
 /**
  * The subset of \`args\` that belongs in the query string.
  *
@@ -516,16 +525,32 @@ function str(args: Record<string, unknown>, name: string): string {
  * parameters to the same level, so "whatever is not a path parameter" would forward a model's
  * typo as a query parameter the deployment then ignores, and the caller would see a filter that
  * silently did nothing.
+ *
+ * Returns the call site's own query type, and CHECKS rather than assumes: a required parameter
+ * that \`args\` omits throws here, the way a missing path parameter already does through
+ * \`str()\`. The tool's \`inputSchema\` marks the same parameters required, but a host is not
+ * obliged to validate against it and the reference server in this package does not, so trusting
+ * it made the narrowing a claim about a bag that had just dropped the field the call needs. The
+ * failure that produced is the worst kind for a model: a 400 about a parameter it believes it
+ * supplied, several turns after the tool description explained it.
+ *
+ * PRESENCE only. What a value may BE is the deployment's judgement, already stated in the schema
+ * the model was given, and its refusal names the field; re-deriving it here would be a second
+ * copy of the contract, free to disagree with the first.
  */
-function pick(
-  args: Record<string, unknown>,
-  names: readonly string[],
-): Record<string, unknown> {
+function pick<Query>(args: Record<string, unknown>, params: readonly QueryParam[]): Query {
   const out: Record<string, unknown> = {}
-  for (const name of names) {
-    if (args[name] !== undefined) out[name] = args[name]
+  for (const param of params) {
+    const value = args[param.name]
+    if (value === undefined) {
+      if (param.required) {
+        throw new TypeError(\`\${param.name} is required\`)
+      }
+      continue
+    }
+    out[param.name] = value
   }
-  return out
+  return out as Query
 }
 
 ${emitted

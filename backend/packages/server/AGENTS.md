@@ -27,7 +27,11 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   carries one authorization model), `PublicMergeEvidenceController` (the merge-EVIDENCE loop: a run's
   merge decision with its backend-derived change class and the merger's scores, the workspace's
   per-class rollups, and the reviewer-effort TAG a landed pull request earned; the tag at `write`,
-  not the `admin` that `act` needs, since tagging merges nothing), `PublicKeyController` (HEADLESS key provisioning at `admin`
+  not the `admin` that `act` needs, since tagging merges nothing), `PublicSpendController` (the
+  `read`-scoped **spend analytics** read at `/api/v1/usage/spend`: one dimension of
+  `ReportsService` over a window, scoped to the key's own account AND board, so the
+  cost-attribution axes the panel serves account-wide (repository, ticket, run) are reachable
+  headlessly without the cross-workspace view the admin gate exists for), `PublicKeyController` (HEADLESS key provisioning at `admin`
   scope, delegating to the same `PublicApiKeyService` the session panel calls; the mintable rungs
   are derived from the gate, so a key minted here can never mint another),
   `PublicMcpController` (the

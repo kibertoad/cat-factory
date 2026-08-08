@@ -213,25 +213,33 @@ const API_PREFIX = '/api/v1'
 // which it is. A consumer counting rows off that list to mean "screenshots this run captured" must
 // filter on `scope: 'run'`; one comparing a screenshot against the design it was judged against
 // finally has both, which is why the list was half the truth before.
+// 1.32.0: the two cost/telemetry reads that were reachable only from a browser session. Two new
+// operations (`GET /api/v1/usage/spend`, `GET /api/v1/debug/runs/{runId}/llm-export`), no change
+// to anything already served. Additive on every axis, so a consumer built against 1.31.0 keeps
+// parsing every response it already understood.
 //
-// 1.32.0, not 1.31.0: the MERGE-EVIDENCE loop (ADR 0046) reaches `/api/v1`. Four new operations
-// and nothing else: `GET /api/v1/runs/:runId/merge-record`, `GET /api/v1/merge-records/rollups`,
-// `GET /api/v1/merge-records/:recordId` and `POST /api/v1/merge-records/:recordId/effort`. Purely
-// additive: no existing path, shape, scope floor or error vocabulary moves, so a client generated
-// against 1.31.0 is unaffected in every call it already makes.
+// Worth stating for a reader comparing the new spend read against `GET /api/v1/usage`: the two
+// answer different questions off the same ledger and will not tie out. `/usage` is the current
+// calendar month against the budget; `/usage/spend` is a rolling window snapped to a bucket edge,
+// and on `30d`/`90d` it is served from the durable rollup, whose attribution was frozen while the
+// money was spent. `source` and `since` on the response are what say which is talking.
+//
+// 1.33.0: the MERGE-EVIDENCE loop (ADR 0046) reaches `/api/v1`. Four new operations
+// (`GET /api/v1/runs/:runId/merge-record`, `GET /api/v1/merge-records/rollups`,
+// `GET /api/v1/merge-records/:recordId`, `POST /api/v1/merge-records/:recordId/effort`) plus an
+// all-optional body on `POST /api/v1/notifications/:id/act`. Purely additive: no existing path,
+// shape, scope floor or error vocabulary moves.
 //
 // The scope split is the part worth stating. Recording how much review a merged pull request
-// needed is `write`, not the `admin` that `POST /notifications/:id/act` carries: `act` MERGES a
-// pull request, where tagging one that already landed merges nothing. An integration whose job is
-// collecting evidence therefore no longer needs a key that can also delete tasks and merge.
+// needed is `write`, not the `admin` that `act` carries: `act` MERGES a pull request, where
+// tagging one that already landed merges nothing. An integration whose job is collecting evidence
+// therefore no longer needs a key that can also delete tasks and merge.
 //
-// What this version deliberately does NOT do is put `reviewEffort` on `act`, which is where the
-// app's one-tap confirm-and-tag lives. Every SDK emitter renders a request body as a REQUIRED
-// positional parameter, so the field would rewrite `act(id)` as `act(id, body)` in four published
-// clients, a compile break for existing callers, which is not something `/api/v1` may do. The
-// headless equivalent is two calls (`act`, then the effort route), and the tag is idempotent and
-// orthogonal to the decision, so the order does not matter.
-const API_VERSION = '1.32.0'
+// `act`'s new body is what gives the app's one-tap confirm-and-tag a headless equivalent, and it
+// reaches four published clients without breaking a caller because the emitters now render an
+// all-optional body as a parameter that may be OMITTED. Sending no body at all still works
+// (the route mounts `optionalJsonBody`), so an integration calling it since 1.0 is untouched.
+const API_VERSION = '1.33.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -292,6 +300,14 @@ const COMPONENT_SCHEMAS = {
   PublicUsageRow: 'publicUsageRowSchema',
   PublicUsageBudget: 'publicUsageBudgetSchema',
   PublicUsage: 'publicUsageSchema',
+  // The spend breakdown, hoisted beside its budget sibling and for the same reason. Left inline
+  // it ships as `GetPublicSpendResponse` / `…ResponseRow` / `…ResponseTotals` in four languages:
+  // names derived from an operationId rather than from the resource, which is what an integrator
+  // ends up writing its code against. The picklists these carry are NOT hoisted (a bare enum
+  // renders as an empty `interface`); they are pinned by value-set in `scripts/sdk/ir.mjs`.
+  PublicSpendRow: 'publicSpendRowSchema',
+  PublicSpendTotals: 'publicSpendTotalsSchema',
+  PublicSpend: 'publicSpendSchema',
   PublicIdentity: 'publicIdentitySchema',
   // Parked decisions. `PublicDecisionList` is the response of EVERY decision route, and it
   // transitively carries the full finding + fork-option + PR-finding shapes — hoisting it (and the
@@ -589,6 +605,12 @@ const OPERATION_DOCS = {
     description:
       'Read this billing period’s METERED spend against the workspace budget (including whether it is exceeded, which pauses runs) plus the per-(billing, vendor, provider, model) token breakdown behind it. Costs on `subscription` rows are illustrative — a flat-rate plan bills nothing per token — so branch on `billing` before summing. Workspace-scoped: the account- and user-tier budgets are not reachable through this surface.',
   },
+  getPublicSpend: {
+    tag: 'Usage',
+    summary: "Break the workspace's spend down by repository, ticket, run or step kind",
+    description:
+      'Group the board\u2019s spend over a window (`24h`, `7d`, `30d`, `90d`) by ONE dimension: `repo`, `ticket` and `run` are the cost-attribution axes an organisation budgets against, and `model` / `agentKind` / `service` / `taskType` slice the same money the other ways. `meteredCost` is real money and `subscriptionCost` is the illustrative equivalent-API cost of flat-rate quota usage, so never sum them. The EMPTY `key` is the unattributed bucket, a real slice rather than a dropped row, never dropped from the breakdown. `rows` is the heaviest `limit` slices (default 100, max 500) and `truncated` says when there was a tail, while `totals` aggregates the WHOLE window either way, so a capped answer still reports what the board spent. `source` says which store answered: the short windows scan the live ledger, which resolves a repository or a ticket through today\u2019s links, while the long ones read the durable daily rollup, which froze that attribution while the money was spent and is never pruned. Read `rolledUpThrough` before reporting a quiet quarter, since a rollup that has never run and a board that spent nothing look identical. Workspace-scoped: the account-wide view is not reachable through this surface.',
+  },
   getPublicIdentity: {
     tag: 'Identity',
     summary: 'Describe the calling key',
@@ -864,6 +886,12 @@ const OPERATION_DOCS = {
     summary: 'Get one LLM call',
     description:
       'One recorded model call with its budgeted prompt delta, response and reasoning. `bodyOffset`/`bodyChars` window the bodies, so an arbitrarily long transcript is readable in bounded pages.',
+  },
+  getDebugLlmExport: {
+    tag: 'Debug',
+    summary: "Export a run's model activity as one bundle",
+    description:
+      'The whole of a run\u2019s model activity as one self-describing document, for handing straight to a model asked why the run truncated, spent or stalled: the SQL rollups (run totals, per agent kind, per phase, with the carry cost that says which slice burdened everything after it) plus a bounded window of the individual calls behind them. The rollups cover EVERY recorded call and do not move with `limit`, so a windowed bundle still reports what the run actually cost; `truncated` says the calls are a window and `order` says which end was kept. Bodies are omitted unless `bodyChars` asks, and the resumable call list is the way to walk a long run whole.',
   },
   listDebugAgentContext: {
     tag: 'Debug',

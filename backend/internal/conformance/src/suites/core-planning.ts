@@ -19,6 +19,7 @@ export function defineCorePlanningConformance(harness: ConformanceHarness): void
   describe('public API (break down an initiative)', () => {
     registerPublicApiTests(harness)
     registerPublicApiScopeTests(harness)
+    registerPublicNotificationTests(harness)
   })
   registerPipelineCatalogTests(harness)
 
@@ -397,6 +398,164 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
     expect((await call('DELETE', `/api/v1/tasks/${taskId}`, undefined, adminAuth)).status).toBe(404)
   })
 
+  it('serves the workspace usage + budget read to a read-scoped key', async () => {
+    const { call, createOrgWorkspace } = harness.makeApp()
+    const { workspace } = await createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const minted = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
+      label: 'usage',
+      scope: 'read',
+    })
+    const auth = { authorization: `Bearer ${minted.body.secret}` }
+
+    const usage = await call<{
+      periodStart: number
+      currency: string
+      budget: {
+        inputTokens: number
+        outputTokens: number
+        costSpent: number
+        costLimit: number
+        exceeded: boolean
+      }
+      rows: { billing: string; model: string; calls: number }[]
+    }>('GET', '/api/v1/usage', undefined, auth)
+    expect(usage.status).toBe(200)
+    // The period is the current calendar month (UTC) and the currency is the deployment's,
+    // both resolved by the facade's own pricing wiring — what conformance proves is that BOTH
+    // facades serve the same resolved shape, not a particular number.
+    expect(usage.body.currency).toBeTruthy()
+    expect(usage.body.periodStart).toBeGreaterThan(0)
+    // A workspace that has spent nothing this period reports a real zero against a real
+    // configured limit, and is NOT paused. `rows` is empty for the same reason — there is no
+    // usage to group, which is distinct from a sink the deployment doesn't retain.
+    expect(usage.body.budget.inputTokens).toBe(0)
+    expect(usage.body.budget.outputTokens).toBe(0)
+    expect(usage.body.budget.costSpent).toBe(0)
+    expect(usage.body.budget.costLimit).toBeGreaterThan(0)
+    expect(usage.body.budget.exceeded).toBe(false)
+    expect(usage.body.rows).toEqual([])
+
+    // Read is the whole scope story — the aggregate names no resource ids — but a key is
+    // still required, and an unauthenticated caller learns nothing.
+    expect((await call('GET', '/api/v1/usage')).status).toBe(401)
+  })
+
+  it('slices the same money by repository and ticket, off whichever store the window routes to', async () => {
+    const { call, createOrgWorkspace } = harness.makeApp()
+    const { workspace } = await createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const minted = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
+      label: 'spend',
+      scope: 'read',
+    })
+    const auth = { authorization: `Bearer ${minted.body.secret}` }
+
+    type Spend = {
+      dimension: string
+      window: string
+      generatedAt: number
+      since: number
+      currency: string
+      source: string
+      rolledUpThrough: number | null
+      truncated: boolean
+      totals: { calls: number; meteredCost: number; subscriptionCost: number }
+      rows: { key: string; label: string | null; meteredCost: number }[]
+    }
+
+    // The LIVE half: the short windows scan the ledger, and nothing in that path can be behind,
+    // so claiming a coverage boundary would invite a reader to believe the numbers were bounded
+    // by one. The TCO axes are what this endpoint exists for, so both are driven here.
+    for (const dimension of ['repo', 'ticket', 'run'] as const) {
+      const live = await call<Spend>(
+        'GET',
+        `/api/v1/usage/spend?dimension=${dimension}&window=24h`,
+        undefined,
+        auth,
+      )
+      expect(live.status).toBe(200)
+      expect(live.body.dimension).toBe(dimension)
+      expect(live.body.source).toBe('ledger')
+      expect(live.body.rolledUpThrough).toBeNull()
+      expect(live.body.currency).toBeTruthy()
+      // A board that has spent nothing reports real zeros against a real window, and the window
+      // it reports is the SNAPPED one every number was computed over.
+      expect(live.body.rows).toEqual([])
+      expect(live.body.totals).toMatchObject({ calls: 0, meteredCost: 0, subscriptionCost: 0 })
+      expect(live.body.since).toBeLessThan(live.body.generatedAt)
+      // An empty breakdown is COMPLETE, not capped. The two read identically without this
+      // field, which is the whole reason it is on the wire.
+      expect(live.body.truncated).toBe(false)
+    }
+
+    // The DURABLE half: the long windows read the rollup on both facades, and a deployment whose
+    // sweep has never run says so with `rolledUpThrough: null` rather than presenting an empty
+    // quarter as a quiet one.
+    const durable = await call<Spend>(
+      'GET',
+      '/api/v1/usage/spend?dimension=repo&window=90d',
+      undefined,
+      auth,
+    )
+    expect(durable.status).toBe(200)
+    expect(durable.body.source).toBe('daily-rollup')
+    expect(durable.body.window).toBe('90d')
+
+    // The window defaults to the widest LIVE one, so a caller that states nothing gets
+    // millisecond-exact numbers rather than a rollup that may be a sweep behind.
+    const defaulted = await call<Spend>(
+      'GET',
+      '/api/v1/usage/spend?dimension=model',
+      undefined,
+      auth,
+    )
+    expect(defaulted.body.window).toBe('7d')
+    expect(defaulted.body.source).toBe('ledger')
+
+    // The vocabularies are closed on both axes, and a dimension this surface deliberately does
+    // not publish (`workspace`, which every key already addresses) is refused rather than served.
+    expect(
+      (await call('GET', '/api/v1/usage/spend?dimension=workspace', undefined, auth)).status,
+    ).toBe(400)
+    expect((await call('GET', '/api/v1/usage/spend', undefined, auth)).status).toBe(400)
+    expect(
+      (await call('GET', '/api/v1/usage/spend?dimension=repo&window=1y', undefined, auth)).status,
+    ).toBe(400)
+    expect((await call('GET', '/api/v1/usage/spend?dimension=repo')).status).toBe(401)
+
+    // The row cap is a real bound with a real ceiling, refused at both ends rather than clamped:
+    // a caller that asked for 5000 rows and silently got 500 would read the answer as complete.
+    for (const limit of ['0', '501', 'all', '1e3']) {
+      expect(
+        (await call('GET', `/api/v1/usage/spend?dimension=run&limit=${limit}`, undefined, auth))
+          .status,
+        `limit=${limit} must be refused`,
+      ).toBe(400)
+    }
+    expect(
+      (await call('GET', '/api/v1/usage/spend?dimension=run&limit=1', undefined, auth)).status,
+    ).toBe(200)
+  })
+}
+
+/**
+ * The built-in pipeline catalog's lifecycle: versioned reseed, retire-and-replace, and the
+ * two refusals (a built-in the catalog still ships, one a recurring schedule points at).
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+/**
+ * The notification INBOX the public API serves: list, dismiss, act, and the one card whose
+ * actionability is decided by the request rather than by its type.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerPublicNotificationTests(harness: ConformanceHarness): void {
   /**
    * The arrangement both notification cases share: an org board (the only kind a public-API key
    * can be minted for), a key at each rung, and a seeder for OPEN cards.
@@ -611,59 +770,8 @@ function registerPublicApiScopeTests(harness: ConformanceHarness): void {
     expect(tagged.status).toBe(200)
     expect(tagged.body.status).toBe('acted')
   })
-
-  it('serves the workspace usage + budget read to a read-scoped key', async () => {
-    const { call, createOrgWorkspace } = harness.makeApp()
-    const { workspace } = await createOrgWorkspace({ seed: true })
-    const wsId = workspace.id
-
-    const minted = await call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
-      label: 'usage',
-      scope: 'read',
-    })
-    const auth = { authorization: `Bearer ${minted.body.secret}` }
-
-    const usage = await call<{
-      periodStart: number
-      currency: string
-      budget: {
-        inputTokens: number
-        outputTokens: number
-        costSpent: number
-        costLimit: number
-        exceeded: boolean
-      }
-      rows: { billing: string; model: string; calls: number }[]
-    }>('GET', '/api/v1/usage', undefined, auth)
-    expect(usage.status).toBe(200)
-    // The period is the current calendar month (UTC) and the currency is the deployment's,
-    // both resolved by the facade's own pricing wiring — what conformance proves is that BOTH
-    // facades serve the same resolved shape, not a particular number.
-    expect(usage.body.currency).toBeTruthy()
-    expect(usage.body.periodStart).toBeGreaterThan(0)
-    // A workspace that has spent nothing this period reports a real zero against a real
-    // configured limit, and is NOT paused. `rows` is empty for the same reason — there is no
-    // usage to group, which is distinct from a sink the deployment doesn't retain.
-    expect(usage.body.budget.inputTokens).toBe(0)
-    expect(usage.body.budget.outputTokens).toBe(0)
-    expect(usage.body.budget.costSpent).toBe(0)
-    expect(usage.body.budget.costLimit).toBeGreaterThan(0)
-    expect(usage.body.budget.exceeded).toBe(false)
-    expect(usage.body.rows).toEqual([])
-
-    // Read is the whole scope story — the aggregate names no resource ids — but a key is
-    // still required, and an unauthenticated caller learns nothing.
-    expect((await call('GET', '/api/v1/usage')).status).toBe(401)
-  })
 }
 
-/**
- * The built-in pipeline catalog's lifecycle: versioned reseed, retire-and-replace, and the
- * two refusals (a built-in the catalog still ships, one a recurring schedule points at).
- *
- * Registered from the suite above; split out purely to keep each function within the
- * per-function line budget. Every test is unchanged.
- */
 function registerPipelineCatalogTests(harness: ConformanceHarness): void {
   describe('pipeline versioning + reseed', () => {
     it('ships catalog versions on the snapshot and reseeds a built-in, preserving organization', async () => {

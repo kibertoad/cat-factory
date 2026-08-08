@@ -172,19 +172,32 @@ function returnType(operation) {
   return tsType(operation.result)
 }
 
+/**
+ * Whether the query bag may be omitted entirely: only when every parameter in it is optional.
+ * An endpoint with a REQUIRED query param (`GET /api/v1/usage/spend` needs a `dimension`) must
+ * not default its bag to `{}`, which emits a signature promising a call the server refuses with
+ * a 400, and TypeScript rejects the default outright, which is how the first such endpoint
+ * surfaced this rather than shipping a broken method.
+ */
+function queryIsOmittable(operation) {
+  return (operation.queryParams ?? []).every((param) => !param.required)
+}
+
 function emitMethod(operation) {
   const query = queryTypeName(operation)
-  // A body whose every field is optional gets a `{}` default, so `start(taskId)` reads as the
-  // request it is instead of `start(taskId, {})`. The parameter stays in body position rather
-  // than moving after `options`: the wire order is path → body → query, and a signature that
-  // reordered itself by optionality would put the same operation's body in a different place
-  // depending on its schema.
+  const optionalQuery = queryIsOmittable(operation)
+  // Two trailing params may be left out, and each for its own reason. A body whose every field
+  // is optional gets a `{}` default, so `start(taskId)` reads as the request it is instead of
+  // `start(taskId, {})`. A query bag gets one only when every parameter in it is optional (see
+  // `queryIsOmittable`). Neither moves position: the wire order is path -> body -> query, and a
+  // signature that reordered itself by optionality would put the same operation's body in a
+  // different place depending on its schema.
   const params = [
     ...operation.pathParams.map((p) => `${camel(p.wireName)}: string`),
     operation.body
       ? `body: ${tsType(operation.body)}${operation.bodyOptional ? ' = {}' : ''}`
       : null,
-    query ? `query: ${query} = {}` : null,
+    query ? `query: ${query}${optionalQuery ? ' = {}' : ''}` : null,
     'options: RequestOptions = {}',
   ].filter(Boolean)
 
@@ -228,7 +241,7 @@ function emitPager(operation) {
   const listTypeName = tsType(operation.result)
   const params = [
     ...operation.pathParams.map((p) => `${camel(p.wireName)}: string`),
-    query ? `query: ${query} = {}` : null,
+    query ? `query: ${query}${queryIsOmittable(operation) ? ' = {}' : ''}` : null,
     'options: RequestOptions = {}',
   ].filter(Boolean)
   const callArgs = [
