@@ -36,7 +36,11 @@ import type {
   ProvisioningLogRecord,
   ProvisioningLogRepository,
 } from '@cat-factory/kernel'
-import { LLM_WARNING_FINISH_REASONS, escapeLikePattern } from '@cat-factory/kernel'
+import {
+  LLM_WARNING_FINISH_REASONS,
+  dedupeDocumentRefs,
+  escapeLikePattern,
+} from '@cat-factory/kernel'
 import { isWebSearchProvider } from '@cat-factory/contracts'
 import {
   and,
@@ -1196,6 +1200,41 @@ export class DrizzleBinaryArtifactMetadataStore implements BinaryArtifactMetadat
       .where(this.documentScope(workspaceId, document))
       .orderBy(asc(binaryArtifacts.created_at), asc(binaryArtifacts.id))
     return rows.map(rowToBinaryArtifact)
+  }
+
+  async listByDocuments(
+    workspaceId: string,
+    documents: readonly DocumentArtifactRef[],
+  ): Promise<BinaryArtifactRecord[]> {
+    const refs = dedupeDocumentRefs(documents)
+    if (!refs.length) return []
+    const rows: (typeof binaryArtifacts.$inferSelect)[] = []
+    for (let i = 0; i < refs.length; i += 500) {
+      const chunk = refs.slice(i, i + 500)
+      const found = await this.db
+        .select()
+        .from(binaryArtifacts)
+        .where(
+          and(
+            eq(binaryArtifacts.workspace_id, workspaceId),
+            or(
+              ...chunk.map((ref) =>
+                and(
+                  eq(binaryArtifacts.document_source, ref.source),
+                  eq(binaryArtifacts.document_external_id, ref.externalId),
+                ),
+              ),
+            ),
+          ),
+        )
+        .orderBy(asc(binaryArtifacts.created_at), asc(binaryArtifacts.id))
+      rows.push(...found)
+    }
+    // Re-sorted across chunks: each statement orders its own rows, and the caller's "newest
+    // render for a view wins" rule reads the whole list in order.
+    return rows
+      .sort((a, b) => a.created_at - b.created_at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .map(rowToBinaryArtifact)
   }
 
   async deleteByIds(workspaceId: string, ids: readonly string[]): Promise<number> {

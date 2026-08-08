@@ -66,6 +66,9 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   names; shared by `AgentContextBuilder` and the inline initiative interviewer, which builds its
   own prompt and would otherwise see a different set of attachments than the analyst and planner
   that follow it),
+  `visual-confirm-design-references.ts` (the visual-confirmation gate's DESIGN half: the frames an
+  import retained for the designs a task links, folded into its gallery beside the hand-uploaded
+  references, with the collision, precedence and gap rules that fold implies),
   plus `RunStateMachine`, `StepGraph`, the companion/review
   controllers, and `*.logic.ts` helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …), and
   `PrVerificationReportController` + `prReport.logic.ts` (the **PR verification report**:

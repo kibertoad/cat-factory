@@ -5600,6 +5600,19 @@
     "history": {
       "heading": "Geçmiş (tur yok) | Geçmiş ({count} tur) | Geçmiş ({count} tur)",
       "fixRequested": "Düzeltme istendi"
+    },
+    "design": {
+      "summary": "Bağlantılı tasarımdan hiç çerçeve gelmedi. | Bağlantılı tasarımdan {count} çerçeve. | Bağlantılı tasarımdan {count} çerçeve.",
+      "dropped": "Gizlenen başka çerçeve yok. | {count} çerçeve daha burada gösterilmiyor. | {count} çerçeve daha burada gösterilmiyor.",
+      "gapDropped": "Gizlenen çerçevesi yok. | Bu tasarımın {count} çerçevesi burada gösterilmiyor. | Bu tasarımın {count} çerçevesi burada gösterilmiyor.",
+      "gapLine": "{title}:",
+      "gap": {
+        "partial": "çerçevelerinin yalnızca bir kısmı saklandı; yeniden denemek için belgeyi yenileyin.",
+        "failed": "son içe aktarmada çerçeveleri indirilemedi; yeniden denemek için belgeyi yenileyin.",
+        "none": "gösterilecek çerçevesi yok.",
+        "storage_unavailable": "içe aktarıldığında görsel depolama yapılandırılmamıştı, bu yüzden hiçbir şey indirilmedi.",
+        "not_retained": "bunun için saklanan görsel yok. Kaynağı çerçeve üretmiyor olabilir ya da çerçeveler saklanmaya başlamadan önce içe aktarılmış olabilir; yeniden içe aktarmak hangisi olduğunu gösterir."
+      }
     }
   },
   "outcome": {
@@ -5846,6 +5859,7 @@
       },
       "actual": "Gerçek",
       "reference": "Referans",
+      "fromLinkedDesign": "· bağlantılı tasarımdan",
       "actualAlt": "{view} (gerçek)",
       "referenceAlt": "{view} (referans)",
       "replace": "Değiştir",

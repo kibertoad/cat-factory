@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { MAX_POST_MORTEM_CHARS } from '@cat-factory/kernel'
 import type { ContainerExec } from './containerRuntime.js'
+import { formatContainerLogs, MAX_CONTAINER_LOG_CHARS } from './containerRuntime.js'
 import {
   createRuntimeAdapter,
   resolveHostAlias,
@@ -481,5 +483,31 @@ describe('AppleContainerRuntimeAdapter', () => {
     expect(await adapter.listRunContainers(exec)).toEqual([
       { runId: 'run_42', containerId: n('run_42') },
     ])
+  })
+})
+
+describe('formatContainerLogs', () => {
+  it('joins the two streams and drops an empty one', () => {
+    expect(formatContainerLogs('out\n', '  ')).toBe('out')
+    expect(formatContainerLogs('', 'err')).toBe('err')
+  })
+
+  it('keeps only the last `tailLines` for a CLI that cannot tail itself', () => {
+    expect(formatContainerLogs('a\nb\nc\nd', '', 2)).toBe('c\nd')
+  })
+
+  it('bounds the output by CHARACTERS, which a line tail does not', () => {
+    // `docker logs --tail 50` counts lines, and fifty lines of an agent echoing a diff or a
+    // base64 blob is tens of kilobytes. Unbounded it then meets composePostMortem's
+    // head-keeping cap, which keeps the boot chatter and drops the crash at the end: the one
+    // part the tail was read for.
+    const noisy = `${'x'.repeat(MAX_CONTAINER_LOG_CHARS * 2)}\nFATAL: heap out of memory`
+
+    const shaped = formatContainerLogs(noisy, '')
+
+    expect(shaped.endsWith('FATAL: heap out of memory')).toBe(true)
+    expect(shaped).toContain('earlier characters dropped')
+    // Well under the post-mortem cap, so the composed verdict in front of it always survives.
+    expect(shaped.length).toBeLessThan(MAX_POST_MORTEM_CHARS)
   })
 })

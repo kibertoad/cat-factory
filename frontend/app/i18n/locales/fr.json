@@ -5600,6 +5600,19 @@
     "history": {
       "heading": "Historique (aucun tour) | Historique ({count} tour) | Historique ({count} tours)",
       "fixRequested": "Correction demandée"
+    },
+    "design": {
+      "summary": "Aucun cadre ne provient de la maquette liée. | 1 cadre issu de la maquette liée. | {count} cadres issus de la maquette liée.",
+      "dropped": "Aucun autre n'est masqué. | 1 de plus n'est pas affiché ici. | {count} de plus ne sont pas affichés ici.",
+      "gapDropped": "Aucun de ses cadres n'est masqué. | 1 de ses cadres n'est pas affiché ici. | {count} de ses cadres ne sont pas affichés ici.",
+      "gapLine": "{title} :",
+      "gap": {
+        "partial": "seule une partie de ses cadres a été conservée ; actualisez le document pour réessayer.",
+        "failed": "ses cadres n'ont pas pu être téléchargés lors du dernier import ; actualisez le document pour réessayer.",
+        "none": "elle n'a aucun cadre à afficher.",
+        "storage_unavailable": "aucun stockage d'images n'était configuré lors de l'import, donc rien n'a été téléchargé.",
+        "not_retained": "aucune image n'est conservée pour elle. Sa source ne produit peut-être pas de cadres, ou elle a été importée avant leur conservation ; un nouvel import permet de trancher."
+      }
     }
   },
   "outcome": {
@@ -5846,6 +5859,7 @@
       },
       "actual": "Réel",
       "reference": "Référence",
+      "fromLinkedDesign": "· issu de la maquette liée",
       "actualAlt": "{view} (réel)",
       "referenceAlt": "{view} (référence)",
       "replace": "Remplacer",

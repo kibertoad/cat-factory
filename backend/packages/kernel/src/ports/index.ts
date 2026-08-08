@@ -298,6 +298,7 @@ export type {
 export {
   BUILTIN_BINARY_ARTIFACT_STORAGE_KINDS,
   createBinaryArtifactStore,
+  dedupeDocumentRefs,
 } from './binary-artifacts.js'
 export type {
   AgentCloneSpec,

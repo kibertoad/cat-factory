@@ -141,6 +141,68 @@ describe('KubernetesRunnerTransport.poll', () => {
     expect(result.evicted).toBe('crash')
     expect(result.error).toMatch(/evicted or crashed/)
   })
+
+  it("reads the dead pod's termination state onto the eviction detail", async () => {
+    // Finding D1: the pod OBJECT outlives its workload (`restartPolicy: Never`), so the kubelet's
+    // account of the death is sitting one GET away and was never read. An OOM kill is otherwise
+    // indistinguishable from an unexplained vanishing.
+    stubFetch((method, url) => {
+      if (url.includes('/proxy/')) return new Response('not found', { status: 404 })
+      if (method === 'GET' && url.includes('/pods/cf-run-1')) {
+        return new Response(
+          JSON.stringify({
+            status: {
+              phase: 'Failed',
+              containerStatuses: [
+                {
+                  name: 'executor',
+                  state: { terminated: { reason: 'OOMKilled', exitCode: 137 } },
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        )
+      }
+      return undefined
+    })
+    const transport = new KubernetesRunnerTransport(config, resolveSecret)
+    const result = await transport.poll(ref)
+
+    // The verdict is untouched: a post-mortem explains a failure, it never reclassifies one.
+    expect(result.evicted).toBe('crash')
+    expect(result.detail).toContain('OOMKilled')
+    expect(result.detail).toContain('exit code 137')
+  })
+
+  it('distinguishes a pod that is GONE from one that cannot be read', async () => {
+    // Three outcomes, three investigations. A vanished pod was deleted or GC'd by something
+    // outside the run; an apiserver that will not answer means nobody looked at all. Reporting
+    // either as an absent detail makes an unreachable control plane read like a clean death.
+    stubFetch((method, url) =>
+      url.includes('/proxy/')
+        ? new Response('not found', { status: 404 })
+        : new Response('forbidden', { status: 403 }),
+    )
+    const transport = new KubernetesRunnerTransport(config, resolveSecret)
+
+    expect((await transport.poll(ref)).detail).toContain('apiserver answered HTTP 403')
+  })
+
+  it('never lets the post-mortem read fail the poll', async () => {
+    // A run that lost its container must still be FAILED, cause or no cause: this is a
+    // best-effort diagnostic hanging off a terminal verdict, and the whole eviction-recovery
+    // path depends on the verdict arriving.
+    stubFetch((method, url) => {
+      if (url.includes('/proxy/')) return new Response('not found', { status: 404 })
+      throw new Error('apiserver connection reset')
+    })
+    const transport = new KubernetesRunnerTransport(config, resolveSecret)
+    const result = await transport.poll(ref)
+
+    expect(result.evicted).toBe('crash')
+    expect(result.detail).toContain('connection reset')
+  })
 })
 
 describe('KubernetesRunnerTransport.release', () => {

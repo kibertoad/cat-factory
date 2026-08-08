@@ -350,6 +350,26 @@ describe('forecastSpend: the remaining verdict edges', () => {
     expect(f.projectedTotal).not.toBeNull()
   })
 
+  it('confidently forecasts a window that has only just opened with nothing in it', () => {
+    // The short-history rule is guarded on there being a FIRST ROW at all. A window whose span
+    // is minutes old but holds no rows is the confident zero again, not missing history: there
+    // is nothing to wait for, and withholding the projection would leave the scope permanently
+    // unforecast at the start of every period.
+    const now = PERIOD_START + 10 * DAY
+    const f = forecastSpend(
+      input({
+        now,
+        windowStart: now - 60_000,
+        windowCost: 0,
+        windowFirstSeenAt: null,
+        costSpent: 4,
+      }),
+    )
+    expect(f.confidence).toBe('ok')
+    expect(f.burnRatePerDay).toBe(0)
+    expect(f.projectedTotal).toBe(4)
+  })
+
   it('reports no exhaustion date for a scope burning exactly nothing', () => {
     const now = PERIOD_START + 10 * DAY
     const f = forecastSpend(
@@ -390,6 +410,18 @@ describe('mergeSpendAlertStates: the remaining fold edges', () => {
         { threshold: 0.8, projectedOverrun: false },
       ]).threshold,
     ).toBe(0.8)
+  })
+
+  it('raises the kept threshold when a LATER tier crosses a higher one', () => {
+    // The accumulator is only null for the first tier, so a fold that stopped looking after it
+    // was set would still pass every descending and equal-threshold case and report the
+    // account's 0.95 crossing as the workspace's 0.8.
+    expect(
+      mergeSpendAlertStates(PERIOD_START, [
+        { threshold: 0.8, projectedOverrun: false },
+        { threshold: 0.95, projectedOverrun: false },
+      ]).threshold,
+    ).toBe(0.95)
   })
 
   it('adopts a tier threshold when none has been seen yet, whatever its value', () => {

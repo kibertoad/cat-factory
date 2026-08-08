@@ -62,6 +62,22 @@ export interface DocumentArtifactRef {
   externalId: string
 }
 
+/**
+ * Collapse a document list to the distinct `(source, externalId)` pairs a batch read should ask
+ * about. Shared by both metadata stores so a duplicate ref cannot cost one runtime a repeated OR
+ * clause (and duplicate rows in its result) while the other happens to dedupe.
+ */
+export function dedupeDocumentRefs(
+  documents: readonly DocumentArtifactRef[],
+): DocumentArtifactRef[] {
+  const seen = new Map<string, DocumentArtifactRef>()
+  for (const document of documents) {
+    const key = `${document.source}::${document.externalId}`
+    if (!seen.has(key)) seen.set(key, document)
+  }
+  return [...seen.values()]
+}
+
 /** Metadata describing one stored blob (the bytes live in a {@link BinaryBlobBackend}). */
 export interface BinaryArtifactRecord {
   id: string
@@ -136,6 +152,19 @@ export interface BinaryArtifactStore {
     workspaceId: string,
     document: DocumentArtifactRef,
   ): Promise<BinaryArtifactRecord[]>
+  /**
+   * The same renders for a LIST of documents, in one batched read: what a reader with a task's
+   * whole set of linked designs in hand calls, rather than {@link listByDocument} per document.
+   *
+   * The visual-confirmation gate is that reader, and it runs on the driver path of every run whose
+   * pipeline carries the gate, so a point read per attached design is exactly the N+1 the batch
+   * ports exist to prevent. Each record still names its own `document`, so a caller that needs the
+   * per-document split indexes the result rather than asking again.
+   */
+  listByDocuments(
+    workspaceId: string,
+    documents: readonly DocumentArtifactRef[],
+  ): Promise<BinaryArtifactRecord[]>
   delete(workspaceId: string, id: string): Promise<void>
   /**
    * Re-import reclaim: delete every artifact rendered from one document — BOTH the metadata rows
@@ -191,6 +220,16 @@ export interface BinaryArtifactMetadataStore {
   listByDocument(
     workspaceId: string,
     document: DocumentArtifactRef,
+  ): Promise<BinaryArtifactRecord[]>
+  /**
+   * The same records for a LIST of documents, in ONE chunked statement per call rather than a
+   * read per document. Empty input reads nothing; a document naming no row is simply absent.
+   * Ordered like the single-document read (`createdAt`, then `id`) across the whole result, so
+   * "the newest render for a view wins" holds the same way however many documents were asked for.
+   */
+  listByDocuments(
+    workspaceId: string,
+    documents: readonly DocumentArtifactRef[],
   ): Promise<BinaryArtifactRecord[]>
   /**
    * Delete exactly the named metadata rows in ONE chunked statement; returns how many went.
@@ -404,6 +443,9 @@ export function createBinaryArtifactStore(deps: {
     },
     listByDocument(workspaceId, document) {
       return metadata.listByDocument(workspaceId, document)
+    },
+    listByDocuments(workspaceId, documents) {
+      return metadata.listByDocuments(workspaceId, documents)
     },
     async pruneByDocument(workspaceId, document) {
       const previous = await metadata.listByDocument(workspaceId, document)

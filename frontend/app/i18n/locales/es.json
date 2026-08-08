@@ -5600,6 +5600,19 @@
     "history": {
       "heading": "Historial (sin rondas) | Historial ({count} ronda) | Historial ({count} rondas)",
       "fixRequested": "Corrección solicitada"
+    },
+    "design": {
+      "summary": "Ningún marco procede del diseño vinculado. | 1 marco del diseño vinculado. | {count} marcos del diseño vinculado.",
+      "dropped": "No hay otros ocultos. | 1 más no se muestra aquí. | {count} más no se muestran aquí.",
+      "gapDropped": "Ninguno de sus marcos está oculto. | 1 de sus marcos no se muestra aquí. | {count} de sus marcos no se muestran aquí.",
+      "gapLine": "{title}:",
+      "gap": {
+        "partial": "solo se conservó parte de sus marcos; actualiza el documento para volver a intentarlo.",
+        "failed": "no se pudieron descargar sus marcos en la última importación; actualiza el documento para reintentarlo.",
+        "none": "no tiene marcos que mostrar.",
+        "storage_unavailable": "no había almacenamiento de imágenes configurado cuando se importó, así que no se descargó nada.",
+        "not_retained": "no hay imágenes guardadas para él. Puede que su origen no genere marcos, o que se importara antes de que se conservaran; volver a importarlo lo aclara."
+      }
     }
   },
   "outcome": {
@@ -5846,6 +5859,7 @@
       },
       "actual": "Real",
       "reference": "Referencia",
+      "fromLinkedDesign": "· del diseño vinculado",
       "actualAlt": "{view} (real)",
       "referenceAlt": "{view} (referencia)",
       "replace": "Reemplazar",

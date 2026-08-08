@@ -5869,6 +5869,19 @@
     "history": {
       "heading": "History (no rounds) | History ({count} round) | History ({count} rounds)",
       "fixRequested": "Fix requested"
+    },
+    "design": {
+      "summary": "No frames came from the linked design. | 1 frame from the linked design. | {count} frames from the linked design.",
+      "dropped": "No others are hidden. | 1 more is not shown here. | {count} more are not shown here.",
+      "gapDropped": "None of its frames are hidden. | 1 of its frames is not shown here. | {count} of its frames are not shown here.",
+      "gapLine": "{title}:",
+      "gap": {
+        "partial": "only part of its frames were retained; refresh the document to try again.",
+        "failed": "its frames could not be downloaded at the last import; refresh the document to retry.",
+        "none": "it has no frames to show.",
+        "storage_unavailable": "no image storage was configured when it was imported, so nothing was downloaded.",
+        "not_retained": "no images are held for it. Its source may not render frames, or it was imported before frames were kept; re-importing tells the two apart."
+      }
     }
   },
   "outcome": {
@@ -6121,6 +6134,7 @@
       },
       "actual": "Actual",
       "reference": "Reference",
+      "fromLinkedDesign": "· from the linked design",
       "actualAlt": "{view} (actual)",
       "referenceAlt": "{view} (reference)",
       "replace": "Replace",
