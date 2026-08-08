@@ -203,6 +203,7 @@ export {
   renderLinkedContext,
   initiativePresetSection,
   CONTEXT_DIR,
+  REFERENCE_SCREENSHOT_DIR,
 } from './agents/prompts/standard.js'
 export { toolServersSection } from './agents/prompts/capabilities.js'
 export {

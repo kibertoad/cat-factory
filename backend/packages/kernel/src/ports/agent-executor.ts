@@ -14,6 +14,7 @@ import type {
   PullRequestRef,
   PeerPullRequest,
   ReferenceRepo,
+  ReferenceScreenshotSet,
   AprioriBranch,
   ServiceProvisioning,
   StepSubtasks,
@@ -440,6 +441,20 @@ export interface AgentRunContext {
    * reports live on the step, not in the repo, and must not be gated on a resolved run repo.
    */
   injectedContextFiles?: InjectedContextFile[]
+  /**
+   * The reference design images this run's task already has (the frames its linked designs
+   * retained plus the images a person uploaded against it), for a kind that CAPTURES views
+   * (`agent.image === 'ui'`). The executor turns them into the manifest the harness downloads
+   * into `.cat-context/reference-screenshots/`, the directory the UI-tester prompt names.
+   *
+   * ABSENT and EMPTY say different things and both are reachable: absent means this dispatch
+   * never asked (a kind that captures nothing, or a deployment with no artifact storage), and an
+   * empty `files` means it asked and the task has no reference at all. Neither is an error (a
+   * tester with no references names its own views), but the executor only sends a manifest when
+   * the set says SOMETHING, so the container never creates an empty directory that reads as "the
+   * designs gave nothing".
+   */
+  referenceScreenshots?: ReferenceScreenshotSet
   /**
    * A live ephemeral environment a deployer step provisioned earlier in this run
    * (resolved from the run's block). Present only when the environment
