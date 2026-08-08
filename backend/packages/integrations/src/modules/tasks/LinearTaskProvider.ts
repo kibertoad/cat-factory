@@ -47,6 +47,7 @@ import {
   parseLinearRef,
 } from './linear.logic.js'
 import { linearWebhookAdapter } from './webhook/adapters.js'
+import { linearWriteback } from './writeback/linear.writeback.js'
 
 // LinearTaskProvider: the task-source provider for Linear. It authenticates with a
 // personal API key against Linear's single GraphQL endpoint (via the shared
@@ -67,6 +68,12 @@ export class LinearTaskProvider implements TaskSourceProvider {
    * `backend/docs/adr/0032-tracker-webhook-intake.md`.
    */
   readonly webhook = linearWebhookAdapter
+  /**
+   * Outbound writeback (comment / resolve / claim), the mirror of the webhook capability above.
+   * Linear has no native close, so both state changes are transitions to a workflow state of a
+   * standard type.
+   */
+  readonly writeback = linearWriteback
   readonly descriptor = LINEAR_TASK_DESCRIPTOR
   /**
    * Linear has no issue-type notion at all: teams distinguish bugs with a label, which is what

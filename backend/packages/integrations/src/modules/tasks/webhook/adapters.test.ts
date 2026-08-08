@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { TrackerCommentEvent, TrackerWebhookDelivery } from '@cat-factory/kernel'
-import { githubIssuesWebhookAdapter, jiraWebhookAdapter, linearWebhookAdapter } from './adapters.js'
+import {
+  githubIssuesWebhookAdapter,
+  gitlabIssuesWebhookAdapter,
+  jiraWebhookAdapter,
+  linearWebhookAdapter,
+} from './adapters.js'
 import { markdownToAdf } from '../../tracker/jira.create.logic.js'
 import {
   isPlatformAuthoredComment,
@@ -420,5 +425,156 @@ describe('linearWebhookAdapter.parse', () => {
       linearWebhookAdapter.parse(raw({ type: 'Comment', action: 'update', data: { id: 'c' } })),
     ).toBeNull()
     expect(linearWebhookAdapter.parse(raw({ type: 'Reaction', action: 'create' }))).toBeNull()
+  })
+})
+
+describe('gitlabIssuesWebhookAdapter.verify', () => {
+  /** A delivery presenting `token` in the header GitLab echoes the shared secret in. */
+  const tokened = (token: string | null): TrackerWebhookDelivery => ({
+    eventName: '',
+    headers: token === null ? {} : { 'x-gitlab-token': token },
+    raw: new TextEncoder().encode('{}').buffer as ArrayBuffer,
+  })
+
+  it('accepts the configured token and rejects everything else', async () => {
+    // GitLab signs nothing: it echoes the caller-chosen secret, so verification is a compare
+    // rather than an HMAC over the body.
+    expect(await gitlabIssuesWebhookAdapter.verify(SECRET, tokened(SECRET))).toBe(true)
+    expect(await gitlabIssuesWebhookAdapter.verify(SECRET, tokened('another'))).toBe(false)
+    expect(await gitlabIssuesWebhookAdapter.verify(SECRET, tokened(null))).toBe(false)
+  })
+
+  it('FAILS CLOSED on an empty secret, as every other adapter does', async () => {
+    // An unconfigured connection must not accept a delivery that also presents nothing, which is
+    // exactly what a bare equality check on two empty strings would do.
+    await expect(gitlabIssuesWebhookAdapter.verify('', tokened(''))).resolves.toBe(false)
+    await expect(gitlabIssuesWebhookAdapter.verify('', tokened('anything'))).resolves.toBe(false)
+  })
+})
+
+describe('gitlabIssuesWebhookAdapter.parse', () => {
+  const raw = (payload: unknown): TrackerWebhookDelivery => ({
+    eventName: '',
+    headers: {},
+    raw: new TextEncoder().encode(JSON.stringify(payload)).buffer as ArrayBuffer,
+  })
+
+  it('keys an issue note by the project path and the issue IID', () => {
+    // The `iid` is the project-relative number the external-id grammar carries; the global `id`
+    // on the same payload would never match an imported row.
+    const event = gitlabIssuesWebhookAdapter.parse(
+      raw({
+        object_kind: 'note',
+        project: { path_with_namespace: 'acme/sub/web' },
+        issue: { id: 900, iid: 42 },
+        object_attributes: {
+          id: 77,
+          noteable_type: 'Issue',
+          note: '@cat-factory proceed',
+        },
+        user: { id: 3, username: 'ada', name: 'Ada', email: 'ada@acme.test' },
+      }),
+    )
+    expect(event).toEqual({
+      kind: 'comment',
+      source: 'gitlab',
+      externalId: 'acme/sub/web#42',
+      commentId: '77',
+      body: '@cat-factory proceed',
+      author: { id: '3', handle: 'ada', email: 'ada@acme.test', bot: false },
+    })
+  })
+
+  it('ignores a note on anything but an issue', () => {
+    // Notes cover merge requests, commits and snippets. A reply command typed on an MR does
+    // nothing: the loop is anchored to the issue the work was requested on.
+    expect(
+      gitlabIssuesWebhookAdapter.parse(
+        raw({
+          object_kind: 'note',
+          project: { path_with_namespace: 'acme/web' },
+          merge_request: { iid: 5 },
+          object_attributes: { id: 1, noteable_type: 'MergeRequest', note: 'x' },
+        }),
+      ),
+    ).toBeNull()
+  })
+
+  it('maps an issue event, reading labels off `title` and the board off the project path', () => {
+    const event = gitlabIssuesWebhookAdapter.parse(
+      raw({
+        object_kind: 'issue',
+        project: { path_with_namespace: 'acme/web' },
+        labels: [{ title: 'bug' }, { title: 'p1' }],
+        object_attributes: {
+          iid: 7,
+          title: 'Checkout crashes',
+          action: 'open',
+          state: 'opened',
+          url: 'https://gitlab.example.test/acme/web/-/issues/7',
+        },
+      }),
+    )
+    expect(event).toEqual({
+      kind: 'issue',
+      source: 'gitlab',
+      externalId: 'acme/web#7',
+      action: 'created',
+      title: 'Checkout crashes',
+      // GitLab labels carry `title`, not the `name` every other vendor here uses; reading the
+      // wrong field would report an unlabelled issue, which an intake label predicate reads as
+      // `unconfirmed` rather than as the match it is.
+      labels: ['bug', 'p1'],
+      // GitLab's type vocabulary has no member meaning "bug", so the provider omits the predicate
+      // from its vendor query. Reporting a type here would let the push path evaluate a predicate
+      // the polling path ignores, and the same delivery would be admitted by a schedule fire and
+      // refused by a webhook.
+      issueType: null,
+      board: 'acme/web',
+      url: 'https://gitlab.example.test/acme/web/-/issues/7',
+    })
+  })
+
+  it('reads the labels nested on the issue when the instance sends them there', () => {
+    const event = gitlabIssuesWebhookAdapter.parse(
+      raw({
+        object_kind: 'issue',
+        project: { path_with_namespace: 'acme/web' },
+        object_attributes: {
+          iid: 8,
+          title: 'x',
+          action: 'update',
+          state: 'opened',
+          labels: [{ title: 'regression' }],
+        },
+      }),
+    )
+    expect(event).toMatchObject({ action: 'updated', labels: ['regression'] })
+  })
+
+  it('treats an update on a CLOSED issue as closed, so intake never re-offers it', () => {
+    const event = gitlabIssuesWebhookAdapter.parse(
+      raw({
+        object_kind: 'issue',
+        project: { path_with_namespace: 'acme/web' },
+        object_attributes: { iid: 9, title: 'x', action: 'update', state: 'closed' },
+      }),
+    )
+    expect(event).toMatchObject({ action: 'closed' })
+  })
+
+  it('returns null for a project path the id grammar cannot express', () => {
+    // Better an unrecognised (acked) delivery than an id minted in a shape no imported row can
+    // ever match, which would read as an issue nobody has ever linked.
+    expect(
+      gitlabIssuesWebhookAdapter.parse(
+        raw({
+          object_kind: 'issue',
+          project: { path_with_namespace: 'toplevel' },
+          object_attributes: { iid: 1, title: 'x', action: 'open', state: 'opened' },
+        }),
+      ),
+    ).toBeNull()
+    expect(gitlabIssuesWebhookAdapter.parse(raw({ object_kind: 'pipeline' }))).toBeNull()
   })
 })

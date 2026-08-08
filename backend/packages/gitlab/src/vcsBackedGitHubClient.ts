@@ -134,6 +134,17 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
   if (vcs.listSubIssues) {
     client.listSubIssues = (i, ref, n) => vcs.listSubIssues!(conn(i), toRepoRef(ref), n)
   }
+  // The issue-writeback pair. Deliberately NOT folded into `comment`/omitted: `comment` maps to
+  // MERGE-REQUEST notes here (that is what the gates use it for), so an issue comment routed
+  // through it lands on whatever MR shares the number.
+  if (vcs.commentOnIssue) {
+    client.commentOnIssue = (i, ref, n, body) =>
+      vcs.commentOnIssue!(conn(i), toRepoRef(ref), n, body)
+  }
+  if (vcs.applyIssueLabel) {
+    client.applyIssueLabel = (i, ref, n, label) =>
+      vcs.applyIssueLabel!(conn(i), toRepoRef(ref), n, label)
+  }
   if (vcs.listRequestedReviewers) {
     client.listRequestedReviewers = (i, ref, n) =>
       vcs.listRequestedReviewers!(conn(i), toRepoRef(ref), n)

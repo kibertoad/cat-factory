@@ -56,6 +56,7 @@ function memoryStore(over: { failOn?: string } = {}) {
     getBlobWithMetadata: async () => null,
     listByExecution: async () => [],
     countByExecution: async () => 0,
+    countByBlock: async () => 0,
     listByBlock: async () => [],
     listByDocument: async (_ws, document) =>
       rows.filter(
