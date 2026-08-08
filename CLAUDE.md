@@ -1074,11 +1074,11 @@ AND that a gated controller leaves no route of its own uncovered.
   `ResultWindowShell` section, decided by the RECORD's scope) and the `useResultViewRunMeta` rule live in
   [`frontend-extension-mechanism.md`](./docs/initiatives/frontend-extension-mechanism.md); adoption:
   [ADR 0049](./backend/docs/adr/0049-modular-vue-adoption.md).
-- **Tests**: Worker integration tests use real `workerd` + real local D1; Node tests use real Postgres
-  (`DATABASE_URL`); only the LLM is faked. **Run the FILES your change touched, NAMED on the command line**
-  (`pnpm exec vitest run <file>`). A `--filter`ed package, `test:changed`, `test:quick` and the whole tree are
-  LANES: CI's to run, and reaching for one to check nothing else broke is the banned habit, not thoroughness.
-  A green run printing the app's OWN log lines is a SUITE bug: silence the gate, or inject a silent logger.
+- **Tests**: Worker integration tests use real `workerd` + real local D1; Node tests use real Postgres (`DATABASE_URL`); only
+  the LLM is faked. **Run the FILES your change touched, NAMED on the command line** (`pnpm exec vitest run <file>`), and
+  NOTHING else, EVER: `turbo run test:run --filter=<pkg>`, `test:changed`, `test:quick` and the whole tree are LANES, CI's to
+  run. Reaching for one AFTER the named files, to confirm nothing else broke, IS the banned habit, not thoroughness. A green run
+  printing the app's OWN log lines is a SUITE bug: silence the gate, or inject a silent logger.
 - **Count what the test OWNS; assert a RELATION over what it does not.** Seed two rows and assert two:
   the test made that population, so the count is a local fact. A total over a population it does NOT
   control (a generated table, a registry, a catalog, the spec) is the opposite: `toBe(42)` fails on
@@ -1088,6 +1088,6 @@ AND that a gated controller leaves no route of its own uncovered.
   EXACTLY its table). Check what already refuses the case first: the assertion worth writing is the one
   existing guards structurally CANNOT make, e.g. a regenerate-and-diff check passes an emitter whose
   bug is consistent in both halves.
-- **Always run `typecheck`/`test`/`build` through Turbo from the repo root**, never a package's raw script from inside
-  its directory (exception: a task with no build deps), and scope with `--filter` rather than a `cd`. Turbo's `^build`
-  edge only fires through Turbo; bypassing it surfaces as spurious `TS2307 Cannot find module '@cat-factory/contracts'`.
+- **Always run `typecheck`/`build`, NEVER `test`, through Turbo from the repo root**, never a package's raw script from inside
+  its directory (exception: a task with no build deps), and scope with `--filter` rather than a `cd`. Turbo's `^build` edge only
+  fires through Turbo; bypassing it surfaces as spurious `TS2307 Cannot find module '@cat-factory/contracts'`.
