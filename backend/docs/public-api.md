@@ -62,12 +62,12 @@ existed.
 
 Scopes are an ordered, **inclusive** ladder; each rung can do everything below it:
 
-| Scope    | Adds                                                                                                                                                                                                                             |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, a run's [evidence](#run-evidence-report--artifacts), the whole [`/debug` surface](./debug-api.md).                       |
-| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                                                                                                      |
-| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                            |
-| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**), manage the [outbound webhook](#outbound-webhooks-push), and [provision keys](#key-provisioning-apiv1keys). |
+| Scope    | Adds                                                                                                                                                                                                                                                                           |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, a run's [evidence](#run-evidence-report--outcome--artifacts) and its [merge record](#merge-evidence-apiv1merge-records), the whole [`/debug` surface](./debug-api.md). |
+| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification, tag the [reviewer effort](#merge-evidence-apiv1merge-records) a merged pull request needed.                                                        |
+| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                                                                          |
+| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**), manage the [outbound webhook](#outbound-webhooks-push), and [provision keys](#key-provisioning-apiv1keys).                                               |
 
 Two things to know before minting `decide` or `admin`:
 
@@ -1121,6 +1121,15 @@ run whose CI could not be fixed). `act` runs the card's typed side-effect; on a 
 | `POST /api/v1/notifications/:id/act`     | `admin` | Run the side-effect, resolve the card: `merge_review` / `pipeline_complete` → merge the PR; `ci_failed` / `test_failed` → retry the run. Any other type → `409 notification_not_actionable` (resolve it in the app, or dismiss). |
 | `POST /api/v1/notifications/:id/dismiss` | `write` | Resolve the card with no side-effect (idempotent).                                                                                                                                                                               |
 
+`act` takes **no body**, deliberately: every SDK emitter renders a request body as a required
+positional parameter, so giving this route the app's `reviewEffort` field would rewrite `act(id)` as
+`act(id, body)` in four published clients. Record the tag through
+[`POST /api/v1/merge-records/:recordId/effort`](#merge-evidence-apiv1merge-records) instead, before
+or after the `act` that merged: the tag is idempotent and orthogonal to the decision, and that route
+is a rung LOWER (`write`) since it merges nothing. A `merge_tag_request` card (a pull request a human
+merged directly on the provider) is not `act`-able for the same reason, its only action being the tag
+itself, so resolve it by tagging the record its payload names and dismissing the card.
+
 ### Discovery: the key and the spec
 
 The two reads an integration makes before it does anything, each of which used to be answerable
@@ -1322,6 +1331,70 @@ curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/report" | jq '.ci, .validation, .obse
 curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/outcome" | jq '.disposition, .requirements, .checks'
 curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/artifacts" | jq '.artifacts[] | {artifactId, view, byteSize}'
 curl -s -H "$AUTH" "$BASE/api/v1/artifacts/$ART/blob" -o login.png
+```
+
+### Merge evidence (`/api/v1/merge-records`)
+
+The evidence behind the auto-merge policy: what KIND of change each run made, what the `merger`
+scored it, what happened to its pull request, and **how much review a human actually spent**. Design
+record: [ADR 0046](./adr/0046-merge-track-record.md).
+
+| Method / path                                 | Scope   | Behaviour                                                                         |
+| --------------------------------------------- | ------- | --------------------------------------------------------------------------------- |
+| `GET /api/v1/runs/:runId/merge-record`        | `read`  | The merge decision this run left behind (and the `recordId` the tag route takes). |
+| `GET /api/v1/merge-records/rollups`           | `read`  | Every change class's accumulated track record, as one aggregate.                  |
+| `GET /api/v1/merge-records/:recordId`         | `read`  | One record by id.                                                                 |
+| `POST /api/v1/merge-records/:recordId/effort` | `write` | Tag (or clear) the reviewer effort that pull request needed.                      |
+
+**Tagging is `write`, not `admin`, and that is the point of the surface.** `POST /notifications/:id/act`
+sits at the top of the ladder because it MERGES a pull request for real; recording how much review an
+already-landed one took performs no external side-effect and can merge nothing. Before 1.32.0 the only
+way to record a tag over the API was through that `admin` route's session-authed twin, so an
+integration whose whole job is collecting evidence had no path at all, and a `read` key could not see
+what the workspace had accumulated. The reads sit at `read` for the same reason the
+[run evidence](#run-evidence-report--outcome--artifacts) does.
+
+The **change class** is derived on the backend from the pull request's changed-file list and never
+from an agent's opinion: `docs`, `test`, `dependency`, `config`, `source`, `schema`, or `unknown`. A
+mixed diff resolves to the **highest-ranked class present**, so a diff touching `package.json` and
+`src/foo.ts` is `source` and one touching a migration and docs is `schema`. That is what makes a
+per-class auto-merge rule safe: an "always auto-merge dependency bumps" rule can only fire on a diff
+carrying nothing riskier than a bump. `unknown` means no changed-file list was available (no VCS
+client wired, or an unreadable diff) and **never matches a per-class rule**, so a transient VCS outage
+cannot change merge policy. Do not collapse it onto a class: it is a classification failure, not a
+kind of change.
+
+The **effort tag** is `none` (zero blocking comments), `minor` (a nit pass) or `major` (real rework),
+and it is **never mandatory**: an untagged merge records `null`, and `null` means "nobody said",
+never `none`. Tagging is idempotent and orthogonal to the decision, so a record can be tagged
+whenever the effort becomes known, before or after the merge; `{ "reviewEffort": null }` clears a
+tag that was recorded wrongly.
+
+A **rollup** carries `total`, `merged` (the landed denominator: auto + through the app + directly on
+the provider), each decision's own count, and the distribution of effort tags including `untagged`.
+Every class is present, as zeros when it holds nothing, so "no data yet" never reads as a class the
+response left out. This is the number that justifies **widening** a per-class rule, and nothing
+widens one automatically: the rules live on the workspace's merge presets and a human edits them.
+
+Refusals carry `error.details.reason`: `run_not_found` (the id names no run this key may read),
+`no_merge_record` (the run is readable and simply made no merge decision, because its pipeline has no
+`merger` step or it never reached one) and `merge_record_not_found`. A deployment that wired no
+track-record store answers `503` rather than an empty rollup set.
+
+A run is addressable here on the same terms as every other `/api/v1/runs/:runId/*` route: the runs
+this key could already read through `GET /api/v1/jobs/:id` or `GET /api/v1/tasks/:taskId/run`. The
+two record-addressed routes are scoped to the key's workspace instead, like every point read on this
+API.
+
+```sh
+# The loop: merge the tail, then record what reviewing it actually cost.
+REC=$(curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/merge-record" | jq -r .recordId)
+curl -s -X POST -H "$AUTH" -H 'content-type: application/json' \
+  -d '{"reviewEffort":"none"}' "$BASE/api/v1/merge-records/$REC/effort"
+
+# What the board has earned, per class.
+curl -s -H "$AUTH" "$BASE/api/v1/merge-records/rollups" \
+  | jq '.rollups[] | select(.merged > 0) | {changeClass, merged, autoMerged, effort}'
 ```
 
 ### Key provisioning (`/api/v1/keys`)

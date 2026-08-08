@@ -100,6 +100,9 @@ type Client struct {
 	Me *MeService
 	// What a run proved: its verification report and captured artifacts.
 	Evidence *EvidenceService
+	// The evidence behind the auto-merge policy: per-run merge decisions, the per-class
+	// rollups, and the reviewer-effort tag a landed pull request earned.
+	MergeRecords *MergeRecordsService
 	// The workspace's own API keys.
 	Keys *KeysService
 }
@@ -156,6 +159,7 @@ func New(options Options) (*Client, error) {
 	client.Debug = &DebugService{client: client}
 	client.Me = &MeService{client: client}
 	client.Evidence = &EvidenceService{client: client}
+	client.MergeRecords = &MergeRecordsService{client: client}
 	client.Keys = &KeysService{client: client}
 	return client, nil
 }

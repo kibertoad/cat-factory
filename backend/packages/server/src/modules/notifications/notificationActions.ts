@@ -20,7 +20,9 @@ export const HEADLESS_ACTIONABLE_NOTIFICATION_TYPES: ReadonlySet<NotificationTyp
   // `merge_tag_request` is deliberately ABSENT: its whole action is recording a reviewer-effort
   // tag the human chose, and the headless `act` route carries no tag — so admitting it would
   // resolve the nudge while recording nothing. A headless caller tags through
-  // `POST /merge-track-records/:id/effort` (or dismisses the card).
+  // `POST /api/v1/merge-records/:recordId/effort` (the record id is on the card's payload), then
+  // dismisses the card. That route is `write`, a rung BELOW the `admin` this one needs, since
+  // tagging a pull request that already landed merges nothing.
 ])
 
 /**

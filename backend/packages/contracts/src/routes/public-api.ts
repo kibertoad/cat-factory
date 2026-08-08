@@ -283,6 +283,11 @@ export const listPublicPipelinesContract = withMinScope(
 // (merge a `merge_review` / `pipeline_complete` PR, retry a `ci_failed` / `test_failed`
 // run), `dismiss` waves a card off. `act` performs a real GitHub merge, so it is the
 // top of the scope ladder (`admin`); `dismiss` is `write`; the list is `read`.
+//
+// Recording the reviewer EFFORT a merge took does not sit at that top rung, and is not on this
+// route at all: `POST /api/v1/merge-records/:recordId/effort` (`write`, see
+// `./public-merge-evidence.ts`) is where a headless caller tags a landed pull request, before or
+// after the `act` that merged it.
 
 /** List the workspace's OPEN notifications (the inbox). */
 export const listPublicNotificationsContract = withMinScope(
@@ -294,7 +299,18 @@ export const listPublicNotificationsContract = withMinScope(
   }),
 )
 
-/** Act on a notification (run its typed side-effect, then resolve it). Requires an `admin` key. */
+/**
+ * Act on a notification (run its typed side-effect, then resolve it). Requires an `admin` key.
+ *
+ * Body-LESS, deliberately, where the session-authed twin carries an optional `reviewEffort`
+ * (`routes/notifications.ts`). Every emitter renders a request body as a REQUIRED positional
+ * parameter, so giving this route the tag field would rewrite `act(id)` as `act(id, body)` in
+ * four published clients: a compile break for every existing caller, which is exactly what
+ * CLAUDE.md's "the public API does not break" refuses. A headless caller records the tag through
+ * `POST /api/v1/merge-records/:recordId/effort` instead (`./public-merge-evidence.ts`), which is
+ * a rung LOWER than this route rather than a workaround for it: tagging a landed pull request
+ * merges nothing.
+ */
 export const actPublicNotificationContract = withMinScope(
   'admin',
   defineApiContract({

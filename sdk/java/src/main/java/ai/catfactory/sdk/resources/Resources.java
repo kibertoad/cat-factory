@@ -27,6 +27,7 @@ public abstract class Resources {
     private final DecisionsClient decisions;
     private final DebugClient debug;
     private final EvidenceClient evidence;
+    private final MergeRecordsClient mergeRecords;
     private final KeysClient keys;
 
     protected Resources(Transport transport) {
@@ -43,6 +44,7 @@ public abstract class Resources {
         this.decisions = new DecisionsClient(transport);
         this.debug = new DebugClient(transport);
         this.evidence = new EvidenceClient(transport);
+        this.mergeRecords = new MergeRecordsClient(transport);
         this.keys = new KeysClient(transport);
     }
 
@@ -109,6 +111,11 @@ public abstract class Resources {
     /** What a run proved: the engine's verification report, the outcome summary behind it, and the artifacts it captured, bytes included. */
     public EvidenceClient evidence() {
         return evidence;
+    }
+
+    /** The evidence behind the auto-merge policy: what kind of change each merged run made, what the merger scored it, what happened to the pull request, and how much review a human actually spent, plus the per-class rollups that justify widening a rule. Reading takes a `read` key and recording an effort tag a `write` one: neither merges anything. */
+    public MergeRecordsClient mergeRecords() {
+        return mergeRecords;
     }
 
     /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */

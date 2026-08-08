@@ -293,6 +293,18 @@ export class MergeTrackRecordService {
     return this.deps.mergeTrackRecordRepository.get(workspaceId, id)
   }
 
+  /**
+   * The record a RUN left behind, or null when the merge path never wrote one (a pipeline with
+   * no `merger` step, or a run that never reached its merge decision).
+   *
+   * The run-scoped entry point into the record, which is what a headless caller holds: it started
+   * the run and knows its id, where the record's own id is minted inside the merge path.
+   */
+  async getForRun(workspaceId: string, executionId: string): Promise<MergeTrackRecord | null> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    return this.deps.mergeTrackRecordRepository.getByExecution(workspaceId, executionId)
+  }
+
   /** The most recent record for a block — the seam the block-scoped merge controls tag through. */
   async getLatestByBlock(workspaceId: string, blockId: string): Promise<MergeTrackRecord | null> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)

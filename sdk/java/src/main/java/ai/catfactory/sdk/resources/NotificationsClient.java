@@ -30,7 +30,10 @@ public final class NotificationsClient {
      * so it requires an admin-scoped key. Only these automated-action types are actionable through
      * the API — a notification that parks a run on an interactive human decision cannot be acted
      * on headlessly (dismiss it instead). A card that would retry a run on an individual-usage
-     * model likewise cannot be acted on through the API.
+     * model likewise cannot be acted on through the API. To record how much review a merged pull
+     * request needed, call `POST /api/v1/merge-records/{recordId}/effort` (a `write` key) before
+     * or after this; a `merge_tag_request` card carries its record id on the payload and is
+     * resolved by tagging that record and dismissing the card.
      * {@code POST /api/v1/notifications/{id}/act} (operation {@code actPublicNotification}).
      */
     public Notification act(String id) {

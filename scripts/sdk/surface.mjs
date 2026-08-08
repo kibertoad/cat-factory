@@ -123,6 +123,12 @@ const SURFACE = {
   listPublicRunArtifacts: { group: 'evidence', method: 'listArtifacts' },
   getPublicArtifactBlob: { group: 'evidence', method: 'downloadArtifact' },
 
+  // ---- Merge evidence (`read` to look, `write` to tag; never `admin`, which is what MERGES) --
+  getPublicRunMergeRecord: { group: 'mergeRecords', method: 'getForRun' },
+  getPublicMergeRecord: { group: 'mergeRecords', method: 'get' },
+  listPublicMergeClassRollups: { group: 'mergeRecords', method: 'listRollups' },
+  tagPublicMergeReviewEffort: { group: 'mergeRecords', method: 'tagEffort' },
+
   // ---- Headless key provisioning (`admin` scope) ------------------------------------------
   listPublicKeys: { group: 'keys', method: 'list' },
   createPublicKey: { group: 'keys', method: 'create' },
@@ -234,6 +240,8 @@ export const GROUP_DOCS = {
     "A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs.",
   evidence:
     "What a run proved: the engine's verification report, the outcome summary behind it, and the artifacts it captured, bytes included.",
+  mergeRecords:
+    'The evidence behind the auto-merge policy: what kind of change each merged run made, what the merger scored it, what happened to the pull request, and how much review a human actually spent, plus the per-class rollups that justify widening a rule. Reading takes a `read` key and recording an effort tag a `write` one: neither merges anything.',
   keys: "The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted).",
 }
 

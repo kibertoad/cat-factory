@@ -887,7 +887,10 @@ type NotificationsService struct {
 // it requires an admin-scoped key. Only these automated-action types are actionable through the
 // API — a notification that parks a run on an interactive human decision cannot be acted on
 // headlessly (dismiss it instead). A card that would retry a run on an individual-usage model
-// likewise cannot be acted on through the API.
+// likewise cannot be acted on through the API. To record how much review a merged pull request
+// needed, call `POST /api/v1/merge-records/{recordId}/effort` (a `write` key) before or after
+// this; a `merge_tag_request` card carries its record id on the payload and is resolved by
+// tagging that record and dismissing the card.
 // POST /api/v1/notifications/{id}/act (operation actPublicNotification).
 func (s *NotificationsService) Act(ctx context.Context, id string) (*Notification, error) {
 	req := requestSpec{
@@ -2311,6 +2314,97 @@ func (s *EvidenceService) ListArtifacts(ctx context.Context, runID string) (*Pub
 		Path:   fmt.Sprintf("/api/v1/runs/%s/artifacts", pathEscape(runID)),
 	}
 	var out PublicRunArtifactList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// MergeRecordsService the evidence behind the auto-merge policy: what kind of change each merged run made, what the
+// merger scored it, what happened to the pull request, and how much review a human actually
+// spent, plus the per-class rollups that justify widening a rule. Reading takes a `read` key and
+// recording an effort tag a `write` one: neither merges anything.
+type MergeRecordsService struct {
+	client *Client
+}
+
+// Get get one merge record
+// The same record addressed by its own id, for a caller that holds one without the run: the id a
+// `merge_tag_request` notification carries on its payload, for instance. Scoped to the calling
+// key’s workspace.
+// GET /api/v1/merge-records/{recordId} (operation getPublicMergeRecord).
+func (s *MergeRecordsService) Get(ctx context.Context, recordID string) (*GetPublicMergeRecordResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/merge-records/%s", pathEscape(recordID)),
+	}
+	var out GetPublicMergeRecordResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetForRun get the merge decision a run left behind
+// What kind of change the run’s pull request made (a change class derived on the backend from the
+// changed-file list, never from an agent’s opinion), what the merger scored it, which
+// merge-threshold preset the decision was compared against, what ultimately happened to the pull
+// request, and how much review a human spent if anybody has tagged it. The entry point of the
+// merge-evidence loop for a caller holding a run id: it also hands back the `recordId` the
+// effort-tag route takes. A run whose pipeline had no `merger` step made no merge decision and
+// answers `404` with `details.reason: "no_merge_record"`, distinct from the `"run_not_found"` a
+// run this key cannot read gets.
+// GET /api/v1/runs/{runId}/merge-record (operation getPublicRunMergeRecord).
+func (s *MergeRecordsService) GetForRun(ctx context.Context, runID string) (*GetPublicMergeRecordResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/merge-record", pathEscape(runID)),
+	}
+	var out GetPublicMergeRecordResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListRollups list the per-change-class merge rollups
+// Every change class’s accumulated track record for the workspace, as one aggregate: how many
+// records it holds, how many landed and by which route (auto-merged, merged through the app,
+// merged directly on the provider), how many were rejected or are still awaiting review, and the
+// distribution of reviewer-effort tags. This is the evidence that justifies widening a per-class
+// auto-merge rule; nothing widens one automatically. A class with no records is present as zeros
+// rather than absent, so "nothing has landed here yet" never reads as a class the response left
+// out. `unknown` is a real class (no changed-file list was available) and never matches a
+// per-class rule.
+// GET /api/v1/merge-records/rollups (operation listPublicMergeClassRollups).
+func (s *MergeRecordsService) ListRollups(ctx context.Context) (*ListPublicMergeClassRollupsResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/merge-records/rollups",
+	}
+	var out ListPublicMergeClassRollupsResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// TagEffort tag the reviewer effort a merge took
+// Record how much review a landed pull request actually needed (`none` for zero blocking
+// comments, `minor` for a nit pass, `major` for real rework), or `null` to clear the tag. This is
+// the ground truth the auto-merge score thresholds are trying to approximate, and it is never
+// mandatory: an untagged merge records a null tag and nothing downstream breaks. A `write` key,
+// not an `admin` one: the pull request already landed, so tagging it merges nothing. Idempotent,
+// and orthogonal to the decision, so a record can be tagged whenever the effort becomes known,
+// before or after the `act` that merged it.
+// POST /api/v1/merge-records/{recordId}/effort (operation tagPublicMergeReviewEffort).
+func (s *MergeRecordsService) TagEffort(ctx context.Context, recordID string, body TagPublicMergeReviewEffortRequest) (*GetPublicMergeRecordResponse, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/merge-records/%s/effort", pathEscape(recordID)),
+		Body:   body,
+	}
+	var out GetPublicMergeRecordResponse
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}
