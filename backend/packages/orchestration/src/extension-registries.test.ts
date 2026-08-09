@@ -1419,6 +1419,14 @@ describe('generative binary integration registry validation', () => {
     expect(problems[0]?.message).toContain('VENDOR_KEY')
     expect(problems[0]?.message).toContain('retro-diffusion')
     expect(problems[0]?.message).toContain('studio-music')
+    // Compared case-folded: the pair below is one variable wherever the environment ignores case,
+    // so an exact comparison would pass the collision on the platform nobody would see it on.
+    expect(
+      problemsFor([
+        { ...valid, id: 'retro-diffusion', credentials: [{ key: 'RD', envName: 'VENDOR_KEY' }] },
+        { ...valid, id: 'studio-music', credentials: [{ key: 'SK', envName: 'vendor_key' }] },
+      ]).map((problem) => problem.code),
+    ).toEqual(['binary_generator_injection_name_collision'])
   })
 
   it('accepts two integrations SHARING one account, which is the same name over the same key', () => {

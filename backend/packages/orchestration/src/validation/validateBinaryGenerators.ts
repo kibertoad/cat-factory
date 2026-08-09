@@ -8,6 +8,7 @@ import {
   type BinaryGeneratorDefinition,
   binaryCredentialInjectionName,
   binaryGeneratorDefinitionIssues,
+  comparableCredentialInjectionName,
   modalitiesOfMediaType,
 } from '@cat-factory/contracts'
 // Type-only, so the pairing with the module this section was extracted from stays a compile-time
@@ -80,17 +81,23 @@ export function checkBinaryGenerators(
 function checkInjectionNameCollisions(
   definitions: readonly BinaryGeneratorDefinition[],
 ): RegistrationProblem[] {
-  const claims = new Map<string, Map<string, string[]>>()
+  // Grouped by the COMPARABLE (case-folded) name and reported under the spelling the deployment
+  // wrote, because `ACME_KEY` and `acme_key` are one variable wherever the environment is
+  // case-insensitive and two everywhere else: the pair collides on exactly the platform where the
+  // operator has the least chance of noticing.
+  const claims = new Map<string, { spelling: string; byKey: Map<string, string[]> }>()
   for (const definition of definitions) {
     for (const credential of definition.credentials ?? []) {
-      const envName = binaryCredentialInjectionName(credential)
-      const byKey = claims.get(envName) ?? new Map<string, string[]>()
-      byKey.set(credential.key, [...(byKey.get(credential.key) ?? []), definition.id])
-      claims.set(envName, byKey)
+      const claim = claims.get(comparableCredentialInjectionName(credential)) ?? {
+        spelling: binaryCredentialInjectionName(credential),
+        byKey: new Map<string, string[]>(),
+      }
+      claim.byKey.set(credential.key, [...(claim.byKey.get(credential.key) ?? []), definition.id])
+      claims.set(comparableCredentialInjectionName(credential), claim)
     }
   }
   const problems: RegistrationProblem[] = []
-  for (const [envName, byKey] of claims) {
+  for (const [, { spelling: envName, byKey }] of claims) {
     if (byKey.size < 2) continue
     const described = [...byKey]
       .map(([key, ids]) => `"${key}" (${ids.join(', ')})`)

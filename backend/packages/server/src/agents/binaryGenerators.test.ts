@@ -275,6 +275,26 @@ describe('resolveBinaryGeneratorSecrets', () => {
     })
   })
 
+  it('judges a contest on the CASE-FOLDED name, and still injects under the declared spelling', async () => {
+    // Two spellings of one variable collide wherever the environment folds case, so the contest is
+    // judged there. The dedupe of a SHARED account stays on the exact name, because that spelling
+    // is what the brief tells the agent to read: dropping `rd_token` as a duplicate of `RD_TOKEN`
+    // would name a variable in the brief that is set nowhere on a platform keeping them apart.
+    const { resolver } = recordingResolver({ FIRST_KEY: 'a', SECOND_KEY: 'b', RD_TOKEN: 'c' })
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([
+          { ...retro, id: 'one', credentials: [{ key: 'FIRST_KEY', envName: 'VENDOR_KEY' }] },
+          { ...retro, id: 'two', credentials: [{ key: 'SECOND_KEY', envName: 'vendor_key' }] },
+          { ...retro, id: 'three', credentials: [{ key: 'RD_TOKEN', envName: 'rd_token' }] },
+        ]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+        logger: createRecordingLogger(),
+      }),
+    ).toEqual([{ key: 'rd_token', value: 'c' }])
+  })
+
   it('costs a contested integration only the contested variable, never its other credentials', async () => {
     // The withholding is per VARIABLE. An integration that also declares a name nobody else wants
     // still gets that one, so a collision cannot silently widen into an unrelated outage.

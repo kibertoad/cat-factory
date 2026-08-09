@@ -22,9 +22,10 @@ carries pairs. The single field was the one singular link in that chain.
 Definitions are code, so the break arrives as a typecheck failure at the composition root rather than
 as a run that quietly authenticates with nothing.
 
-Two rules ship with it. Injection names must be distinct within a definition, refused at boot,
-because the job body is keyed by the variable each value arrives as and a collision would silently
-deliver one value and drop the other. And the brief NAMES a multi-credential set before its parts, so
+Two rules ship with it. Injection names must be distinct within a definition, refused at boot and
+compared case-folded (the fold the reserved-key floor already applies, since two spellings are one
+variable wherever the environment ignores case), because the job body is keyed by the variable each
+value arrives as and a collision would silently deliver one value and drop the other. And the brief NAMES a multi-credential set before its parts, so
 an agent handed two paragraphs does not read them as two independent keys and try the first alone.
 That set line states its joint rule over the REQUIRED members only: "never call it with a subset of
 them" is right for a Basic pair and contradicts an optional member's own line, which says to call

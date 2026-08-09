@@ -294,6 +294,13 @@ conflict loudly, one value silently wins and the integration authenticates with 
 the brief NAMES a multi-credential set before its parts, because two credential paragraphs read as
 two independent keys and an agent has no reason not to try the first alone.
 
+Distinctness is judged CASE-FOLDED, the same fold the reserved-key floor applies, because
+`ACME_KEY` and `acme_key` are two declarations and one variable wherever the environment ignores
+case. Comparing them exactly would call the pair distinct and let one value overwrite the other on
+the one platform where nothing reports it. What is injected is still the spelling the deployment
+wrote, which is also what the brief names, so the fold decides collisions and never what the agent
+reads.
+
 **The same name ACROSS definitions is refused only when the key behind it differs.** One vendor
 behind an image endpoint and a music endpoint is one account, and sharing a variable is the point
 there: both look the value up under the same key, so whichever resolves first sets it to exactly

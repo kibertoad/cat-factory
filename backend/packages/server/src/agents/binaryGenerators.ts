@@ -8,6 +8,7 @@ import type {
 import { noopLogger, runBestEffort } from '@cat-factory/kernel'
 import {
   binaryCredentialInjectionName,
+  comparableCredentialInjectionName,
   isReservedPlatformEnvKey,
   isToolchainEnvName,
   reservedEnvKeyMessage,
@@ -89,7 +90,10 @@ export async function resolveBinaryGeneratorSecrets(
 interface PlannedCredential {
   credential: ResolvedBinaryGeneratorCredential
   key: string
+  /** The variable the value is injected as, and the exact spelling the brief tells the agent. */
   envName: string
+  /** The same name case-folded, which is the form a COLLISION between two of them is judged in. */
+  comparableName: string
 }
 
 /** One integration's surviving credentials, which resolve together in a single call. */
@@ -117,6 +121,7 @@ function planLookups(
         credential,
         key: credential.key,
         envName: binaryCredentialInjectionName(credential),
+        comparableName: comparableCredentialInjectionName(credential),
       })),
   }))
   const contested = contestedInjectionNames(input, admissible)
@@ -124,7 +129,12 @@ function planLookups(
   return admissible.map(({ generator, credentials }) => ({
     generator,
     credentials: credentials.filter((planned) => {
-      if (contested.has(planned.envName)) return false
+      // Contest is judged on the CASE-FOLDED name, because two spellings of one variable collide
+      // wherever the environment is case-insensitive. The dedupe below is judged on the exact
+      // name, because that is the string the brief tells the agent to read: dropping `acme_key`
+      // as a duplicate of `ACME_KEY` would leave a variable named in the brief and set nowhere on
+      // every platform that keeps them apart.
+      if (contested.has(planned.comparableName)) return false
       // A name already claimed by an earlier integration is the SHARED-ACCOUNT case and nothing
       // else, because a contested name was dropped above: the claimant looks the same value up
       // under the same key, so the variable this integration reads is already being set to
@@ -157,23 +167,30 @@ function contestedInjectionNames(
   input: ResolveBinaryGeneratorSecretsInput,
   admissible: readonly GeneratorPlan[],
 ): ReadonlySet<string> {
-  const byName = new Map<string, { keys: Set<string>; generatorIds: string[] }>()
+  // Keyed by the case-folded name and reported under the spelling that reached the dispatch: two
+  // integrations declaring `ACME_KEY` and `acme_key` for different keys are one variable on a
+  // case-insensitive environment, which is where the wrong value would be read.
+  const byName = new Map<string, { spelling: string; keys: Set<string>; generatorIds: string[] }>()
   for (const { generator, credentials } of admissible) {
     for (const planned of credentials) {
-      const entry = byName.get(planned.envName) ?? { keys: new Set(), generatorIds: [] }
+      const entry = byName.get(planned.comparableName) ?? {
+        spelling: planned.envName,
+        keys: new Set<string>(),
+        generatorIds: [],
+      }
       entry.keys.add(planned.key)
       if (!entry.generatorIds.includes(generator.id)) entry.generatorIds.push(generator.id)
-      byName.set(planned.envName, entry)
+      byName.set(planned.comparableName, entry)
     }
   }
   const contested = new Set<string>()
-  for (const [envName, entry] of byName) {
+  for (const [comparableName, entry] of byName) {
     if (entry.keys.size < 2) continue
-    contested.add(envName)
+    contested.add(comparableName)
     input.logger?.warn(
       'binary-generators disagree about what one injected variable holds; withholding it from all of them',
       {
-        credentialEnvName: envName,
+        credentialEnvName: entry.spelling,
         binaryGeneratorIds: entry.generatorIds,
         credentialKeys: [...entry.keys],
       },

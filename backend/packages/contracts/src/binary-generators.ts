@@ -147,6 +147,19 @@ export function binaryCredentialInjectionName(credential: BinaryCredentialNames)
 }
 
 /**
+ * The form an injection name is COMPARED in, which is not the form it is injected under.
+ *
+ * Case-folded, the same way {@link isReservedPlatformEnvKey} folds the lookup key it screens, and
+ * for the reason that floor has: environment lookup is case-insensitive on Windows, so `ACME_KEY`
+ * and `acme_key` are two variables in the declaration and one variable in the process that reads
+ * them. A rule comparing them exactly would call that pair distinct and let one value overwrite
+ * the other on the one platform where it matters.
+ */
+export function comparableCredentialInjectionName(credential: BinaryCredentialNames): string {
+  return binaryCredentialInjectionName(credential).toUpperCase()
+}
+
+/**
  * Whether every credential in a declaration arrives as its own variable.
  *
  * Exported so the boot check and the schema share one implementation rather than agreeing by
@@ -157,7 +170,7 @@ export function binaryCredentialInjectionName(credential: BinaryCredentialNames)
 export function uniqueCredentialInjectionNames(
   credentials: readonly BinaryGeneratorCredential[],
 ): boolean {
-  const names = credentials.map(binaryCredentialInjectionName)
+  const names = credentials.map(comparableCredentialInjectionName)
   return new Set(names).size === names.length
 }
 
@@ -230,13 +243,17 @@ export const binaryGeneratorDefinitionSchema = v.object({
    * field was the one singular link in that chain, and it bought nothing.
    *
    * INJECTION NAMES must be distinct, which is what {@link uniqueCredentialInjectionNames}
-   * refuses. The job body is keyed by the variable each value arrives as, so two entries naming
-   * one variable do not conflict loudly: one silently wins, and the integration authenticates
-   * with half of a pair.
+   * refuses, case-insensitively for the reason {@link comparableCredentialInjectionName} gives.
+   * The job body is keyed by the variable each value arrives as, so two entries naming one
+   * variable do not conflict loudly: one silently wins, and the integration authenticates with
+   * half of a pair.
    */
   credentials: v.optional(
     v.pipe(
       v.array(binaryGeneratorCredentialSchema),
+      // A bound rather than a considered ceiling: no authentication shape needs eight values, and
+      // a declaration that reaches it is a mistake worth naming at boot rather than a list worth
+      // resolving.
       v.maxLength(8),
       // Wrapped rather than passed by reference: the helper takes a `readonly` array (it is the
       // shape every other caller holds) and valibot infers a check's input as the pipe's own

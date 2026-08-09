@@ -1,6 +1,6 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { INLINE_ENGINE_SYSTEM_PROMPTS, runsInContainer } from '@cat-factory/agents'
-import { checkBinaryGenerators } from './binaryGeneratorRegistrations.js'
+import { checkBinaryGenerators } from './validateBinaryGenerators.js'
 import type {
   AgentKind,
   BinaryGeneratorRegistry,
@@ -19,7 +19,6 @@ import {
   FIXER_AGENT_KIND,
   ON_CALL_AGENT_KIND,
   describeFoundationalProblem,
-  isAllowedMcpHttpUrl,
   seedPipelines,
   stubGateContext,
   validateFoundationalDefinition,
