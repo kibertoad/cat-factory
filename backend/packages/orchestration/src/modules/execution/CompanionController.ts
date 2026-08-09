@@ -20,6 +20,7 @@ import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import { buildStepApproval } from './stepApproval.js'
+import { recordInlineToolServers } from './step-fold.logic.js'
 import type { StepGraph } from './StepGraph.js'
 
 /** Parse a companion's JSON verdict from a model reply, or `undefined` if it won't parse. */
@@ -151,6 +152,11 @@ export class CompanionController {
     // reply doesn't parse (truncated / wrapped in prose). Only retried when there is a
     // producer to grade. `result` carries the LAST call's output + the summed usage.
     const { assessment, result } = await this.runWithRepair(context, options, producerIndex >= 0)
+    // The same inline fold the generic agent step applies: an inline companion is consensus-eligible
+    // too, so a diverted one has a withheld tool-server list to record. Here rather than inside
+    // `runWithRepair` because the repair re-runs the SAME context and reports the same resolution,
+    // so folding per call would write the identical record twice.
+    recordInlineToolServers(step, result, context.agentKind)
     if (result.usage) {
       await this.deps.spend.record({
         workspaceId,

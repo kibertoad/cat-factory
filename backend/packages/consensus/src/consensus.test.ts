@@ -269,6 +269,62 @@ describe('ConsensusAgentExecutor', () => {
     expect(kept.every((r) => r.provider === 'anthropic' && r.harness === 'claude-code')).toBe(true)
   })
 
+  it('states the tool servers the panel withheld, in the participants’ prompt and on the result', async () => {
+    // The finding this closes: `architect` runs in a container in its standard mode, so boot
+    // validation has nothing to warn about, and the container executor (which owns the whole
+    // unavailability vocabulary) is not on this path. Without this the step silently loses the
+    // server AND records nothing, reading exactly like a kind that declared none.
+    const registry = defaultAgentKindRegistry()
+    registerConsensusTraits(registry)
+    registry.registerToolServer({
+      id: 'issues',
+      label: 'Issue tracker',
+      transport: { kind: 'stdio', command: 'npx', args: ['-y', 'issue-mcp'] },
+    })
+    registry.assignToolServers('architect', ['issues'])
+    const systems: string[] = []
+    const exec = new ConsensusAgentExecutor({
+      ...baseDeps,
+      agentKindRegistry: registry,
+      generate: async (args) => {
+        systems.push(args.system)
+        return fakeGenerate(args)
+      },
+    })
+
+    const res = await exec.run(
+      makeContext({
+        consensus: { enabled: true, strategy: 'specialist-panel', participants: twoParticipants },
+      }),
+    )
+
+    expect(res.toolServers).toEqual({
+      wired: [],
+      unavailable: [{ id: 'issues', label: 'Issue tracker', reason: 'consensus_panel' }],
+    })
+    // Every PARTICIPANT is told, not just one: each is a separate model call planning its own work
+    // around the tools its instructions name.
+    const participantSystems = systems.filter((s) => !s.startsWith('You are a neutral synthesizer'))
+    expect(participantSystems).toHaveLength(2)
+    expect(participantSystems.every((s) => s.includes('Issue tracker'))).toBe(true)
+    // After the surface statement, which is itself appended after any workspace prompt override.
+    expect(
+      participantSystems.every(
+        (s) => s.indexOf('## Tool servers') > s.indexOf('SURFACE FOR THIS RUN'),
+      ),
+    ).toBe(true)
+  })
+
+  it('reports no tool-server resolution when the diverted kind declared none', async () => {
+    const exec = new ConsensusAgentExecutor(baseDeps)
+    const res = await exec.run(
+      makeContext({
+        consensus: { enabled: true, strategy: 'specialist-panel', participants: twoParticipants },
+      }),
+    )
+    expect(res.toolServers).toBeUndefined()
+  })
+
   it('runsAsync is false while consensus is active, delegated otherwise', () => {
     const exec = new ConsensusAgentExecutor(baseDeps)
     expect(

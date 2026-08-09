@@ -2106,8 +2106,9 @@ For contributors adding or changing `/api/v1` endpoints, the short version, with
   [`docs/openapi.json`](../../docs/openapi.json) and the module the deployment serves at
   `GET /api/v1/openapi.json`, and `check:openapi` diffs both — a served spec that lags the
   contracts is worse than an absent one.
-- Bump the spec's `info.version` MINOR for an addition (the normal case). Re-check the number
-  against `origin/main` after every merge: two branches bumping to the same value produce
+- Bump the spec's `info.version` MINOR for an addition (the normal case), in
+  `scripts/openapi-version.mjs`, and add the entry saying what moved and why it is additive. Re-check
+  the number against `origin/main` after every merge: two branches bumping to the same value produce
   byte-identical text, so git auto-merges them and one surface ships under a number the other
   already used.
 - **Update this document**: the reference tables above are hand-maintained.

@@ -1,6 +1,6 @@
 # MCP support maturation
 
-Status: **in progress; slices 1, 2, 3, 4, 5 and slice 7's CONSUMING half landed.** Sources: the 2026-08-04 review of both MCP
+Status: **in progress; slices 1, 2, 3, 4, 5, 9 and slice 7's CONSUMING half landed.** Sources: the 2026-08-04 review of both MCP
 surfaces, and the 2026-08-05 follow-up review of one question through the same material: how well
 a deployment can add EXTERNAL tool servers programmatically, without forking. That review's
 verdict and its new findings are folded in below (the inventory rows marked 2026-08-05, slice 8,
@@ -196,19 +196,19 @@ dump and never uses the word MCP).
       run), and a mechanical warm-up (installing declared `stdio` packages before the agent's
       first turn, the dependency-prepopulation analogue) is the candidate follow-up if cold-start
       or registry-outage failures show up in practice; it is a harness change, so an image bump.
-- [ ] **9. Consensus-diverted steps state their tool-server ceiling.** (2026-08-09 review) A
-      consensus-enabled step runs its participants inline, with no checkout and no tools, and
-      today no layer says so: `toolServersSection` has one caller (the container job body), no
-      `step.toolServers` record is written for the diverted dispatch, and the boot warning that
+- [x] **9. Consensus-diverted steps state their tool-server ceiling.** (2026-08-09 review) Landed
+      as scoped. A consensus-enabled step runs its participants inline, with no checkout and no
+      tools, and no layer said so: `toolServersSection` had one caller (the container job body), no
+      `step.toolServers` record was written for the diverted dispatch, and the boot warning that
       would catch it (`tool_servers_without_container`) keys on `runsInContainer`, which is true
       for every consensus-eligible kind. The default-eligible list (architect, analysis, the
       reviewers, the companions) is precisely the set a deployment attaches a read-only research
-      server to, so the drop lands on the likeliest adopters. The fix follows the vocabulary the
-      run record already has: the diverted dispatch records its declared servers as unavailable
-      under a reason naming the panel (a new closed-vocabulary member, so contracts + the two SPA
-      `Record`s + ten locales), and the panel prompt states the ceiling the way the container
-      prompt states a drop. Compare the ambient-Codex case, which states the same class of drop as
-      `harness_unsupported`.
+      server to, so the drop landed on the likeliest adopters. `panelToolServerCeiling`
+      (`@cat-factory/consensus`) now reports it in BOTH channels a container dispatch uses: the
+      participants' prompt, through the same `toolServersSection`, and the step's record, returned
+      on the new `AgentRunResult.toolServers` and stamped with the dispatched kind by the engine
+      (`recordInlineToolServers`, sharing one `stampToolServers` with the handle fold). The reason
+      is `consensus_panel`, its own member for the reason below. Its four decisions are below.
 
 ## Findings inventory
 
@@ -272,7 +272,7 @@ From the 2026-08-09 code audit (both sides verified against this tracker; every 
 | `stdio` + `header` credential silently dropped; server starts unauthenticated | Done (boot error, this PR)  |
 | Its `http` mirror, a credential naming no header, left open by the first pass | Done (boot error, this PR)  |
 | No dispatch or probe mirror of the boot refusal, so mothership skew slips it  | Done (this PR)              |
-| Consensus-diverted step gets no tool servers and is told nothing              | Slice 9                     |
+| Consensus-diverted step gets no tool servers and is told nothing              | Slice 9 (done)              |
 | Serving OAuth also needs the 401 `WWW-Authenticate` entry point               | Slice 7 (scope extended)    |
 | `public-api.md` promised JSON-RPC batching the 2025-06-18 revision removed    | Done (reworded, this PR)    |
 | No bound on the hosted endpoint's legacy batch fan-out                        | Not pursued (below)         |
@@ -365,12 +365,13 @@ Recorded so the next iteration does not re-propose them.
   tool is absent and that trying harder will not produce it. Two reasons deliberately render the
   SAME sentence (`harness_unsupported` / `transport_unsupported`) because the distinction is the
   operator's, carried by the log line and the boot warning.
-- **And it is a PUBLIC-API change, which slice 9's cost estimate omits.** The reason rides the run
+- **And it is a PUBLIC-API change.** The reason rides the run
   reads under `/api/v1`, so the full price of a member is: the contracts picklist, the per-cause
   reasoning on kernel's `UnavailableToolServer`, `UNAVAILABLE_REASONS`, the two SPA `Record`s, ten
   locales, the website's reason table, AND an OpenAPI `info.version` minor with `pnpm gen:openapi &&
-pnpm gen:sdk` behind it (`unusable_secret` was 1.37.0). Additive, so it ships freely, but a member
-  added without the regeneration fails `check:sdk` rather than the typecheck that catches the rest.
+pnpm gen:sdk` behind it (`unusable_secret` was 1.37.0, `consensus_panel` 1.38.0). Additive, so it
+  ships freely, but a member added without the regeneration fails `check:sdk` rather than the
+  typecheck that catches the rest. Slice 9's estimate omitted this half, which is why it is here.
 - **A boot refusal is HALF a rule; the dispatch is where a mothership node meets it.** Every
   credential floor here exists twice on purpose, because a mothership-mode node boot-validates
   nothing it resolves: the definitions arrive per dispatch from a process one build ahead. A new
@@ -397,6 +398,53 @@ pnpm gen:sdk` behind it (`unusable_secret` was 1.37.0). Additive, so it ships fr
   internal-first soft launch for an endpoint whose whole point is external callers. It carries that
   obligation through `backend/docs/public-api.md` rather than the OpenAPI spec (see slice 3's
   decisions below), so a change to it must be reviewed against that doc, which no drift guard reads.
+
+## Slice 9: its four decisions
+
+- **A member of its own, not `harness_unsupported`.** The cheap version reuses the reason the
+  ambient-Codex drop already reuses, and it needs no contracts change, no locales and no OpenAPI
+  bump. It is also the one member a consumer would act on wrongly: `harness_unsupported` says the
+  CLI cannot serve this server, and here the kind's standard surface serves it perfectly. An
+  operator reading it would go widening a `harnesses` list that was never the constraint, and a
+  step-level choice (consensus on this step) is the only thing that changes the answer. Compare
+  the ambient-Codex case, which genuinely IS about the runtime it ran on. The agent-facing prose
+  is a THIRD sentence for the same reason the operator copy is a third row: a participant told
+  "not supported by the agent runtime this run uses" would be told something false about the kind
+  it is running as.
+- **The record travels on `AgentRunResult`, not a new port method or a wider `AgentJobHandle`.**
+  A panel returns a result, not a handle, so the two dispatch shapes already have two channels and
+  this is the second one's missing field. The alternative (having the ENGINE ask whether a dispatch
+  was diverted) fails on the layering: only the executor knows, and `runsAsync` answering false is
+  equally true of every ordinary inline kind. The stamp still belongs to the engine, which is why
+  both folds now go through one `stampToolServers`: an executor that could name the kind could
+  name the wrong one.
+- **Nothing declared records NOTHING, where the container fold records both lists empty.** The two
+  look inconsistent and are not. Both-empty on the container path means a dispatch resolved and
+  the kind declared nothing, which is a real answer about a surface that COULD have wired
+  something. An inline surface wires nothing whatever the kind declares, so the same value from it
+  would state a resolution where none was possible, and it would land on every consensus step on
+  every deployment that registers no tool servers at all.
+- **The prompt half reuses `toolServersSection` rather than writing a panel sentence.** It buys
+  the wording a container run uses (so a withheld server reads the same wherever it happened), the
+  `maxStatedUnavailable` fold for a runaway declaration, and one place to change if the phrasing
+  ever moves. Cost: the section is composed against a shallow copy of the run context with the
+  unavailable list spliced in, which is the only place this platform builds a context it did not
+  dispatch with.
+
+## Gotchas slice 9 surfaced
+
+- **The prompt-section coverage test was grading a copy of itself.** `ALL_REASONS` was a
+  hand-written list in the test file, three members stale (`unusable_secret` and both OAuth
+  reasons), so the assertion whose whole job is "no member ships as a blank parenthetical" had
+  been silently covering five of eight. It now reads `toolServerUnavailableReasonSchema.options`.
+  The SPA's parity spec had it right already, and the difference is instructive: the SPA derives
+  from the schema because the `Record` it grades is the thing under test, and the same reasoning
+  applies wherever a test enumerates a closed vocabulary.
+- **A second inline dispatch site exists and is easy to miss.** `CompanionController.evaluate`
+  runs the inline companions (`architect-companion`, `spec-companion`), which are consensus-eligible
+  too, so the fold lives there as well. It goes on the CONTROLLER rather than inside
+  `runWithRepair`, whose repair retry re-runs the same context and would write the identical record
+  twice.
 
 ## Slice 5 (handshake): its four decisions
 

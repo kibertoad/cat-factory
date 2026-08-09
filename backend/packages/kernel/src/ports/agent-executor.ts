@@ -850,6 +850,23 @@ export interface AgentRunResult {
    * for metered usage.
    */
   usageVendor?: string
+  /**
+   * What an INLINE dispatch did with the tool servers (MCP) the running agent kind declared, the
+   * counterpart of {@link AgentJobHandle.toolServers} on the path that returns a result instead of
+   * a handle.
+   *
+   * Its one producer today is the consensus executor: a diverted step runs as inline model calls
+   * with no agent CLI to wire a server into, so every declared server is WITHHELD, and the record
+   * is what stops that reading as a step whose kind declared none. An inline executor with nothing
+   * to withhold omits the field rather than reporting two empty lists: an inline surface never
+   * wires anything, so an all-empty resolution from one would state that a resolution happened
+   * where no wiring was ever possible.
+   *
+   * Carries no agent kind for the same reason the handle's does not: the engine stamps the
+   * DISPATCHED kind as it folds, so an executor cannot label a resolution with a kind other than
+   * the one that ran.
+   */
+  toolServers?: DispatchToolServers
 }
 
 export interface AgentExecutor {

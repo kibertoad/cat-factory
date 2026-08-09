@@ -1,6 +1,6 @@
 import type { AgentJobHandle, PipelineStep } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
-import { recordDispatchAttribution } from './step-fold.logic.js'
+import { recordDispatchAttribution, recordInlineToolServers } from './step-fold.logic.js'
 
 // `recordDispatchAttribution` is the one funnel every dispatch site calls right after
 // `startJob`, which is why the dispatched KIND is recorded here rather than at each site: a step
@@ -94,5 +94,41 @@ describe('recordDispatchAttribution — tool servers', () => {
     const s = step()
     recordDispatchAttribution(s, { jobId: 'job_1' } as AgentJobHandle, 'coder')
     expect(s.toolServers).toBeUndefined()
+  })
+})
+
+describe('recordInlineToolServers', () => {
+  // The inline counterpart, whose one producer is a consensus-diverted step: it reaches no
+  // container, so nothing on the handle path can report what the panel withheld.
+  const withheld = {
+    toolServers: {
+      wired: [],
+      unavailable: [{ id: 'issues', label: 'Issue tracker', reason: 'consensus_panel' as const }],
+    },
+  }
+
+  it('stamps the DISPATCHED kind, exactly as the handle fold does', () => {
+    const s = step({ agentKind: 'architect' })
+    recordInlineToolServers(s, withheld, 'architect')
+    expect(s.toolServers).toEqual({ ...withheld.toolServers, agentKind: 'architect' })
+  })
+
+  it('leaves a container round’s record standing when the inline result carries none', () => {
+    // The same guard the handle fold has, and it matters more here: an inline re-dispatch on a step
+    // a container round already resolved (a two-phase kind, a re-run) must not erase what ran.
+    const s = step({ agentKind: 'reviewer' })
+    recordDispatchAttribution(
+      s,
+      {
+        jobId: 'job_1',
+        toolServers: {
+          wired: [{ id: 'issues', label: 'Issue tracker', transport: 'stdio' }],
+          unavailable: [],
+        },
+      } as AgentJobHandle,
+      'reviewer',
+    )
+    recordInlineToolServers(s, {}, 'reviewer')
+    expect(s.toolServers?.wired).toHaveLength(1)
   })
 })

@@ -31,6 +31,7 @@ import {
   userPromptFor,
 } from '@cat-factory/agents'
 import { decideConsensusMode } from './gating.js'
+import { panelToolServerCeiling } from './toolServers.js'
 import { isConsensusEligible } from './traits.js'
 import { runSpecialistPanel } from './strategies/specialistPanel.js'
 import { runDebate } from './strategies/debate.js'
@@ -229,7 +230,23 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
     // real checkout (run `git diff`, read `.cat-context/*`, dispatch slice subagents). A panel
     // participant is a plain inline call with none of that, so the surface it is actually on is
     // stated last — after any workspace override, which must not be able to drop it.
-    const baseSystem = `${composedSystem}\n\n${INLINE_PANEL_SURFACE}`
+    //
+    // The tool servers the kind declared go the same way, and are NAMED rather than covered by the
+    // paragraph above: the surface statement tells a participant it has no CLI, which does not tell
+    // it that the vendor tool its instructions send it to is one of the things it has lost.
+    const ceiling = panelToolServerCeiling(context, this.agentKindRegistry)
+    if (ceiling.record) {
+      this.deps.logger?.warn('consensus panel withholds the tool servers this kind declares', {
+        agentKind: context.agentKind,
+        strategy: cfg.strategy,
+        executionId: context.executionId,
+        stepIndex: context.stepIndex,
+        toolServerIds: ceiling.record.unavailable.map((server) => server.id),
+      })
+    }
+    const baseSystem = ceiling.section
+      ? `${composedSystem}\n\n${INLINE_PANEL_SURFACE}\n\n${ceiling.section}`
+      : `${composedSystem}\n\n${INLINE_PANEL_SURFACE}`
     const goalPrompt = userPromptFor(context, this.agentKindRegistry)
 
     const participants: ResolvedParticipant[] = cfg.participants.map((p) => {
@@ -318,6 +335,11 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
         output: result.synthesis,
         model: `consensus:${cfg.strategy}:${synthesizer.modelLabel}`,
         usage: result.usage,
+        // What the panel withheld, for the step's own record. Reported on the SUCCESS path only:
+        // the throw below propagates and the engine fails the step from it, so there is no result
+        // to carry a resolution, and the surviving evidence of the ceiling is the log line plus the
+        // prompt the participants actually ran.
+        ...(ceiling.record ? { toolServers: ceiling.record } : {}),
       }
     } catch (error) {
       session.status = 'failed'

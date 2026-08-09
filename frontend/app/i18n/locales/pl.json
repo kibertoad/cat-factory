@@ -1450,6 +1450,7 @@
           "oauthNotConnected": "nie był dostępny: nikt jeszcze nie połączył z nim tej tablicy.",
           "oauthTokenFailed": "nie był dostępny: połączenie przestało wydawać token dostępu.",
           "overBudget": "nie był dostępny: ten agent deklaruje więcej serwerów narzędzi, niż niesie jedno uruchomienie.",
+          "consensusPanel": "nie był dostępny: ten krok wykonał się jako panel konsensusu, a panel nie ma środowiska agenta, do którego można podłączyć serwer narzędzi.",
           "unknown": "nie był dostępny ({reason})."
         },
         "remedy": {
@@ -1460,7 +1461,8 @@
           "unusableSecret": "Popraw deklarację w kodzie instalacji: dane uwierzytelniające serwera zdalnego jadą w nagłówku, a lokalnego są wstrzykiwane do procesu serwera.",
           "oauthNotConnected": "Połącz tę tablicę z serwerem w oknie Infrastruktura. Wdrożenie bez ENCRYPTION_KEY nie ma gdzie przechować zgody, więc operator musi ją najpierw ustawić.",
           "oauthTokenFailed": "Połącz go ponownie w oknie Infrastruktura albo przeczekaj awarię dostawcy.",
-          "overBudget": "Skróć to, co deklaruje agent, aby jedno uruchomienie uniosło całość."
+          "overBudget": "Skróć to, co deklaruje agent, aby jedno uruchomienie uniosło całość.",
+          "consensusPanel": "Wyłącz konsensus dla tego kroku, jeśli potrzebuje tego narzędzia, albo przyjmij, że panel oceni bez niego. W samym serwerze nic nie trzeba zmieniać."
         },
         "observed": {
           "ready": "uruchomiony",

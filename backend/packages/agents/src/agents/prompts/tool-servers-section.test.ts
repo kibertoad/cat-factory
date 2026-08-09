@@ -1,5 +1,6 @@
 import type { AgentRunContext, UnavailableToolServer } from '@cat-factory/kernel'
 import { TOOL_SERVER_BUDGET } from '@cat-factory/kernel'
+import { toolServerUnavailableReasonSchema } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import { toolServersSection } from './capabilities.js'
 
@@ -32,12 +33,11 @@ function ctx(
   } as unknown as AgentRunContext
 }
 
+// Read off the SCHEMA rather than retyped here, because a retyped list grades the `Record` against
+// a copy of itself: this one had gone three members stale (`unusable_secret` and both OAuth
+// reasons), so the coverage test below was passing while covering less than the union it names.
 const ALL_REASONS: UnavailableToolServer['reason'][] = [
-  'harness_unsupported',
-  'transport_unsupported',
-  'missing_secret',
-  'reserved_secret',
-  'over_budget',
+  ...toolServerUnavailableReasonSchema.options,
 ]
 
 describe('toolServersSection', () => {

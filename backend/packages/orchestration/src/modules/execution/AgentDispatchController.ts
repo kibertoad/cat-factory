@@ -14,7 +14,7 @@ import type {
 } from '@cat-factory/kernel'
 import { getErrorMessage, isAsyncAgentExecutor, parseLocalModelId } from '@cat-factory/kernel'
 import { PR_REVIEWER_KIND, resolvePrNumber } from '@cat-factory/agents'
-import { recordDispatchedJob } from './step-fold.logic.js'
+import { recordDispatchedJob, recordInlineToolServers } from './step-fold.logic.js'
 import { classifyDispatchFailure, type DispatchFailureClassification } from './job.logic.js'
 import { initialPrReviewState } from './prReview.logic.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
@@ -224,6 +224,11 @@ export class AgentDispatchController {
     await this.deps.runStateMachine.persistAndEmit(workspaceId, instance)
 
     const result = await this.runAgent(context, options)
+    // An inline executor that RESOLVED tool servers reports what it did with them, exactly as the
+    // container path does off the job handle. Today that is a consensus-diverted step, which wires
+    // none and states them all as withheld; every other inline run reports nothing and the step's
+    // record stays absent, which is what absent has always meant here.
+    recordInlineToolServers(step, result, context.agentKind)
     return this.deps.recordStepResult(workspaceId, instance, step, isFinalStep, result)
   }
 
