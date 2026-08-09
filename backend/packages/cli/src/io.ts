@@ -34,14 +34,37 @@ export interface Io {
   openBrowser(url: string): Promise<void>
 }
 
-/** The OS-appropriate command for opening a URL in the default browser. */
-function openCommand(url: string): { cmd: string; args: string[] } {
-  switch (process.platform) {
+/** How to spawn the OS's URL opener: the command, its argv, and Windows' verbatim-argv flag. */
+export interface OpenBrowserCommand {
+  cmd: string
+  args: string[]
+  /**
+   * Windows only: hand the joined argv to `CreateProcess` unchanged instead of re-quoting each
+   * argument for `CommandLineToArgvW`, whose rules `cmd` does not follow.
+   */
+  windowsVerbatimArguments?: boolean
+}
+
+/**
+ * The OS-appropriate command for opening a URL in the default browser.
+ *
+ * Windows goes through `cmd`, and cmd splits an UNQUOTED command line on `&` before the `start`
+ * builtin ever sees it. Every URL we open carries more than one query parameter, so this used to
+ * open the browser at everything up to the first `&` and then try to RUN each remaining parameter
+ * as a command: `cat-factory k3s` landed on a bare `?infraSetup=local-k3s` with none of the values
+ * the connect form prefills from, and the PAT links dropped their `scopes`.
+ *
+ * So the URL is quoted, which is also why `start`'s first argument is an empty quoted window title
+ * (it reads a leading quoted token as one). The quotes have to reach cmd verbatim, hence the flag.
+ * Nothing can break out of them: `URL`/`URLSearchParams` percent-encode both `"` and space, and
+ * outside a batch file cmd leaves an undefined `%…%` reference alone.
+ */
+export function openCommand(url: string, platform: NodeJS.Platform): OpenBrowserCommand {
+  switch (platform) {
     case 'darwin':
       return { cmd: 'open', args: [url] }
     case 'win32':
-      // `start` is a cmd builtin; the empty "" is the window title arg it requires.
-      return { cmd: 'cmd', args: ['/c', 'start', '', url] }
+      return { cmd: 'cmd', args: ['/c', 'start', '""', `"${url}"`], windowsVerbatimArguments: true }
     default:
       return { cmd: 'xdg-open', args: [url] }
   }
@@ -102,8 +125,12 @@ export function createConsoleIo(): Io {
     openBrowser(url) {
       return new Promise<void>((resolve) => {
         try {
-          const { cmd, args } = openCommand(url)
-          const child = spawn(cmd, args, { stdio: 'ignore', detached: true })
+          const { cmd, args, windowsVerbatimArguments } = openCommand(url, process.platform)
+          const child = spawn(cmd, args, {
+            stdio: 'ignore',
+            detached: true,
+            windowsVerbatimArguments,
+          })
           child.on('error', () => resolve())
           child.unref()
           resolve()
