@@ -490,4 +490,72 @@ describe('KubernetesEnvironmentProvider.teardown', () => {
     const del = calls.find((c) => c.method === 'DELETE')!
     expect(del.url).toBe('https://cluster.test:6443/api/v1/namespaces/cf-env-42')
   })
+
+  it('reclaims a namespace whose stored config no longer matches the PROVISIONING contract', async () => {
+    // The failure this closes: a stored `providerConfig` is re-parsed on the way out, so drift in
+    // a field teardown never reads (here the manifest source and the URL derivation) used to
+    // refuse the delete. Nothing later fixes that by itself, so the namespace kept running while
+    // every sweep re-failed on the same parse. The reclaim path validates what it USES.
+    const drifted = kubernetesConfigToManifest(config)
+    drifted.providerConfig = {
+      apiServerUrl: config.apiServerUrl,
+      label: config.label,
+      manifestSource: { type: 'colocated' },
+      url: { source: 'someSourceThisBuildDoesNotKnow' },
+    }
+    const calls = stubFetch(() => ({ status: 200 }))
+    const provider = new KubernetesEnvironmentProvider()
+
+    const result = await provider.teardown({
+      manifest: drifted,
+      externalId: 'cf-env-42',
+      provisionFields: { namespace: 'cf-env-42' },
+      resolveSecret,
+    })
+
+    expect(result.status).toBe('torn_down')
+    expect(calls.find((c) => c.method === 'DELETE')?.url).toBe(
+      'https://cluster.test:6443/api/v1/namespaces/cf-env-42',
+    )
+  })
+
+  it('still refuses when the apiserver coordinates themselves are what drifted', async () => {
+    // The one field with no safe default: a DELETE aimed at a guessed cluster is worse than a
+    // refusal, so this half of the config stays validated.
+    const { apiServerUrl: _dropped, ...withoutCluster } = config
+    const drifted = kubernetesConfigToManifest(config)
+    drifted.providerConfig = { ...withoutCluster }
+    stubFetch(() => ({ status: 200 }))
+    const provider = new KubernetesEnvironmentProvider()
+
+    await expect(
+      provider.teardown({
+        manifest: drifted,
+        externalId: 'cf-env-42',
+        provisionFields: { namespace: 'cf-env-42' },
+        resolveSecret,
+      }),
+    ).rejects.toThrow(/apiServerUrl/)
+  })
+})
+
+describe('KubernetesEnvironmentProvider.confirmTeardown', () => {
+  it('reads the namespace back for a config whose PROVISIONING half drifted', async () => {
+    // The probe answers the same question the delete asked, so it has to be answerable for the
+    // same configs: a teardown that went through and a proof that came back `unknown` would
+    // report a reclaim nobody can verify, purely because of a field neither call reads.
+    const drifted = kubernetesConfigToManifest(config)
+    drifted.providerConfig = { apiServerUrl: config.apiServerUrl, url: { source: 'gone-variant' } }
+    stubFetch(() => ({ status: 404 }))
+    const provider = new KubernetesEnvironmentProvider()
+
+    const probe = await provider.confirmTeardown({
+      manifest: drifted,
+      externalId: 'cf-env-42',
+      provisionFields: { namespace: 'cf-env-42' },
+      resolveSecret,
+    })
+
+    expect(probe.state).toBe('gone')
+  })
 })

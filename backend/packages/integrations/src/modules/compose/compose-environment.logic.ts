@@ -284,7 +284,7 @@ export function composeConfigToManifest(config: ComposeEnvironmentConfig): Envir
     provision: { method: 'POST', pathTemplate: '' },
     response: {},
     ...(config.defaultTtlMs ? { defaultTtlMs: config.defaultTtlMs } : {}),
-    providerConfig: { ...config } as unknown as Record<string, unknown>,
+    providerConfig: { ...config },
   }
 }
 

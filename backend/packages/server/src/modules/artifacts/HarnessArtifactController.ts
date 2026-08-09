@@ -8,6 +8,7 @@ import { logger } from '../../observability/logger.js'
 import {
   MAX_REQUEST_BYTES,
   MAX_UPLOAD_BYTES,
+  blobResponseBody,
   blobResponseHeaders,
   exceedsRequestSizeLimit,
   normalizeImageContentType,
@@ -221,7 +222,7 @@ export function harnessArtifactController(): Hono<AppEnv> {
     // Same headers as the workspace-scoped serve path: the content type is clamped to the image
     // allow-list and `nosniff` is sent, so bytes stored before a tightening can never be served
     // as active content.
-    return new Response(got.bytes as unknown as BodyInit, {
+    return new Response(blobResponseBody(got.bytes), {
       status: 200,
       headers: blobResponseHeaders(got.record.contentType),
     })

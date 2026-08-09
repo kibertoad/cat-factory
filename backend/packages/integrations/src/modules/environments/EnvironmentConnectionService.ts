@@ -627,7 +627,7 @@ export class EnvironmentConnectionService {
         ? { bootstrapInputs: provider.describeBootstrapInputs() }
         : {}),
       missingRequired: missingRequiredConfigKeys(configFields, storedKeys),
-      ...(manifest ? { savedManifest: manifest as unknown as Record<string, unknown> } : {}),
+      ...(manifest ? { savedManifest: manifest } : {}),
       ...(provider.describeManifestTemplate
         ? { manifestTemplate: provider.describeManifestTemplate() as Record<string, unknown> }
         : {}),

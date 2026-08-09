@@ -81,7 +81,7 @@ import {
 } from '@cat-factory/server'
 import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
-import { requireDb, requireTelemetryDb } from './env'
+import { envBag, requireDb, requireTelemetryDb } from './env'
 import { CloudflareContainerTransport } from './containers/CloudflareContainerTransport'
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
@@ -1027,7 +1027,7 @@ export function buildContainer(
   const toolSecretChain = buildToolSecretChain({
     custom: resolveRegisteredToolSecretResolver(env),
     credentials: shared.capabilityCredentialsService,
-    env: env as unknown as Record<string, unknown>,
+    env: envBag(env),
     environmentFallback: registeredToolSecretEnvironmentFallback(),
     logger,
   })

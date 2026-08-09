@@ -392,13 +392,9 @@ const ITEM_ICON: Record<string, string> = {
               </div>
             </div>
             <div class="flex items-center gap-1">
-              <UBadge
-                :color="statusMeta.chip as any"
-                variant="subtle"
-                size="sm"
-                :title="statusHint"
-                >{{ statusLabel }}</UBadge
-              >
+              <UBadge :color="statusMeta.chip" variant="subtle" size="sm" :title="statusHint">{{
+                statusLabel
+              }}</UBadge>
               <!-- Board-authoring buttons (create task / from issue / recurring / initiative)
                    are `board.write`, hidden for a read-only viewer, who keeps the status badge
                    (the one view-only affordance here). -->
