@@ -16,7 +16,7 @@
 // Bootstrap produces the repository and the frame; neither half of the provisioning wiring is its
 // job, so the suite supplies both here, once, before any run needs them.
 
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { requireBootstrapped, runBootstrap } from '../src/bootstrap.ts'
 import {
   backendBootstrapInstructions,
@@ -27,7 +27,7 @@ import {
 import { buildK3sHandlerConfig, buildK3sSecrets, buildServiceProvisioning } from '../src/k3s.ts'
 import { findServiceByTitle } from '../src/publicApi.ts'
 import type { ServiceRecord } from '../src/world.ts'
-import { harness, serviceTitles } from './fixtures.ts'
+import { assertPrerequisites, harness, serviceTitles } from './fixtures.ts'
 
 // Bootstrapping scaffolds a whole service, its tests, its Dockerfile, its manifests and its CI
 // workflow in one container run. 45 minutes is generous on purpose: the budget is here to catch a
@@ -35,8 +35,13 @@ import { harness, serviceTitles } from './fixtures.ts'
 const BOOTSTRAP_BUDGET_MS = 45 * 60 * 1000
 
 describe('bootstrap: two empty repositories become two provisioned board services', () => {
-  const { config, client, app, world } = harness()
+  const { config, client, app, world, journal } = harness('01-bootstrap')
   const titles = serviceTitles(config.namePrefix)
+
+  // The gate, not a duplicate of spec 00: a pass resumed straight into this file never ran that
+  // one, and bootstrapping two repositories against an unwired deployment is the most expensive
+  // way there is to discover it.
+  beforeAll(assertPrerequisites)
 
   it('connects the workspace k3s engine for the `kubernetes` provision type', async () => {
     // Idempotent by design: re-registering replaces, so a resumed pass re-asserts the connection
@@ -46,12 +51,12 @@ describe('bootstrap: two empty repositories become two provisioned board service
       config: buildK3sHandlerConfig(config.cluster),
       secrets: buildK3sSecrets(config.cluster),
     })
-    console.log(`  connected ${config.cluster.apiServerUrl} as the 'kubernetes' handler`)
+    journal.say('milestone', `connected ${config.cluster.apiServerUrl} as the 'kubernetes' handler`)
   })
 
   it('bootstraps the backend service repository', async () => {
     const record = await bootstrapService({
-      existing: world.value.backend,
+      role: 'backend',
       title: titles.backend,
       repoName: backendRepoName(config.namePrefix, world.value.runId),
       type: 'service',
@@ -64,7 +69,7 @@ describe('bootstrap: two empty repositories become two provisioned board service
   it('bootstraps the frontend repository', async () => {
     const backend = world.require('backend')
     const record = await bootstrapService({
-      existing: world.value.frontend,
+      role: 'frontend',
       title: titles.frontend,
       repoName: frontendRepoName(config.namePrefix, world.value.runId),
       type: 'frontend',
@@ -100,40 +105,61 @@ describe('bootstrap: two empty repositories become two provisioned board service
           `linked to it; an unlinked frame holds tasks and can start none of them.`,
       ).toBeDefined()
     }
+    journal.finishPhase('both services are on the board and can be filed against')
   })
 
   /**
-   * Bootstrap one service, or adopt the one a previous pass already made.
+   * Bootstrap one service, or pick up whatever a previous pass left of it.
    *
-   * The resume path checks the BOARD, not just the ledger: a ledger entry whose frame has since
-   * been deleted would otherwise carry a resumed pass all the way to a 404 on the first task.
+   * Three resume states, because a bootstrap has two moments a pass can die between and they need
+   * different actions:
+   *
+   *   - **A service in the ledger.** Re-checked against the BOARD, not trusted: a ledger entry
+   *     whose frame has since been deleted would otherwise carry a resumed pass to a 404 on the
+   *     first task filed under it.
+   *   - **A job id in the ledger and no service.** The repository exists (the job created it) but
+   *     nothing saw the job settle, so re-attach. Starting a second bootstrap here collides with
+   *     the name its own predecessor took, and the provider's refusal reads like a stranger's.
+   *   - **Neither.** Start one, recording the job id before the first poll.
    */
   async function bootstrapService(options: {
-    existing: ServiceRecord | null
+    role: 'backend' | 'frontend'
     title: string
     repoName: string
     type: 'service' | 'frontend'
     instructions: string
   }): Promise<ServiceRecord> {
-    const { existing, title, repoName, type, instructions } = options
+    const { role, title, repoName, type, instructions } = options
+    const existing = world.value[role]
     if (existing) {
       const live = await findServiceByTitle(client, title)
       if (live) {
-        console.log(`  reusing '${repoName}' from a previous pass (${existing.blockId})`)
+        journal.say('milestone', `reusing '${repoName}' from a previous pass (${existing.blockId})`)
         return existing
       }
+      journal.record(
+        'milestone',
+        `the ledger names '${repoName}' but the board has no '${title}'; bootstrapping again`,
+      )
       console.warn(
         `  ledger names '${repoName}' but the board has no '${title}'; bootstrapping again`,
       )
     }
 
-    const job = await runBootstrap(
+    const job = await runBootstrap({
       app,
-      { repoName, type, description: title, private: true, instructions },
-      BOOTSTRAP_BUDGET_MS,
-    )
+      journal,
+      input: { repoName, type, description: title, private: true, instructions },
+      budgetMs: BOOTSTRAP_BUDGET_MS,
+      existingJobId: world.value.bootstrapJobs[role],
+      onStarted: (jobId) =>
+        world.patch({ bootstrapJobs: { ...world.value.bootstrapJobs, [role]: jobId } }),
+    })
     const { blockId, repoUrl } = requireBootstrapped(job)
-    console.log(`  bootstrapped ${repoUrl ?? repoName} → frame ${blockId}`)
+    // Cleared only once the job has SETTLED into a frame: while it is null and the service is
+    // null, a resume knows there is nothing of this service anywhere.
+    world.patch({ bootstrapJobs: { ...world.value.bootstrapJobs, [role]: null } })
+    journal.say('milestone', `bootstrapped ${repoUrl ?? repoName} → frame ${blockId}`)
     return { blockId, serviceId: blockId, repoName, repoUrl }
   }
 })

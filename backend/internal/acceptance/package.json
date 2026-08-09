@@ -7,6 +7,7 @@
   "scripts": {
     "acceptance": "vitest run --config vitest.acceptance.config.ts",
     "acceptance:watch": "vitest --config vitest.acceptance.config.ts",
+    "status": "node --experimental-strip-types src/statusCli.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"

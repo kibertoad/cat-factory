@@ -19,6 +19,13 @@
 // it run, answer what it asks, read what it proved) is entirely public. If a future change
 // makes one of these reachable from `/api/v1`, delete it from here.
 //
+// **The other group here is READ-ONLY PREFLIGHT PROBES**, and they are a different kind of thing
+// rather than a widening of the three above. They create nothing and drive nothing; they ask what
+// the deployment has WIRED, which is exactly the class of fact a public surface frozen forever
+// deliberately does not publish (`backend/docs/public-api.md`). The alternative is not a public
+// call, it is discovering an unwired model or a connection without `workflows: write` forty
+// minutes into a run. `prerequisites.ts` is their only caller.
+//
 // **These calls are session-authed, so they work only against a deployment running open**
 // (`AUTH_DEV_OPEN=true`, which local mode sets by default). That is a deliberate limit: the
 // suite targets a developer's own local instance, and a hosted deployment would need a real
@@ -27,7 +34,11 @@
 import type {
   BootstrapJob,
   BootstrapRepoInput,
+  ConfigProblem,
+  GitHubConnection,
   InfraHandlerConfig,
+  ModelCatalog,
+  RiskPolicy,
   ServiceProvisioning,
 } from '@cat-factory/contracts'
 
@@ -94,8 +105,72 @@ export class AppApi {
     })
   }
 
-  async #request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const url = `${this.#baseUrl}/workspaces/${encodeURIComponent(this.#workspaceId)}${path}`
+  // ---- Read-only preflight probes (see the header) --------------------------
+
+  /**
+   * The deployment's own health verdict.
+   *
+   * `misconfigured` is the value that earns this call: a backend that failed its own config
+   * validation serves a FALLBACK app which answers every other route with a 503, so without
+   * this probe the suite's first real call reports "503 from /api/v1/me" and an operator goes
+   * looking at their API key. Unauthenticated and outside the workspace mount, so it also
+   * answers when the app API would refuse.
+   */
+  health(): Promise<{ status: string }> {
+    return this.#rootRequest<{ status: string }>('GET', '/health')
+  }
+
+  /**
+   * The problem list a misconfigured deployment publishes about ITSELF.
+   *
+   * Only meaningful when `health()` said `misconfigured`; on a healthy backend the field is
+   * absent and this answers an empty list. Each entry names the variable, what breaks without
+   * it and how to fill it, so the suite reports the backend's own diagnosis rather than
+   * paraphrasing a 503.
+   */
+  async configProblems(): Promise<readonly ConfigProblem[]> {
+    const config = await this.#rootRequest<{ misconfigured?: { problems?: ConfigProblem[] } }>(
+      'GET',
+      '/auth/config',
+    )
+    return config.misconfigured?.problems ?? []
+  }
+
+  /** The workspace's model catalog, whose `available` flag is what a dispatch resolves against. */
+  listModels(): Promise<ModelCatalog> {
+    return this.#request<ModelCatalog>('GET', '/models')
+  }
+
+  /**
+   * The workspace's VCS connection, or null when nothing is connected.
+   *
+   * Read through the `github` module, which is the provider-ROUTING surface rather than a
+   * GitHub-only one: a GitLab-connected workspace answers here too, and the row's own `provider`
+   * says which instance it talks to. Nothing in this suite may hard-code a provider or a host.
+   */
+  async vcsConnection(): Promise<GitHubConnection | null> {
+    const view = await this.#request<{ connection: GitHubConnection | null }>(
+      'GET',
+      '/github/connection',
+    )
+    return view.connection
+  }
+
+  /** The workspace's merge-threshold preset library. The `isDefault` row governs an unpinned task. */
+  listRiskPolicies(): Promise<readonly RiskPolicy[]> {
+    return this.#request<readonly RiskPolicy[]>('GET', '/risk-policies')
+  }
+
+  #request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    return this.#rootRequest<T>(
+      method,
+      `/workspaces/${encodeURIComponent(this.#workspaceId)}${path}`,
+      body,
+    )
+  }
+
+  async #rootRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const url = `${this.#baseUrl}${path}`
     const response = await fetch(url, {
       method,
       headers: body === undefined ? {} : { 'content-type': 'application/json' },

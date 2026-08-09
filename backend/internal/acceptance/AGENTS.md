@@ -6,7 +6,14 @@ local deployment with nothing faked. Full notes: [`README.md`](./README.md).
 
 **Entry:** `acceptance/*.acceptance.ts` via
 `pnpm --filter @cat-factory/acceptance run acceptance`. Needs a running deployment, a k3s cluster
-and real model credentials; `src/config.ts` refuses with the whole list of what is missing.
+and real model credentials; `src/config.ts` refuses with the whole list of missing VARIABLES, and
+`src/prerequisites.ts` then refuses with the whole list of unsatisfied DEPLOYMENT conditions.
+
+**A pass is watchable and resumable, and both are load-bearing rather than conveniences.**
+`pnpm --filter @cat-factory/acceptance run status [runId|latest]` reduces the ledger and the
+journal into where a pass got to, opening no connection to the deployment.
+`ACCEPTANCE_RUN_ID=<id|latest>` resumes, adopting or re-attaching to whatever the previous attempt
+left rather than re-filing it. The README tables both.
 
 **It is NOT in CI and must never become so.** `test:run` points at `vitest.config.ts`, which
 collects `test/**/*.test.ts` only: this package's own unit tests. The acceptance specs are behind
@@ -16,18 +23,21 @@ every CI lane.
 
 **Where things live**
 
-| File                          | What                                                                             |
-| ----------------------------- | -------------------------------------------------------------------------------- |
-| `acceptance/00-preflight`     | The key, the catalog, a real apiserver probe. Creates nothing.                   |
-| `acceptance/01-bootstrap`     | k3s engine + two bootstrapped repos + each service's manifest source.            |
-| `acceptance/02-feature-…`     | `pl_build` across both services; environment / CI / merge evidence.              |
-| `acceptance/03-investigate-…` | `pl_bugfix`; the `clarity-review` gate answered over `/api/v1`; the repro proof. |
-| `src/`                        | The harness. Per-file roles are tabled in the README.                            |
-| `test/`                       | Unit tests for the pure logic (config, ledger, evidence, waits). CI-safe.        |
+| File                          | What                                                                                    |
+| ----------------------------- | --------------------------------------------------------------------------------------- |
+| `acceptance/00-preflight`     | Reports each prerequisite as its own test. Creates nothing.                             |
+| `acceptance/01-bootstrap`     | k3s engine + two bootstrapped repos + each service's manifest source.                   |
+| `acceptance/02-feature-…`     | `pl_build` across both services; environment / CI / merge evidence.                     |
+| `acceptance/03-investigate-…` | `pl_bugfix`; the `clarity-review` gate answered over `/api/v1`; the repro proof.        |
+| `src/`                        | The harness. Per-file roles are tabled in the README.                                   |
+| `test/`                       | Unit tests for the pure logic (config, gate, ledger, journal, status, evidence, waits). |
 
-**The four rules the specs are written to** (each expanded in the README, and each the reason a
+**The rules the specs are written to** (each expanded in the README, and each the reason a
 particular file exists):
 
+0. **Refuse before spending.** `src/prerequisites.ts` runs in EVERY spec's `beforeAll`, not just
+   spec 00: a resumed pass starts where it stopped, so a gate only the first file mounts is one
+   the resume path skips. An unreadable probe is its own verdict, never read as "unmet".
 1. **Assert on evidence the platform COMPUTED, never on agent prose.** `src/evidence.ts` reduces
    the verification report; grepping a coder's reply tests the model's phrasing, not the product.
 2. **Never auto-answer an unplanned decision.** `src/decisions.ts` answers `follow-ups` and

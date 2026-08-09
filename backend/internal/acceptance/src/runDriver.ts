@@ -14,10 +14,12 @@
 import type { CatFactoryClient, PublicRun } from '@cat-factory/sdk'
 import { type AnsweredDecision, answerDecisions } from './decisions.ts'
 import { formatDuration } from './deadline.ts'
+import type { Journal } from './journal.ts'
 import { describeRun, isTerminal, waitForDecisionOrSettled } from './publicApi.ts'
 
 export type DriveOptions = {
   client: CatFactoryClient
+  journal: Journal
   taskId: string
   pipelineId: string
   /** The steer handed to any question the run raises. See `AnswerOptions.steer`. */
@@ -31,22 +33,15 @@ export type DriveResult = {
   answered: AnsweredDecision[]
 }
 
-/** Start a task on a named pipeline and drive it to a terminal state. */
-export async function startAndDrive(options: DriveOptions): Promise<DriveResult> {
-  const { client, taskId, pipelineId } = options
-  const task = await client.tasks.start(taskId, { pipelineId })
-  if (!task.runId) {
-    throw new Error(
-      `Starting task ${taskId} on '${pipelineId}' returned no runId, so there is nothing to follow.`,
-    )
-  }
-  console.log(`  started task ${taskId} on ${pipelineId} → run ${task.runId}`)
-  return driveRun({ ...options, runId: task.runId })
-}
-
-/** Drive an already-started run. Split out so a resumed pass can re-attach to one. */
+/**
+ * Drive an already-started run to a terminal state.
+ *
+ * Starting is deliberately NOT this function's job: `resume.ts` owns whether a task is filed, a
+ * live run re-attached to, or a finished one adopted, and folding a `start` in here is what made
+ * an interrupted pass re-ship the same feature.
+ */
 export async function driveRun(options: DriveOptions & { runId: string }): Promise<DriveResult> {
-  const { client, taskId, runId, steer, budgetMs } = options
+  const { client, journal, taskId, runId, steer, budgetMs } = options
   const startedAt = Date.now()
   const answered: AnsweredDecision[] = []
 
@@ -63,6 +58,7 @@ export async function driveRun(options: DriveOptions & { runId: string }): Promi
 
     const { run, decisions } = await waitForDecisionOrSettled({
       client,
+      journal,
       taskId,
       runId,
       budgetMs: remainingMs,
@@ -74,7 +70,10 @@ export async function driveRun(options: DriveOptions & { runId: string }): Promi
     // decision a person was meant to make.
     const justAnswered = await answerDecisions({ client, runId, steer }, decisions)
     for (const entry of justAnswered) {
-      console.log(`  answered '${entry.kind}': ${entry.actions.join('; ') || '(nothing pending)'}`)
+      journal.say(
+        'milestone',
+        `answered '${entry.kind}': ${entry.actions.join('; ') || '(nothing pending)'}`,
+      )
     }
     answered.push(...justAnswered)
 

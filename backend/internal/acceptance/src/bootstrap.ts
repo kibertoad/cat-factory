@@ -9,28 +9,56 @@
 import type { BootstrapJob, BootstrapRepoInput } from '@cat-factory/contracts'
 import type { AppApi } from './appApi.ts'
 import { waitFor } from './deadline.ts'
+import type { Journal } from './journal.ts'
 
-/** Start a bootstrap and wait for it to settle, succeeded or otherwise. */
-export async function runBootstrap(
-  app: AppApi,
-  input: BootstrapRepoInput,
-  budgetMs: number,
-): Promise<BootstrapJob> {
-  const started = await app.startBootstrap(input)
-  console.log(`  bootstrap ${started.id} started for ${input.repoName} (block ${started.blockId})`)
+export type BootstrapOptions = {
+  app: AppApi
+  journal: Journal
+  input: BootstrapRepoInput
+  budgetMs: number
+  /**
+   * A job a previous pass started and did not see settle. Re-attached to rather than restarted,
+   * because the repository name is taken the moment the FIRST job creates it: starting a second
+   * one fails on a collision with its own predecessor, which reads like someone else's leftovers.
+   */
+  existingJobId: string | null
+  /** Called with the job id as soon as one exists, so an interrupted pass can re-attach. */
+  onStarted: (jobId: string) => void
+}
+
+/** Start a bootstrap (or re-attach to one) and wait for it to settle, succeeded or otherwise. */
+export async function runBootstrap(options: BootstrapOptions): Promise<BootstrapJob> {
+  const { app, journal, input, budgetMs, existingJobId } = options
+  const jobId = existingJobId ?? (await start(options))
+  if (existingJobId) {
+    journal.say('milestone', `re-attaching to bootstrap ${existingJobId} for ${input.repoName}`)
+  }
   return waitFor<BootstrapJob>({
     label: `the bootstrap of ${input.repoName}`,
     budgetMs,
     probe: async () => {
-      const job = await app.getBootstrapJob(started.id)
+      const job = await app.getBootstrapJob(jobId)
       return job.status === 'succeeded' || job.status === 'failed'
         ? { done: true, value: job }
         : { done: false, state: describeBootstrap(job) }
     },
     onProgress: (state, elapsedMs) => {
-      console.log(`  [${Math.round(elapsedMs / 1000)}s] ${state}`)
+      journal.say('observation', `[${Math.round(elapsedMs / 1000)}s] ${state}`)
     },
   })
+}
+
+async function start(options: BootstrapOptions): Promise<string> {
+  const { app, journal, input, onStarted } = options
+  const started = await app.startBootstrap(input)
+  // Recorded before the first poll: the job creates a real repository, so a pass killed during
+  // the wait must be able to find its way back to this job rather than trying the name again.
+  onStarted(started.id)
+  journal.say(
+    'milestone',
+    `bootstrap ${started.id} started for ${input.repoName} (block ${started.blockId})`,
+  )
+  return started.id
 }
 
 /** One line for the wait's progress and its expiry message. */

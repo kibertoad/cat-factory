@@ -31,7 +31,7 @@ Four spec files, run in order. Each spec's output is the next one's input.
 
 | Spec                     | What it does                                                                                                                                                       |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `00-preflight`           | The key, its workspace and scope; the pipeline catalog; a real probe of the k3s apiserver; the ingress template renders. Creates nothing.                          |
+| `00-preflight`           | Reports every prerequisite as its own named test. Creates nothing. The GATE runs in each spec, so a resumed pass cannot skip it.                                   |
 | `01-bootstrap`           | Connects the k3s engine, bootstraps a backend repo and a frontend repo from empty, declares each service's manifest source, and checks both are fileable services. |
 | `02-feature-with-defect` | Ships a paginated catalog across both services on `pl_build`. Asserts the environment came up on the cluster, CI gated it, the merge resolved, the namespace went. |
 | `03-investigate-and-fix` | Files the resulting bug as a report, runs `pl_bugfix`, answers its `clarity-review` human gate over `/api/v1`, and asserts a red-then-green reproduction proof.    |
@@ -62,20 +62,52 @@ asserting it away.
 
 A local cat-factory that can really do the work, and a cluster to deploy onto.
 
+**Most of this list is CHECKED, and checked before anything is created.** `src/prerequisites.ts`
+probes each condition below, every spec runs the whole gate in its `beforeAll`, and a pass that
+would fail is refused with every unsatisfied prerequisite and its remedy in one message. That
+matters because each of these otherwise surfaces between fifteen and ninety minutes in, wearing a
+failure that names something else: an unwired model looks like a broken dispatcher, a connection
+without workflow permission looks like a repository whose CI never fires, and a preset that holds
+every merge for a person looks like a run that stalled on its last step.
+
+Three states, not two: a probe that cannot READ an answer reports that, and never as evidence
+that the prerequisite is unmet.
+
+| Prerequisite         | Checked | What it means                                                                                             |
+| -------------------- | ------- | --------------------------------------------------------------------------------------------------------- |
+| `deployment-health`  | yes     | The backend booted. A misconfigured one serves a fallback app, and its own problem list is reported.      |
+| `api-key`            | yes     | `CAT_FACTORY_API_KEY` names `ACCEPTANCE_WORKSPACE_ID` and is scoped `admin`.                              |
+| `spend-budget`       | yes     | The workspace is not over budget, which pauses every run.                                                 |
+| `agent-model`        | yes     | At least one catalog model is selectable. Distinguishes "unconfigured" from "blocked by account policy".  |
+| `vcs-connection`     | yes     | Connected to `ACCEPTANCE_REPO_OWNER`, may CREATE repositories, and may write workflow files.              |
+| `auto-merge-policy`  | yes     | The workspace's default merge preset permits auto-merge (see below).                                      |
+| `board-titles`       | yes     | A fresh pass is not about to create a second frame under a title this board already has.                  |
+| `cluster-connection` | yes     | The apiserver answers the ServiceAccount token, probed without persisting anything.                       |
+| `ingress-template`   | yes     | An environment URL renders from the configured host template.                                             |
+| `pipeline-catalog`   | note    | Advisory: an unadopted pipeline materialises on first start, so this is a heads-up rather than a refusal. |
+
+Two things it deliberately does NOT check, because neither is knowable without spending:
+
+- **Whether the wired model can actually build a small service.** A model that cannot scaffold a
+  Fastify app fails spec 01 for reasons that are not the platform's. This suite is not a model
+  benchmark and does not grade one.
+- **Whether a container runtime is available to the agent jobs.** Nothing short of dispatching a
+  job answers it.
+
+**Why auto-merge is a prerequisite rather than a preference.** `pl_build` ends in a `merger`, and
+the suite asserts each run reached `done`, which the platform reaches only when the pull request
+really merged. A preset that holds everything for a person is correctly configured and will stop
+this suite. What the gate cannot settle is a preset's `dryRunRoles`: the public API does not
+report which workspace role a key's runs are admitted under, so a non-empty list is STATED as a
+caveat rather than graded, which is the honest disposition for an answer the probe cannot reach.
+
 **The deployment**
 
 - Running in **local mode** (`@cat-factory/local-server`) with `AUTH_DEV_OPEN=true` (local mode's
-  default). Three setup calls use the session-authed app API; see "The escape hatch" below.
+  default). The setup calls and the preflight probes use the session-authed app API; see "The
+  escape hatch" below.
 - `ENCRYPTION_KEY` set, or `/api/v1` answers `503` on every call.
-- A **VCS credential** with rights to create repositories under `ACCEPTANCE_REPO_OWNER`, and a
-  container runtime for the agent jobs.
-- A **model** wired that can actually build a small service. This suite is not a model benchmark,
-  but a model that cannot scaffold a Fastify app will fail spec 01 for reasons that are not the
-  platform's.
-- A **merge-threshold preset that permits auto-merge**. `pl_build` ends in a `merger`, and the
-  suite asserts each feature run reached `done`, which the platform reaches only when the pull
-  request really merged. A preset that holds everything for a person is correctly configured and
-  will stop this suite; the failure says so.
+- A **container runtime** for the agent jobs.
 
 **The cluster**
 
@@ -112,24 +144,63 @@ cluster (a public package, or an `imagePullSecret` you have already installed).
 | `ACCEPTANCE_NAME_PREFIX`               | no       | Default `cf-acc`. Set it per-person when an org is shared: repository names collide account-wide. |
 | `ACCEPTANCE_RUN_BUDGET_MS`             | no       | Per-run ceiling, default 90 min. Not a vitest timeout; see below.                                 |
 | `ACCEPTANCE_STATE_DIR`                 | no       | Default `.acceptance`, relative to this package.                                                  |
-| `ACCEPTANCE_RUN_ID`                    | no       | Set it to **resume** a previous pass instead of starting a new one.                               |
+| `ACCEPTANCE_RUN_ID`                    | no       | A run id to **resume**, or `latest` for the most recent pass. Unset starts a new one.             |
 
 Missing configuration is reported **all at once**, with what each variable is for. The suite
 refuses rather than guessing, because it creates real repositories.
 
+## Watching a pass
+
+A pass runs for an afternoon in a terminal nobody is watching, and the questions asked afterwards
+are asked from somewhere else. So every observation is appended to a journal beside the ledger,
+and a second command reduces the two into an answer:
+
+```sh
+pnpm --filter @cat-factory/acceptance run status          # the most recent pass
+pnpm --filter @cat-factory/acceptance run status 20260809175530
+```
+
+It reports each phase with how long it has been in it, the last thing that phase observed,
+anything the pass created (services, runs, pull requests), any bootstrap started but not settled,
+and how long ago the last line was written. That last number is the one that matters: a pass whose
+poll interval is ten seconds and whose journal has been silent for twenty minutes is not slow, it
+is dead or detached, and nothing else distinguishes those from "still working".
+
+The command opens no connection to the deployment, creates nothing, and needs no API key, so it is
+safe to run against a pass that is currently going.
+
 ## Resuming
 
-A full pass costs an afternoon and real spend, so every spec records what it created in a ledger
-under `ACCEPTANCE_STATE_DIR` and re-reads it on start. The run id is printed at the top of every
-spec file's output:
+A full pass costs an afternoon and real spend, so it is written to be resumed. Every spec records
+what it created in a ledger under `ACCEPTANCE_STATE_DIR`, re-reads it on start, and re-checks it
+against the deployment rather than trusting it.
 
 ```sh
 ACCEPTANCE_RUN_ID=20260809175530 pnpm --filter @cat-factory/acceptance run acceptance
+ACCEPTANCE_RUN_ID=latest pnpm --filter @cat-factory/acceptance run acceptance
 ```
 
-A resumed pass reuses the bootstrapped services (re-checking they still exist on the board, not
-just in the ledger) and re-runs from the first unfinished step. `bail: 1` keeps the ledger pointing
-at the step that actually broke.
+`latest` resolves through a pointer written when a pass OPENS, not when it finishes: the pass
+worth resuming is by definition one that did not finish. Asking for `latest` when no pass exists
+is refused rather than quietly starting a new one, because those are opposite intents and the
+wrong one bootstraps two repositories.
+
+What a resumed pass does with each thing it finds:
+
+| Found                               | Action                                                                           |
+| ----------------------------------- | -------------------------------------------------------------------------------- |
+| A service in the ledger             | Re-read the BOARD; reuse it if the frame is still there, bootstrap again if not. |
+| A bootstrap job started, no service | Re-attach to the job. The repository already exists, so a second one collides.   |
+| A task filed, never started         | Start it.                                                                        |
+| A run still working                 | Re-attach and keep driving it. Nothing is re-filed.                              |
+| A run that already reached `done`   | Adopt it.                                                                        |
+| A task the board no longer has      | File it again, saying so.                                                        |
+
+Every one of those states is recorded the moment it is entered rather than when it completes, so
+the window a crash can land in is as small as the ledger write. The one thing recorded that is not
+an id is the set of decision kinds the suite ANSWERED, because a settled decision is
+indistinguishable afterwards from one nobody had to make, and spec 03's claim that it drove a human
+gate over `/api/v1` has to survive the process that made it.
 
 **Nothing is cleaned up on failure.** The run, its pull request and any provisioned namespace are
 left in place to be inspected, and the failure message says so. Successful passes reclaim their
@@ -137,7 +208,13 @@ namespaces through the pipeline's own `disposer`, which spec 02 asserts.
 
 ## The rules these specs are written to
 
-Four, and each is load-bearing.
+Five, and each is load-bearing.
+
+**0. Refuse before spending, and say everything that is wrong.** The gate above runs in every
+spec rather than only in spec 00, because a resumed pass starts wherever it stopped and a check
+only the first file runs is a check the resume path skips. Everything it knows is reported
+together: this suite's unit of feedback is an afternoon, so learning about the second problem
+tomorrow costs a day per problem.
 
 **1. Assert on evidence the platform COMPUTED, never on prose an agent wrote.** A test that greps a
 coder's reply for "fixed the off-by-one" is testing the model's turn of phrase; change the model
@@ -163,8 +240,10 @@ and failed CI is one story, and learning the second half on tomorrow's re-run wa
 
 The suite drives `/api/v1` through the **published TypeScript SDK**, the same artifact an
 integrator installs, so a surface change that would break an integration breaks this suite at
-compile time. Three setup calls have no public counterpart and go to the session-authed app API,
-each documented at the top of [`src/appApi.ts`](./src/appApi.ts):
+compile time. Two groups of call go elsewhere, and they are different in kind.
+
+**Three SETUP calls** have no public counterpart, each documented at the top of
+[`src/appApi.ts`](./src/appApi.ts):
 
 1. **Bootstrapping a repository** (`POST /workspaces/:ws/bootstrap/jobs`). `/api/v1` can create a
    service against an existing repository but has nothing that makes one.
@@ -175,22 +254,34 @@ All three are deployment SETUP, deliberately absent from a surface frozen foreve
 narrative itself (file work, watch it run, answer what it asks, read what it proved) is entirely
 public. If a future change makes one of these reachable from `/api/v1`, delete it from there.
 
+**Four READ-ONLY preflight probes** (health and the deployment's own problem list, the model
+catalog, the VCS connection, the merge presets) ask what the deployment has WIRED. That is exactly
+the class of fact a frozen public surface does not publish, and the alternative to asking is not a
+public call: it is discovering the answer forty minutes into a run. They create nothing and drive
+nothing, and `src/prerequisites.ts` is their only caller.
+
 ## Where things live
 
-| Path                         | What                                                                            |
-| ---------------------------- | ------------------------------------------------------------------------------- |
-| `acceptance/*.acceptance.ts` | The four specs, in order. `fixtures.ts` builds the harness.                     |
-| `src/config.ts`              | Environment → config, reporting every problem at once. Pure; unit-tested.       |
-| `src/world.ts`               | The resumable ledger.                                                           |
-| `src/publicApi.ts`           | SDK client, run observation, the polling waits.                                 |
-| `src/runDriver.ts`           | Start a task and drive it to terminal, answering parks under one shared budget. |
-| `src/decisions.ts`           | The two decision kinds this suite answers, and the refusal for everything else. |
-| `src/evidence.ts`            | The report reductions the specs assert on. Pure; unit-tested.                   |
-| `src/instructions.ts`        | The briefs, and the reasoning behind the planted defect.                        |
-| `src/k3s.ts`                 | The engine connection and the per-service manifest source.                      |
-| `src/bootstrap.ts`           | Starting a bootstrap and reporting its structured failure.                      |
-| `src/appApi.ts`              | The three setup calls `/api/v1` does not serve.                                 |
-| `src/deadline.ts`            | Waiting, with the observation the expiry needs.                                 |
+| Path                         | What                                                                             |
+| ---------------------------- | -------------------------------------------------------------------------------- |
+| `acceptance/*.acceptance.ts` | The four specs, in order. `fixtures.ts` builds the harness and mounts the gate.  |
+| `src/config.ts`              | Environment → config, reporting every problem at once. Pure; unit-tested.        |
+| `src/preflight.ts`           | The prerequisite vocabulary, runner and refusal. Pure; unit-tested.              |
+| `src/prerequisites.ts`       | The checks themselves, each with its remedy.                                     |
+| `src/world.ts`               | The resumable ledger, and the `latest` pointer.                                  |
+| `src/journal.ts`             | The append-only progress record a pass can be watched through.                   |
+| `src/status.ts`              | Ledger + journal → "where is this pass". Pure; unit-tested.                      |
+| `src/statusCli.ts`           | `pnpm run status`. Reads the two files and nothing else.                         |
+| `src/publicApi.ts`           | SDK client, run observation, the polling wait.                                   |
+| `src/resume.ts`              | File a task, or adopt / re-attach to what a previous pass left.                  |
+| `src/runDriver.ts`           | Drive a started run to terminal, answering parks under one shared budget.        |
+| `src/decisions.ts`           | The two decision kinds this suite answers, and the refusal for everything else.  |
+| `src/evidence.ts`            | The report reductions the specs assert on. Pure; unit-tested.                    |
+| `src/instructions.ts`        | The briefs, and the reasoning behind the planted defect.                         |
+| `src/k3s.ts`                 | The engine connection and the per-service manifest source.                       |
+| `src/bootstrap.ts`           | Starting (or re-attaching to) a bootstrap, and reporting its structured failure. |
+| `src/appApi.ts`              | The setup calls and preflight probes `/api/v1` does not serve.                   |
+| `src/deadline.ts`            | Waiting, with the observation the expiry needs.                                  |
 
 **See also:** [`backend/internal/e2e`](../e2e) (the faked-externals product suite),
 [`backend/internal/sdk-smoketest`](../sdk-smoketest) (the same SDK against a booted backend),

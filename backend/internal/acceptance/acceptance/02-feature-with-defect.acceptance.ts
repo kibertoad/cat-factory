@@ -19,7 +19,7 @@
 // platform. The second belongs to spec 03, and is answered by fixing the bug rather than by
 // asserting it away.
 
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import {
   assertChecks,
   checkCi,
@@ -29,9 +29,10 @@ import {
 } from '../src/evidence.ts'
 import { backendFeatureBrief, frontendFeatureBrief } from '../src/instructions.ts'
 import { hostSuffix } from '../src/k3s.ts'
-import { requireRunDone, startAndDrive } from '../src/runDriver.ts'
+import { fileAndDrive } from '../src/resume.ts'
+import { requireRunDone } from '../src/runDriver.ts'
 import type { RunRecord } from '../src/world.ts'
-import { harness } from './fixtures.ts'
+import { assertPrerequisites, harness } from './fixtures.ts'
 
 const PIPELINE = 'pl_build'
 
@@ -44,16 +45,18 @@ const STEER =
   'worked examples. Do not broaden the scope.'
 
 describe('feature delivery: two services ship through pl_build onto k3s', () => {
-  const { config, client, world } = harness()
+  const { config, client, world, journal } = harness('02-feature-with-defect')
+
+  beforeAll(assertPrerequisites)
 
   it('ships the paginated catalog endpoint on the backend service', async () => {
     const backend = world.require('backend')
     const record = await shipFeature({
+      ledgerKey: 'featureBackend',
       serviceId: backend.serviceId,
       title: 'Paginate the catalog endpoint',
       brief: backendFeatureBrief(),
     })
-    world.patch({ featureBackend: record })
     expect(record.pullRequestUrl).toBeTruthy()
   })
 
@@ -64,11 +67,11 @@ describe('feature delivery: two services ship through pl_build onto k3s', () => 
     // scheduler, so ordering it directly is the honest expression of the constraint.
     const frontend = world.require('frontend')
     const record = await shipFeature({
+      ledgerKey: 'featureFrontend',
       serviceId: frontend.serviceId,
       title: 'Page through the catalog',
       brief: frontendFeatureBrief(),
     })
-    world.patch({ featureFrontend: record })
     expect(record.pullRequestUrl).toBeTruthy()
   })
 
@@ -103,35 +106,47 @@ describe('feature delivery: two services ship through pl_build onto k3s', () => 
         `no ready ${label} environment URL sits under '${suffix}' (from the configured template ` +
           `'${config.cluster.ingressHostTemplate}'). URLs: ${urls.join(', ') || '(none)'}`,
       ).toBe(true)
+      journal.finishPhase(`the ${label} feature run's delivery evidence holds`)
     },
   )
 
-  /** File a task, run it to `done`, and record what it produced. */
+  /**
+   * File a task (or pick up the one a previous pass filed), run it to `done`, record it throughout.
+   *
+   * The ledger key is threaded in rather than the record, because `fileAndDrive` writes through
+   * it three times: at the create, at the start, and at the settle. A pass killed between any two
+   * of those re-attaches instead of re-shipping, which on this spec is the difference between a
+   * resumed afternoon and a second one.
+   */
   async function shipFeature(options: {
+    ledgerKey: 'featureBackend' | 'featureFrontend'
     serviceId: string
     title: string
     brief: string
   }): Promise<RunRecord> {
-    const task = await client.tasks.create(options.serviceId, {
-      title: options.title,
-      taskType: 'feature',
-      description: options.brief,
-    })
-    console.log(`  filed '${options.title}' as ${task.taskId}`)
-
-    const { run, answered } = await startAndDrive({
+    const { run, answered, record } = await fileAndDrive({
       client,
-      taskId: task.taskId,
+      journal,
+      existing: world.value[options.ledgerKey],
+      label: options.title,
+      createTask: () =>
+        client.tasks.create(options.serviceId, {
+          title: options.title,
+          taskType: 'feature',
+          description: options.brief,
+        }),
+      onRecord: (next) => world.set(options.ledgerKey, next),
       pipelineId: PIPELINE,
       steer: STEER,
       budgetMs: config.runBudgetMs,
     })
     requireRunDone(run, `shipping '${options.title}'`)
-    console.log(
-      `  '${options.title}' merged as ${run.pullRequest?.url ?? '(no PR recorded)'} ` +
+    journal.say(
+      'milestone',
+      `'${options.title}' merged as ${run.pullRequest?.url ?? '(no PR recorded)'} ` +
         `after answering ${answered.length} decision(s)`,
     )
-    return { taskId: task.taskId, runId: run.runId, pullRequestUrl: run.pullRequest?.url ?? null }
+    return record
   }
 })
 

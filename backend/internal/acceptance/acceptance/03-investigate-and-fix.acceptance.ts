@@ -24,7 +24,7 @@
 // the fix belongs: the backend's contract is documented and internally consistent, so the side
 // that disagrees with the documented contract is the caller.
 
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import {
   assertChecks,
   checkCi,
@@ -33,8 +33,9 @@ import {
   checkReproductionProof,
 } from '../src/evidence.ts'
 import { bugReportBrief } from '../src/instructions.ts'
-import { requireRunDone, startAndDrive } from '../src/runDriver.ts'
-import { harness } from './fixtures.ts'
+import { fileAndDrive } from '../src/resume.ts'
+import { requireRunDone } from '../src/runDriver.ts'
+import { assertPrerequisites, harness } from './fixtures.ts'
 
 const PIPELINE = 'pl_bugfix'
 
@@ -49,36 +50,33 @@ const STEER =
   'should show the next 10 items with no repeats.'
 
 describe('bug lifecycle: investigate the shipped defect and fix it', () => {
-  const { config, client, world } = harness()
+  const { config, client, world, journal } = harness('03-investigate-and-fix')
+
+  beforeAll(assertPrerequisites)
 
   it('files the bug against the frontend service and drives pl_bugfix to a merged fix', async () => {
     const frontend = world.require('frontend')
-    // The environment spec 02 stood up is long gone (its `disposer` reclaimed the namespace, which
-    // spec 02 asserted), so the report names a live URL only when one is still recorded. An
-    // absent URL is stated as "reproduce locally" rather than omitted: a bug report that silently
-    // drops its "where" reads to an investigator like one whose reporter never had an environment.
-    const environmentUrl = await lastKnownEnvironmentUrl()
-    const task = await client.tasks.create(frontend.serviceId, {
-      title: 'Paging repeats the last item of the previous page',
-      taskType: 'bug',
-      description: bugReportBrief(environmentUrl),
-    })
-    console.log(`  filed the bug as ${task.taskId}`)
-    world.patch({ bugfix: { taskId: task.taskId, runId: null, pullRequestUrl: null } })
-
-    const { run, answered } = await startAndDrive({
+    const { run, answeredKinds } = await fileAndDrive({
       client,
-      taskId: task.taskId,
+      journal,
+      existing: world.value.bugfix,
+      label: 'the paging bug report',
+      // The environment spec 02 stood up is long gone (its `disposer` reclaimed the namespace,
+      // which spec 02 asserted), so the report names a live URL only when one is still recorded.
+      // An absent URL is stated as "reproduce locally" rather than omitted: a bug report that
+      // silently drops its "where" reads to an investigator like one whose reporter never had an
+      // environment. Resolved inside the callback because a resumed pass that adopts the already
+      // filed task must not spend two evidence reads composing a description nobody will use.
+      createTask: async () =>
+        client.tasks.create(frontend.serviceId, {
+          title: 'Paging repeats the last item of the previous page',
+          taskType: 'bug',
+          description: bugReportBrief(await lastKnownEnvironmentUrl()),
+        }),
+      onRecord: (record) => world.patch({ bugfix: record }),
       pipelineId: PIPELINE,
       steer: STEER,
       budgetMs: config.runBudgetMs,
-    })
-    world.patch({
-      bugfix: {
-        taskId: task.taskId,
-        runId: run.runId,
-        pullRequestUrl: run.pullRequest?.url ?? null,
-      },
     })
     requireRunDone(run, 'fixing the paging defect')
 
@@ -86,10 +84,15 @@ describe('bug lifecycle: investigate the shipped defect and fix it', () => {
     // and a run that reached `done` without ever parking on it did not exercise the pipeline this
     // spec names. Asserting it here is what stops a future pipeline change from quietly turning
     // this into a test of an entirely different chain.
+    //
+    // Read from the LEDGER-BACKED set rather than this attempt's answers: a settled decision looks
+    // afterwards exactly like one nobody had to make, so a resumed pass that adopts yesterday's
+    // finished run has no way to observe a gate it genuinely answered.
     expect(
-      answered.map((entry) => entry.kind),
+      answeredKinds,
       'the run never parked on the clarity-review gate, so the human-gate path was not exercised',
     ).toContain('clarity-review')
+    journal.finishPhase('the bugfix run merged, having been through the clarity gate')
   })
 
   it('proved the defect red on the pre-fix tree and green on the pushed tree', async () => {

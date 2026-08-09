@@ -10,6 +10,7 @@ import { CatFactoryClient } from '@cat-factory/sdk'
 import type { PublicDecisionList, PublicIdentity, PublicRun, PublicService } from '@cat-factory/sdk'
 import type { AcceptanceConfig } from './config.ts'
 import { waitFor } from './deadline.ts'
+import type { Journal } from './journal.ts'
 
 export type { PublicDecisionList, PublicRun, PublicService }
 
@@ -18,31 +19,36 @@ export function createClient(config: AcceptanceConfig): CatFactoryClient {
 }
 
 /**
- * Check the key before anything is created.
+ * What is wrong with the key, or null. Checked before anything is created.
  *
  * Two failures this catches, both of which would otherwise appear much later wearing a
  * misleading face: a key bound to a DIFFERENT workspace than `ACCEPTANCE_WORKSPACE_ID` (every
  * public read then answers 404 for resources the app API is busy creating in the other one,
  * which reads as a broken deployment), and a key below `admin` (spec 01 creates services and
  * spec 03 answers a human gate, so a `write` key gets a third of the way and refuses).
+ *
+ * A returned string rather than a throw, because the prerequisite gate reports it as one verdict
+ * beside nine others: refusing out of the first probe is what collecting every problem exists to
+ * avoid.
  */
-export function assertKeyUsable(identity: PublicIdentity, workspaceId: string): void {
+export function describeKeyProblem(identity: PublicIdentity, workspaceId: string): string | null {
   if (identity.workspaceId !== workspaceId) {
-    throw new Error(
+    return (
       `CAT_FACTORY_API_KEY is bound to workspace ${identity.workspaceId}, but ` +
-        `ACCEPTANCE_WORKSPACE_ID is ${workspaceId}. The public API is workspace-scoped and the ` +
-        `app-API setup calls are addressed by id, so the two must name the same board.`,
+      `ACCEPTANCE_WORKSPACE_ID is ${workspaceId}. The public API is workspace-scoped and the ` +
+      `app-API setup calls are addressed by id, so the two must name the same board.`
     )
   }
   // The ladder is INCLUSIVE, so this is the rung test the contract asks for, not an equality
   // check: `admin` is the top and is what spec 01 (create a service) and spec 03 (answer the
   // clarity gate, which needs `decide`) between them require.
   if (identity.scope !== 'admin') {
-    throw new Error(
+    return (
       `CAT_FACTORY_API_KEY is scoped '${identity.scope}'. This suite creates services (admin) ` +
-        `and answers a parked human gate (decide), so it needs an 'admin' key.`,
+      `and answers a parked human gate (decide), so it needs an 'admin' key.`
     )
   }
+  return null
 }
 
 /** A run status that will not change without someone doing something. */
@@ -75,17 +81,8 @@ export function describeDecisions(decisions: PublicDecisionList): string {
   return `answerable: [${answerable}], unanswerable: [${blocked}]`
 }
 
-export type RunWaitOptions = {
-  client: CatFactoryClient
-  taskId: string
-  budgetMs: number
-  /** What ends the wait. Defaults to "terminal", which treats a park as something to keep waiting on. */
-  until?: (run: PublicRun) => boolean
-  label?: string
-}
-
 /**
- * Poll a task's run until `until` holds.
+ * Wait until the run is parked on a decision this API can answer, or settles without asking.
  *
  * Polling rather than the SSE stream, deliberately. The stream is the better channel for a UI
  * and this suite is not one: an hour-long wait over one long-lived connection has to handle
@@ -94,29 +91,14 @@ export type RunWaitOptions = {
  * which is authoritative by construction and carries every step's whole output (the stream
  * clips them; see `truncated` on the run-step contract).
  */
-export function waitForRun(options: RunWaitOptions): Promise<PublicRun> {
-  const { client, taskId, budgetMs, until = (run) => isTerminal(run.status) } = options
-  return waitFor<PublicRun>({
-    label: options.label ?? `task ${taskId} to settle`,
-    budgetMs,
-    probe: async () => {
-      const run = await client.tasks.getRun(taskId)
-      return until(run) ? { done: true, value: run } : { done: false, state: describeRun(run) }
-    },
-    onProgress: (state, elapsedMs) => {
-      console.log(`  [${Math.round(elapsedMs / 1000)}s] ${state}`)
-    },
-  })
-}
-
-/** Wait until the run is parked on a decision this API can answer, or settles without asking. */
 export function waitForDecisionOrSettled(options: {
   client: CatFactoryClient
+  journal: Journal
   taskId: string
   runId: string
   budgetMs: number
 }): Promise<{ run: PublicRun; decisions: PublicDecisionList }> {
-  const { client, taskId, runId, budgetMs } = options
+  const { client, journal, taskId, runId, budgetMs } = options
   return waitFor({
     label: `task ${taskId} to park on an answerable decision or settle`,
     budgetMs,
@@ -131,10 +113,21 @@ export function waitForDecisionOrSettled(options: {
         ? { done: true, value: { run, decisions } }
         : { done: false, state: `${describeRun(run)}; ${describeDecisions(decisions)}` }
     },
-    onProgress: (state, elapsedMs) => {
-      console.log(`  [${Math.round(elapsedMs / 1000)}s] ${state}`)
-    },
+    onProgress: reportObservation(journal),
   })
+}
+
+/**
+ * Print each observation and append it to the journal.
+ *
+ * Both channels, because they answer different questions: the console is for whoever is watching
+ * the run, and the journal is for the same person an hour later in a different window, which is
+ * where "has the coder moved since 14:20" is actually asked.
+ */
+function reportObservation(journal: Journal): (state: string, elapsedMs: number) => void {
+  return (state, elapsedMs) => {
+    journal.say('observation', `[${Math.round(elapsedMs / 1000)}s] ${state}`)
+  }
 }
 
 /** Find a service frame by exact title; null when the board has none. */

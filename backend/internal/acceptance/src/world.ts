@@ -17,6 +17,22 @@ import { fileURLToPath } from 'node:url'
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
+/** Where a pass keeps its ledger and journal. Relative paths resolve against the package. */
+export function resolveStateDir(stateDir: string): string {
+  return isAbsolute(stateDir) ? stateDir : join(packageRoot, stateDir)
+}
+
+/**
+ * The pointer to the most recent pass, so `ACCEPTANCE_RUN_ID=latest` and the status script have
+ * something to resolve. Rewritten whenever a pass opens its ledger.
+ *
+ * A pointer rather than a default: resuming stays an EXPLICIT act. A suite that silently picked
+ * up the previous pass would turn "run the acceptance suite" into "continue whatever half-built
+ * thing is lying around", and the ledger's whole value is that a resume is something an operator
+ * chose after reading why the last one stopped.
+ */
+const LATEST_POINTER = 'latest.json'
+
 /** One repository the suite bootstrapped, and the board service frame it materialised. */
 export type ServiceRecord = {
   /** The board block id of the service frame (the app API addresses blocks by this). */
@@ -32,6 +48,23 @@ export type RunRecord = {
   taskId: string
   runId: string | null
   pullRequestUrl: string | null
+  /**
+   * The decision kinds this suite answered on the run, accumulated across attempts.
+   *
+   * The one entry here that is not an id, and the exception is deliberate: every other field
+   * names something the DEPLOYMENT can be re-asked about, but "the suite answered a
+   * `clarity-review` gate over /api/v1" is a fact about what the suite DID, and a settled
+   * decision is indistinguishable afterwards from one that never had to be made. Spec 03 asserts
+   * on it, so a resumed pass that adopts a finished run would otherwise report the human-gate
+   * path as never exercised when it was exercised yesterday.
+   */
+  answeredKinds: readonly string[]
+}
+
+/** Bootstrap jobs started but not yet seen to settle. Keyed by the service each will become. */
+export type BootstrapJobs = {
+  backend: string | null
+  frontend: string | null
 }
 
 export type World = {
@@ -39,6 +72,15 @@ export type World = {
   runId: string
   backend: ServiceRecord | null
   frontend: ServiceRecord | null
+  /**
+   * The in-flight half of the two records above.
+   *
+   * A bootstrap creates the repository long before its frame is a service, so between those two
+   * moments the ledger would otherwise hold nothing at all. A pass interrupted there and re-run
+   * would start a SECOND bootstrap under a name its own predecessor had already taken, and the
+   * collision reads exactly like someone else's leftovers on a shared account.
+   */
+  bootstrapJobs: BootstrapJobs
   /**
    * Spec 02, per service. Two records rather than one because the planted mismatch has two halves
    * and spec 02 asserts the ephemeral-environment evidence of EACH: collapsing them would make
@@ -55,6 +97,7 @@ export function emptyWorld(runId: string): World {
     runId,
     backend: null,
     frontend: null,
+    bootstrapJobs: { backend: null, frontend: null },
     featureBackend: null,
     featureFrontend: null,
     bugfix: null,
@@ -64,30 +107,79 @@ export function emptyWorld(runId: string): World {
 /**
  * The run id for this pass: `ACCEPTANCE_RUN_ID` when set, else a fresh one.
  *
- * Setting it is how a re-run RESUMES rather than starting a second pass, so the suite prints it
- * on every load: an operator whose spec 03 died needs that value and has no other way to get it.
+ * Setting it is how a re-run RESUMES rather than starting a second pass. The literal `latest`
+ * resolves through the pointer the previous pass wrote, because the id an operator needs is
+ * otherwise recoverable only from the stdout of the run that just died: `latest` is what makes
+ * "resume the thing that broke" a command someone can type from memory at 9am.
+ *
+ * An absent or unreadable pointer with `latest` asked for is a REFUSAL rather than a fresh pass.
+ * The two are opposite intents, and silently starting a new one would bootstrap two repositories
+ * for an operator who asked to continue.
  */
-export function resolveRunId(env: Readonly<Record<string, string | undefined>>): string {
+export function resolveRunId(
+  env: Readonly<Record<string, string | undefined>>,
+  stateDir: string,
+): string {
   const pinned = env.ACCEPTANCE_RUN_ID?.trim()
-  if (pinned) return pinned
+  if (pinned && pinned !== 'latest') return pinned
+  if (pinned === 'latest') {
+    const latest = readLatestRunId(resolveStateDir(stateDir))
+    if (latest) return latest
+    throw new Error(
+      `ACCEPTANCE_RUN_ID=latest, but ${join(resolveStateDir(stateDir), LATEST_POINTER)} names no ` +
+        `previous pass. Name a run id explicitly, or unset ACCEPTANCE_RUN_ID to start a new pass ` +
+        `(which bootstraps two repositories and spends real money).`,
+    )
+  }
   // Seconds granularity, no separators: it becomes part of a GitHub repository name, where the
   // character set is narrow and the length budget is not generous.
   return new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
 }
 
+/** The run id the most recent pass recorded, or null. Total: an unreadable pointer is "none". */
+export function readLatestRunId(stateDir: string): string | null {
+  let raw: string
+  try {
+    raw = readFileSync(join(stateDir, LATEST_POINTER), 'utf8')
+  } catch {
+    // silent-catch-ok: no pointer is the normal state before any pass has run.
+    return null
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    const runId = (parsed as { runId?: unknown } | null)?.runId
+    return typeof runId === 'string' && runId.length > 0 ? runId : null
+  } catch {
+    // silent-catch-ok: a malformed pointer is discarded, exactly as a malformed ledger is.
+    return null
+  }
+}
+
 export class WorldStore {
   readonly #path: string
+  readonly #dir: string
   #world: World
 
   constructor(stateDir: string, runId: string) {
-    const dir = isAbsolute(stateDir) ? stateDir : join(packageRoot, stateDir)
-    this.#path = join(dir, `${runId}.json`)
-    mkdirSync(dir, { recursive: true })
+    this.#dir = resolveStateDir(stateDir)
+    this.#path = join(this.#dir, `${runId}.json`)
+    mkdirSync(this.#dir, { recursive: true })
     this.#world = readWorld(this.#path) ?? emptyWorld(runId)
+    // Written on OPEN rather than on completion: the pass an operator most needs to resume is
+    // the one that died, and a pointer written at the end would name only passes that finished.
+    writeFileSync(
+      join(this.#dir, LATEST_POINTER),
+      `${JSON.stringify({ runId, ledger: this.#path }, null, 2)}\n`,
+      'utf8',
+    )
   }
 
   get path(): string {
     return this.#path
+  }
+
+  get dir(): string {
+    return this.#dir
   }
 
   get value(): World {
@@ -105,6 +197,18 @@ export class WorldStore {
     this.#world = { ...this.#world, ...patch }
     writeFileSync(this.#path, `${JSON.stringify(this.#world, null, 2)}\n`, 'utf8')
     return this.#world
+  }
+
+  /**
+   * Patch ONE record, chosen at runtime.
+   *
+   * Exists so a caller holding a key in a variable (the two feature runs are the same code with
+   * different ledger slots) does not have to widen its own patch to do it. The cast is contained
+   * here and the signature is what makes it sound: `K` ties the key to the value's type, which a
+   * computed-key object literal cannot express on its own.
+   */
+  set<K extends keyof World>(key: K, value: World[K]): World {
+    return this.patch({ [key]: value } as Partial<World>)
   }
 
   /** Read a required record, failing with what to re-run rather than a null dereference. */
@@ -153,9 +257,18 @@ export function coerceWorld(value: unknown): World | null {
     runId: record.runId,
     backend: coerceService(record.backend),
     frontend: coerceService(record.frontend),
+    bootstrapJobs: coerceBootstrapJobs(record.bootstrapJobs),
     featureBackend: coerceRun(record.featureBackend),
     featureFrontend: coerceRun(record.featureFrontend),
     bugfix: coerceRun(record.bugfix),
+  }
+}
+
+function coerceBootstrapJobs(value: unknown): BootstrapJobs {
+  const record = asRecord(value)
+  return {
+    backend: typeof record?.backend === 'string' ? record.backend : null,
+    frontend: typeof record?.frontend === 'string' ? record.frontend : null,
   }
 }
 
@@ -186,6 +299,9 @@ function coerceRun(value: unknown): RunRecord | null {
     taskId: record.taskId,
     runId: typeof record.runId === 'string' ? record.runId : null,
     pullRequestUrl: typeof record.pullRequestUrl === 'string' ? record.pullRequestUrl : null,
+    answeredKinds: Array.isArray(record.answeredKinds)
+      ? record.answeredKinds.filter((kind): kind is string => typeof kind === 'string')
+      : [],
   }
 }
 
