@@ -204,17 +204,50 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       rots in the direction that matters most, since a page deleted from the site would stay listed
       and keep passing.
 - [ ] 15. **Finish the reductions the pointers only announced.** A pointer at the top of a doc is
-      not the split; it is the promise of one, and the promise reads as done on a checklist. What
-      has actually been reduced: `sdk/README.md` (-92 lines), `security-model.md` (-60),
-      `vcs-providers.md` (-24), the root `README.md` (-13) and `model-support.md` §6-§8. What has
-      not, measured by comparing section headings against the live pages: `custom-agents.md` vs
-      `extend/custom-agents.html` (three-stages model, the registration seam, the worked example),
-      `environments-integration.md` vs `operate/environments.html` (the manifest, registering a
-      provider, "when the manifest isn't enough"), and, more mildly, `runner-pool-integration.md` vs
-      `operate/runner-pools.html` (how it works, configuration). `llm-telemetry.md` is the model of a
-      clean split and needs nothing: every section is an internal rule with no counterpart on the
-      site. Take these one doc per PR, each verified against the live page rather than against this
-      table.
+      not the split; it is the promise of one, and on a checklist the promise reads as done. Slices
+      2 to 11 reduced five things: `sdk/README.md` (-92 lines), `security-model.md` (-60),
+      `vcs-providers.md` (-24), the root `README.md` (-13) and `model-support.md` §6-§8. Every other
+      doc in the "mixed" row gained a pointer over unchanged prose, which is the two-parallel-full-
+      accounts state rule 1 exists to end. One doc per PR, each section checked against the LIVE
+      page before it is cut.
+
+      **Trap that shapes all three: the site splits a feature from its MANIFEST.** A manifest schema
+          lives on `extend/manifests.html`, not on the feature's own page, so a repo doc reducing its
+          manifest section points THERE. Reducing it toward the feature page instead loses the schema
+          for every reader.
+
+          15a. `custom-agents.md` (553 lines) against `extend/custom-agents.html`:
+
+          | Section                             | Lines | Disposition                                                                                             |
+          | ----------------------------------- | ----- | ------------------------------------------------------------------------------------------------------- |
+          | The governing principle             | 9     | KEEP. "Zero `switch(agentKind)` in the container" is an invariant a contributor breaks, not a how-to.   |
+          | The three stages                    | 22    | CUT. Near-verbatim of the site's "The mental model: three stages"; keep the `RepoFiles` source link.    |
+          | The seams                           | 77    | CUT ~55. Registration example and the `AgentKindDefinition` table are both on the site. KEEP the `standardsDelivery: 'context-files'` rationale (why a delegating kind must not fold) and `registeredKindRequiresContainer`. |
+          | Variations of an EXISTING kind      | 89    | KEEP. The site has four sentences; these lines are WHY a variant is not a kind, which is the safety property. |
+          | Capabilities → Skills               | 131   | KEEP most. Deeper than the site: the three ref forms, bundled vs catalog resolution, harness-aware install, the overlap with the built-in `skill` KIND. |
+          | Capabilities → Tool servers (MCP)   | 104   | CUT toward `mcp-tool-servers.md`, NOT the website. See the repo-to-repo finding below.                  |
+          | Capabilities → Binary generators    | 78    | Check against `binary-output-foundational-storage.md` first; likely the same repo-to-repo shape.        |
+          | Judges                              | 75    | Three-way overlap: the site's `extend/custom-gates.html#custom-judges` AND `docs/initiatives/judge-registry.md`. Resolve the repo-to-repo half first. |
+          | The worked example                  | 47    | CUT most; point at `backend/internal/example-custom-agent`, which is the executable copy.               |
+          | Status / scope                      | 33    | KEEP.                                                                                                    |
+
+          15b. `environments-integration.md` (442 lines). The site is BIGGER here (18 sections), so the
+          repo doc is the junior partner: `## The manifest` (152) belongs to
+          `extend/manifests.html#environment-provider-manifest`; `## Code-adapter seam` (126) is the one
+          to keep, being a code seam, but the site's `#when-the-manifest-isn-t-enough` covers the
+          choosing half; `## How it works` (18) and `## Registering a provider` (19) are on the site
+          verbatim. `## Reaching an internal / VPN-hosted platform`, `## Provisioning & discovery` and
+          `## Security notes` stay.
+
+          15c. `runner-pool-integration.md` (701 lines) is the MILD case and the one most likely to be
+          over-cut. `operate/runner-pools.html` has four sections; almost everything here is genuinely
+          deeper. Exactly one section duplicates: `## 3. Describe your scheduler as a manifest` (203),
+          which `extend/manifests.html#runner-pool-manifest` owns. The runner image and job protocol
+          (117), the k3s/Nomad mapping (48), the trust boundary (41) and scaling (25) all stay.
+
+          `llm-telemetry.md` is the model of a clean split and needs nothing: every section is an
+          internal rule with no counterpart on the site. Copy its shape.
+
 - [ ] 13. The website's page-quality pass (its phase D): the opening/closing shape on the 41 pages
       that predate the revamp, task-oriented titles, and splitting the two pages that mix doc types.
       Tracked on the website tracker.
@@ -228,6 +261,27 @@ Checked against `main` on 2026-08-08, after the tracker's base commit:
 | `backend/docs/custom-binary-stores.md`                      | mixed          | User-facing half (what you implement, how a store is selected, what it owes the sweeps) added to the website's custom-providers page as the third code seam; repo doc keeps the cache and resolution design. |
 | `backend/docs/adr/0050-public-api-headless-completeness.md` | contributor    | Stays. An ADR is a decision record by definition.                                                                                                                                                            |
 | `backend/internal/conformance/README.md`                    | contributor    | Stays. It describes this repository's own test suite.                                                                                                                                                        |
+
+## Repo-to-repo duplication, found while planning slice 15
+
+The audit classified every doc by READER and asked, per doc, what the website should own. It never
+asked what a SIBLING doc already owns, so this class was invisible to it: two repo docs, same
+audience, same material, neither aware the other is authoritative. It is the same failure mode as
+the website duplication (rule 1's "two parallel full accounts"), and it is not fixed by the split,
+because moving the user-facing half to the site leaves both copies of the internal half behind.
+
+Recorded here, deliberately NOT fixed in the execution PR: each needs its own judgement about which
+doc is the authority, and folding that into a website slice would hide it.
+
+| Restated in                                     | Lines | Already owned by                                         | Note                                                                                                                        |
+| ----------------------------------------------- | ----- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `custom-agents.md` → "Tool servers (MCP)"       | 104   | `mcp-tool-servers.md`                                    | The same file NAMES it "the full MCP tool-server model" four lines from the top, then restates it. The clearest case.       |
+| `custom-agents.md` → "Judges"                   | 75    | `docs/initiatives/judge-registry.md` (191)               | Also on the site. The tracker is a live initiative, so per CLAUDE.md its committed scope converts to an ADR; do that first. |
+| `custom-agents.md` → "Binary-output generators" | 78    | `docs/initiatives/binary-output-foundational-storage.md` | Unverified: check before cutting, the shape only looks the same.                                                            |
+
+**The rule this suggests, if it holds up on a second pass:** a doc that names another as "the full
+model" may not also contain that model. Say what the reader needs to decide whether to follow the
+link (one paragraph), and link.
 
 ## Gotchas
 
