@@ -6,6 +6,7 @@ import {
 } from '@cat-factory/kernel'
 import {
   type BinaryGeneratorDefinition,
+  binaryAcceptsWithoutCapability,
   binaryCredentialInjectionName,
   binaryGeneratorDefinitionIssues,
   comparableCredentialInjectionName,
@@ -161,6 +162,23 @@ function checkBinaryGeneratorDetails(definition: BinaryGeneratorDefinition): Reg
           `refused, and one selecting it for the listed modalities would be told it can emit this.`,
       )
     }
+  }
+  // The same fault one axis finer: a declaration whose two halves contradict each other, where
+  // every reader believes a different half. An `accepts` set states which values the endpoint
+  // takes for an option its `capabilities` say it cannot be asked for at all, so the brief
+  // renders the set as fact while admission refuses every step that asks, and the value rule
+  // (judged over the capability's declarers) never sees the set at all. The accurate half is
+  // unreachable, which makes this an error rather than a warning: the remedy is one capability
+  // on one definition, and the deployment has already written down that the endpoint has it.
+  for (const { option, capability } of binaryAcceptsWithoutCapability(definition)) {
+    invalid(
+      'binary_generator_accepts_without_capability',
+      `Generative binary integration "${definition.id}" states the values it accepts for ` +
+        `\`${option}\` but does not declare the "${capability}" capability that option needs. ` +
+        `A step asking for it is refused as unsupported, so the accepted set is never consulted ` +
+        `while the agent's brief states it. Declare "${capability}", or drop the set if the ` +
+        `endpoint genuinely takes no such parameter.`,
+    )
   }
   return problems
 }

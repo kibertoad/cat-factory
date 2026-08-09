@@ -4,6 +4,7 @@ import {
   binaryCredentialInjectionName,
   binaryFormatCoverage,
   binaryModalityOverlaps,
+  binaryValueCoverage,
   requiredBinaryCapabilities,
 } from '@cat-factory/contracts'
 import type {
@@ -12,6 +13,8 @@ import type {
   BinaryGeneratorCredential,
   BinaryModality,
   BinaryOutputConfig,
+  BinaryUnacceptedValue,
+  BinaryValueOption,
 } from '@cat-factory/contracts'
 import type { BinaryGeneratorView } from './binary-generator-registry.js'
 import {
@@ -147,6 +150,22 @@ export type BinaryGeneratorSelectionIssue =
    * every integration registered before this axis existed running unchanged.
    */
   | { problem: 'capability_unsupported'; capability: BinaryGeneratorCapability }
+  /**
+   * A generation option every selected integration CAN be asked for and none of them will take
+   * the step's VALUE at: a `7:3` aspect ratio asked of endpoints whose picklists offer ten
+   * others, a 96x96 render asked of one whose `size` parameter starts at 1024x1024.
+   *
+   * One notch finer than the capability above and refused for the reason each finer axis before
+   * it was: an unsupported value is not a thinner generation. The endpoint takes the parameter,
+   * so the call succeeds, and what comes back is the nearest thing the vendor chose, cropped or
+   * downscaled, with the modality covered, the format covered and the upload clean. The consumer
+   * that rejects it is weeks downstream.
+   *
+   * Only ever raised where EVERY integration declaring the capability enumerated what it takes.
+   * One that declared the capability and no set has said nothing about this value, which is
+   * {@link binaryValueCoverage}'s `unverifiable` and is reported rather than refused.
+   */
+  | { problem: 'option_value_unaccepted'; value: BinaryUnacceptedValue }
 
 /** A step's selection, resolved against the registry's views. */
 export interface ResolvedBinaryGeneratorSelection {
@@ -226,7 +245,29 @@ export function binaryGeneratorSelectionIssues(
   ).uncovered) {
     issues.push({ problem: 'capability_unsupported', capability })
   }
+  // One notch finer again: the option is supported and the VALUE is not. Judged only over the
+  // integrations that declare the gating capability, so a selection failing the coarser check
+  // above is never reported twice for one fault, and only where every one of them enumerated
+  // what it takes.
+  for (const value of binaryValueCoverage(config?.generation, selected).unaccepted) {
+    issues.push({ problem: 'option_value_unaccepted', value })
+  }
   return issues
+}
+
+/**
+ * A value option in words, for a message a human reads.
+ *
+ * A `Record` rather than a `switch`, because unlike {@link describeCapability} this vocabulary is
+ * not a wire picklist: it is the key set of a table in `@cat-factory/contracts` that this build
+ * and the mothership both compile against, so a member from a newer build cannot arrive here
+ * without the option itself arriving with it. Adding one fails the typecheck, which is the whole
+ * guard the case needs.
+ */
+const VALUE_OPTION_LABELS: Record<BinaryValueOption, string> = {
+  aspectRatio: 'an aspect ratio',
+  outputSize: 'an output size',
+  upscale: 'an upscale factor',
 }
 
 /**
@@ -348,6 +389,10 @@ export function describeBinaryGeneratorSelectionIssues(
     if (issue.problem === 'capability_unsupported') {
       return `this step's generation options ask for ${describeCapability(issue.capability)}, and no selected integration supports it: remove the option, or select an integration that declares the capability`
     }
+    if (issue.problem === 'option_value_unaccepted') {
+      const { option, requested, accepted } = issue.value
+      return `this step asks for ${VALUE_OPTION_LABELS[option]} of ${requested}, which no selected integration accepts: each of them states the values it takes, and between them those are ${accepted.join(', ')}. Ask for one of those, or select an integration that renders this one`
+    }
     return `no selected integration produces ${describeModality(issue.modality)}, which this step declares it delivers`
   })
   const problems = clauses.length === 1 ? clauses[0] : clauses.map((c) => `\n  - ${c}`).join('')
@@ -403,6 +448,7 @@ export function renderBinaryGeneratorSection(input: {
           '- Formats: not declared — read them off its API contract rather than assuming one.',
         )
       }
+      lines.push(...acceptedValueLines(generator))
       if (generator.endpoint) lines.push(`- Endpoint: ${generator.endpoint}`)
       lines.push(`- ${generator.summary}`)
       if (generator.description.trim()) lines.push('', generator.description.trim())
@@ -524,6 +570,57 @@ function generationOptionLines(
     lines.push(
       `No selected integration declares support for ${coverage.unverifiable.map(describeCapability).join(', ')}, and at least one of them declares no capabilities at all, so whether it can is unknown rather than settled. Check its API contract before relying on ${coverage.unverifiable.length === 1 ? 'it' : 'them'}, and report the gap rather than generating as if the option had been applied.`,
       '',
+    )
+  }
+  // The VALUE half of the same sentence, and the reason it is stated separately: the option is
+  // supported everywhere, one integration has enumerated what it takes and this is not on the
+  // list, and another has enumerated nothing. Admission let the step through on the strength of
+  // the second one, so the agent is the party that has to route around the first, and it can only
+  // do that if it is told which fact it is holding.
+  const values = binaryValueCoverage(generation, selected)
+  // The DEFINITE version of that fact, and the one the providers list above actively misleads
+  // about: every integration named there declares the option, and one of them has written down
+  // that it will not take this value. Naming it is the whole remedy, since the agent is the party
+  // choosing which endpoint renders which artifact.
+  for (const value of values.partial) {
+    lines.push(
+      `${joinIds(value.refusedBy)} ${value.refusedBy.length === 1 ? 'states the values it accepts' : 'state the values they accept'} for ${VALUE_OPTION_LABELS[value.option]} and ${value.refusedBy.length === 1 ? 'does' : 'do'} NOT accept the ${value.requested} this step asks for, while another selected integration does. Send these generations to one that accepts it. Do not send this option to ${joinIds(value.refusedBy)}: the call would succeed and return a nearby value instead. If routing is impossible for an artifact, report the option by name rather than substituting.`,
+      '',
+    )
+  }
+  if (values.unverifiable.length > 0) {
+    const named = values.unverifiable.map((option) => VALUE_OPTION_LABELS[option]).join(', ')
+    lines.push(
+      `At least one selected integration states the values it accepts and does NOT accept what this step asks for (${named}), while another states no values at all. Route these generations to an integration that can render what is asked, read the accepted sets listed per integration above, and report the option by name rather than substituting a nearby value.`,
+      '',
+    )
+  }
+  return lines
+}
+
+/**
+ * The closed sets of values one integration accepts, stated per option beside its formats.
+ *
+ * On the integration's own entry rather than only in the options section below, because it is a
+ * fact about the endpoint the agent needs whatever this step happens to ask for: an agent holding
+ * two image APIs picks per artifact, and "this one renders 1024x1024 and nothing else" is exactly
+ * the kind of thing that decides. Silent per option where nothing was declared, which is the
+ * ordinary case and means the endpoint's own contract is the authority.
+ */
+function acceptedValueLines(generator: BinaryGeneratorView): string[] {
+  const accepts = generator.accepts
+  if (!accepts) return []
+  const lines: string[] = []
+  if (accepts.aspectRatios?.length) {
+    lines.push(`- Accepts these aspect ratios and no others: ${accepts.aspectRatios.join(', ')}.`)
+  }
+  if (accepts.outputSizes?.length) {
+    const sizes = accepts.outputSizes.map((size) => `${size.width}x${size.height}`)
+    lines.push(`- Renders at these exact sizes and no others: ${sizes.join(', ')}.`)
+  }
+  if (accepts.upscaleFactors?.length) {
+    lines.push(
+      `- Accepts these upscale factors and no others: ${accepts.upscaleFactors.join(', ')}.`,
     )
   }
   return lines

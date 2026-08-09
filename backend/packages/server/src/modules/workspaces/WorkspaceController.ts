@@ -308,6 +308,10 @@ async function snapshotBinaryGenerators(
     // array would make every builder render "supports nothing" for a definition that said
     // nothing: the same absent-reads-as-zero mistake the rest of this surface avoids.
     ...(view.capabilities.length > 0 ? { capabilities: view.capabilities } : {}),
+    // Carried for the same reason, and already absent-or-declared on the view: the builder judges
+    // a step's aspect ratio and output size against it, so omitting it would leave the picker
+    // silent about a value the only selected endpoint refuses.
+    ...(view.accepts ? { accepts: view.accepts } : {}),
   }))
   return generators.length > 0 ? { generators } : {}
 }
