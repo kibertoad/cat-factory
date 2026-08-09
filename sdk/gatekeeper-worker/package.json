@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/gatekeeper-worker",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "The Cloudflare OS Gatekeeper machinery for cat-factory as an installable library: policy-compiled Cap'n Web capabilities over the /api/v1 operation table, per-actor API-key minting, a verified outbound-webhook receiver and the approval inbox that answers every park a run stops on. A deployment supplies only its policy; deploy/gatekeeper is the template it copies.",
   "keywords": [
     "capnweb",
