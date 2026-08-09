@@ -184,11 +184,21 @@ newBranch?, pr?, serviceDirectory? }`). A per-repo token is optional (defaults t
   branch and therefore a single pull request: `frameIds` names all of them. The harness
   echoes the dispatch's set back untouched rather than picking, and the peer checkout is
   whole-repo (no `serviceDirectory` scoping, exactly like the primary), or the services
-  that resolved second would be out of the agent's reach. Two places stay singular
-  because they ADDRESS a repo rather than attribute a change, each documented at its
-  type: the conflicts gate's `conflictTarget.frameId` / `RepoMergeability.frameId` (a
-  git conflict is per-repo, and any co-located frame resolves the same checkout back),
-  and the published `PrReportScope.frameId`, kept beside `frameIds` as its head.
+  that resolved second would be out of the agent's reach. The own-service pull request
+  is attributed the same way, naming the involved services co-located in the task's own
+  repo: they open no pull request of their own, so the report on that one is the only
+  place their change is reported. One field stays singular: the published
+  `PrReportScope.frameId`, kept beside `frameIds` as its head.
+- **A recorded pull request is ADDRESSED by its repo, never by its frames.** Both are on
+  the record, and only the repo identifies a checkout: the frames are attribution, they
+  are absent on a record written before the run stated them, and every reader that keyed
+  on them instead degraded silently (the merger scoring a cross-repo change on the own
+  diff alone, the conflicts gate sending its resolver at the repo that does not
+  conflict). So `resolveMergerCombinedDiff` and `resolveConflictResolverPeer` both match
+  `owner/name` against the resolved checkout set, and the frames only widen what gets
+  resolved. A pull request whose repo is outside that set is NAMED (to the merger in its
+  prompt, to the operator in a log) rather than dropped, since the repo on a recorded
+  peer PR is harness-reported and writing off an unconfirmed identity is worse.
 - **Image**: any harness `src/**` change bumps `@cat-factory/executor-harness` + the
   three pinned tags per the CLAUDE.md image rules.
 

@@ -160,6 +160,66 @@ describe('GitHubPrReportPublisher.resolveTargets', () => {
     expect(targets[1]?.frameIds).toEqual(['frm_email'])
   })
 
+  it('names the involved services CO-LOCATED in the primary repo on the own-service target', async () => {
+    // A monorepo hosting the task's own service and an involved one: the fan-out dedupes by
+    // REPO, so there is no peer checkout and no second pull request. Their change rides the
+    // own-service PR, and this report is the only place it is reported at all. An unnamed
+    // co-located service reads exactly like one the run opened no pull request for.
+    const block = {
+      id: 'blk_1',
+      pullRequest: { number: 7, url: 'https://github.test/o/r/pull/7', branch: 'work' },
+      involvedServiceIds: ['frm_billing'],
+    } as unknown as Block
+    const h = makeDeps(block, null)
+    const targets = await new GitHubPrReportPublisher({
+      ...h.deps,
+      resolveRepoTargets: async () => ({
+        checkouts: [{ target: OWN_REPO, primary: true, involved: [{ frameId: 'frm_billing' }] }],
+      }),
+    }).resolveTargets('ws_1', 'blk_1')
+
+    expect(targets.map((t) => [t.repo, t.role, t.frameIds])).toEqual([
+      ['o/r', 'own', ['frm_billing']],
+    ])
+  })
+
+  it('leaves the own-service target unattributed on a single-repo run', async () => {
+    // No involved service means no frame to name, which is what an absent `frameIds` says. The
+    // resolution is skipped outright: a single-repo run must not pay for a repo read.
+    const h = makeDeps(BLOCK_WITH_PR, null)
+    let resolutions = 0
+    const targets = await new GitHubPrReportPublisher({
+      ...h.deps,
+      resolveRepoTargets: async () => {
+        resolutions += 1
+        return { checkouts: [{ target: OWN_REPO, primary: true, involved: [] }] }
+      },
+    }).resolveTargets('ws_1', 'blk_1')
+
+    expect(targets.map((t) => t.frameIds)).toEqual([undefined])
+    expect(resolutions).toBe(0)
+  })
+
+  it('attributes a peer PR from its resolved checkout when the record carries no frames', async () => {
+    // The frames on a recorded peer PR can be absent (a row written before the attribution
+    // existed, or echoed by an older harness image). The repo is what addresses the checkout,
+    // and the frames that checkout hosts are the platform's own answer about what rides it,
+    // off a resolution this call already paid for.
+    const block = {
+      ...BLOCK_MULTI_REPO,
+      peerPullRequests: [
+        { repo: 'o/email', ref: { number: 12, url: 'https://github.test/o/email/pull/12' } },
+      ],
+    } as unknown as Block
+    const h = makeDeps(block, null)
+    const targets = await new GitHubPrReportPublisher(h.deps).resolveTargets('ws_1', 'blk_1')
+
+    expect(targets.map((t) => [t.role, t.frameIds])).toEqual([
+      ['own', undefined],
+      ['peer', ['frm_email']],
+    ])
+  })
+
   it('resolves a peer PR even when the own service has not opened one yet', async () => {
     // The coding agent can push a connected service's change first; that PR is owed a report,
     // and its own-service back-pointer is what says the other PR is not there yet.

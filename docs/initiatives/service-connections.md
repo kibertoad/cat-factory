@@ -165,14 +165,29 @@ harness path via a widened `peerRepos` job body, with no runner-image bump. `ste
     `PrReportTarget` / `RunnerJobResult` and the harness's `PeerRepoSpec` + `RepoLeg`. The
     harness echoes it back untouched (it decides no attribution of its own), so the ONE pull
     request a monorepo peer opens is recorded against every frame whose change landed in it.
-    Two things stayed singular ON PURPOSE, each documented at its own type: the gate's
-    `conflictTarget.frameId` and `RepoMergeability.frameId` are ADDRESSES, not attribution
-    (a conflict is per-repo, and `resolveConflictResolverPeer` resolves the whole checkout back
-    from any frame co-located in it), and `PrReportScope.frameId` is published `/api/v1`, kept
-    beside the new `frameIds` as its head (surface 1.39.0). `mergeOrder` keys a peer on the
+    The OWN-SERVICE pull request carries the set too, naming the involved services co-located in
+    the task's own repo: the fan-out dedupes by repo, so those open no PR of their own and the
+    report on the own-service one is the only place their change is reported. It is DERIVED at
+    settle time off the resolution `PrVerificationReportPublisher.resolveTargets` already pays
+    for, rather than persisted: which frames a repo hosts is board state, and the record would
+    have needed a second wire field plus an image bump to carry it. `PrReportScope.frameId` is
+    published `/api/v1`, kept beside the new `frameIds` as its head (surface 1.40.0), and is
+    therefore no longer always null on an own-service report. `mergeOrder` keys a peer on the
     LEAST of its frames, so the order is a function of the set rather than of resolution order.
     The same change stopped a peer checkout inheriting one co-located service's
     `serviceDirectory`: it is whole-repo, exactly as the primary already was.
+  - **Frames ATTRIBUTE, the repo ADDRESSES, and only the repo may be keyed on.** Every reader
+    that looked a recorded pull request up by its frames degraded SILENTLY when a record carried
+    none (one written before the attribution existed, or echoed by a runner pool still on an
+    older harness image): `resolveMergerCombinedDiff` returned nothing and the merger scored a
+    cross-service change on the own-service diff alone, and the conflicts gate dropped its
+    `conflictTarget`, which reads as an own-repo conflict and spends the gate's whole attempt
+    budget on the repo that does not conflict. Both now match `owner/name` against the resolved
+    checkout set, the frames only widening what is resolved, and both attribute a frameless
+    record from the checkout it resolved to. `RepoMergeability.frameId` stays singular as a
+    hint. A pull request whose repo is outside the resolved set is NAMED (in the merger's prompt
+    and in a log) rather than dropped: the repo is harness-reported, so an unconfirmed identity
+    is not written to, and a partial combined diff must not read as a whole one.
   - **Deferred: the conflict-resolver's service-directory scoping.** The resolver is SINGLE-repo,
     so it keeps the ordinary `serviceDirectory` cwd scoping on both the own and the peer repo.
     On a monorepo whose work branch touched two involved services' subtrees that points the agent

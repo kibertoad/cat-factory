@@ -834,10 +834,11 @@ export type PrReportOwnPullRequest = v.InferOutput<typeof prReportOwnPullRequest
 /**
  * WHICH pull request this copy of the report is written onto, on a multi-repo run.
  *
- * A cross-service task opens one PR per repo it changed: the task's own-service PR plus one
- * per connected involved service (`Block.peerPullRequests`). Every one of them gets a report,
- * because a reviewer sitting on the peer repo's PR is exactly as entitled to the run's
- * evidence as one sitting on the own-service PR, and before this they got nothing at all.
+ * A cross-service task opens one PR per REPO it changed: the task's own-service PR plus one per
+ * peer repo (`Block.peerPullRequests`). Per repo, not per service, so two involved services in
+ * one monorepo share a pull request and `frameIds` is what names them both. Every one of those
+ * PRs gets a report, because a reviewer sitting on the peer repo's PR is exactly as entitled to
+ * the run's evidence as one sitting on the own-service PR, and before this they got nothing.
  *
  * The scope exists because the reports are NOT interchangeable. Most of what the run proved is
  * run-global (the tester ran once, the judges scored once, the trajectory is one run), but
@@ -862,12 +863,12 @@ export const prReportScopeSchema = v.object({
    */
   role: v.picklist(['own', 'peer']),
   /**
-   * The involved service frame whose repo this PR belongs to, when the peer PR recorded one.
-   * Null on an own-service report, and on a peer whose frame attribution was not recorded.
-   *
    * The FIRST of {@link prReportScopeSchema.entries.frameIds}, kept because it is part of the
-   * published `/api/v1` shape. A peer repo hosting several involved services (a monorepo)
-   * carries all of them in `frameIds`; read that instead.
+   * published `/api/v1` shape. Null when this PR carries no involved service's changes: a
+   * single-repo run, or a peer whose frame attribution was not recorded.
+   *
+   * Read `frameIds` instead. One repo routinely hosts several of the run's involved services,
+   * and which of them this field names is then arbitrary.
    */
   frameId: v.optional(v.nullable(v.string())),
   /**
@@ -875,7 +876,12 @@ export const prReportScopeSchema = v.object({
    *
    * More than one when the repo is a monorepo hosting several of the run's involved services:
    * they share a checkout, a work branch and this pull request, so the report on it speaks for
-   * all of them. Absent/empty on an own-service report.
+   * all of them.
+   *
+   * Set on an `own` report too, naming the involved services co-located in the task's own repo.
+   * The fan-out checks out one repo per REPO, so those have no pull request of their own and
+   * ride this one; this report is the only place their change is reported. Absent on a
+   * single-repo run, which has no involved service to name.
    */
   frameIds: v.optional(v.array(v.string())),
   /** Where the own-service sections live. Null on an own-service report. */

@@ -23,12 +23,13 @@ export interface RepoMergeability {
   /** The repo (owner/name) this PR is in. */
   repo: string
   /**
-   * ONE involved-service frame this repo hosts, absent for the own-service PR.
+   * ONE involved-service frame this repo hosts, absent for the own-service PR and for a peer
+   * pull request whose attribution was not recorded.
    *
-   * Singular on purpose, and not an under-reporting of a monorepo peer's several frames: a
-   * git conflict is per-REPO, so this id is only an ADDRESS. The conflicts gate copies it onto
-   * `conflictTarget` and `resolveConflictResolverPeer` resolves it back to the repo's whole
-   * checkout, which any frame co-located in that repo names equally well.
+   * Singular on purpose, and not an under-reporting of a monorepo peer's several frames: a git
+   * conflict is per-REPO, so the id is only ever a hint. What ADDRESSES the conflicted checkout
+   * is {@link RepoMergeability.repo}, which the conflicts gate copies onto `conflictTarget` and
+   * `resolveConflictResolverPeer` resolves back to that repo's whole checkout.
    */
   frameId?: string
   /** The PR head commit; null when no open PR/branch is resolved. */

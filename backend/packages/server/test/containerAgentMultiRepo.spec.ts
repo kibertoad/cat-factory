@@ -5,6 +5,7 @@ import type {
   RunnerJobRef,
   RunnerTransport,
 } from '@cat-factory/kernel'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import type { AgentRouting } from '@cat-factory/agents'
 import { describe, expect, it } from 'vitest'
 import {
@@ -161,21 +162,42 @@ describe('ContainerAgentExecutor multi-repo gate/merge targeting', () => {
     expect(spec.pushBranch).toBe('cat-factory/blk_1')
   })
 
-  it('conflict-resolver stays on the OWN repo when the conflictTarget has no frameId', async () => {
+  it('conflict-resolver stays on the OWN repo when the conflictTarget names it', async () => {
     const { executor, captured } = makeExecutor({ resolveRepoTargets })
     await executor.startJob(
       context(
         'conflict-resolver',
         { pullRequest: PR },
         {
-          // An own-repo conflict carries no frameId (single-repo, implicit own target).
-          conflictTarget: { repo: 'acme/widgets' } as never,
+          // The conflict is on the task's own repo, which is where the resolver already runs.
+          conflictTarget: { repo: 'acme/widgets' },
         },
       ),
     )
     const spec = captured[0]!.spec
     expect(spec.repo).toMatchObject({ owner: 'acme', name: 'widgets' })
     expect(spec.mergeBase).toBe('main')
+  })
+
+  it('conflict-resolver targets the PEER repo the gate named even with no frame beside it', async () => {
+    // The gate copies its frame off the conflicted pull request's record, so a peer PR recorded
+    // without attribution names no frame. Deciding own-versus-peer on the frame read that as an
+    // own-repo conflict and sent the resolver at a repo that does not conflict, where it burned
+    // the gate's whole attempt budget. The repo is what addresses the checkout.
+    const { executor, captured } = makeExecutor({ resolveRepoTargets })
+    await executor.startJob(
+      context(
+        'conflict-resolver',
+        { pullRequest: PR },
+        {
+          conflictTarget: { repo: 'acme/billing' },
+          involvedServices: [{ frameId: 'frm_peer', title: 'Billing' }],
+        },
+      ),
+    )
+    const spec = captured[0]!.spec
+    expect(spec.repo).toMatchObject({ owner: 'acme', name: 'billing' })
+    expect(spec.mergeBase).toBe('develop')
   })
 
   it('conflict-resolver resolves on the shared work branch when the OWN service has no PR (peer-only conflict)', async () => {
@@ -258,6 +280,72 @@ describe('ContainerAgentExecutor multi-repo gate/merge targeting', () => {
     const userPrompt = spec.userPrompt as string
     expect(userPrompt).toContain('spans MULTIPLE repositories')
     expect(userPrompt).toContain('SINGLE')
+  })
+
+  it('merger addresses a peer PR by its REPO, so a record with no frame attribution still scores', async () => {
+    // A recorded peer PR whose `frameIds` never arrived: a row written before the attribution
+    // existed, or echoed by a runner pool still on an older harness image. Addressing it by
+    // frame resolved NOTHING and quietly dropped the whole peer, leaving the merger to score
+    // the own-service diff alone and auto-merge a cross-repo change on part of the evidence.
+    // The repo is what addresses a checkout, and every recorded peer PR carries it.
+    const { executor, captured } = makeExecutor({ resolveRepoTargets })
+    await executor.startJob(
+      context(
+        'merger',
+        {
+          pullRequest: PR,
+          peerPullRequests: [{ repo: PEER_PR.repo, ref: PEER_PR.ref }],
+        },
+        { involvedServices: [{ frameId: 'frm_peer', title: 'Billing' }] },
+      ),
+    )
+    const spec = captured[0]!.spec
+    expect(spec.peerRepos).toMatchObject([
+      // Attributed from the checkout the repo resolved to: the same derivation the dispatch
+      // made, rather than left blank because the record lost it.
+      { repo: { owner: 'acme', name: 'billing' }, frameIds: ['frm_peer'] },
+    ])
+    expect(spec.systemPrompt as string).toContain(`${siblingCheckoutDir('acme', 'billing')}/`)
+  })
+
+  it('merger STATES a recorded peer PR it cannot address rather than scoring without it', async () => {
+    // The repo on a recorded peer PR is harness-reported, so a repo outside the resolved
+    // checkout set is not cloned (writing off an unconfirmed identity is worse). What the
+    // merger must never do is read the diff in front of it as the whole change: the omission
+    // is named in its prompt, and logged for the operator who has to fix the linkage.
+    const logger = createRecordingLogger()
+    const { executor, captured } = makeExecutor({ resolveRepoTargets, logger })
+    await executor.startJob(
+      context(
+        'merger',
+        {
+          pullRequest: PR,
+          peerPullRequests: [
+            PEER_PR,
+            {
+              repo: 'acme/ghost',
+              frameIds: ['frm_gone'],
+              ref: { url: 'https://github.com/acme/ghost/pull/4', number: 4 },
+            },
+          ],
+        },
+        { involvedServices: [{ frameId: 'frm_peer', title: 'Billing' }] },
+      ),
+    )
+    const spec = captured[0]!.spec
+    // The resolvable peer is still scored: one broken linkage does not cost the rest.
+    expect(spec.peerRepos).toMatchObject([{ repo: { name: 'billing' } }])
+    const systemPrompt = spec.systemPrompt as string
+    expect(systemPrompt).toContain('NOT CHECKED OUT')
+    expect(systemPrompt).toContain('acme/ghost')
+    expect(systemPrompt).toContain('INCOMPLETE')
+    expect(logger.lines).toContainEqual(
+      expect.objectContaining({
+        level: 'warn',
+        msg: expect.stringContaining('unresolvable peer repo'),
+        fields: expect.objectContaining({ repos: ['acme/ghost'] }),
+      }),
+    )
   })
 
   it('merger stays single-repo when the task opened no peer PRs', async () => {
