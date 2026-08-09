@@ -15,7 +15,6 @@ import { writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { toJsonSchema, toJsonSchemaDefs } from '@valibot/to-json-schema'
-import { API_VERSION } from './openapi-version.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const CONTRACTS_DIST = resolve(repoRoot, 'backend/packages/contracts/dist/index.js')
@@ -42,6 +41,28 @@ export const SERVED_OPENAPI_PATH = resolve(
 )
 
 const API_PREFIX = '/api/v1'
+
+// The document's `info.version` describes the PUBLIC API surface (`/api/v1`), NOT the npm package
+// release: the surface's own version, and the ONE place it is set. Its history (what every number
+// added, and the collisions several of them survived) is `backend/docs/public-api-versions.md`,
+// which is where a new entry goes.
+//
+// It is deliberately DECOUPLED from any `package.json` version: those bump on every changesets
+// release with no bearing on the API contract, and baking one in would make the committed
+// `docs/openapi.json` go stale on every release, so the drift guard (`check:openapi`) would fail
+// spuriously on the next PR that merges a release even when no contract changed.
+//
+// The public API is STABLE (see CLAUDE.md "The public API does not break"): an additive change
+// bumps the minor here, and a breaking one is not allowed on `/api/v1` at all (it means a new
+// `/api/v2` prefix served beside v1 through a deprecation window, and a new spec version with it).
+//
+// NOTE when rebasing/merging: this line COLLIDES SILENTLY. A branch that bumps the minor and a
+// main that bumps it to the same number produce byte-identical text, so git auto-merges them with
+// no conflict and the branch ships a DIFFERENT surface under a version main already used. Re-check
+// it against `origin/main` after every merge rather than trusting a clean one, and write the new
+// entry in the history doc, which is what makes the next collision arrive as a conflict.
+
+const API_VERSION = '1.39.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -754,7 +775,7 @@ const OPERATION_DOCS = {
     tag: 'Evidence',
     summary: "Get a run's outcome summary",
     description:
-      'What the run changed and what backs that up, in product language, for a reader who will not open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, and the machine checks that ran. The same reduction the app’s outcome card renders, over the same evidence the verification report is built from, so the two cannot state different totals for one run. Nothing here is asserted by a model: every count is derived from recorded verdicts. Prefer the verification report when you need a reviewer’s full bundle; prefer this when you need to say what shipped. Sections state `reported` or `absent` with a machine-readable gap code, and `truncations` names any list the response had to bound.',
+      'What the run changed and what backs that up, in product language, for a reader who will not open the diff: the run’s disposition, the pull requests it opened, requirement coverage joined to the service’s `spec/`, the tester’s verdict and concerns, the views it captured, the throwaway environments it stood up (`state: "live"` is the only one worth opening, and only while its `expiresAt` is still ahead; every other row still carries its URL), and the machine checks that ran. The same reduction the app’s outcome card renders, over the same evidence the verification report is built from, so the two cannot state different totals for one run. Nothing here is asserted by a model: every count is derived from recorded verdicts. Prefer the verification report when you need a reviewer’s full bundle; prefer this when you need to say what shipped. Sections state `reported` or `absent` with a machine-readable gap code, and `truncations` names any list the response had to bound.',
   },
   listPublicRunArtifacts: {
     tag: 'Evidence',

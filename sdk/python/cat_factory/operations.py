@@ -1909,14 +1909,16 @@ class EvidenceResource:
         What the run changed and what backs that up, in product language, for a reader who
         will not open the diff: the run’s disposition, the pull requests it opened,
         requirement coverage joined to the service’s `spec/`, the tester’s verdict and
-        concerns, the views it captured, and the machine checks that ran. The same reduction
-        the app’s outcome card renders, over the same evidence the verification report is
-        built from, so the two cannot state different totals for one run. Nothing here is
-        asserted by a model: every count is derived from recorded verdicts. Prefer the
-        verification report when you need a reviewer’s full bundle; prefer this when you
-        need to say what shipped. Sections state `reported` or `absent` with a
-        machine-readable gap code, and `truncations` names any list the response had to
-        bound.
+        concerns, the views it captured, the throwaway environments it stood up (`state:
+        "live"` is the only one worth opening, and only while its `expiresAt` is still
+        ahead; every other row still carries its URL), and the machine checks that ran. The
+        same reduction the app’s outcome card renders, over the same evidence the
+        verification report is built from, so the two cannot state different totals for one
+        run. Nothing here is asserted by a model: every count is derived from recorded
+        verdicts. Prefer the verification report when you need a reviewer’s full bundle;
+        prefer this when you need to say what shipped. Sections state `reported` or `absent`
+        with a machine-readable gap code, and `truncations` names any list the response had
+        to bound.
         `GET /api/v1/runs/{runId}/outcome` (operation `getPublicRunOutcome`).
         """
         raw = self._transport.request(

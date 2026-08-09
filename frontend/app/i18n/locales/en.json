@@ -6131,6 +6131,31 @@
         "none_captured": "The interface was meant to be captured, but no view was."
       }
     },
+    "environments": {
+      "title": "Live environment",
+      "open": "Open the live environment",
+      "retained": "This environment is meant to outlive the run.",
+      "expires": "Expires {date}",
+      "expired": "Expired {date}",
+      "state": {
+        "live": "Live",
+        "provisioning": "Coming up",
+        "failed": "Never came up",
+        "reclaiming": "Being torn down",
+        "reclaimed": "Torn down",
+        "expired": "Expired"
+      },
+      "origin": {
+        "deployer": "Stood up by this run",
+        "human_test": "Stood up for the hands-on test",
+        "projected": "The run is still working, so this can still change"
+      },
+      "gap": {
+        "no_environment_step": "Nothing in this pipeline stands an environment up, so there is nothing to open.",
+        "not_provisioned": "An environment was meant to be stood up, and none has been recorded yet.",
+        "infraless": "This service declares no environment of its own, so nothing was stood up."
+      }
+    },
     "checks": {
       "title": "Checks",
       "row": "{kind}: {state}",

@@ -1,5 +1,116 @@
 # @cat-factory/contracts
 
+## 0.289.0
+
+### Minor Changes
+
+- e3cf16a: Let a generative binary integration declare SEVERAL credentials, for the vendors whose account is not one string.
+
+  `BinaryGeneratorDefinition.credential` becomes `credentials`, a list. The shape that broke the single
+  field is HTTP Basic over a key/secret pair (Scenario, and a long tail of REST APIs that authenticate
+  the same way): the only way to declare it was to colon-join the two halves into one variable, which
+  rotates them together, offers the operator one credential-checklist row where their vendor console
+  issues two values, and turns a mis-joined value into a 401 indistinguishable from a wrong key.
+
+  Nothing about the model changed to allow this, which is the argument for it. Every other layer the
+  value travels through was already plural: the kernel `ToolSecretResolver` port takes `keys`, a tool
+  server declares `credentials`, the checklist keys its rows by `(subject, id, key)`, and the job body
+  carries pairs. The single field was the one singular link in that chain.
+
+  **A deployment registering an integration must rename `credential: {…}` to `credentials: [{…}]`.**
+  Definitions are code, so the break arrives as a typecheck failure at the composition root rather than
+  as a run that quietly authenticates with nothing.
+
+  Two rules ship with it. Injection names must be distinct within a definition, refused at boot and
+  compared case-folded (the fold the reserved-key floor already applies, since two spellings are one
+  variable wherever the environment ignores case), because the job body is keyed by the variable each
+  value arrives as and a collision would silently deliver one value and drop the other. And the brief NAMES a multi-credential set before its parts, so
+  an agent handed two paragraphs does not read them as two independent keys and try the first alone.
+  That set line states its joint rule over the REQUIRED members only: "never call it with a subset of
+  them" is right for a Basic pair and contradicts an optional member's own line, which says to call
+  anyway when that one is missing.
+
+  Across DEFINITIONS the same injection name is refused only where the lookup key behind it differs.
+  Two integrations on one vendor account legitimately share a variable, since both resolve the same
+  value; two that mean different values by it have no right arbitration, because serving the first sets
+  the variable the second integration's brief tells the agent to read. Boot refuses that
+  (`binary_generator_injection_name_collision`), and dispatch, which a mothership node reaches with
+  definitions it never boot-validated, withholds the value from every claimant instead of picking one.
+
+  There is deliberately no auth-scheme field and no platform-side header assembly: the agent writes the
+  request, each credential's `usage` is where it is told how that value is presented, and a scheme enum
+  would need a new member for the first vendor with a signed request or a rotating timestamp.
+
+  A mothership-mode node REFUSES a generator reply that carries no `credentials`, where the sibling
+  capability axis absorbs the same absence. The asymmetry is deliberate: an empty capability
+  declaration is a documented reading ("only the coarse facts are known"), while an empty credential
+  list reads as "this integration is unauthenticated" and the brief would tell the agent exactly that
+  about a deployment that configured a key. So a node needs a mothership new enough to serve the plural
+  field and fails loudly against one that is not, rather than reporting a 401 against an integration
+  nobody gave credentials to.
+
+  Also states, in the capability vocabulary itself, the rule a closed-enumeration endpoint kept turning
+  into a judgement call: a capability says the request can CARRY a value, never which values are
+  accepted. An endpoint offering a closed list of exact `WxH` sizes is handed pixel dimensions and
+  still rounds, so it declares `aspect-ratio` (whose meaning already covers a set it rounds to) and not
+  `exact-size`, whose test is whether an ARBITRARY pair can be asked for. Where no coarser member
+  exists, an endpoint that accepts an option only at values it fixes declares nothing and says what it
+  does in `guidance`: declaring the accepted values instead would be the stale per-integration table
+  the design record refuses, and for an upscaler with no factor to enumerate it would be a fabricated
+  one, admitting a step that asked for 4x and serving it an enlargement at an unknown multiple.
+
+## 0.288.0
+
+### Minor Changes
+
+- 83764b5: Put a run's live environments on the outcome summary (spec 1.38.0, outcome `version` 3). Additive.
+
+  The outcome summary gains an `environments` section: one row per throwaway environment the run
+  stood up, carrying its URL, its state, the TTL instant when the platform recorded one, the service
+  frame it belongs to, the environment id an operator greps for, the producer's verbatim cause, and
+  whether the run's deployer declared that the environment outlives the run. The app's outcome card
+  renders it beside the captured views, and `GET /api/v1/runs/:runId/outcome` serves the same
+  reduction, so "click and look" no longer means opening the step that provisioned it.
+
+  `state` is the field that matters and `live` is the only one that offers a link. Every other row
+  (`provisioning`, `failed`, `reclaiming`, `reclaimed`, `expired`) still carries whatever URL it had,
+  because that is what names the environment, so a consumer rendering the URL without the state
+  beside it hands someone a link to something that is no longer there. A client with a clock owes the
+  other half of that: `expiresAt` is served as an instant rather than folded into `state` (the
+  reduction is clock-free so the app and the endpoint cannot disagree about one run), so a `live` row
+  whose TTL has passed is not a URL to hand anyone.
+
+  Several producers know something about the same environment, and they are reconciled BY IDENTITY
+  before they are ranked: the run's step projections and the `human-test` gate's own record fold into
+  one observation per environment id, above which the disposer's terminal record wins and below which
+  the deployer's provision-time row is the floor. An environment a LATER deploy of the same frame
+  replaced is reported as gone, derived rather than observed, since nothing refreshes its projection
+  again. A reclaim that FAILED leaves the row `live` with the provider's cause beside it: the
+  environment is still standing and its URL still works, and that it should not be is the verification
+  report's teardown proof rather than this section's question.
+
+  Absences stay three distinct facts: `no_environment_step` (the pipeline provisions nothing),
+  `not_provisioned` (something was meant to and nothing is recorded yet) and `infraless` (every frame
+  declares no environment of its own). `hasOutcomeToShow` counts a reported environment, so the "read
+  the result" affordance now appears on a run whose only product so far is something to look at.
+
+  The rules this shares with the PR verification report moved into contracts' `run-evidence.ts`
+  beside the tester rules: which frames the run's deploys settled, what it observed of each
+  environment, which recorded lifecycle states mean one is gone, and whether the deployer declared
+  retention. The disposer reclaims by the same fold, so the set of environments a run stood up has one
+  statement rather than three. `DEPLOYER_AGENT_KIND` / `DISPOSER_AGENT_KIND` are defined there now and
+  re-exported from `pipeline-environment-lifecycle.ts` under the same names, so no importer moves.
+
+  A `deployer` step now also records the environment id on a frame whose provision FAILED, where the
+  provision got far enough to have a record to fail against. Internal step state, so stale rows simply
+  lack it; what it buys is that the failed environment the run projected is nameable as the one that
+  frame broke on rather than surfacing as a second environment nothing accounts for.
+
+  The spec generator's per-version changelog moved to `backend/docs/public-api-versions.md`, a
+  document rather than a 250-line comment block in a script: it grows with every release and never
+  shrinks, and the file-size ratchet said so first. Nothing about how the number is set changed, and
+  the note that makes the next silent version collision arrive as a merge conflict travels with it.
+
 ## 0.287.1
 
 ### Patch Changes

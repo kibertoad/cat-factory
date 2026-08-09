@@ -18,6 +18,7 @@ function generator(overrides: Partial<BinaryGeneratorView> = {}): BinaryGenerato
     modalities: ['image'],
     mediaTypes: ['image/png'],
     capabilities: [],
+    credentials: [],
     contracts: [],
     ...overrides,
   }

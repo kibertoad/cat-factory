@@ -1327,7 +1327,7 @@ describe('generative binary integration registry validation', () => {
     modalities: ['image' as const],
     mediaTypes: ['image/png'],
     endpoint: 'https://api.retrodiffusion.ai/v1',
-    credential: { key: 'RD_TOKEN', usage: 'the X-RD-Token header' },
+    credentials: [{ key: 'RD_TOKEN', usage: 'the X-RD-Token header' }],
   }
 
   it('passes a well-formed registration', () => {
@@ -1337,7 +1337,7 @@ describe('generative binary integration registry validation', () => {
   it('fails boot on a credential key that is not a usable environment variable name', () => {
     // The failure it replaces: the harness drops the malformed name at parse and the integration
     // 401s mid-run, naming nothing that points back at the registration.
-    const problems = problemsFor([{ ...valid, credential: { key: 'x-rd-token' } }])
+    const problems = problemsFor([{ ...valid, credentials: [{ key: 'x-rd-token' }] }])
     expect(problems[0]?.message).toContain('environment variable name')
   })
 
@@ -1345,11 +1345,111 @@ describe('generative binary integration registry validation', () => {
     // A definition names both the key it wants and the endpoint that key is sent to, so this is a
     // registration that booted clean and shipped the deployment's master sealing key to a third
     // party. Enforced by the credential SCHEMA, so it reaches boot through the same parse.
-    const problems = problemsFor([{ ...valid, credential: { key: 'ENCRYPTION_KEY' } }])
+    const problems = problemsFor([{ ...valid, credentials: [{ key: 'ENCRYPTION_KEY' }] }])
     expect(problems[0]?.code).toBe('binary_generator_invalid')
     expect(problems[0]?.message).toContain('the platform')
     // Case-insensitively, because `process.env` lookup is on Windows.
-    expect(problemsFor([{ ...valid, credential: { key: 'encryption_key' } }])).toHaveLength(1)
+    expect(problemsFor([{ ...valid, credentials: [{ key: 'encryption_key' }] }])).toHaveLength(1)
+  })
+
+  it('accepts the KEY PAIR a Basic-auth vendor needs, as two declared credentials', () => {
+    // The shape this field became a list for: an API key and an API secret are two values the
+    // vendor's own console issues separately, and colon-joining them into one variable rotates
+    // them together and turns a mis-joined value into a 401 that reads as a wrong key.
+    expect(
+      problemsFor([
+        {
+          ...valid,
+          credentials: [
+            { key: 'SCENARIO_API_KEY', usage: 'the Basic-auth username half' },
+            { key: 'SCENARIO_API_SECRET', usage: 'the Basic-auth password half' },
+          ],
+        },
+      ]),
+    ).toEqual([])
+  })
+
+  it('fails boot when two credentials would arrive as ONE environment variable', () => {
+    // The job body is keyed by the injection name, so a collision does not conflict loudly: one
+    // value silently wins and the integration authenticates with half a pair. Refused where the
+    // declaration is, since neither the resolver nor the agent can tell afterwards which half it
+    // got. The LOOKUP keys differ here, which is what makes the collision easy to write by hand.
+    const problems = problemsFor([
+      {
+        ...valid,
+        credentials: [
+          { key: 'SCENARIO_API_KEY', envName: 'SCENARIO_AUTH' },
+          { key: 'SCENARIO_API_SECRET', envName: 'SCENARIO_AUTH' },
+        ],
+      },
+    ])
+    expect(problems[0]?.code).toBe('binary_generator_invalid')
+    expect(problems[0]?.message).toContain('its own environment variable')
+    // The same collision through the FALLBACK: an entry with no `envName` arrives as its lookup
+    // key, so this pair collides too and a check reading `envName` alone would pass it.
+    expect(
+      problemsFor([
+        {
+          ...valid,
+          credentials: [
+            { key: 'SCENARIO_AUTH' },
+            { key: 'SCENARIO_API_SECRET', envName: 'SCENARIO_AUTH' },
+          ],
+        },
+      ]),
+    ).toHaveLength(1)
+  })
+
+  it('fails boot when two INTEGRATIONS want one variable to hold different values', () => {
+    // Within a definition the schema already refuses this. Across definitions there is no
+    // arbitration that can be right: serving the first claimant sets the variable the second
+    // integration's brief tells the agent to read, so it authenticates one vendor with the other's
+    // key, and withholding it (what dispatch does) costs both integrations every run. The remedy
+    // is one `envName` on one definition, which is why boot is where it is said.
+    const problems = problemsFor([
+      {
+        ...valid,
+        id: 'retro-diffusion',
+        credentials: [{ key: 'RD_TOKEN', envName: 'VENDOR_KEY' }],
+      },
+      { ...valid, id: 'studio-music', credentials: [{ key: 'STUDIO_KEY', envName: 'VENDOR_KEY' }] },
+    ])
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.code).toBe('binary_generator_injection_name_collision')
+    expect(problems[0]?.message).toContain('VENDOR_KEY')
+    expect(problems[0]?.message).toContain('retro-diffusion')
+    expect(problems[0]?.message).toContain('studio-music')
+    // Compared case-folded: the pair below is one variable wherever the environment ignores case,
+    // so an exact comparison would pass the collision on the platform nobody would see it on.
+    expect(
+      problemsFor([
+        { ...valid, id: 'retro-diffusion', credentials: [{ key: 'RD', envName: 'VENDOR_KEY' }] },
+        { ...valid, id: 'studio-music', credentials: [{ key: 'SK', envName: 'vendor_key' }] },
+      ]).map((problem) => problem.code),
+    ).toEqual(['binary_generator_injection_name_collision'])
+  })
+
+  it('accepts two integrations SHARING one account, which is the same name over the same key', () => {
+    // One vendor behind an image endpoint and a music endpoint is one credential, and the shared
+    // variable is the point rather than a collision: whichever resolves first sets it to exactly
+    // what the other wanted. A check keyed on the NAME alone would refuse the working case.
+    expect(
+      problemsFor([
+        { ...valid, id: 'retro-diffusion', credentials: [{ key: 'RD_TOKEN' }] },
+        { ...valid, id: 'retro-music', credentials: [{ key: 'RD_TOKEN' }] },
+      ]),
+    ).toEqual([])
+  })
+
+  it('compares only definitions that PARSED, so one fault is never restated as two', () => {
+    const problems = problemsFor([
+      { ...valid, id: 'retro-diffusion', credentials: [{ key: 'ENCRYPTION_KEY' }] },
+      { ...valid, id: 'studio-music', credentials: [{ key: 'ENCRYPTION_KEY' }] },
+    ])
+    expect(problems.map((problem) => problem.code)).toEqual([
+      'binary_generator_invalid',
+      'binary_generator_invalid',
+    ])
   })
 
   it('fails boot on a cleartext endpoint off loopback, because the credential rides it', () => {
