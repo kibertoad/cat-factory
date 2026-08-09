@@ -1,5 +1,50 @@
 # @cat-factory/orchestration
 
+## 0.253.1
+
+### Patch Changes
+
+- 3ff215a: Slice 9 of the `mcp-maturation.md` tracker: a consensus-diverted step now states the tool servers
+  (MCP) it cannot reach, instead of losing them in silence.
+
+  A panel runs its participants as inline model calls with no checkout and no agent CLI, so there is
+  nowhere to wire an MCP server. Nothing said so. Boot validation's `tool_servers_without_container`
+  warning keys on the kind's declared surface, which is a container for nearly every consensus-eligible
+  kind (architect, analysis, the reviewers), and that is exactly the set a deployment attaches a
+  read-only research server to; the container executor, which owns the whole unavailability vocabulary,
+  is not on this path at all. So the prompt promised nothing, the step recorded nothing, and a diverted
+  step read exactly like a kind that had declared no tool servers.
+
+  The panel now reports it in both channels a container dispatch uses. The participants' system prompt
+  carries the same `toolServersSection` a container run composes, after the surface statement, so a
+  model planning around the vendor tool its instructions name learns it is absent. And the step carries
+  the resolution: `AgentExecutor.previewToolServers` is the inline counterpart of
+  `AgentJobHandle.toolServers`, answered at dispatch and stamped with the dispatched kind by the engine
+  through the same helper the container fold uses, so an executor still cannot label a resolution with
+  a kind other than the one that ran. A preview rather than a field on the result for the reason the
+  container path records off the handle: a step that later fails keeps its record, where a
+  result-carried field would be absent on exactly the runs a reader needs it for. A kind that declared
+  no servers records nothing at all, because an inline surface wires nothing by construction and an
+  all-empty record would claim a resolution where none was possible.
+
+  PUBLIC API, additive (OpenAPI `1.39.0`): the unavailable-tool-server `reason` vocabulary gains
+  `consensus_panel`, carried by the run reads that project `toolServers`. A member of its own rather
+  than `harness_unsupported` because no harness is involved: the kind's standard surface may serve the
+  server perfectly and the same step with consensus off would have got it, so a consumer acting on the
+  harness reason would go widening a list that was never the constraint. The four generated clients and
+  both projections carry the new member, so they bump with the surface.
+
+- Updated dependencies [3ff215a]
+  - @cat-factory/contracts@0.289.1
+  - @cat-factory/kernel@0.282.1
+  - @cat-factory/agents@0.123.5
+  - @cat-factory/integrations@0.153.10
+  - @cat-factory/prompt-fragments@1.0.43
+  - @cat-factory/sandbox@0.11.120
+  - @cat-factory/spend@0.15.61
+  - @cat-factory/workspaces@0.27.5
+  - @cat-factory/caching@0.18.34
+
 ## 0.253.0
 
 ### Minor Changes
