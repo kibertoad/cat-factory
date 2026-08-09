@@ -4,6 +4,7 @@ import type {
   BlockType,
   CloudProvider,
   ConsensusStepConfig,
+  DesignImageSet,
   DocumentOrigin,
   EnvironmentAccessHandle,
   EnvironmentStatus,
@@ -30,6 +31,7 @@ import type {
   UnavailableToolServer,
 } from '../domain/agent-capabilities.js'
 import type { ResolvedBinaryGenerator } from '../domain/binary-generators.js'
+import type { DesignImageDelivery } from '../domain/design-image-delivery.js'
 import type { DocumentFreshness } from '../domain/document-freshness.js'
 import type { OwnServiceContext } from '../domain/block-tree.js'
 import type { CustomTaskTypeContext } from '../domain/task-type-context.js'
@@ -455,6 +457,32 @@ export interface AgentRunContext {
    * designs gave nothing".
    */
   referenceScreenshots?: ReferenceScreenshotSet
+  /**
+   * The pictures of this task's designs, for a kind that BUILDS or PLANS from one (the
+   * `design-images` trait). The frames the task's linked designs retained plus the images a person
+   * attached to it: the same reference set the capture path reads, put to the opposite use.
+   *
+   * Resolved by the ENGINE, which knows what the task holds. Whether they can actually reach the
+   * model is a DISPATCH fact (the harness and the resolved model), so it lands separately on
+   * {@link designImageDelivery} rather than gating this: the set has to survive an un-attachable
+   * dispatch, or the prompt has nothing to name when it states what was withheld.
+   *
+   * Absent when the kind carries no such trait, when the deployment stores no binaries, or when
+   * the task links no design.
+   */
+  designImages?: DesignImageSet
+  /**
+   * What THIS dispatch could do with {@link designImages}: attached, or refused with the cause.
+   *
+   * Set by the executor rather than the context builder, because both halves of the answer are
+   * resolved at dispatch (the harness the job runs on, the model the step resolved to) and neither
+   * is knowable while the context is being built. The same shape as `toolServers` /
+   * `unavailableToolServers`: the engine states the intent, the dispatch states what became of it.
+   *
+   * Never absent while `designImages` is present. A run holding pictures its agent was not shown
+   * must SAY so, or the agent reads the textual design description as everything the platform had.
+   */
+  designImageDelivery?: DesignImageDelivery
   /**
    * A live ephemeral environment a deployer step provisioned earlier in this run
    * (resolved from the run's block). Present only when the environment

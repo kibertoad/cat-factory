@@ -4,7 +4,7 @@
 // compiler is not pulled into the bundle.
 import HandlebarsRuntime from 'handlebars/runtime.js'
 import type { AgentKind } from '@cat-factory/kernel'
-import type { AgentRunContext } from '@cat-factory/kernel'
+import type { AgentRunContext, DesignImageUnavailableReason } from '@cat-factory/kernel'
 import {
   CONTEXT_BUDGET,
   estimateTokens,
@@ -425,6 +425,85 @@ export const CONTEXT_DIR = '.cat-context'
 export const REFERENCE_SCREENSHOT_DIR = `${CONTEXT_DIR}/reference-screenshots`
 
 /**
+ * Subdirectory of {@link CONTEXT_DIR} holding the design pictures a BUILDING kind was handed: the
+ * same artifacts {@link REFERENCE_SCREENSHOT_DIR} carries for a capture, delivered for the agent to
+ * LOOK at rather than to compare captures against.
+ *
+ * A separate directory rather than a shared one, because the two deliveries are capped differently
+ * and answer different questions: a tester reading the builder's six pictures would take them for
+ * the complete list of views to capture, and a builder reading the tester's twenty-four would spend
+ * its context on screens it was never asked to touch.
+ *
+ * Written by the harness, which depends on no workspace package, so (like {@link CONTEXT_DIR}) the
+ * constant exists twice and the copies are pinned byte-for-byte by the harness contract suite.
+ */
+export const DESIGN_RENDER_DIR = `${CONTEXT_DIR}/design-renders`
+
+/**
+ * The design pictures this dispatch holds, and what became of them.
+ *
+ * Rendered from BOTH halves of the answer, which is why it is one section rather than a list the
+ * delivery path appends to: the engine resolved a set, and the dispatch either put it in front of
+ * the model or could not. Every outcome is stated, because on the agent's side an absent picture
+ * and a screen the design does not have are the same thing, and the difference decides whether it
+ * should ask for the design or get on with the description it has.
+ *
+ * Empty (so byte-identical to the prior prompt) for every run whose task links no design.
+ */
+export function designImagesSection(context: AgentRunContext): string {
+  const set = context.designImages
+  const delivery = context.designImageDelivery
+  if (!set?.files.length || !delivery) return ''
+  const views = set.files.map((file) =>
+    delivery.attached && delivery.channel === 'files'
+      ? `- \`${DESIGN_RENDER_DIR}/${file.fileName}\`: ${file.view}`
+      : `- ${file.view}`,
+  )
+  const lead = delivery.attached
+    ? delivery.channel === 'files'
+      ? [
+          `The design for this task is also available AS PICTURES, one file per view under`,
+          `\`${DESIGN_RENDER_DIR}/\`. Open them and build what they show: they are the design`,
+          'itself, where the text description is a rendering of it.',
+        ]
+      : [
+          'The design for this task is also attached to this message AS PICTURES, one per view, in',
+          'the order listed below. Look at them and work from what they show: they are the design',
+          'itself, where the text description is a rendering of it.',
+        ]
+    : [
+        'This task has design pictures the platform could NOT put in front of you:',
+        `${DESIGN_IMAGE_REFUSALS[delivery.reason]}.`,
+        'Work from the textual design description above. Do not ask for the images and do not try',
+        'to fetch them; nothing in this run can deliver them to you.',
+      ]
+  const omitted = set.omitted.length
+    ? [
+        '',
+        `Not included (this run is limited to ${set.files.length} pictures): ${set.omitted.join(', ')}.`,
+        'The textual design description above still covers those views.',
+      ]
+    : []
+  return `\n\n## Design pictures\n${lead.join('\n')}\n\n${views.join('\n')}${omitted.join('\n')}`
+}
+
+/**
+ * The agent-facing sentence for each way a delivery can fail. An exhaustive `Record`, so a new
+ * member of the kernel vocabulary fails to compile until it has wording: the whole reason the
+ * reasons are distinct is that they read differently to whoever hits them.
+ *
+ * Each states the CAUSE without naming a remedy, because the reader is the agent and none of the
+ * fixes are its to make: a run told "ask an operator to configure this" spends turns on it.
+ */
+const DESIGN_IMAGE_REFUSALS: Record<DesignImageUnavailableReason, string> = {
+  harness_no_image_input: 'the agent CLI running this step cannot read an image',
+  model_no_image_input: 'the model running this step does not accept image input',
+  unknown_model_image_input:
+    'the platform does not know whether the model running this step accepts image input',
+  transfer_failed: 'they could not be retrieved from storage',
+}
+
+/**
  * Render the linked extra-context section — documents (requirements / RFCs /
  * PRDs) and tracker issues attached to the block — or an empty string when none
  * are linked. Shared by every agent kind (standard phases and the generic roles
@@ -627,6 +706,9 @@ export function renderStandardUserPrompt(
     // the linked context. Empty (so byte-identical) on every run of a built-in task type.
     customTaskTypeSection(context) +
     linkedContextSection(context, opts) +
+    // The design PICTURES, right after the linked context whose textual design description they
+    // are the other half of. States its own absence-with-a-cause, so it is never conditional here.
+    designImagesSection(context) +
     environmentSection(context) +
     involvedServicesSection(context) +
     // Only the implementer (build) acts on the TECHNICAL marker — its system prompt carries

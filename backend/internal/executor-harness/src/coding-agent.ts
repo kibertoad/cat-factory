@@ -8,7 +8,7 @@ import type {
   HarnessAuthFields,
   PeerRepoSpec,
   ReferenceRepoSpec,
-  ReferenceScreenshotsSpec,
+  ImageManifestSpec,
   RepoSpec,
   SkillSpec,
   McpServerSpec,
@@ -188,7 +188,14 @@ export interface CodingAgentSpec extends HarnessAuthFields {
    * UI-facing kind may well be a coding one, and nothing here switches on which built-in it is.
    * Absent ⇒ none (the normal case).
    */
-  referenceScreenshots?: ReferenceScreenshotsSpec
+  referenceScreenshots?: ImageManifestSpec
+  /**
+   * The PICTURES of the task's designs, downloaded into `.cat-context/design-renders/` before the
+   * agent's first turn. Carried here for the same reason the capture set is: what earns a run its
+   * pictures is the KIND's declared trait plus a harness that can read an image, and a coding kind
+   * is the commonest holder of both. Absent ⇒ none (the normal case).
+   */
+  designImages?: ImageManifestSpec
 }
 
 /** The outcome of a coding agent run, before each caller maps it to its own result shape. */
@@ -470,6 +477,7 @@ export async function runCodingAgent(
             ...(spec.referenceScreenshots
               ? { referenceScreenshots: spec.referenceScreenshots }
               : {}),
+            ...(spec.designImages ? { designImages: spec.designImages } : {}),
           },
           opts,
         )
@@ -1203,6 +1211,7 @@ export async function runMultiRepoCoding(
           ...(job.skills?.length ? { skills: job.skills } : {}),
           ...(job.mcpServers?.length ? { mcpServers: job.mcpServers } : {}),
           ...(job.referenceScreenshots ? { referenceScreenshots: job.referenceScreenshots } : {}),
+          ...(job.designImages ? { designImages: job.designImages } : {}),
           multiRepo: true,
         },
         opts,

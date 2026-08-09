@@ -37,12 +37,12 @@ export interface ContextFileSpec {
  * container would let a harness image the deployment has not rolled out yet rename every view a
  * run reports, and the pairing would come apart with nothing failing.
  */
-export interface ReferenceScreenshotsSpec {
+export interface ImageManifestSpec {
   /** Base URL of the reference download route; the artifact id is appended as a path segment. */
   url: string
   /** The run's container session token (the same one the LLM proxy is called with). */
   token: string
-  files: ReferenceScreenshotSpec[]
+  files: ImageFileSpec[]
   /**
    * View names the task holds a reference for that this job was NOT sent a file for, because the
    * set was capped. Stated to the agent beside the transfers that failed: from where it stands
@@ -56,8 +56,8 @@ export interface ReferenceScreenshotsSpec {
   omitted: string[]
 }
 
-/** One reference image in a {@link ReferenceScreenshotsSpec}. `fileName` is sanitised on parse. */
-export interface ReferenceScreenshotSpec {
+/** One reference image in a {@link ImageManifestSpec}. `fileName` is sanitised on parse. */
+export interface ImageFileSpec {
   artifactId: string
   fileName: string
   view: string
@@ -99,34 +99,41 @@ export function parseContextFiles(value: unknown): ContextFileSpec[] {
 }
 
 /**
- * How many reference images one job may be handed. The backend caps the set it sends well below
- * this, so this is the harness's own backstop against a malformed or hostile body turning the
- * pre-run setup into an unbounded download, never the ceiling a real run meets.
+ * How many images one job may be handed PER MANIFEST. The backend caps each set it sends well
+ * below this, so this is the harness's own backstop against a malformed or hostile body turning
+ * the pre-run setup into an unbounded download, never the ceiling a real run meets.
+ *
+ * One number for both manifests on purpose: the two real ceilings are the BACKEND's, chosen where
+ * the reason for each is known (transfer time for a capture, input tokens for an attachment). A
+ * second backstop here would only encode those reasons a second time, in the one place that
+ * cannot see either.
  *
  * Hitting it is REPORTED rather than silently obeyed: an entry past the ceiling is dropped from
  * `files` and its view named on `omitted`, so an agent facing a truncated set is still told which
- * views to capture. A cap that shortened the list and said nothing would be indistinguishable, on
- * disk and in the prompt, from a design that simply has no such screen.
+ * views it is not being shown. A cap that shortened the list and said nothing would be
+ * indistinguishable, on disk and in the prompt, from a design that simply has no such screen.
  */
-const MAX_REFERENCE_SCREENSHOTS = 40
+const MAX_MANIFEST_IMAGES = 40
 
 /**
- * Parse the reference-design manifest, or undefined when absent/unusable.
+ * Parse one image manifest (the capture set or the design pictures), or undefined when
+ * absent/unusable.
  *
- * The whole manifest is dropped when its transport half is unusable (no absolute http(s) URL, no
- * token): every file would fail the same way, and one stated cause beats N identical ones. An
- * individual entry is dropped only when it cannot name a file safely: the same basename
- * sanitisation every context file gets, so a hostile `fileName` can neither escape the directory
- * nor clobber a repo file.
+ * ONE parser for both, because the wire shape and every rule over it are the same: only the job
+ * body FIELD and what the harness does with the files afterwards differ. The whole manifest is
+ * dropped when its transport half is unusable (no absolute http(s) URL, no token): every file
+ * would fail the same way, and one stated cause beats N identical ones. An individual entry is
+ * dropped only when it cannot name a file safely: the same basename sanitisation every context
+ * file gets, so a hostile `fileName` can neither escape the directory nor clobber a repo file.
  */
-export function parseReferenceScreenshots(value: unknown): ReferenceScreenshotsSpec | undefined {
+export function parseImageManifest(value: unknown): ImageManifestSpec | undefined {
   if (typeof value !== 'object' || value === null) return undefined
   const o = value as Record<string, unknown>
   const url = typeof o.url === 'string' ? o.url.trim() : ''
   const token = typeof o.token === 'string' ? o.token : ''
   if (!url || !token || !/^https?:\/\//i.test(url)) return undefined
   if (!Array.isArray(o.files)) return undefined
-  const files: ReferenceScreenshotSpec[] = []
+  const files: ImageFileSpec[] = []
   // The backend's own dropped views come first; anything this parser drops joins them below.
   const omitted = Array.isArray(o.omitted)
     ? o.omitted.filter((view): view is string => typeof view === 'string' && view.length > 0)
@@ -144,7 +151,7 @@ export function parseReferenceScreenshots(value: unknown): ReferenceScreenshotsS
     // Past the backstop the entry is NAMED, not dropped: it stays a view the agent must capture.
     // Checked here rather than at the top of the loop so a malformed entry is refused on its own
     // terms (it names no usable view to report) instead of being counted against the ceiling.
-    if (files.length >= MAX_REFERENCE_SCREENSHOTS) {
+    if (files.length >= MAX_MANIFEST_IMAGES) {
       omitted.push(view)
       continue
     }
