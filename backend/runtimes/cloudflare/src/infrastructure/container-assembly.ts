@@ -30,6 +30,7 @@ import type {
 import { AuditService } from '@cat-factory/integrations'
 import {
   logger,
+  mcpAuthServerContainerFields,
   mcpOAuthContainerFields,
   mcpOAuthExecutorDeps,
   operationalMetrics,
@@ -50,7 +51,12 @@ import {
   applyGateProviders,
   warnUnwiredGates,
 } from '@cat-factory/gates'
-import type { NotificationChannel, PlatformAlertSink, RunLifecycleSink } from '@cat-factory/kernel'
+import type {
+  Logger,
+  NotificationChannel,
+  PlatformAlertSink,
+  RunLifecycleSink,
+} from '@cat-factory/kernel'
 import type { AppConfig } from './config'
 import { selectEnvConfigRepairer, selectRepoBootstrapper } from './container-dispatchers'
 import type { Env } from './env'
@@ -980,22 +986,21 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
       env,
       capabilityCredentialsService,
       mcpOAuthService,
+      publicApiKeys,
+      clock,
+      logger,
       toolSecretChain,
     }),
     // The per-service pre-PR validation-check store the shared controller reads. Always present
     // (no secret material), unlike the sealed stores around it.
     validationConfig: validationConfigService,
-    // The vendor-credential (subscription token pool) service the shared controller
-    // reads; present when the shared ENCRYPTION_KEY is configured.
+    // The vendor-credential (subscription token pool) service, the per-user individual-usage store
+    // (Claude) and the direct-provider key pool (account/workspace/user). Each is present exactly
+    // when the shared ENCRYPTION_KEY is; the INBOUND public-API keys are projected above, beside
+    // the authorization server that issues them.
     subscriptions,
-    // The per-user individual-usage subscription store (Claude); present when the
-    // shared ENCRYPTION_KEY is configured.
     personalSubscriptions,
-    // The direct-provider API-key pool (account/workspace/user); present when the
-    // shared ENCRYPTION_KEY is configured.
     apiKeys,
-    // The inbound public-API key store; present when the shared ENCRYPTION_KEY is configured.
-    publicApiKeys,
     // The per-workspace outbound notification-webhook config; present when ENCRYPTION_KEY is set.
     notificationWebhooks: notificationWebhookSupport?.service,
     // The on-call push the cron `scheduled` handler's health sweep hands its edges to.
@@ -1054,12 +1059,18 @@ function workerCapabilityCredentialFields(input: {
   env: Env
   capabilityCredentialsService: CapabilityCredentialsService | undefined
   mcpOAuthService: McpOAuthService | undefined
+  publicApiKeys: PublicApiKeyService | undefined
+  clock: Clock
+  logger: Logger
   toolSecretChain: ToolSecretChain
 }): Pick<
   ServerContainer,
   | 'capabilityCredentials'
   | 'mcpOAuth'
   | 'mcpOAuthRedirectUrl'
+  | 'mcpAuthServer'
+  | 'publicApiKeys'
+  | 'appBaseUrl'
   | 'toolSecretResolver'
   | 'toolSecretEnvironmentFallback'
 > {
@@ -1067,14 +1078,38 @@ function workerCapabilityCredentialFields(input: {
     ...(input.capabilityCredentialsService
       ? { capabilityCredentials: input.capabilityCredentialsService }
       : {}),
+    // The INBOUND public-API key store. It moved in here when the authorization server below was
+    // added: that server ISSUES one of these keys, so the store and the flow that mints from it are
+    // one wiring decision, and a facade cannot wire the flow while leaving the store behind.
+    publicApiKeys: input.publicApiKeys,
     ...mcpOAuthContainerFields({
       oauth: input.mcpOAuthService,
       redirectUrl: input.env.MCP_OAUTH_REDIRECT_URL,
     }),
+    // The mirror image: this deployment as the authorization server for its OWN hosted MCP
+    // endpoint, so a host connects by approving a consent screen instead of being handed a key.
+    // Present only where both halves are (a key to seal what the flow carries, and the public-API
+    // key store it issues from); the Node facade projects the same fields.
+    ...mcpAuthServerContainerFields({
+      encryptionKey: input.env.ENCRYPTION_KEY,
+      publicApiKeys: input.publicApiKeys,
+      clock: input.clock,
+      logger: input.logger,
+    }),
+    // Where the SPA is served, for the browser hand-off in that flow. Resolved exactly as the email
+    // config resolves it for invite and password-reset links, so a deployment configures its app
+    // URL once and both surfaces agree about where the app lives.
+    ...workerAppBaseUrl(input.env),
     // The probe resolves through the SAME chain a dispatch does, or it reports on a tenant's value
     // that is not this board's.
     ...toolSecretContainerFields(input.toolSecretChain),
   }
+}
+
+/** `APP_BASE_URL`, or the login redirect that stands in for it, as an ABSENT-or-set field. */
+function workerAppBaseUrl(env: Env): Pick<ServerContainer, 'appBaseUrl'> {
+  const appBaseUrl = env.APP_BASE_URL?.trim() || env.AUTH_SUCCESS_REDIRECT_URL?.trim()
+  return appBaseUrl ? { appBaseUrl } : {}
 }
 
 /**

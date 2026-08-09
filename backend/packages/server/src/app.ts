@@ -40,6 +40,8 @@ import { mothershipConnectController } from './modules/localSettings/MothershipC
 import { releaseHealthController } from './modules/releaseHealth/ReleaseHealthController.js'
 import { testSecretsController } from './modules/testSecrets/TestSecretsController.js'
 import { capabilityCredentialsController } from './modules/capabilityCredentials/CapabilityCredentialsController.js'
+import { mcpAuthorizationConsentController } from './modules/mcpAuthServer/McpAuthorizationConsentController.js'
+import { mcpAuthorizationController } from './modules/mcpAuthServer/McpAuthorizationController.js'
 import { mcpOAuthCompletionController } from './modules/toolServers/McpOAuthCompletionController.js'
 import { toolServerController } from './modules/toolServers/ToolServerController.js'
 import { validationConfigController } from './modules/validation/ValidationConfigController.js'
@@ -285,6 +287,12 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // and the tools reach those routes back through this app's own loopback under the caller's key, so
   // nothing here can drift from the surface above it.
   app.route('/', publicMcpController(appLoopback(app)))
+  // This deployment's own OAuth authorization server for that endpoint (`/.well-known/*`,
+  // `/oauth/*`): the discovery documents, dynamic client registration, and the token exchange that
+  // mints a public-API key from an approved consent. Unauthenticated by construction, which is what
+  // lets a host that has never heard of this deployment connect to it; the one step needing a
+  // signed-in human is the consent screen, mounted with the session-gated controllers below.
+  app.route('/', mcpAuthorizationController())
   // Read-only catalogs + account/workspace roots (gated by the facade's auth middleware).
   app.route('/', promptFragmentController())
   app.route('/', modelController())
@@ -310,6 +318,10 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // the path, and session-gated by the shared default-deny gate like everything else here, which
   // is what makes its user binding and `secrets.manage` re-check enforceable at all.
   app.route('/', mcpOAuthCompletionController())
+  // The consent screen's own two calls (describe + decide). Root-mounted for the same reason the
+  // completion above is: the board is not in the path, because choosing it is what the screen is
+  // for, so `secrets.manage` is re-resolved on the picked workspace inside the handler.
+  app.route('/', mcpAuthorizationConsentController())
   app.route('/', openRouterCatalogController())
   app.route('/', userApiKeyController())
   // Local-mode operational settings (warm pool + checkout reuse); 503 on non-local facades.

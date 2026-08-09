@@ -1,6 +1,7 @@
 // The `./http` entry point, NOT the package root: the root re-exports the stdio boot, whose
 // transport imports `node:process`, and this package is bundled into the Worker facade.
 import { handleMcpHttpRequest, refuseMcpMethod } from '@cat-factory/mcp-server/http'
+import { bearerChallenge } from '@cat-factory/integrations'
 import { describeError } from '@cat-factory/kernel'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
@@ -43,6 +44,13 @@ export function publicMcpController<E extends AppEnv>(loopback: AppLoopback<E>):
   app.all('/api/v1/mcp', async (c) => {
     const refused = refuseMcpMethod(c.req.method)
     if (refused) return refused
+
+    // The discovery entry point, set BEFORE the gate below can refuse: a host that presented no
+    // credential (or one too narrow) is answered with the challenge naming this deployment's
+    // protected-resource metadata, which is where the MCP authorization spec has a client look for
+    // its authorization server. Without it the whole chain is served and unreachable, and the only
+    // way to connect is a key pasted into a config file.
+    c.set('bearerChallenge', bearerChallenge(new URL(c.req.url).origin))
 
     // `read` is the FLOOR, not a per-tool requirement: the ladder is inclusive, so this refuses only
     // an absent, unknown or revoked key. What each tool may do stays enforced where it already is, by

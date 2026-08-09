@@ -630,6 +630,26 @@ export {
   type McpOAuthServiceDependencies,
 } from './modules/mcpOAuth/McpOAuthService.js'
 export {
+  McpAuthorizationServer,
+  McpOAuthProtocolError,
+  MCP_AUTH_SERVER_CIPHER_INFO,
+  isAllowedRedirectUri,
+  type McpAuthorizationRequestState,
+  type McpAuthorizationRequestSummary,
+  type McpAuthorizationServerDependencies,
+  type McpClientRegistration,
+  type McpIssuedToken,
+} from './modules/mcpAuthServer/McpAuthorizationServer.js'
+export {
+  AUTHORIZATION_SERVER_METADATA_PATH,
+  OAUTH_ENDPOINT_PATHS,
+  PROTECTED_RESOURCE_METADATA_PATH,
+  authorizationServerMetadata,
+  bearerChallenge,
+  mcpResourceIdentifier,
+  protectedResourceMetadata,
+} from './modules/mcpAuthServer/metadataDocuments.js'
+export {
   McpOAuthError,
   MCP_OAUTH_TIMEOUT_MS,
   discoverMcpOAuthEndpoints,

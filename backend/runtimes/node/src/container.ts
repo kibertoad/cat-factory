@@ -23,6 +23,7 @@ import {
   makePreviewJobBuilder,
   type PersistenceRegistry,
   logger,
+  mcpAuthServerContainerFields,
   mcpOAuthContainerFields,
   resolveUrlSafetyPolicy,
   WebCryptoSecretCipher,
@@ -648,6 +649,20 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
       oauth: mcpOAuthService,
       redirectUrl: env.MCP_OAUTH_REDIRECT_URL,
     }),
+    // The mirror image: this deployment as the authorization server for its OWN hosted MCP
+    // endpoint, so a host connects by approving a consent screen instead of being handed a key.
+    // Present only where both halves are (a key to seal what the flow carries, and the public-API
+    // key store it issues from); the Worker facade projects the same fields.
+    ...mcpAuthServerContainerFields({
+      encryptionKey: env.ENCRYPTION_KEY,
+      publicApiKeys,
+      clock: dependencies.clock,
+      logger: dependencies.logger,
+    }),
+    // Where the SPA is served, for the browser hand-off in that flow. Read from the same resolved
+    // value the invite and password-reset links use (`APP_BASE_URL`, falling back to
+    // `AUTH_SUCCESS_REDIRECT_URL`), so a deployment configures its app URL once.
+    ...(config.email.appBaseUrl ? { appBaseUrl: config.email.appBaseUrl } : {}),
     // The composed capability-credential chain: the resolver the tool-server probe resolves through,
     // and what sits BEHIND the store, so the credential checklist describes the real chain instead of
     // asserting the default beside it. Both arrive already projected by

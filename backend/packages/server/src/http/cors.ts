@@ -62,8 +62,13 @@ export const CORS_ALLOWED_HEADERS = [
  * `Access-Control-Expose-Headers` a browser exposes only the CORS-safelisted set, so the
  * correlation id would be present on the wire and invisible to the SPA — which is the one
  * client whose users are the people quoting an id back in a bug report.
+ *
+ * `WWW-Authenticate` is here for the other kind of client: a browser-hosted MCP host reads that
+ * header off the hosted endpoint's 401 to find this deployment's protected-resource metadata, which
+ * is the entry point to the whole authorization flow. Unexposed, the header is on the wire and
+ * invisible to exactly the client that cannot connect without it.
  */
-export const CORS_EXPOSED_HEADERS = ['X-Request-Id']
+export const CORS_EXPOSED_HEADERS = ['X-Request-Id', 'WWW-Authenticate']
 
 /** Parse a comma-separated allowed-origins string into trimmed entries. */
 export function parseAllowedOrigins(configured: string | undefined): string[] {

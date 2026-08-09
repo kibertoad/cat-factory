@@ -334,11 +334,11 @@ carry `details.reason`, the machine-readable code the SPA maps to translated cop
 - **Rethrow, don't re-map.** Catching a `ConflictError` to re-emit it as `c.json({code:'conflict'})` drops
   its `reason`. The one deliberate exception is a handler that flattens distinct causes ON PURPOSE because
   the distinction is an ORACLE (password reset: "no such token" / "expired" / "used").
-- **Three surfaces keep hand-built envelopes, each documented at the site**: the LLM/web-search proxy pair
-  (each failure must be RECORDED on the call metric before responding, and they answer 402/413/502),
-  `publicApiAuth`/`PublicDecisionController` (failures are DATA, so the contract handlers stay typed
-  against their declared response schemas), and the `/internal` relay controllers (a different
-  `{ ok: false }` shape their machine clients parse).
+- **Four surfaces answer in their OWN shape, each documented at the site**: the LLM/web-search proxy pair
+  (each failure is RECORDED on the call metric before responding, and they answer 402/413/502),
+  `publicApiAuth`/`PublicDecisionController` (failures are DATA, so contract handlers stay typed against
+  their declared response schemas), the `/internal` relay controllers (a `{ ok: false }` their machine
+  clients parse), and the MCP authorization endpoints (RFC 6749's error body, which a client branches on).
 - **A test driving a controller through a bare `new Hono()` must mount `app.onError(handleError)`**, or
   every refusal reads as a 500.
 - **A user-reachable 503 `reason` owes TRANSLATED copy** (`UNAVAILABLE_REASONS`, an exhaustive `Record`

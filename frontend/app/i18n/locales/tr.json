@@ -2575,6 +2575,44 @@
       }
     }
   },
+  "mcpAuthorize": {
+    "title": "{client} bağlansın mı?",
+    "subtitle": "Kendisini {client} olarak tanıtıyor ve bu kurulum onu {origin} adresine geri gönderecek.",
+    "workspace": {
+      "label": "Üzerinde işlem yapabileceği pano"
+    },
+    "scopeLabel": "Neler yapabilecek",
+    "scopeHint": "Her düzey kendisinden öncekileri de kapsar.",
+    "scope": {
+      "read": {
+        "label": "Yalnızca okuma",
+        "description": "Servisleri, görevleri, hatları ve çalışmaları görüntüler."
+      },
+      "write": {
+        "label": "Okuma ve yazma",
+        "description": "Ayrıca görev oluşturur ve başlatır."
+      },
+      "decide": {
+        "label": "Okuma, yazma ve karar",
+        "description": "Ayrıca duraklatılmış bir çalışmanın beklediği soruları yanıtlar."
+      },
+      "admin": {
+        "label": "Tam erişim",
+        "description": "Ayrıca görev siler ve bildirimlere işlem uygular; bu bir pull request'i birleştirebilir."
+      }
+    },
+    "approve": "Bağla",
+    "deny": "Vazgeç",
+    "back": "Uygulamaya dön",
+    "noWorkspaces": "Bunu bağlayabileceğiniz bir pano henüz yok.",
+    "revokeHint": "Bu işlem, pano ayarlarından istediğiniz zaman iptal edebileceğiniz bir API anahtarı oluşturur.",
+    "error": {
+      "title": "Bu bağlantı kurulamadı",
+      "noRequest": "Bu sayfa bir yetkilendirme isteği olmadan açıldı. Bağlantıyı MCP istemcinizden başlatın.",
+      "expired": "Bu yetkilendirme isteği geçersiz veya süresi dolmuş. Bağlantıyı MCP istemcinizden yeniden başlatın.",
+      "failed": "Karar kaydedilemedi. Bağlantıyı MCP istemcinizden yeniden başlatın."
+    }
+  },
   "settings": {
     "modelConfiguration": {
       "title": "Model Yapılandırması",

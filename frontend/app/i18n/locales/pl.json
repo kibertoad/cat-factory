@@ -2575,6 +2575,44 @@
       }
     }
   },
+  "mcpAuthorize": {
+    "title": "Połączyć {client}?",
+    "subtitle": "Podaje się za {client}, a ta instalacja odeśle go do {origin}.",
+    "workspace": {
+      "label": "Tablica, na której będzie działać"
+    },
+    "scopeLabel": "Co będzie mógł robić",
+    "scopeHint": "Każdy poziom obejmuje poprzednie.",
+    "scope": {
+      "read": {
+        "label": "Tylko odczyt",
+        "description": "Podgląd usług, zadań, potoków i uruchomień."
+      },
+      "write": {
+        "label": "Odczyt i zapis",
+        "description": "Dodatkowo tworzenie i uruchamianie zadań."
+      },
+      "decide": {
+        "label": "Odczyt, zapis i decyzje",
+        "description": "Dodatkowo odpowiadanie na pytania, na które czeka wstrzymane uruchomienie."
+      },
+      "admin": {
+        "label": "Pełny dostęp",
+        "description": "Dodatkowo usuwanie zadań i reagowanie na powiadomienia, co może scalić pull request."
+      }
+    },
+    "approve": "Połącz",
+    "deny": "Anuluj",
+    "back": "Powrót do aplikacji",
+    "noWorkspaces": "Nie masz jeszcze tablicy, z którą można to połączyć.",
+    "revokeHint": "Zostanie wydany klucz API, który w każdej chwili możesz unieważnić w ustawieniach tablicy.",
+    "error": {
+      "title": "Nie udało się skonfigurować tego połączenia",
+      "noRequest": "Ta strona została otwarta bez żądania autoryzacji. Rozpocznij łączenie w swoim hoście MCP.",
+      "expired": "To żądanie autoryzacji jest nieprawidłowe lub wygasło. Rozpocznij łączenie ponownie w swoim hoście MCP.",
+      "failed": "Nie udało się zapisać decyzji. Rozpocznij łączenie ponownie w swoim hoście MCP."
+    }
+  },
   "settings": {
     "modelConfiguration": {
       "title": "Konfiguracja modeli",

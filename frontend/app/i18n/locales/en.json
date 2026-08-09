@@ -2682,6 +2682,44 @@
       }
     }
   },
+  "mcpAuthorize": {
+    "title": "Connect {client}?",
+    "subtitle": "It says it is {client}, and this deployment will send it back to {origin}.",
+    "workspace": {
+      "label": "Board it may act on"
+    },
+    "scopeLabel": "What it may do",
+    "scopeHint": "Each level includes the ones above it.",
+    "scope": {
+      "read": {
+        "label": "Read only",
+        "description": "See services, tasks, pipelines and runs."
+      },
+      "write": {
+        "label": "Read and write",
+        "description": "Also create and start tasks."
+      },
+      "decide": {
+        "label": "Read, write and decide",
+        "description": "Also answer the questions a parked run is waiting on."
+      },
+      "admin": {
+        "label": "Full access",
+        "description": "Also delete tasks and act on notifications, which can merge a pull request."
+      }
+    },
+    "approve": "Connect",
+    "deny": "Cancel",
+    "back": "Back to the app",
+    "noWorkspaces": "You have no boards to connect this to yet.",
+    "revokeHint": "This issues an API key you can revoke at any time from the board's settings.",
+    "error": {
+      "title": "This connection could not be set up",
+      "noRequest": "This page was opened without an authorization request. Start the connection from your MCP host.",
+      "expired": "This authorization request is invalid or has expired. Start the connection again from your MCP host.",
+      "failed": "The decision could not be recorded. Start the connection again from your MCP host."
+    }
+  },
   "settings": {
     "modelConfiguration": {
       "title": "Model Configuration",
