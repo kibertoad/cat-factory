@@ -262,6 +262,7 @@ const CAPABILITY_LABELS: Record<BinaryGeneratorCapability, () => string> = {
   'negative-prompt': () => t('pipeline.builder.binaryCapability.negative-prompt'),
   seed: () => t('pipeline.builder.binaryCapability.seed'),
   'aspect-ratio': () => t('pipeline.builder.binaryCapability.aspect-ratio'),
+  'exact-size': () => t('pipeline.builder.binaryCapability.exact-size'),
   'candidate-batch': () => t('pipeline.builder.binaryCapability.candidate-batch'),
   upscale: () => t('pipeline.builder.binaryCapability.upscale'),
   'transparent-background': () => t('pipeline.builder.binaryCapability.transparent-background'),
@@ -320,6 +321,21 @@ function setGeneration(fields: Partial<BinaryGenerationOptions>) {
   patch({
     generation: Object.keys(next).length > 0 ? (next as BinaryGenerationOptions) : undefined,
   })
+}
+
+/**
+ * Patch ONE half of the exact output size, dropping the whole option once neither half is set.
+ *
+ * The pair is a single requirement, so a half-entered one is not stored as half: a width with no
+ * height describes no deliverable, and the backend's schema requires both. The unset half stays
+ * 0 while the composer types the first number, which the schema refuses, so the step cannot be
+ * saved mid-edit rather than being saved as something nobody asked for.
+ */
+function setOutputSize(axis: 'width' | 'height', raw: string) {
+  const current = generation.value.outputSize
+  const value = raw.trim() ? Number(raw) : undefined
+  const next = { width: current?.width ?? 0, height: current?.height ?? 0, [axis]: value ?? 0 }
+  setGeneration({ outputSize: next.width || next.height ? next : undefined })
 }
 
 /** The reference-image field's text, and the lines it refused (see `parseReferenceImages`). */
@@ -579,6 +595,34 @@ const declaredFormats = computed(() => {
           :placeholder="t('pipeline.builder.binaryAspectRatioPlaceholder')"
           data-testid="binary-output-aspect-ratio"
           @change="setGeneration({ aspectRatio: ($event.target as HTMLInputElement).value.trim() })"
+        />
+      </div>
+
+      <!-- Two numbers rather than one free-text "WxH": the requirement is a pair of integers and
+           a parser over a string is a second place for it to be wrong. Offered only where an
+           integration declares `exact-size`, because a bucketed endpoint cannot be asked for
+           dimensions at all and a control implying otherwise is the misconception this axis
+           exists to remove. -->
+      <div v-if="offers('exact-size')" class="flex items-center gap-2">
+        <span class="text-[10px] text-slate-500">{{ t('pipeline.builder.binaryOutputSize') }}</span>
+        <UInput
+          class="w-24"
+          type="number"
+          size="xs"
+          :model-value="generation.outputSize ? String(generation.outputSize.width) : ''"
+          :placeholder="t('pipeline.builder.binaryOutputSizeWidth')"
+          data-testid="binary-output-size-width"
+          @change="setOutputSize('width', ($event.target as HTMLInputElement).value)"
+        />
+        <span class="text-[10px] text-slate-500">×</span>
+        <UInput
+          class="w-24"
+          type="number"
+          size="xs"
+          :model-value="generation.outputSize ? String(generation.outputSize.height) : ''"
+          :placeholder="t('pipeline.builder.binaryOutputSizeHeight')"
+          data-testid="binary-output-size-height"
+          @change="setOutputSize('height', ($event.target as HTMLInputElement).value)"
         />
       </div>
 

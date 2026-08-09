@@ -81,8 +81,46 @@ export const binaryGeneratorCapabilitySchema = v.picklist([
    * rather than accidental.
    */
   'seed',
-  /** Accepts an explicit aspect ratio or output size. Unlocks `generation.aspectRatio`. */
+  /**
+   * Accepts an explicit aspect SHAPE: a ratio (`16:9`), or a fixed set of size buckets it
+   * rounds to. Unlocks `generation.aspectRatio`.
+   *
+   * Deliberately NOT "a ratio or an output size", which is what this member said while it was
+   * the only one on the axis. A bucketed API (`image_size: square | portrait | landscape`,
+   * `resolution: 1k | 2k`) honours a ratio exactly and an exact pixel size not at all, so one
+   * member covering both made the two integrations that CAN be handed dimensions
+   * indistinguishable from the two that cannot — see {@link 'exact-size'}.
+   */
   'aspect-ratio',
+  /**
+   * Accepts exact output DIMENSIONS in pixels: a width and a height it renders at natively,
+   * rather than a shape it rounds to. Unlocks `generation.outputSize`.
+   *
+   * Its own member rather than a refinement of `aspect-ratio`, because the two partition
+   * differently and the difference is the whole deliverable for anything rendered to a fixed
+   * grid. A 96x96 inventory icon asked of a bucketed endpoint does not come back slightly
+   * wrong: it comes back as a 1K render downscaled 4x, which on pixel art is not the same asset
+   * at any level of care, and every check downstream passes (the modality is covered, the
+   * format is covered, the upload succeeded). The consumer that rejects it is the game, weeks
+   * later.
+   *
+   * The vocabulary stays FLAT: an API taking width and height can honour any ratio, so it
+   * declares BOTH members rather than this one implying the other. That is the same shape
+   * `reference-image` / `multi-reference` already has, and it is chosen for the same reason —
+   * an implication table is an ordering over a picklist that every future member would then
+   * have to be placed in, to save a deployment one word in its own registration, and the cost
+   * of forgetting that word is a loud refusal naming the capability rather than a silent
+   * mis-render.
+   *
+   * What this does NOT do is state which sizes an endpoint supports. Flux caps at 4 MP and
+   * wants multiples of 32; Retro Diffusion's range moves with the style. A per-integration size
+   * TABLE is refused on the design record's own grounds (it is the `resolutionRange`
+   * discriminator wearing a new name, and it goes stale in this repo while the vendor changes
+   * it in theirs). This member answers only the question that is a durable fact about the
+   * endpoint's REQUEST SHAPE: can it be handed dimensions at all. The rest is the integration's
+   * own `guidance`, where a sentence can say what the limits are.
+   */
+  'exact-size',
   /**
    * Returns SEVERAL candidates for one prompt in ONE call. Exposes no control of its own: it
    * changes what the candidate brief ASKS FOR (request `n` in a single call, rather than
@@ -208,6 +246,27 @@ export const binaryEditRequestSchema = v.object({
 export type BinaryEditRequest = v.InferOutput<typeof binaryEditRequestSchema>
 
 /**
+ * Exact output DIMENSIONS in pixels, for the deliverables where the size IS the requirement.
+ *
+ * A named schema rather than an inline object, for the reason {@link binaryEditRequestSchema} is
+ * one: this nests another object level under an already-deep chain and a named const is where
+ * `tsc` stops re-instantiating it.
+ *
+ * The bounds are a SANITY floor and ceiling on the field, never a claim about what any endpoint
+ * supports. Nothing here knows Flux's 4 MP cap or Retro Diffusion's per-style range, and by
+ * design nothing will: the platform checks that a step CAN be asked for dimensions (the
+ * `exact-size` capability) and states the number to the agent, which is the party holding the
+ * vendor's contract when it writes the call.
+ */
+export const MAX_BINARY_PIXEL_EXTENT = 16384
+
+export const binaryOutputSizeSchema = v.object({
+  width: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(MAX_BINARY_PIXEL_EXTENT)),
+  height: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(MAX_BINARY_PIXEL_EXTENT)),
+})
+export type BinaryOutputSize = v.InferOutput<typeof binaryOutputSizeSchema>
+
+/**
  * The per-step GENERATION OPTIONS: the parameters a step wants every generation to carry, each
  * gated by the capability that makes it answerable ({@link BINARY_OPTION_CAPABILITIES}).
  *
@@ -256,6 +315,16 @@ export const binaryGenerationOptionsObject = v.object({
       v.regex(/^[1-9][0-9]{0,3}:[1-9][0-9]{0,3}$/, 'must be an aspect ratio of the form W:H'),
     ),
   ),
+  /**
+   * Exact pixel dimensions every artifact must be delivered at. Needs `exact-size`.
+   *
+   * Mutually exclusive with `aspectRatio` and `upscale`, refused structurally at pipeline save
+   * (`assertUnambiguousOutputSize`): each of those states the final dimensions in a second,
+   * possibly disagreeing way, and the party who would reconcile them is the agent writing the
+   * call — the one with the least basis for deciding, which is the same argument that keeps
+   * `mediaTypes` from meaning "any of these".
+   */
+  outputSize: v.optional(binaryOutputSizeSchema),
   /** Render at this multiple of the integration's native size. Needs `upscale`. */
   upscale: v.optional(v.pipe(v.number(), v.integer(), v.minValue(2), v.maxValue(8))),
   /** Deliver an alpha channel rather than a background. Needs `transparent-background`. */
@@ -287,6 +356,7 @@ export interface BinaryGenerationOptions {
   negativePrompt?: string | undefined
   seed?: number | undefined
   aspectRatio?: string | undefined
+  outputSize?: BinaryOutputSize | undefined
   upscale?: number | undefined
   transparentBackground?: true | undefined
   tileable?: true | undefined
@@ -318,6 +388,7 @@ export const BINARY_OPTION_CAPABILITIES: Record<
   negativePrompt: ['negative-prompt'],
   seed: ['seed'],
   aspectRatio: ['aspect-ratio'],
+  outputSize: ['exact-size'],
   upscale: ['upscale'],
   transparentBackground: ['transparent-background'],
   tileable: ['tileable'],
@@ -350,6 +421,7 @@ export function requiredBinaryCapabilities(
   if (options.negativePrompt) required.push('negative-prompt')
   if (options.seed !== undefined) required.push('seed')
   if (options.aspectRatio) required.push('aspect-ratio')
+  if (options.outputSize) required.push('exact-size')
   if (options.upscale !== undefined) required.push('upscale')
   if (options.transparentBackground) required.push('transparent-background')
   if (options.tileable) required.push('tileable')

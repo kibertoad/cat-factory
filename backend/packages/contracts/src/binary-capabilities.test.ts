@@ -6,6 +6,7 @@ import {
   binaryGenerationOptionsObject,
   binaryGeneratorCapabilitySchema,
   isBinaryGeneratorCapability,
+  MAX_BINARY_PIXEL_EXTENT,
   requiredBinaryCapabilities,
   type BinaryGenerationOptions,
 } from './binary-capabilities.js'
@@ -47,6 +48,18 @@ describe('binary generation options', () => {
   it('refuses an aspect ratio that is not W:H', () => {
     expect(v.safeParse(binaryGenerationOptionsObject, { aspectRatio: 'wide' }).success).toBe(false)
   })
+
+  // Both members together, always. A width with no height describes no deliverable, and a size
+  // that parsed with half of it would reach the brief as a requirement nothing could satisfy.
+  it('requires both halves of an output size, as whole positive pixels', () => {
+    const parse = (outputSize: unknown) =>
+      v.safeParse(binaryGenerationOptionsObject, { outputSize }).success
+    expect(parse({ width: 96, height: 96 })).toBe(true)
+    expect(parse({ width: 96 })).toBe(false)
+    expect(parse({ width: 96, height: 0 })).toBe(false)
+    expect(parse({ width: 96, height: 96.5 })).toBe(false)
+    expect(parse({ width: 96, height: MAX_BINARY_PIXEL_EXTENT + 1 })).toBe(false)
+  })
 })
 
 describe('requiredBinaryCapabilities', () => {
@@ -67,6 +80,37 @@ describe('requiredBinaryCapabilities', () => {
     expect(requiredBinaryCapabilities({ edit: { mode: 'mask' } })).toEqual(['mask-edit'])
   })
 
+  // The whole reason `exact-size` is its own member. A bucketed endpoint (`image_size`,
+  // `resolution: 1k | 2k`) honours a RATIO exactly and exact dimensions not at all, so a step
+  // whose deliverable is a 96x96 icon must not be admitted against one on the strength of an
+  // `aspect-ratio` declaration. Asserted from both directions, because the failure that matters
+  // is silent in one of them: a size requirement resolving to `aspect-ratio` would look covered.
+  it('tells an exact size apart from an aspect ratio', () => {
+    expect(requiredBinaryCapabilities({ outputSize: { width: 96, height: 96 } })).toEqual([
+      'exact-size',
+    ])
+    expect(requiredBinaryCapabilities({ aspectRatio: '1:1' })).toEqual(['aspect-ratio'])
+
+    const bucketed = [{ id: 'grok', capabilities: ['aspect-ratio' as const] }]
+    expect(binaryCapabilityCoverage(['exact-size'], bucketed)).toEqual({
+      uncovered: ['exact-size'],
+      unverifiable: [],
+    })
+    // And the converse holds: the vocabulary is FLAT, so an integration that takes width and
+    // height covers a ratio only by DECLARING that too. Forgetting the second word is a loud
+    // refusal naming the capability, which is the trade an implication table would buy out.
+    const dimensioned = [{ id: 'flux', capabilities: ['exact-size' as const] }]
+    expect(binaryCapabilityCoverage(['aspect-ratio'], dimensioned).uncovered).toEqual([
+      'aspect-ratio',
+    ])
+    expect(
+      binaryCapabilityCoverage(
+        ['aspect-ratio', 'exact-size'],
+        [{ id: 'flux', capabilities: ['aspect-ratio' as const, 'exact-size' as const] }],
+      ).uncovered,
+    ).toEqual([])
+  })
+
   it('requires nothing of a step with no options', () => {
     expect(requiredBinaryCapabilities(undefined)).toEqual([])
     expect(requiredBinaryCapabilities({})).toEqual([])
@@ -83,6 +127,7 @@ describe('requiredBinaryCapabilities', () => {
       negativePrompt: 'x',
       seed: 1,
       aspectRatio: '1:1',
+      outputSize: { width: 96, height: 96 },
       upscale: 2,
       transparentBackground: true,
       tileable: true,

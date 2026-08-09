@@ -85,6 +85,14 @@ export interface BinaryOutputRow extends BinaryOutputArtifact {
    * state (a model with native image output generates without a registered integration).
    */
   generatorUnknown: boolean
+  /**
+   * The artifact reports pixel dimensions that are not the exact size the step asked for.
+   *
+   * FALSE when the step asked for no size, and false when the artifact reports no dimensions:
+   * the second is "not stated", which is why {@link BinaryOutputView.sizeUnreported} counts it
+   * separately instead of letting an absent measurement read as a passing one.
+   */
+  missized: boolean
 }
 
 /** The whole surface's read model: one state, the join, and every loss the report counted. */
@@ -153,6 +161,31 @@ export interface BinaryOutputView {
    */
   undeliveredMediaTypes: readonly string[]
   /**
+   * The exact pixel size the step asked every generation to be delivered at
+   * (`stepOptions.binaryOutput.generation.outputSize`), or null when it asked for none — which
+   * stays the ordinary case.
+   */
+  requiredSize: { width: number; height: number } | null
+  /**
+   * How many of {@link rows} reported dimensions OTHER than {@link requiredSize}.
+   *
+   * The delivery-side half of the size requirement, and the reason the requirement is worth
+   * declaring at all. Admission checks what the selected integrations can be ASKED for; only
+   * this checks what came back, exactly as {@link undeliveredMediaTypes} does one axis over and
+   * from the same kind of self-report. Derived in code from the step's own two records, never
+   * read off the agent's prose.
+   */
+  missized: number
+  /**
+   * How many of {@link rows} reported NO dimensions on a step that required a size.
+   *
+   * Its own number rather than folded into {@link missized}, for the rule this whole feature
+   * runs on: an unmeasured artifact and a wrong-sized one are the same value and opposite facts.
+   * Counting them together would let a run that reported nothing read as a run that delivered
+   * everything wrong, and hiding them would let it read as a clean one.
+   */
+  sizeUnreported: number
+  /**
    * Integration ids the AGENT named that the deployment does not register. The generative twin of
    * {@link unknownDeclaredServices}, and it needs no exclusion to stay disjoint from anything —
    * there is no single "target" integration a step selects, so the report's own list is already
@@ -203,6 +236,7 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
   const generators = config?.generatorIds ?? []
   const modalities = config?.modalities ?? []
   const mediaTypes = config?.mediaTypes ?? []
+  const requiredSize = config?.generation?.outputSize ?? null
   if (!report) {
     return {
       // A step still queued has not had the chance to record anything, which is a different
@@ -217,6 +251,9 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
       modalities,
       mediaTypes,
       undeliveredMediaTypes: [],
+      requiredSize,
+      missized: 0,
+      sizeUnreported: 0,
       unknownDeclaredGenerators: [],
       generatorsUnverified: false,
       invalidEntries: 0,
@@ -234,6 +271,13 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
     unknown: unknown.has(artifact.service),
     // An UNATTRIBUTED row (no `generator` claimed) is not unknown — see the field's own note.
     generatorUnknown: artifact.generator !== undefined && unknownGenerators.has(artifact.generator),
+    // An UNMEASURED row is not missized either: absent dimensions are counted by
+    // `sizeUnreported`, never folded in here.
+    missized:
+      requiredSize !== null &&
+      artifact.dimensions !== undefined &&
+      (artifact.dimensions.width !== requiredSize.width ||
+        artifact.dimensions.height !== requiredSize.height),
   }))
 
   return {
@@ -247,6 +291,10 @@ export function binaryOutputView(step: PipelineStep | null | undefined): BinaryO
     modalities,
     mediaTypes,
     undeliveredMediaTypes: undeliveredMediaTypes(mediaTypes, rows),
+    requiredSize,
+    missized: rows.filter((row) => row.missized).length,
+    sizeUnreported:
+      requiredSize === null ? 0 : rows.filter((row) => row.dimensions === undefined).length,
     unknownDeclaredGenerators: report.unknownGenerators,
     generatorsUnverified: report.generatorsUnverified === true,
     invalidEntries: report.invalidEntries,
@@ -362,6 +410,8 @@ export function binaryOutputHasWarnings(view: BinaryOutputView): boolean {
     view.unknownDeclaredGenerators.length > 0 ||
     view.generatorsUnverified ||
     view.undeliveredMediaTypes.length > 0 ||
+    view.missized > 0 ||
+    view.sizeUnreported > 0 ||
     view.invalidEntries > 0 ||
     view.omitted > 0 ||
     view.misdirected > 0

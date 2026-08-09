@@ -260,6 +260,32 @@ const state = computed(() => {
           )
         }}
       </li>
+      <!-- The same judgement one axis over, on the requirement whose whole point is the delivered
+           pixels. The two size lines stay apart because an artifact that reported no dimensions
+           is not one that came back wrong: only the first can be fixed by asking the step to
+           report, and only the second is evidence the asset is unusable. -->
+      <li v-if="view.missized && view.requiredSize" data-testid="binary-output-missized">
+        {{
+          t(
+            'binaryOutput.warning.missized',
+            {
+              count: view.missized,
+              width: view.requiredSize.width,
+              height: view.requiredSize.height,
+            },
+            view.missized,
+          )
+        }}
+      </li>
+      <li v-if="view.sizeUnreported" data-testid="binary-output-size-unreported">
+        {{
+          t(
+            'binaryOutput.warning.sizeUnreported',
+            { count: view.sizeUnreported },
+            view.sizeUnreported,
+          )
+        }}
+      </li>
       <li v-if="view.misdirected" data-testid="binary-output-misdirected-note">
         {{
           t(

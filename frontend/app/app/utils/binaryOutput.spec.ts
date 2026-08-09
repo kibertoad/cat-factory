@@ -371,6 +371,61 @@ describe('the delivered-format check', () => {
   })
 })
 
+// The size axis's delivery-side half. Admission checked what the selected integrations can be
+// ASKED for; only this checks what came back, which is the failure the requirement exists for:
+// an asset stored at the wrong size passes every other check on this panel.
+describe('binaryOutputView, the delivered size', () => {
+  const sized = (
+    outputSize: { width: number; height: number } | undefined,
+    stored: { location: string; dimensions?: { width: number; height: number } }[],
+  ) =>
+    binaryOutputView(
+      step({
+        stepOptions: {
+          binaryOutput: {
+            storageServiceId: 'files',
+            ...(outputSize ? { generation: { outputSize } } : {}),
+          },
+        },
+        binaryOutputs: report({
+          stored: stored.map((entry) => ({ service: 'files', ...entry })),
+        }),
+      }),
+    )
+
+  it('counts an artifact delivered at another size, and marks its row', () => {
+    const view = sized({ width: 96, height: 96 }, [
+      { location: 'a.png', dimensions: { width: 96, height: 96 } },
+      { location: 'b.png', dimensions: { width: 1024, height: 1024 } },
+    ])
+    expect(view?.requiredSize).toEqual({ width: 96, height: 96 })
+    expect(view?.missized).toBe(1)
+    expect(view?.rows.map((row) => row.missized)).toEqual([false, true])
+    expect(binaryOutputHasWarnings(view!)).toBe(true)
+  })
+
+  it('counts an UNMEASURED artifact apart, never as a delivered one', () => {
+    // The rule this whole feature runs on: "we were not told" and "it came back wrong" are the
+    // same value and opposite facts. Folded together, a run that reported nothing would read as
+    // one that delivered everything wrong; dropped, it would read as a clean one.
+    const view = sized({ width: 96, height: 96 }, [{ location: 'a.png' }])
+    expect(view?.missized).toBe(0)
+    expect(view?.sizeUnreported).toBe(1)
+    expect(binaryOutputHasWarnings(view!)).toBe(true)
+  })
+
+  it('judges nothing when the step asked for no size', () => {
+    const view = sized(undefined, [
+      { location: 'a.png', dimensions: { width: 1024, height: 1024 } },
+      { location: 'b.png' },
+    ])
+    expect(view?.requiredSize).toBeNull()
+    expect(view?.missized).toBe(0)
+    expect(view?.sizeUnreported).toBe(0)
+    expect(binaryOutputHasWarnings(view!)).toBe(false)
+  })
+})
+
 describe('binaryOutputPickIssues, generative half', () => {
   const catalog = [{ id: 'files', capabilities: ['asset-storage'] }]
   const generators = [
