@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/gatekeeper-bindings",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Policy-annotated operation table for the cat-factory public API (/api/v1): per-operation scope floors, mutation and transport metadata, and invoke thunks over @cat-factory/sdk, generated from the same OpenAPI spec the SDKs are. Built for credential-holding front-ends such as a Cloudflare OS Gatekeeper.",
   "keywords": [
     "cat-factory",
@@ -41,7 +41,7 @@
     "@cat-factory/sdk": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^26.1.2",
+    "@types/node": "^26.2.0",
     "typescript": "7.0.2",
     "vitest": "^4.1.10"
   },

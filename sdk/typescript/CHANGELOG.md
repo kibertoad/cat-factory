@@ -1,5 +1,17 @@
 # @cat-factory/sdk
 
+## 0.28.1
+
+### Patch Changes
+
+- 3036af7: Refresh every direct and transitive dependency to the newest version the 24h
+  `minimumReleaseAge` supply-chain gate admits, staying inside each package's current major.
+
+  The Vercel AI SDK family moves within the majors `workers-ai-provider` pairs with
+  (`ai@7.0.58`, `@ai-sdk/*@4.0.36` / `openai-compatible@3.0.27` / `amazon-bedrock@5.0.50`), and the
+  Vue singleton pin plus its `@vue/*` overrides move together to 3.5.41 so the SPA still bundles
+  exactly one Vue.
+
 ## 0.28.0
 
 ### Minor Changes
