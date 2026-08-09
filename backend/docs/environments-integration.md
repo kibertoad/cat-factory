@@ -28,15 +28,24 @@ See also [ADR 0003](./adr/0003-ephemeral-environment-provider.md). When your too
 bespoke to describe declaratively, you can instead inject a hand-written **native adapter**:
 see [Native environment adapters](./native-environment-adapter.md).
 
-> **A manifest is the last resort, not the first.** Three backends ship in the box and need none:
-> `kubernetes`, `eks` and `cloudflare`; choosing between them is the site's
+> **A manifest is the last resort, not the first.** Four backends ship in the box and need none:
+> `kubernetes`, `eks`, `cloudflare` and `compose` (the `docker-compose` provision type, over the
+> `local-docker` engine); choosing between them is the site's
 > [Choosing a backend](https://www.catfactory.ai/operate/environments.html#choosing-a-backend).
-> The one design fact that belongs here is why `cloudflare` is available where the others are not:
-> it stands its per-PR Worker up by driving the target repository's OWN preview workflow over the
-> VCS Deployments API, so it needs nothing but outbound HTTPS and therefore works on every facade,
-> including the Cloudflare Worker one that has no Docker daemon and no filesystem. Its reference
-> workflow lives in [`deploy/preview`](../../deploy/preview/README.md); wiring it to a board is
-> [`docs/internal/dogfooding.md`](../../docs/internal/dogfooding.md).
+> What belongs here is why the two ends of that list are offered on different facades, which is a
+> property of what each one has to reach rather than a packaging decision:
+>
+> - **`cloudflare` is available everywhere**, the Cloudflare Worker facade with no Docker daemon
+>   and no filesystem included, because it stands its per-PR Worker up by driving the target
+>   repository's OWN preview workflow over the VCS Deployments API: outbound HTTPS is the whole
+>   requirement. Its reference workflow lives in
+>   [`deploy/preview`](../../deploy/preview/README.md); wiring it to a board is
+>   [`docs/internal/dogfooding.md`](../../docs/internal/dogfooding.md).
+> - **`compose` is the local facade's alone**, and only when `LOCAL_CONTAINER_RUNTIME` selects a
+>   Docker-family runtime, because it drives a host `docker compose` binary. It is therefore the
+>   one built-in the facade registers BY REFERENCE (closing over the host CLI seam) instead of
+>   building from config, and the one that rides the contract's generic backend-manifest member
+>   rather than a reserved kind.
 
 > **The connection is now per provision type, not one per workspace.** This doc describes the
 > generic HTTP `manifest` backend, which today serves the **`custom` provision type** via the
@@ -266,7 +275,8 @@ What belongs to THIS doc is how a code adapter sits inside the manifest integrat
   apply.
 - **The URL it returns is still SSRF-guarded**, because the guard belongs to the engine rather than
   to the provider that produced the URL. Installing your own code is therefore not a way around it;
-  reaching an internal platform means widening the URL policy (next section).
+  reaching an internal platform means widening the URL policy
+  ([below](#reaching-an-internal--vpn-hosted-platform)).
 
 ### Confirming a teardown (`confirmTeardown`)
 
