@@ -1,4 +1,5 @@
 import {
+  MCP_AUTHORIZATION_REQUEST_INVALID,
   decideMcpAuthorizationContract,
   describeMcpAuthorizationContract,
 } from '@cat-factory/contracts'
@@ -89,6 +90,10 @@ function requireAuthServer<E extends AppEnv>(c: Context<E>) {
  * they are indistinguishable to whoever presented the value, and separating them would only tell
  * someone guessing which guess was closer. The page renders "this request has expired, start again
  * from your host", which is the right instruction for every one of them.
+ *
+ * The `reason` is what makes that instruction correct rather than a guess: it is the ONE refusal
+ * here that consumed the flow, so the screen keys its terminal state off this code and treats every
+ * other failure as one the person can answer differently (see `MCP_AUTHORIZATION_REQUEST_INVALID`).
  */
 async function openRequest<E extends AppEnv>(
   c: Context<E>,
@@ -99,7 +104,7 @@ async function openRequest<E extends AppEnv>(
     requestLogger(c).warn('mcp authorization consent carried no usable request')
     throw new UnauthorizedError(
       'This authorization request is invalid or has expired',
-      'mcp_authorization_request_invalid',
+      MCP_AUTHORIZATION_REQUEST_INVALID,
     )
   }
   return request

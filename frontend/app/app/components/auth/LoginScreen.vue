@@ -5,6 +5,7 @@ import SecretInput from '~/components/common/SecretInput.vue'
 import type { VcsProvider } from '~/types/domain'
 import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS, vcsTokenCreateUrl } from '~/utils/vcs'
 import { SSO_ERROR_MESSAGE_KEYS } from '~/utils/sso'
+import { postSignInUrl } from '~/utils/postSignIn'
 
 const auth = useAuthStore()
 const { t } = useI18n()
@@ -62,7 +63,7 @@ async function submitPat(provider: PatProvider) {
   patBusy.value = true
   try {
     await auth.patLogin({ provider })
-    if (typeof window !== 'undefined') window.location.assign(window.location.pathname)
+    if (typeof window !== 'undefined') window.location.assign(postSignInUrl(window.location))
   } catch (e) {
     patError.value = apiErrorEnvelope(e)?.message ?? t('auth.localMode.failed')
   } finally {
@@ -105,7 +106,7 @@ async function submitPassword() {
       await auth.passwordLogin({ email: email.value, password: password.value })
     }
     // Reload so the app boots with the new session.
-    if (typeof window !== 'undefined') window.location.assign(window.location.pathname)
+    if (typeof window !== 'undefined') window.location.assign(postSignInUrl(window.location))
   } catch (e) {
     error.value = apiErrorEnvelope(e)?.message ?? t('auth.login.signInFailed')
   } finally {
@@ -177,7 +178,7 @@ async function submitRemotePat() {
   remotePatBusy.value = true
   try {
     await auth.patLogin({ provider: remotePatProvider.value, token: remotePatToken.value.trim() })
-    if (typeof window !== 'undefined') window.location.assign(window.location.pathname)
+    if (typeof window !== 'undefined') window.location.assign(postSignInUrl(window.location))
   } catch (e) {
     remotePatError.value = apiErrorEnvelope(e)?.message ?? t('auth.login.signInFailed')
   } finally {

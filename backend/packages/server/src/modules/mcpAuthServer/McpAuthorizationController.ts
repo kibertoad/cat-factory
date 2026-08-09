@@ -1,6 +1,8 @@
 import {
   McpOAuthProtocolError,
+  McpOAuthRedirectableError,
   authorizationServerMetadata,
+  mcpOAuthErrorRedirect,
   mcpResourceIdentifier,
   protectedResourceMetadata,
   AUTHORIZATION_SERVER_METADATA_PATH,
@@ -11,7 +13,7 @@ import { describeError } from '@cat-factory/kernel'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { requireCapability } from '../../http/guards.js'
+import { assertCapability, requireCapability } from '../../http/guards.js'
 import { requestLogger } from '../../http/requestLogging.js'
 import { consentUrlFor } from './consentRedirect.js'
 
@@ -36,14 +38,30 @@ import { consentUrlFor } from './consentRedirect.js'
 // against `invalid_client` is a distinction the envelope's status class cannot carry.
 // ---------------------------------------------------------------------------
 
+/** What every route here needs, and the message naming what a deployment has not wired. */
+const AUTH_SERVER_UNWIRED =
+  'This deployment does not serve MCP authorization. It needs ENCRYPTION_KEY (the flow seals ' +
+  'every value it carries) and the public API enabled, since what a host is issued is a ' +
+  'public-API key.'
+
 /** The authorization server, or the 503 naming what a deployment has not wired. */
 function requireAuthServer<E extends AppEnv>(c: Context<E>) {
-  return requireCapability(
-    c.get('container').mcpAuthServer,
-    'This deployment does not serve MCP authorization. It needs ENCRYPTION_KEY (the flow seals ' +
-      'every value it carries) and the public API enabled, since what a host is issued is a ' +
-      'public-API key.',
-  )
+  return requireCapability(c.get('container').mcpAuthServer, AUTH_SERVER_UNWIRED)
+}
+
+/**
+ * The same refusal where the route has no use for the value: the two metadata documents.
+ *
+ * They are gated for the reason a signpost is taken down when the road behind it is closed. Left
+ * ungated they describe a complete authorization server (endpoints, grant types, PKCE method) on a
+ * deployment whose `/oauth/register` and `/oauth/token` can only answer 503, which is strictly
+ * worse than answering nothing: a host that reads discovery believes the flow is available, walks
+ * it, and reports a broken server. A host that cannot discover falls back to asking for a key,
+ * which is exactly the behaviour that existed before any of this, and is the honest answer for a
+ * deployment that has not wired what the documents promise.
+ */
+function assertAuthServer<E extends AppEnv>(c: Context<E>) {
+  assertCapability(c.get('container').mcpAuthServer, AUTH_SERVER_UNWIRED)
 }
 
 export function mcpAuthorizationController(): Hono<AppEnv> {
@@ -55,12 +73,16 @@ export function mcpAuthorizationController(): Hono<AppEnv> {
   // exactly one protected resource, so there is no second document either path could mean, and
   // answering both costs nothing but takes a whole class of "connects everywhere except here" out.
   for (const path of [PROTECTED_RESOURCE_METADATA_PATH, '/.well-known/oauth-protected-resource']) {
-    app.get(path, (c) => metadataResponse(c, protectedResourceMetadata(originOf(c))))
+    app.get(path, (c) => {
+      assertAuthServer(c)
+      return metadataResponse(c, protectedResourceMetadata(originOf(c)))
+    })
   }
 
-  app.get(AUTHORIZATION_SERVER_METADATA_PATH, (c) =>
-    metadataResponse(c, authorizationServerMetadata(originOf(c))),
-  )
+  app.get(AUTHORIZATION_SERVER_METADATA_PATH, (c) => {
+    assertAuthServer(c)
+    return metadataResponse(c, authorizationServerMetadata(originOf(c)))
+  })
 
   // Dynamic client registration (RFC 7591). Unauthenticated, which is the specified shape for an
   // OPEN registration endpoint and is what makes a host nobody configured able to connect at all.
@@ -113,12 +135,26 @@ export function mcpAuthorizationController(): Hono<AppEnv> {
       })
       return c.redirect(consentUrlFor(c, sealedRequest), 302)
     } catch (error) {
-      // A refusal here is NOT reported by redirecting to the client. `beginAuthorization` refuses
-      // exactly when the request is not one this server can attribute to a registered redirect
-      // target, so bouncing the error to the supplied `redirect_uri` would be the open redirect the
-      // registration check exists to prevent: an attacker would have a URL on this deployment's
-      // origin that forwards a browser anywhere, with error text of their choosing on the end of
-      // it. The human standing in front of this reads the refusal instead.
+      // WHERE a refusal goes is the service's judgement, not this route's, and it turns on one
+      // question: has the redirect URI been matched against the registration yet?
+      //
+      // Until it has, the refusal has nowhere safe to go. Bouncing it to the supplied
+      // `redirect_uri` would be the open redirect the registration check exists to prevent: an
+      // attacker would hold a URL on this deployment's origin that forwards a browser anywhere,
+      // with error text of their choosing on the end of it. The human standing in front of the
+      // browser reads that refusal as a page instead.
+      //
+      // Once it has, the opposite holds and RFC 6749 §4.1.2.1 requires it: the fault is in the
+      // host's own request and it is the host that must hear about it, at an address it registered
+      // itself. Rendered as a page, a conforming client waits out its timeout and reports that this
+      // deployment never answered.
+      if (error instanceof McpOAuthRedirectableError) {
+        requestLogger(c).warn('mcp authorization refused, reporting to the client', {
+          oauthError: error.oauthError,
+          ...describeError(error),
+        })
+        return c.redirect(mcpOAuthErrorRedirect(error), 302)
+      }
       return oauthErrorResponse(c, error)
     }
   })
@@ -169,19 +205,16 @@ function originOf<E extends AppEnv>(c: Context<E>): string {
 }
 
 /**
- * A metadata document, cacheable and readable cross-origin.
+ * A metadata document, cacheable.
  *
- * The `*` is on THESE two routes alone, and it is not a widening of the deployment's CORS policy:
- * both are public, credential-free documents whose whole purpose is to be read by a client that has
- * no relationship with this deployment yet, and a browser-hosted MCP client (the case this feature
- * exists for) cannot start the flow without reading them. Every route that accepts or issues a
- * credential keeps the deployment's configured allowlist.
+ * Readable from any browser origin, but NOT by a header set here: `isPubliclyReadablePath` in the
+ * shared CORS layer covers `/.well-known` and `/oauth` together, because the routes that ACT on
+ * these documents are preflighted and a preflight never reaches a handler. Setting the header here
+ * as well would answer discovery from two places and leave the registration it points at answering
+ * from neither.
  */
 function metadataResponse<E extends AppEnv>(c: Context<E>, document: Record<string, unknown>) {
-  return c.json(document, 200, {
-    'cache-control': 'public, max-age=300',
-    'access-control-allow-origin': '*',
-  })
+  return c.json(document, 200, { 'cache-control': 'public, max-age=300' })
 }
 
 /**

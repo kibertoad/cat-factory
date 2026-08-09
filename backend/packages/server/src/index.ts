@@ -333,7 +333,9 @@ export { handleError } from './http/errorHandler.js'
 export {
   CORS_ALLOWED_HEADERS,
   CORS_EXPOSED_HEADERS,
+  corsOriginFor,
   corsReflectsWhenUnset,
+  isPubliclyReadablePath,
   parseAllowedOrigins,
   resolveCorsOrigin,
 } from './http/cors.js'

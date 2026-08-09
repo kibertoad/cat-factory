@@ -59,9 +59,20 @@ about nobody.
 
 Two asymmetries in that controller are deliberate. A DENIAL takes no permission, because a person who
 cannot approve must still be able to answer, or the host waits out its timeout and its user goes
-looking for a fault in the deployment. And an unregistered `redirect_uri` is refused ON THE PAGE
-rather than reported by redirecting to it: for that one error, bouncing it back would BE the open
-redirect the registration check exists to prevent.
+looking for a fault in the deployment. And WHERE a refusal at the authorize endpoint goes turns on
+one line: until the `redirect_uri` has been matched against the registration there is no address it
+may be sent to, because bouncing it back would BE the open redirect that check exists to prevent, so
+it renders as a page; once it has been matched, RFC 6749 §4.1.2.1 puts every remaining fault (a bad
+`response_type`, missing PKCE, a `resource` naming somewhere else) on the client's own registered
+address, because a page instead leaves a conforming host waiting on a callback that never arrives.
+The distinction is carried by the error the service throws rather than re-derived at the route, so
+nothing downstream re-decides it from attacker-supplied input.
+
+**The consent screen preselects the platform's default scope, never the host's ask above it.**
+Registration is unauthenticated, so `scope=admin` costs an attacker nothing, and an ask arriving as
+the checked radio button would put the rung that deletes tasks and merges pull requests in front of a
+person as though it were the shipped default. The ask is honoured only downward; above the default it
+is REPORTED on the screen instead, so raising the grant stays something a person does.
 
 **The 401 challenge is the piece with no second source.** Everything else in the chain was already
 serveable and would have been unreachable, because nothing told a client to look. It is set by the
@@ -78,9 +89,21 @@ recorded verbatim. One client, two servers, and the second held to what the firs
 enough. The Figma fixture earns its place twice: it is also the only regression test the consuming
 walk has against a shipping, OAuth-protected MCP server.
 
+**`/.well-known/*` and `/oauth/*` answer any browser origin**, whatever `CORS_ALLOWED_ORIGINS` says,
+through one predicate in the shared CORS layer both facades read. That is the complement of the
+allowlist rather than a hole in it: the allowlist names the origins that may drive an existing
+credential's surface, every route under these two prefixes is reached by a party that has no
+credential yet, and the hosts this exists for run on origins no operator can be expected to have
+listed. It belongs in the CORS layer rather than on a handler because a preflight is answered before
+any route runs: covering the documents alone reads as working, since discovery is a plain GET nobody
+preflights, and then the first call that ACTS on what was discovered is dropped by the browser.
+
 Serving is enabled exactly when a deployment can complete the flow: an `ENCRYPTION_KEY` (everything
-carried is sealed under it) and the public-API key store (what it issues). Absent either, the
-authorization routes refuse with a 503 naming both, and a host falls back to asking for a key.
+carried is sealed under it) and the public-API key store (what it issues). Absent either, NOTHING is
+advertised: the discovery documents refuse with the same 503 as the routes they describe, and a host
+falls back to asking for a key. A deployment that described an authorization server it cannot run
+would send every host down a chain that fails at the last step, which reads as a broken deployment
+rather than as one that has not enabled a capability.
 `APP_BASE_URL` is read only for the consent redirect and falls back to the request's own origin,
 which is right for every same-origin install; unlike the consuming side's `MCP_OAUTH_REDIRECT_URL`,
 no third party holds this string.

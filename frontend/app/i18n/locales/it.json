@@ -25,6 +25,7 @@
         "description": "Inoltre eliminare attività e agire sulle notifiche, il che può unire una pull request."
       }
     },
+    "requestedScope": "{client} ha richiesto {scope}. Seleziona quell'opzione qui sopra solo se intendi davvero concederla.",
     "approve": "Collega",
     "deny": "Annulla",
     "back": "Torna all'app",

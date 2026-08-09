@@ -25,6 +25,7 @@
         "description": "Zusätzlich Aufgaben löschen und auf Benachrichtigungen reagieren, was einen Pull Request zusammenführen kann."
       }
     },
+    "requestedScope": "{client} hat {scope} angefragt. Wählen Sie das oben nur, wenn Sie es wirklich gewähren möchten.",
     "approve": "Verbinden",
     "deny": "Abbrechen",
     "back": "Zurück zur App",

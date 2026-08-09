@@ -2601,6 +2601,7 @@
         "description": "Además, eliminar tareas y actuar sobre notificaciones, lo que puede fusionar un pull request."
       }
     },
+    "requestedScope": "{client} solicitó {scope}. Elige esa opción arriba solo si de verdad quieres concederla.",
     "approve": "Conectar",
     "deny": "Cancelar",
     "back": "Volver a la aplicación",

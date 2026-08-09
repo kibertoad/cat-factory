@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { PUBLIC_API_SCOPES, type PublicApiScope } from '@cat-factory/contracts'
+import {
+  MCP_AUTHORIZATION_REQUEST_INVALID,
+  PUBLIC_API_SCOPES,
+  type PublicApiScope,
+} from '@cat-factory/contracts'
+import { apiErrorEnvelope, apiErrorReason } from '~/composables/api/errors'
 
 // The consent screen an MCP host's authorization request lands on
 // (`/mcp-authorize?request=…`), reached by a redirect from `GET /oauth/authorize`.
@@ -12,9 +17,10 @@ import { PUBLIC_API_SCOPES, type PublicApiScope } from '@cat-factory/contracts'
 // and its `secrets.manage` check actually run.
 //
 // Not a public route: an expired session renders the login screen on this same URL, and once the
-// person signs in the query string is still here and the flow continues. That is correct rather
-// than a gap, and it is also how an SSO deployment gets its identity provider into a flow that
-// otherwise has no idea who anyone is.
+// person signs in the query string is still here and the flow continues (`postSignInUrl`, which
+// LoginScreen reloads to, exists to keep it). That is correct rather than a gap, and it is also how
+// an SSO deployment gets its identity provider into a flow that otherwise has no idea who anyone
+// is.
 
 const api = useApi()
 const { t } = useI18n()
@@ -23,11 +29,25 @@ type Screen = 'loading' | 'deciding' | 'submitting' | 'failed'
 
 const screen = ref<Screen>('loading')
 const detail = ref<string | null>(null)
+/**
+ * A refusal that did NOT consume the request, shown beside the choices rather than instead of
+ * them. See `decide`: the two failures are answered differently because only one of them ends the
+ * flow.
+ */
+const decisionError = ref<string | null>(null)
 const clientName = ref('')
 const redirectOrigin = ref('')
 const workspaces = ref<{ label: string; value: string }[]>([])
 const workspaceId = ref<string | undefined>(undefined)
-const scope = ref<PublicApiScope>('write')
+/**
+ * Starts at the FLOOR of the ladder and is replaced by the server's `defaultScope` once the request
+ * resolves. The screen never preselects from the host's own ask: an unauthenticated registration
+ * can name any scope, so the server clamps it (`consentDefaultScope`) and this page renders what it
+ * was given. Least privilege before that answer arrives, in case a render ever beats it.
+ */
+const scope = ref<PublicApiScope>('read')
+/** What the host asked for, when the server preselected something else. Shown, never applied. */
+const requestedScope = ref<PublicApiScope | null>(null)
 
 const sealedRequest = computed(() =>
   typeof window === 'undefined'
@@ -61,19 +81,28 @@ onMounted(async () => {
     ])
     clientName.value = request.clientName
     redirectOrigin.value = request.redirectOrigin
-    if (request.requestedScope) scope.value = request.requestedScope
+    scope.value = request.defaultScope
+    // Only worth saying when the two differ: identical values would be a line telling a person
+    // that the thing in front of them is the thing in front of them.
+    requestedScope.value =
+      request.requestedScope && request.requestedScope !== request.defaultScope
+        ? request.requestedScope
+        : null
     workspaces.value = boards.map((board) => ({ label: board.name, value: board.id }))
     workspaceId.value = workspaces.value[0]?.value
     screen.value = 'deciding'
   } catch (e) {
+    // Terminal whatever the cause: with no request to describe there is nothing to decide, and the
+    // person is told to start again from the host, which is the only place a new one comes from.
     screen.value = 'failed'
-    detail.value = messageOf(e) ?? t('mcpAuthorize.error.expired')
+    detail.value = apiErrorEnvelope(e)?.message ?? t('mcpAuthorize.error.expired')
   }
 })
 
 async function decide(decision: 'approve' | 'deny') {
   if (decision === 'approve' && !workspaceId.value) return
   screen.value = 'submitting'
+  decisionError.value = null
   try {
     const result = await api.decideMcpAuthorization(
       decision === 'approve'
@@ -89,13 +118,20 @@ async function decide(decision: 'approve' | 'deny') {
     // waiting for a browser to arrive at it with the code on the query string.
     if (typeof window !== 'undefined') window.location.assign(result.redirectTo)
   } catch (e) {
-    screen.value = 'failed'
-    detail.value = messageOf(e) ?? t('mcpAuthorize.error.failed')
+    // Two outcomes, because two things can be wrong and only one of them ends the flow. The sealed
+    // request gone is TERMINAL: nothing on this page can mint another, so it says so and offers the
+    // way out. Anything else (this board is one the person cannot mint a key on, it disappeared,
+    // the deployment hiccuped) leaves the request valid and this screen the only place the decision
+    // can be made, so dropping to a dead end over it would strand a person who has a board they
+    // COULD have picked one dropdown away.
+    if (apiErrorReason(e) === MCP_AUTHORIZATION_REQUEST_INVALID) {
+      screen.value = 'failed'
+      detail.value = apiErrorEnvelope(e)?.message ?? t('mcpAuthorize.error.expired')
+      return
+    }
+    screen.value = 'deciding'
+    decisionError.value = apiErrorEnvelope(e)?.message ?? t('mcpAuthorize.error.failed')
   }
-}
-
-function messageOf(error: unknown): string | null {
-  return (error as { data?: { error?: { message?: string } } })?.data?.error?.message ?? null
 }
 
 function backToApp() {
@@ -136,9 +172,12 @@ function backToApp() {
         </h1>
         <!-- The origin is the one fact here an attacker cannot choose: it was matched against what
              the client registered before this screen was ever reached. The name beside it is a
-             stranger's own words, so the copy presents it as a claim rather than as identity. -->
+             stranger's own words, so the copy presents it as a claim rather than as identity.
+             The copy reads "It says it is {client}, and …" in every locale, so BOTH holes have to
+             be filled: an unpassed `client` renders a sentence naming nobody, on the one screen
+             whose whole subject is who is asking. -->
         <p class="mb-6 text-center text-sm text-slate-400">
-          {{ t('mcpAuthorize.subtitle', { origin: redirectOrigin }) }}
+          {{ t('mcpAuthorize.subtitle', { client: clientName, origin: redirectOrigin }) }}
         </p>
 
         <div v-if="!workspaces.length" class="mb-6 text-center text-sm text-amber-300">
@@ -159,7 +198,7 @@ function backToApp() {
           <UFormField
             :label="t('mcpAuthorize.scopeLabel')"
             :description="t('mcpAuthorize.scopeHint')"
-            class="mb-6"
+            :class="requestedScope ? 'mb-2' : 'mb-6'"
           >
             <URadioGroup
               v-model="scope"
@@ -168,7 +207,31 @@ function backToApp() {
               data-testid="mcp-authorize-scope"
             />
           </UFormField>
+
+          <!-- Only when the host asked for something other than what is preselected. Anyone can
+               register a client and ask for `admin`, so the ask is reported as a fact ABOUT the
+               host rather than acted on: raising the grant stays a thing a person does. -->
+          <p
+            v-if="requestedScope"
+            class="mb-6 text-xs text-amber-300"
+            data-testid="mcp-authorize-requested-scope"
+          >
+            {{
+              t('mcpAuthorize.requestedScope', {
+                client: clientName,
+                scope: t(`mcpAuthorize.scope.${requestedScope}.label`),
+              })
+            }}
+          </p>
         </template>
+
+        <p
+          v-if="decisionError"
+          class="mb-4 text-center text-sm break-words text-red-400"
+          data-testid="mcp-authorize-decision-error"
+        >
+          {{ decisionError }}
+        </p>
 
         <div class="flex gap-2">
           <UButton

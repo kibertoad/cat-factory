@@ -2601,6 +2601,7 @@
         "description": "Dodatkowo usuwanie zadań i reagowanie na powiadomienia, co może scalić pull request."
       }
     },
+    "requestedScope": "{client} poprosił o {scope}. Wybierz tę opcję powyżej tylko wtedy, gdy naprawdę chcesz jej udzielić.",
     "approve": "Połącz",
     "deny": "Anuluj",
     "back": "Powrót do aplikacji",

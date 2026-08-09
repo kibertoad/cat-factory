@@ -1,7 +1,7 @@
 import type { Clock, Logger, SecretCipher } from '@cat-factory/kernel'
-import { noopLogger } from '@cat-factory/kernel'
+import { ConflictError, noopLogger } from '@cat-factory/kernel'
 import { PUBLIC_API_SCOPES, type PublicApiScope } from '@cat-factory/contracts'
-import type { PublicApiKeyService } from '../publicApi/PublicApiKeyService.js'
+import { scopeSatisfies, type PublicApiKeyService } from '../publicApi/PublicApiKeyService.js'
 
 // ---------------------------------------------------------------------------
 // The SERVING half of MCP authorization: this deployment acting as the authorization server for
@@ -74,6 +74,13 @@ const REQUIRED_CODE_CHALLENGE_METHOD = 'S256'
 const MAX_REDIRECT_URIS = 8
 const MAX_CLIENT_NAME_LENGTH = 120
 
+/**
+ * The scope the consent screen offers before anyone has chosen: the middle of the ladder, which is
+ * what an MCP host is actually for (read the board, author and start work on it) and stops short of
+ * both rungs that answer a parked run or merge a pull request.
+ */
+export const CONSENT_DEFAULT_SCOPE: PublicApiScope = 'write'
+
 /** A registration, sealed into the `client_id` a dynamic registration answers with. */
 interface SealedClient {
   kind: 'mcp-client'
@@ -123,6 +130,12 @@ export interface McpAuthorizationRequestSummary {
   clientName: string
   /** The origin the browser will be sent back to: the fact a human can actually judge. */
   redirectOrigin: string
+  /**
+   * What the screen preselects: the platform's default, or the host's ask when that asks for LESS
+   * ({@link consentDefaultScope}). Never what an unauthenticated registration asked for above it.
+   */
+  defaultScope: PublicApiScope
+  /** What the host asked for, verbatim, so the screen can say so when it exceeds the default. */
   requestedScope?: PublicApiScope
 }
 
@@ -153,27 +166,80 @@ export interface McpAuthorizationServerDependencies {
  * rather than the deployment's error envelope, the same split the hosted MCP endpoint already
  * makes between an HTTP-level auth failure and a JSON-RPC method refusal.
  */
+export type McpOAuthErrorCode =
+  | 'invalid_request'
+  | 'invalid_client'
+  | 'invalid_grant'
+  | 'unauthorized_client'
+  | 'unsupported_grant_type'
+  // RFC 6749 §4.1.2.1's own, for the authorization endpoint: a client that asked for a response
+  // type this server does not serve is told which half of its request was wrong, where the
+  // generic code sends its author reading the whole query string.
+  | 'unsupported_response_type'
+  | 'invalid_scope'
+  | 'access_denied'
+  // RFC 7591 §3.2.2's own two, which the registration endpoint answers with. Kept as members
+  // rather than folded into `invalid_request`: a client that registered a redirect URI this
+  // server will not send a code to has one line to change, and the generic code sends its
+  // author looking through the whole request body for it.
+  | 'invalid_redirect_uri'
+  | 'invalid_client_metadata'
+
 export class McpOAuthProtocolError extends Error {
   constructor(
-    readonly oauthError:
-      | 'invalid_request'
-      | 'invalid_client'
-      | 'invalid_grant'
-      | 'unauthorized_client'
-      | 'unsupported_grant_type'
-      | 'invalid_scope'
-      | 'access_denied'
-      // RFC 7591 §3.2.2's own two, which the registration endpoint answers with. Kept as members
-      // rather than folded into `invalid_request`: a client that registered a redirect URI this
-      // server will not send a code to has one line to change, and the generic code sends its
-      // author looking through the whole request body for it.
-      | 'invalid_redirect_uri'
-      | 'invalid_client_metadata',
+    readonly oauthError: McpOAuthErrorCode,
     message: string,
   ) {
     super(message)
     this.name = 'McpOAuthProtocolError'
   }
+}
+
+/**
+ * A refusal at the authorization endpoint that the CLIENT must be told about, on the redirect URI
+ * it registered (RFC 6749 §4.1.2.1).
+ *
+ * The distinction this type carries is the whole of that section's rule, and it is a distinction
+ * only this service can make. Where the request cannot be ATTRIBUTED to a registered redirect
+ * target (an unknown `client_id`, a `redirect_uri` the client never registered), the refusal has
+ * nowhere safe to go: bouncing it back would turn this deployment's own origin into a forwarder to
+ * any address an attacker names, which is the open redirect the registration check exists to
+ * prevent. Those stay a plain {@link McpOAuthProtocolError} and are rendered as a page.
+ *
+ * Once the redirect URI HAS been matched against the registration, the opposite is true: a bad
+ * `response_type`, a missing PKCE challenge or a `resource` naming someone else are faults in the
+ * host's own request, and it is the host that must hear about them. Rendered as a page instead,
+ * they leave a conforming client waiting on a callback that never arrives until it times out, and
+ * the fault it then reports is "this deployment did not answer" rather than the one line it got
+ * wrong.
+ */
+export class McpOAuthRedirectableError extends McpOAuthProtocolError {
+  constructor(
+    oauthError: McpOAuthErrorCode,
+    message: string,
+    /** The already-validated address to report this on, and the host's `state` to echo. */
+    readonly target: McpOAuthRedirectTarget,
+  ) {
+    super(oauthError, message)
+    this.name = 'McpOAuthRedirectableError'
+  }
+}
+
+/** A registered redirect URI plus the host's own `state`: where a refusal or a code is delivered. */
+export interface McpOAuthRedirectTarget {
+  redirectUri: string
+  state?: string
+}
+
+/**
+ * Where a refusal the client must hear about goes.
+ *
+ * Exported as a function over the error rather than a method, because the target rides the error
+ * itself: the controller catching it needs no access to the server that threw it, and there is no
+ * way to spell "report this somewhere the request was not validated against".
+ */
+export function mcpOAuthErrorRedirect(error: McpOAuthRedirectableError): string {
+  return redirectWithError(error.target, error.oauthError, error.message)
 }
 
 /**
@@ -257,16 +323,24 @@ export class McpAuthorizationServer {
         'redirect_uri does not match any URI this client registered.',
       )
     }
+    // Past this line the address is one the client itself registered, so every further refusal is
+    // REPORTABLE to it rather than only to the human standing in front of the browser.
+    const target: McpOAuthRedirectTarget = {
+      redirectUri: input.redirectUri,
+      ...(input.state ? { state: input.state } : {}),
+    }
     if (input.responseType !== 'code') {
-      throw new McpOAuthProtocolError(
-        'invalid_request',
+      throw new McpOAuthRedirectableError(
+        'unsupported_response_type',
         `Only the authorization-code response type is served; got '${input.responseType}'.`,
+        target,
       )
     }
     if (input.codeChallengeMethod !== REQUIRED_CODE_CHALLENGE_METHOD || !input.codeChallenge) {
-      throw new McpOAuthProtocolError(
+      throw new McpOAuthRedirectableError(
         'invalid_request',
         `This authorization server requires PKCE with code_challenge_method=${REQUIRED_CODE_CHALLENGE_METHOD}.`,
+        target,
       )
     }
     // RFC 8707. Checked rather than ignored because the whole point of the parameter is that a
@@ -274,9 +348,10 @@ export class McpAuthorizationServer {
     // host believe it holds a token this deployment vouched for against a surface it does not
     // serve. Absent is tolerated (a client one revision behind), a MISMATCH never is.
     if (input.resource && !resourceMatches(input.resource, input.expectedResource)) {
-      throw new McpOAuthProtocolError(
+      throw new McpOAuthRedirectableError(
         'invalid_request',
         `This authorization server issues tokens for ${input.expectedResource}, not ${input.resource}.`,
+        target,
       )
     }
     const requestedScope = readScope(input.scope)
@@ -365,11 +440,13 @@ export class McpAuthorizationServer {
    * they just made.
    */
   denial(request: McpAuthorizationRequestState): { redirectTo: string } {
-    const url = new URL(request.redirectUri)
-    url.searchParams.set('error', 'access_denied')
-    url.searchParams.set('error_description', 'The request was declined.')
-    if (request.state) url.searchParams.set('state', request.state)
-    return { redirectTo: url.toString() }
+    return {
+      redirectTo: redirectWithError(
+        { redirectUri: request.redirectUri, ...(request.state ? { state: request.state } : {}) },
+        'access_denied',
+        'The request was declined.',
+      ),
+    }
   }
 
   /**
@@ -411,19 +488,7 @@ export class McpAuthorizationServer {
     if (!(await pkceMatches(input.codeVerifier, code.codeChallenge))) {
       throw new McpOAuthProtocolError('invalid_grant', 'The PKCE code verifier does not match.')
     }
-    const issued = await this.deps.publicApiKeys.issue(
-      {
-        accountId: code.accountId,
-        workspaceId: code.workspaceId,
-        createdByUserId: code.approvedByUserId,
-        // The connected host, on its own side. Opaque to the platform like every other external
-        // identity, and what makes a run this host starts attributable to it rather than to the
-        // person who happened to approve the connection months earlier.
-        externalIdentity: `mcp-client:${code.clientName}`,
-      },
-      keyLabelFor(code.clientName),
-      code.scope,
-    )
+    const issued = await this.issueKeyFor(code)
     this.log.info('mcp authorization server issued an access token', {
       workspaceId: code.workspaceId,
       keyId: issued.record.id,
@@ -431,6 +496,45 @@ export class McpAuthorizationServer {
       clientName: code.clientName,
     })
     return { accessToken: issued.secret, scope: code.scope, keyId: issued.record.id }
+  }
+
+  /**
+   * Mint the key an approved code redeems for, answering a refusal in the protocol's vocabulary.
+   *
+   * The one refusal `issue` can raise that a host will actually meet is the per-board key cap, and
+   * it arrives at the WORST moment in the flow: the human has already approved, the browser has
+   * already gone back to the host, and what is left is a machine-to-machine call. Left to reach
+   * `handleError`, that answers the deployment's own `{ error: { code, message } }` envelope with
+   * a 409, which is not a shape any OAuth client parses: the host reports a broken connection and
+   * names nothing a person could act on. Translated here, the same fact arrives as
+   * `error_description`, which every host renders, naming the board's key panel and what to do
+   * there. This is the one place a `DomainError` is deliberately re-mapped rather than rethrown,
+   * for the reason the file header gives: this endpoint answers in OAuth's vocabulary, so an
+   * envelope is the foreign shape here and the protocol code is the native one.
+   */
+  private async issueKeyFor(code: SealedCode) {
+    try {
+      return await this.deps.publicApiKeys.issue(
+        {
+          accountId: code.accountId,
+          workspaceId: code.workspaceId,
+          createdByUserId: code.approvedByUserId,
+          // The connected host, on its own side. Opaque to the platform like every other external
+          // identity, and what makes a run this host starts attributable to it rather than to the
+          // person who happened to approve the connection months earlier.
+          externalIdentity: externalIdentityFor(code.clientName),
+        },
+        keyLabelFor(code.clientName),
+        code.scope,
+      )
+    } catch (error) {
+      if (!(error instanceof ConflictError)) throw error
+      throw new McpOAuthProtocolError(
+        'access_denied',
+        `${error.message}. The connection was approved, but no key could be issued on that board: ` +
+          'revoke one in the board settings and connect again.',
+      )
+    }
   }
 
   /** Open a sealed value and pin its `kind`, or null if it will not open as that kind. */
@@ -463,9 +567,34 @@ export class McpAuthorizationServer {
   }
 }
 
+/** A refusal delivered where the protocol puts one: the client's own registered redirect URI. */
+function redirectWithError(
+  target: McpOAuthRedirectTarget,
+  error: McpOAuthErrorCode,
+  description: string,
+): string {
+  const url = new URL(target.redirectUri)
+  url.searchParams.set('error', error)
+  url.searchParams.set('error_description', description)
+  if (target.state) url.searchParams.set('state', target.state)
+  return url.toString()
+}
+
 /** The label an issued key carries in the panel, so a person can tell what to revoke. */
 function keyLabelFor(clientName: string): string {
   return `MCP: ${clientName}`
+}
+
+/**
+ * Who the issued key acts for, on the host's own side.
+ *
+ * Built here rather than at the call site because it is the ONE value in this flow that leaves it:
+ * `externalIdentity` is echoed on the key resource, on run projections and on `GET /api/v1/me`, and
+ * the name inside it is a stranger's free text. {@link normaliseClientName} is what holds it to the
+ * same rule `publicApiExternalIdentitySchema` states on the wire, which this path does not cross.
+ */
+function externalIdentityFor(clientName: string): string {
+  return `mcp-client:${clientName}`
 }
 
 /** The non-secret half of a request, for the consent screen. */
@@ -473,8 +602,29 @@ function summarise(request: McpAuthorizationRequestState): McpAuthorizationReque
   return {
     clientName: request.clientName,
     redirectOrigin: originOf(request.redirectUri),
+    defaultScope: consentDefaultScope(request.requestedScope),
     ...(request.requestedScope ? { requestedScope: request.requestedScope } : {}),
   }
+}
+
+/**
+ * The scope the consent screen PRESELECTS, which is never a scope a stranger asked for above the
+ * platform's own default.
+ *
+ * A registration is unauthenticated: anyone who can reach `/oauth/register` can name themselves and
+ * then ask for `admin`. Letting that ASK become the preselected radio button would make the top of
+ * the ladder the default on a screen whose whole subject is a grant, decided by the party asking
+ * for it rather than the one granting it, and a person clicking Connect on what looks like the
+ * shipped default would hand over the rung that can delete tasks and merge pull requests.
+ *
+ * So the ask is honoured only DOWNWARD. A host that wants less than the default gets less
+ * preselected (nothing is protected by talking someone into granting `read`); a host that wants
+ * more gets the default, and {@link McpAuthorizationRequestSummary.requestedScope} still carries
+ * what it asked for, so the screen can say so and a human can raise it deliberately.
+ */
+function consentDefaultScope(requested: PublicApiScope | undefined): PublicApiScope {
+  if (!requested) return CONSENT_DEFAULT_SCOPE
+  return scopeSatisfies(requested, CONSENT_DEFAULT_SCOPE) ? CONSENT_DEFAULT_SCOPE : requested
 }
 
 /**
@@ -529,11 +679,47 @@ export function isAllowedRedirectUri(raw: string): boolean {
   if (url.hash) return false
   if (url.protocol === 'https:') return true
   if (url.protocol === 'http:') return isLoopbackHost(url.hostname)
-  // A private-use scheme (`com.example.app:/callback`) is how a native host is reached without a
-  // listening socket. It is only a redirect target the OS routes, so there is no transport to
-  // hold to https, but it must still be a scheme rather than a bare path.
-  return /^[a-z][a-z0-9+.-]*:$/i.test(url.protocol) && url.protocol !== 'javascript:'
+  // A private-use scheme (`com.example.app:/callback`, `vscode://…`) is how a native host is
+  // reached without a listening socket. There is no transport to hold to https, because there is
+  // no transport: the OS hands the URL to whichever application claimed the scheme.
+  //
+  // Which is exactly why the test is what a scheme MEANS rather than a list of bad names. A scheme
+  // the BROWSER interprets is not routed to an application at all, and this URL is navigated to
+  // (`window.location.assign`) from the consent screen with an authorization code appended, so
+  // `javascript:` there executes in the SPA's own document and `data:`/`blob:`/`file:` render
+  // attacker-chosen content on it. Naming only `javascript:` reads as a fix and admits every
+  // sibling; excluding the schemes with browser-defined meaning is the rule the RFC states
+  // (a private-use scheme is by definition NOT a standard one) and covers the ones nobody
+  // remembered.
+  return (
+    /^[a-z][a-z0-9+.-]*:$/i.test(url.protocol) &&
+    !BROWSER_INTERPRETED_SCHEMES.has(url.protocol.toLowerCase())
+  )
 }
+
+/**
+ * Schemes a browser gives its own meaning to, which therefore cannot be a private-use scheme.
+ *
+ * The URL standard's "special" schemes minus the two handled above, plus the pseudo-schemes that
+ * resolve inside the current document rather than dispatching to an application. Every member is
+ * defined by a standard, so this set is closed by something other than the imagination of whoever
+ * edits it next.
+ */
+const BROWSER_INTERPRETED_SCHEMES = new Set([
+  // URL-standard special schemes (http/https answered above on their own terms).
+  'ftp:',
+  'file:',
+  'ws:',
+  'wss:',
+  // Resolved by the browser in the current document's context, never dispatched to an app.
+  'javascript:',
+  'vbscript:',
+  'data:',
+  'blob:',
+  'about:',
+  'filesystem:',
+  'view-source:',
+])
 
 /** Loopback, in both families plus the name, which is what a native host actually registers. */
 function isLoopbackHost(hostname: string): boolean {
@@ -541,12 +727,23 @@ function isLoopbackHost(hostname: string): boolean {
   return host === 'localhost' || host === '127.0.0.1' || host === '::1'
 }
 
-/** A client name that is safe to render on a consent screen and in a key label. */
+/**
+ * A client name that is safe to render on a consent screen, in a key label, and in the
+ * `externalIdentity` the name is spliced into.
+ *
+ * That last one is why the class here is not a matter of taste. `externalIdentity` normally arrives
+ * over the wire, where `publicApiExternalIdentitySchema` refuses control characters AND the two
+ * Unicode separators; a name registered here reaches `PublicApiKeyService.issue` directly, so this
+ * function is the only thing standing where that schema stands. The separators matter for the same
+ * reason the controls do: U+2028 and U+2029 are LINE BREAKS to every renderer that matters, so a
+ * name carrying one breaks a line-oriented log or a table row on whichever surface echoes the value
+ * next, and the schema's own doc records that they are refused rather than tolerated.
+ */
 function normaliseClientName(raw: string | undefined): string {
-  // Control characters stripped rather than refused: the name is a third party's free text on a
-  // screen whose whole job is to say WHO is asking, and refusing the registration over a stray
-  // character would take that screen away instead of cleaning it up.
-  const cleaned = (raw ?? '').replace(/[\p{Cc}\p{Cf}]/gu, ' ').trim()
+  // Stripped rather than refused: the name is a third party's free text on a screen whose whole job
+  // is to say WHO is asking, and refusing the registration over a stray character would take that
+  // screen away instead of cleaning it up.
+  const cleaned = (raw ?? '').replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, ' ').trim()
   if (!cleaned) return 'An unnamed MCP client'
   return cleaned.length > MAX_CLIENT_NAME_LENGTH
     ? `${cleaned.slice(0, MAX_CLIENT_NAME_LENGTH - 1)}…`

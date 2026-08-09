@@ -39,7 +39,9 @@ class MemoryKeyRepository implements PublicApiKeyRepository {
   async revokeMintedBy() {}
 }
 
-function build(options: { role?: 'admin' | 'member'; appBaseUrl?: string } = {}) {
+function build(
+  options: { role?: 'admin' | 'member'; appBaseUrl?: string; authServer?: boolean } = {},
+) {
   const repository = new MemoryKeyRepository()
   const publicApiKeys = new PublicApiKeyService({
     repository,
@@ -68,18 +70,22 @@ function build(options: { role?: 'admin' | 'member'; appBaseUrl?: string } = {})
     publicApiKeys,
     // The REAL authorization server over a real key store: what these tests care about is that a
     // host ends up with a credential that authenticates, which a stub could not demonstrate.
-    mcpAuthServer: new McpAuthorizationServer({
-      secretCipher: {
-        encrypt: async (value: string) => `sealed(${value})`,
-        decrypt: async (value: string) => {
-          const match = /^sealed\((.*)\)$/s.exec(value)
-          if (!match) throw new Error('not sealed by this cipher')
-          return match[1]!
-        },
-      },
-      publicApiKeys,
-      clock: { now: () => Date.now() },
-    }),
+    // `authServer: false` is the deployment that wired neither ENCRYPTION_KEY nor the public API.
+    mcpAuthServer:
+      options.authServer === false
+        ? undefined
+        : new McpAuthorizationServer({
+            secretCipher: {
+              encrypt: async (value: string) => `sealed(${value})`,
+              decrypt: async (value: string) => {
+                const match = /^sealed\((.*)\)$/s.exec(value)
+                if (!match) throw new Error('not sealed by this cipher')
+                return match[1]!
+              },
+            },
+            publicApiKeys,
+            clock: { now: () => Date.now() },
+          }),
     ...(options.appBaseUrl ? { appBaseUrl: options.appBaseUrl } : {}),
   } as unknown as ServerContainer
 
@@ -199,6 +205,8 @@ describe('MCP authorization (serving side)', () => {
     expect(await described.json()).toEqual({
       clientName: 'Test Host',
       redirectOrigin: 'http://127.0.0.1:53219',
+      // What the screen preselects, decided here rather than by the party asking for it.
+      defaultScope: 'write',
     })
 
     const decided = await json(
@@ -304,6 +312,59 @@ describe('MCP authorization (serving side)', () => {
     })
     expect(res.status).toBe(400)
     expect(await res.json()).toMatchObject({ error: 'invalid_redirect_uri' })
+  })
+
+  it('reports a fault in the request to the host, on its own registered address', async () => {
+    // RFC 6749 §4.1.2.1's other half, and the counterpart of the test above: once the redirect URI
+    // HAS matched a registration, the client is the party that must hear about a bad request. A
+    // page instead leaves a conforming host on a callback that never arrives, and the failure it
+    // reports is a timeout against this deployment rather than the one parameter it got wrong.
+    const { app } = build()
+    const registration = await json(app, '/oauth/register', {
+      client_name: 'Test Host',
+      redirect_uris: [REDIRECT],
+    })
+    const { client_id: clientId } = (await registration.json()) as { client_id: string }
+    const query = new URLSearchParams({
+      response_type: 'token',
+      client_id: clientId,
+      redirect_uri: REDIRECT,
+      code_challenge: await pkce('v'),
+      code_challenge_method: 'S256',
+      state: 'host-state',
+    })
+    const res = await app.request(`${ORIGIN}/oauth/authorize?${query}`)
+    expect(res.status).toBe(302)
+    const location = new URL(res.headers.get('location')!)
+    expect(location.origin + location.pathname).toBe(REDIRECT)
+    expect(location.searchParams.get('error')).toBe('unsupported_response_type')
+    expect(location.searchParams.get('state')).toBe('host-state')
+  })
+
+  it('keeps the SPA path prefix when the app is served under one', async () => {
+    // `new URL('/mcp-authorize', base)` resolves an ABSOLUTE path, which keeps the base's origin
+    // and discards its path: a sub-path install sent every host one segment above the app, with
+    // nothing on this side failing.
+    const { app } = build({ appBaseUrl: 'https://example.test/cat-factory' })
+    const { consent } = await startFlow(app, 'v')
+    expect(consent.origin + consent.pathname).toBe('https://example.test/cat-factory/mcp-authorize')
+    expect(consent.searchParams.get('request')).toBeTruthy()
+  })
+
+  it('advertises nothing where the deployment has not wired the flow', async () => {
+    // The signpost comes down with the road. Left answering, discovery describes a complete
+    // authorization server whose register and token endpoints can only 503, so a host walks the
+    // chain and reports a broken deployment; unanswered, it falls back to asking for a key, which
+    // is exactly the behaviour that existed before any of this.
+    const { app } = build({ authServer: false })
+    for (const path of [
+      '/.well-known/oauth-protected-resource/api/v1/mcp',
+      '/.well-known/oauth-protected-resource',
+      '/.well-known/oauth-authorization-server',
+    ]) {
+      const res = await app.request(`${ORIGIN}${path}`)
+      expect(res.status, path).toBe(503)
+    }
   })
 
   it('answers the refresh grant with what it actually serves', async () => {

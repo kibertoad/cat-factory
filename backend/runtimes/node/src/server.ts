@@ -17,7 +17,7 @@ import {
   mountRequestLogging,
   setLogLevel,
   registerCoreControllers,
-  resolveCorsOrigin,
+  corsOriginFor,
   sweepHealth,
   sweepKeyDriftAndRaise,
   WebCryptoSecretCipher,
@@ -111,8 +111,16 @@ export function createApp(
   app.use(
     '*',
     cors({
-      origin: (origin) =>
-        resolveCorsOrigin(origin, env.CORS_ALLOWED_ORIGINS, corsReflectsWhenUnset(env.ENVIRONMENT)),
+      // Shared with the Worker, including WHICH paths answer any origin: the credential-free MCP
+      // discovery and authorization routes, whose browser-hosted clients run on origins no
+      // operator lists.
+      origin: (origin, c) =>
+        corsOriginFor(
+          new URL(c.req.url).pathname,
+          origin,
+          env.CORS_ALLOWED_ORIGINS,
+          corsReflectsWhenUnset(env.ENVIRONMENT),
+        ),
       // Same shared allow-list the Worker uses, so the facades stay symmetric (Hono
       // would otherwise echo the requested headers, masking a drift like the missing
       // X-Connection-Id the Worker hit).

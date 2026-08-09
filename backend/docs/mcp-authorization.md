@@ -111,7 +111,25 @@ Two asymmetries in that controller are deliberate:
 - **An unregistered `redirect_uri` is refused ON THE PAGE, never bounced to.** Reporting that one by
   redirecting would BE the open redirect the registration check exists to prevent: a URL on this
   deployment's origin that forwards a browser anywhere, with attacker-chosen text on the end of it.
-  Every other refusal at the authorize endpoint is the client's to hear about.
+  Every other refusal at the authorize endpoint is the client's to hear about, and RFC 6749 §4.1.2.1
+  requires it: a bad `response_type`, a missing PKCE challenge or a `resource` naming somewhere else
+  leave a conforming host waiting on a callback that never arrives, so what it finally reports is a
+  timeout against this deployment rather than the one parameter it got wrong.
+
+  **Which of the two a refusal is, is the SERVICE's judgement and rides the error**
+  (`McpOAuthRedirectableError`, carrying the already-matched target). The line is
+  `beginAuthorization`'s registration check: before it, there is no address the refusal may be sent
+  to; after it, the address is one the client itself registered. A controller re-deciding that from
+  the request would be re-deriving, from attacker-supplied input, the one thing this flow may not
+  get wrong.
+
+- **The consent screen never preselects a scope the HOST asked for above the platform default.**
+  Registration is unauthenticated, so `scope=admin` costs an attacker nothing, and the ask arriving
+  as the checked radio button would make the rung that deletes tasks and merges pull requests the
+  default on a screen whose whole subject is a grant. `consentDefaultScope` honours the ask only
+  DOWNWARD (nothing is protected by talking someone into granting `read`); above the default it
+  preselects the default and the view carries `requestedScope` beside it, so the screen SAYS what
+  was asked and raising it stays something a person does.
 
 ## Refusals answer in OAuth's vocabulary
 
@@ -123,6 +141,34 @@ the transport's own frame: `invalid_grant` and `invalid_client` are both a bare 
 envelope's vocabulary, and the distinction is exactly what a client branches on. Anything that is
 NOT a protocol error is re-thrown to `handleError`, so an unexpected fault keeps its 500 and its
 correlation id rather than being flattened into a code no client can act on.
+
+The one `DomainError` deliberately translated rather than rethrown is the per-board key cap, and it
+is translated because of WHERE it lands: `redeemCode` mints the key, so the cap refuses after the
+human approved and after the browser went back to the host, on a machine-to-machine call where
+`error_description` is the only thing left that reaches a person. A 409 envelope there is a shape no
+OAuth client parses, so the host reports a broken connection and names nothing to act on.
+
+## The unauthenticated paths answer any browser origin
+
+`/.well-known/*` and `/oauth/*` are exempt from `CORS_ALLOWED_ORIGINS` (`isPubliclyReadablePath`,
+in the shared CORS layer both facades read). That is the complement of the allowlist rather than a
+hole in it: the allowlist names the origins that may drive an EXISTING credential's surface, and
+every route under these two prefixes is reached by a party with no credential and no relationship to
+this deployment, which is what it came for. The hosts the feature exists for run on origins no
+operator can be expected to have listed, and an attacker reads these documents from a server with no
+browser involved, so a per-deployment allowlist here restricts only the legitimate client.
+
+It is a PATH rule in the CORS layer rather than a header on the metadata handlers because **the
+browser asks first**: `POST /oauth/register` carries JSON, so it is preflighted, and a preflight is
+answered before any route runs. Covering the documents alone reads as working, because discovery is
+a plain GET nobody preflights: a browser host walks the whole chain and then fails on the first call
+that acts on it.
+
+The documents are also GATED on the capability, so a deployment that wired neither `ENCRYPTION_KEY`
+nor the public API advertises nothing. A signpost pointing at a road that 503s is worse than no
+signpost: a host that reads discovery believes the flow is available and reports a broken server,
+where a host that cannot discover falls back to asking for a key, which is the behaviour that
+existed before any of this.
 
 ## What a deployment needs, and what absence means
 

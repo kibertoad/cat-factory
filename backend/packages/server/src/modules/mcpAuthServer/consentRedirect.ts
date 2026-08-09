@@ -33,11 +33,17 @@ export const MCP_AUTHORIZE_PATH = '/mcp-authorize'
  * The sealed request rides the query string, where a browser history keeps it. It carries no
  * credential and no code (the code is minted only after a human approves), and it is useless to
  * anyone who cannot both open a session here and hold `secrets.manage` on a board.
+ *
+ * The path is APPENDED to the configured base rather than resolved against it, which is the same
+ * join `notificationDeepLink` makes and for the same reason: `new URL('/mcp-authorize', base)`
+ * resolves an ABSOLUTE path, so it keeps the base's origin and discards any path component of it. A
+ * deployment serving the SPA under a prefix (`APP_BASE_URL=https://example.test/cat-factory`) would
+ * have every host sent to a 404 one segment above the app, with nothing on this side failing.
  */
 export function consentUrlFor<E extends AppEnv>(c: Context<E>, sealedRequest: string): string {
   const configured = c.get('container').appBaseUrl?.trim()
   const base = configured || new URL(c.req.url).origin
-  const url = new URL(MCP_AUTHORIZE_PATH, base.endsWith('/') ? base : `${base}/`)
+  const url = new URL(`${base.replace(/\/+$/, '')}${MCP_AUTHORIZE_PATH}`)
   url.searchParams.set('request', sealedRequest)
   return url.toString()
 }

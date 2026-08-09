@@ -2708,6 +2708,7 @@
         "description": "Also delete tasks and act on notifications, which can merge a pull request."
       }
     },
+    "requestedScope": "{client} asked for {scope}. Choose it above only if you mean to grant that.",
     "approve": "Connect",
     "deny": "Cancel",
     "back": "Back to the app",

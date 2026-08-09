@@ -632,13 +632,18 @@ export {
 export {
   McpAuthorizationServer,
   McpOAuthProtocolError,
+  McpOAuthRedirectableError,
+  CONSENT_DEFAULT_SCOPE,
   MCP_AUTH_SERVER_CIPHER_INFO,
   isAllowedRedirectUri,
+  mcpOAuthErrorRedirect,
   type McpAuthorizationRequestState,
   type McpAuthorizationRequestSummary,
   type McpAuthorizationServerDependencies,
   type McpClientRegistration,
   type McpIssuedToken,
+  type McpOAuthErrorCode,
+  type McpOAuthRedirectTarget,
 } from './modules/mcpAuthServer/McpAuthorizationServer.js'
 export {
   AUTHORIZATION_SERVER_METADATA_PATH,

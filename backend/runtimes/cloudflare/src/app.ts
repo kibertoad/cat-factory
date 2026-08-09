@@ -17,7 +17,7 @@ import {
   CORS_ALLOWED_HEADERS,
   CORS_EXPOSED_HEADERS,
   corsReflectsWhenUnset,
-  resolveCorsOrigin,
+  corsOriginFor,
 } from './infrastructure/config/cors'
 import { buildContainer } from './infrastructure/container'
 import { registerToolSecretPolicy } from './infrastructure/toolSecretResolver'
@@ -155,8 +155,12 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
   app.use(
     '*',
     cors({
+      // Shared with the Node service, including WHICH paths answer any origin: the credential-free
+      // MCP discovery and authorization routes, whose browser-hosted clients run on origins no
+      // operator lists.
       origin: (origin, c) =>
-        resolveCorsOrigin(
+        corsOriginFor(
+          new URL(c.req.url).pathname,
           origin,
           c.env.CORS_ALLOWED_ORIGINS,
           corsReflectsWhenUnset(c.env.ENVIRONMENT),
