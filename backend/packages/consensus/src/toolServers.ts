@@ -1,4 +1,4 @@
-import type { AgentKind, AgentRunContext, UnavailableToolServer } from '@cat-factory/kernel'
+import type { AgentKind, AgentRunContext, Logger, UnavailableToolServer } from '@cat-factory/kernel'
 import type { DispatchToolServers } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { toolServersSection } from '@cat-factory/agents'
@@ -50,6 +50,10 @@ const NONE: PanelToolServerCeiling = { section: '' }
  * Ids a kind declared with no matching registration are skipped rather than listed: there is no
  * definition to name a label from, and boot validation already reported the typo as an error, so
  * inventing a chip for it would put a registry fault in front of the agent as a missing capability.
+ * They are still LOGGED here, exactly as the container path re-reports them, because a
+ * mothership-mode node boot-validates nothing it resolves: the definitions arrive per dispatch from
+ * a process one build ahead of it, so the loud channel this relies on may never have fired for this
+ * declaration. Skipped and unlogged, an unregistered id would leave no evidence anywhere.
  *
  * The prompt half goes through the SAME `toolServersSection` the container dispatch composes, so a
  * panel states a withheld server in the words a container run would, and inherits the drop list's
@@ -58,8 +62,15 @@ const NONE: PanelToolServerCeiling = { section: '' }
 export function panelToolServerCeiling(
   context: AgentRunContext,
   registry: AgentKindRegistry,
+  logger?: Logger,
 ): PanelToolServerCeiling {
-  const declared = registry.toolServersFor(context.agentKind as AgentKind).servers
+  const { servers: declared, unknown } = registry.toolServersFor(context.agentKind as AgentKind)
+  for (const id of unknown) {
+    logger?.warn('agent kind declares an unregistered tool server id; skipping it', {
+      agentKind: context.agentKind,
+      toolServerId: id,
+    })
+  }
   if (!declared.length) return NONE
   const unavailable: UnavailableToolServer[] = declared.map((definition) => ({
     id: definition.id,

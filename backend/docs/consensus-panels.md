@@ -21,8 +21,9 @@ names a withheld tool server can see this one: boot validation's `tool_servers_w
 warning keys on the kind's DECLARED surface, which is a container for nearly every eligible kind,
 and the container executor (which owns the whole unavailability vocabulary) is not on this path at
 all. So `panelToolServerCeiling` reports it in both channels the container dispatch uses: the
-participants' prompt, through the SAME `toolServersSection`, and the step's own record, returned on
-`AgentRunResult.toolServers` and stamped with the dispatched kind by the engine. The reason is
+participants' prompt, through the SAME `toolServersSection`, and the step's own record, answered at
+dispatch on `AgentExecutor.previewToolServers` and stamped with the dispatched kind by the engine, so
+a panel that then throws still leaves a step saying what it could not reach. The reason is
 `consensus_panel`, a member of its own because nothing about the harness is involved and the same
 step with consensus off would have got the server. A kind that declared none composes an unchanged
 prompt and records nothing: an inline surface wires nothing by construction, so an all-empty record

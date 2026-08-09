@@ -47,10 +47,13 @@ in three ways.
   the default-eligible set (architect, analysis, the reviewers, the companions) is almost entirely
   container kinds, which is exactly the set a deployment attaches a read-only research server to. The
   same step with consensus off gets the server; there is no registration to warn about.
-- **The record arrives from the INLINE path.** `AgentRunResult.toolServers` is the counterpart of
-  `AgentJobHandle.toolServers`, folded by `recordInlineToolServers` at the two inline dispatch sites
-  and stamped with the dispatched kind by the ENGINE, exactly as the container fold is. Both go
-  through one `stampToolServers`, so there is one place an executor-supplied kind could creep back in.
+- **The record arrives from the INLINE path, BEFORE the work.** `AgentExecutor.previewToolServers`
+  is the counterpart of `AgentJobHandle.toolServers`, folded by `recordInlineToolServers` at the two
+  inline dispatch sites and stamped with the dispatched kind by the ENGINE, exactly as the container
+  fold is. Both go through one `stampToolServers`, so there is one place an executor-supplied kind
+  could creep back in. It is a preview rather than a field on the result for the reason the container
+  path records off the handle at dispatch: a step that later fails keeps its record, where a
+  result-carried field is absent on exactly the runs a reader most needs it for.
 - **Nothing declared means no record.** A panel wires nothing by construction, so an all-empty
   resolution from it would say a dispatch resolved tool servers where none could ever have been
   wired, which is not what both-empty means below. The panel reports only what it withheld.

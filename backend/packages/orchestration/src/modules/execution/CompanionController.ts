@@ -10,6 +10,7 @@ import type {
 import {
   type CompanionAssessment,
   DEFAULT_COMPANION_MAX_ATTEMPTS,
+  type DispatchToolServers,
   parseCompanionAssessment,
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
@@ -79,6 +80,7 @@ export interface CompanionControllerDeps {
   spend: SpendService
   idGenerator: IdGenerator
   previewStepModel: (context: AgentRunContext) => Promise<string | undefined>
+  previewStepToolServers: (context: AgentRunContext) => Promise<DispatchToolServers | undefined>
   runAgent: (context: AgentRunContext, options: AdvanceOptions) => Promise<AgentRunResult>
   /** The async instance/block spine (persist/emit/park/finalize/progress/notify/stop). */
   stateMachine: RunStateMachine
@@ -148,15 +150,22 @@ export class CompanionController {
     )
     const previewModel = await this.deps.previewStepModel(context)
     if (previewModel && previewModel !== step.model) step.model = previewModel
+    // The same dispatch-time fold the generic agent step applies: an inline companion is
+    // consensus-eligible too, so a diverted one has a withheld tool-server list to record. Ahead of
+    // the call rather than after it, because the repair retry re-runs the SAME context and would
+    // report the identical resolution twice, and because a companion that throws must still leave a
+    // step saying what it could not reach. Persisted here for that second reason: a throw
+    // propagates past this method and the failure path re-reads the instance from storage, so an
+    // unpersisted mutation is a record that exists only on the runs that did not need it.
+    const ceiling = await this.deps.previewStepToolServers(context)
+    if (ceiling) {
+      recordInlineToolServers(step, ceiling, context.agentKind)
+      await this.deps.stateMachine.persistAndEmit(workspaceId, instance)
+    }
     // Run the companion, parsing its JSON verdict with ONE repair retry when the first
     // reply doesn't parse (truncated / wrapped in prose). Only retried when there is a
     // producer to grade. `result` carries the LAST call's output + the summed usage.
     const { assessment, result } = await this.runWithRepair(context, options, producerIndex >= 0)
-    // The same inline fold the generic agent step applies: an inline companion is consensus-eligible
-    // too, so a diverted one has a withheld tool-server list to record. Here rather than inside
-    // `runWithRepair` because the repair re-runs the SAME context and reports the same resolution,
-    // so folding per call would write the identical record twice.
-    recordInlineToolServers(step, result, context.agentKind)
     if (result.usage) {
       await this.deps.spend.record({
         workspaceId,

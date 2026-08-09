@@ -101,19 +101,17 @@ describe('recordInlineToolServers', () => {
   // The inline counterpart, whose one producer is a consensus-diverted step: it reaches no
   // container, so nothing on the handle path can report what the panel withheld.
   const withheld = {
-    toolServers: {
-      wired: [],
-      unavailable: [{ id: 'issues', label: 'Issue tracker', reason: 'consensus_panel' as const }],
-    },
+    wired: [],
+    unavailable: [{ id: 'issues', label: 'Issue tracker', reason: 'consensus_panel' as const }],
   }
 
   it('stamps the DISPATCHED kind, exactly as the handle fold does', () => {
     const s = step({ agentKind: 'architect' })
     recordInlineToolServers(s, withheld, 'architect')
-    expect(s.toolServers).toEqual({ ...withheld.toolServers, agentKind: 'architect' })
+    expect(s.toolServers).toEqual({ ...withheld, agentKind: 'architect' })
   })
 
-  it('leaves a container round’s record standing when the inline result carries none', () => {
+  it('leaves a container round’s record standing when the inline preview carries none', () => {
     // The same guard the handle fold has, and it matters more here: an inline re-dispatch on a step
     // a container round already resolved (a two-phase kind, a re-run) must not erase what ran.
     const s = step({ agentKind: 'reviewer' })
@@ -128,7 +126,7 @@ describe('recordInlineToolServers', () => {
       } as AgentJobHandle,
       'reviewer',
     )
-    recordInlineToolServers(s, {}, 'reviewer')
+    recordInlineToolServers(s, undefined, 'reviewer')
     expect(s.toolServers?.wired).toHaveLength(1)
   })
 })

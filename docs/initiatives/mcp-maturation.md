@@ -205,9 +205,10 @@ dump and never uses the word MCP).
       reviewers, the companions) is precisely the set a deployment attaches a read-only research
       server to, so the drop landed on the likeliest adopters. `panelToolServerCeiling`
       (`@cat-factory/consensus`) now reports it in BOTH channels a container dispatch uses: the
-      participants' prompt, through the same `toolServersSection`, and the step's record, returned
-      on the new `AgentRunResult.toolServers` and stamped with the dispatched kind by the engine
-      (`recordInlineToolServers`, sharing one `stampToolServers` with the handle fold). The reason
+      participants' prompt, through the same `toolServersSection`, and the step's record, answered
+      at dispatch on the new `AgentExecutor.previewToolServers` and stamped with the dispatched kind
+      by the engine (`recordInlineToolServers`, sharing one `stampToolServers` with the handle fold),
+      so a panel that then throws still leaves the record standing. The reason
       is `consensus_panel`, its own member for the reason below. Its four decisions are below.
 
 ## Findings inventory
@@ -411,13 +412,20 @@ pnpm gen:sdk` behind it (`unusable_secret` was 1.37.0, `consensus_panel` 1.38.0)
   is a THIRD sentence for the same reason the operator copy is a third row: a participant told
   "not supported by the agent runtime this run uses" would be told something false about the kind
   it is running as.
-- **The record travels on `AgentRunResult`, not a new port method or a wider `AgentJobHandle`.**
-  A panel returns a result, not a handle, so the two dispatch shapes already have two channels and
-  this is the second one's missing field. The alternative (having the ENGINE ask whether a dispatch
-  was diverted) fails on the layering: only the executor knows, and `runsAsync` answering false is
+- **The record travels on a PREVIEW port method, not on `AgentRunResult` and not a wider
+  `AgentJobHandle`.** It was written as a result field first, on the reasoning that a panel returns
+  a result rather than a handle so the second dispatch shape simply lacked the field. That is the
+  one thing the shape cannot do: the container path records off the handle at DISPATCH, which is
+  what keeps the record when the job later fails, and a result-carried field is by construction
+  absent on exactly the runs a reader most needs it for. A failed diverted step would have read
+  exactly like an ordinary inline step whose kind declared none, which is the failure this whole
+  slice exists to end. `AgentExecutor.previewToolServers` is the shape `resolveModel` already has,
+  for the same reason: cheap, side-effect-free, answered ahead of the work so the engine can persist
+  it before anything can throw. The alternative (having the ENGINE ask whether a dispatch was
+  diverted) still fails on the layering: only the executor knows, and `runsAsync` answering false is
   equally true of every ordinary inline kind. The stamp still belongs to the engine, which is why
-  both folds now go through one `stampToolServers`: an executor that could name the kind could
-  name the wrong one.
+  both folds go through one `stampToolServers`: an executor that could name the kind could name the
+  wrong one.
 - **Nothing declared records NOTHING, where the container fold records both lists empty.** The two
   look inconsistent and are not. Both-empty on the container path means a dispatch resolved and
   the kind declared nothing, which is a real answer about a surface that COULD have wired

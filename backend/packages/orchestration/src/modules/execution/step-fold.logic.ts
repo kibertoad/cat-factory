@@ -1,9 +1,4 @@
-import {
-  sameSubtasks,
-  type AgentJobHandle,
-  type AgentRunResult,
-  type PipelineStep,
-} from '@cat-factory/kernel'
+import { sameSubtasks, type AgentJobHandle, type PipelineStep } from '@cat-factory/kernel'
 import type { DispatchToolServers } from '@cat-factory/contracts'
 import { shouldPersistActivity } from './job.logic.js'
 
@@ -103,12 +98,17 @@ export function recordDispatchAttribution(
 }
 
 /**
- * Record what an INLINE dispatch did with the running kind's tool servers (MCP).
+ * Record what an INLINE dispatch will do with the running kind's tool servers (MCP).
  *
  * The counterpart of the `handle.toolServers` fold above on the path that returns a RESULT instead
  * of a job handle. Its one producer today is a consensus-diverted step: the panel runs as inline
  * model calls with no agent CLI, so every server the kind declared is withheld, and without this
  * the step would carry no record at all and read exactly like a kind that declared none.
+ *
+ * Called BEFORE the inline call, off `AgentExecutor.previewToolServers`, so the two paths record on
+ * the same terms: the container path stamps off the handle at dispatch, and a job that later fails
+ * keeps its record. Folding an inline resolution off the RESULT instead would drop it on exactly
+ * the runs a reader most needs it for, since a failed step returns no result to carry it.
  *
  * `dispatchedKind` is a parameter here for the same reason it is there, and it is what keeps the
  * stamp out of the executor's hands: the engine names the kind it dispatched, so a resolution can
@@ -117,10 +117,10 @@ export function recordDispatchAttribution(
  */
 export function recordInlineToolServers(
   step: PipelineStep,
-  result: Pick<AgentRunResult, 'toolServers'>,
+  resolved: DispatchToolServers | undefined,
   dispatchedKind: string,
 ): void {
-  if (result.toolServers) stampToolServers(step, result.toolServers, dispatchedKind)
+  if (resolved) stampToolServers(step, resolved, dispatchedKind)
 }
 
 /**

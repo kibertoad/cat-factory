@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createRecordingLogger } from '@cat-factory/kernel'
 import type { AgentRunContext, McpServerDefinition } from '@cat-factory/kernel'
 import { AgentKindRegistry } from '@cat-factory/agents'
 import { panelToolServerCeiling } from './toolServers.js'
@@ -70,14 +71,32 @@ describe('panelToolServerCeiling', () => {
     expect(ceiling.section).toBe('')
   })
 
-  it('skips an id no registration matches rather than inventing a chip for it', () => {
+  it('skips an id no registration matches rather than inventing a chip for it, and logs it', () => {
     // Boot validation already reported the typo as an error, and there is no definition to name a
     // label from. Putting a registry fault in front of the agent as a missing capability would tell
-    // it to plan around a tool that never existed anywhere.
+    // it to plan around a tool that never existed anywhere. It is still LOGGED, exactly as the
+    // container path re-reports it: a mothership-mode node boot-validates nothing it resolves, so
+    // the loud channel this defers to may never have fired for this declaration, and a skip with no
+    // log would leave an unregistered id with no evidence on any surface.
     const registry = new AgentKindRegistry()
     registry.assignToolServers('architect', ['typo'])
-    const ceiling = panelToolServerCeiling(context(), registry)
+    const logger = createRecordingLogger()
+    const ceiling = panelToolServerCeiling(context(), registry, logger)
     expect(ceiling.record).toBeUndefined()
     expect(ceiling.section).toBe('')
+    expect(
+      logger.lines.filter((l) => l.level === 'warn' && l.fields.toolServerId === 'typo'),
+    ).toHaveLength(1)
+  })
+
+  it('reports an unregistered id even when the kind also declared servers that resolve', () => {
+    // The declared-and-registered half returning a ceiling must not shadow the broken id: a reader
+    // who sees one chip and no warning concludes the kind declared exactly one server.
+    const registry = registryWith(ISSUES)
+    registry.assignToolServers('architect', ['issues', 'typo'])
+    const logger = createRecordingLogger()
+    const ceiling = panelToolServerCeiling(context(), registry, logger)
+    expect(ceiling.record?.unavailable).toHaveLength(1)
+    expect(logger.lines.some((l) => l.fields.toolServerId === 'typo')).toBe(true)
   })
 })

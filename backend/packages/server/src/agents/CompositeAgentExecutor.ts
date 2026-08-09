@@ -7,6 +7,7 @@ import {
   type AsyncAgentExecutor,
   isAsyncAgentExecutor,
 } from '@cat-factory/kernel'
+import type { DispatchToolServers } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   defaultAgentKindRegistry,
@@ -90,6 +91,17 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
   resolveModel(context: AgentRunContext): Promise<string | undefined> {
     const executor = this.pick(context)
     return executor.resolveModel?.(context) ?? Promise.resolve(undefined)
+  }
+
+  /**
+   * Preview what an inline dispatch will do with the kind's tool servers, forwarding to the
+   * executor that will handle its kind. Guarded like {@link resolveModel} and for the same reason:
+   * `pick` throws for an unwired container kind, and that error belongs to the dispatch rather
+   * than to a record the engine keeps beside it.
+   */
+  previewToolServers(context: AgentRunContext): Promise<DispatchToolServers | undefined> {
+    const executor = this.pick(context)
+    return executor.previewToolServers?.(context) ?? Promise.resolve(undefined)
   }
 
   /**
