@@ -113,10 +113,13 @@ radius (a one-line internal fix needs none; a new export / env var / capability 
 - The package's own `README.md` + `AGENTS.md`; the root `README.md`'s layout and feature-guide rows.
 - This file, only for a new CROSS-CUTTING convention or a change to a flow it indexes; detail about one flow
   goes in that flow's doc, and a higher-level doc POINTS AT a new deeper one or the deeper one is lost.
-- **Does this change behaviour a catfactory.ai page describes?** OWNERSHIP FOLLOWS THE READER: the website
-  owns what anyone can act on with NO checkout, a doc here keeps internal design plus a LINK, the two split by
-  DEPTH, never mirrored. Land the website page FIRST, and before reducing a doc check what deep-links its
-  HEADINGS from code (`check-doc-anchors.mjs`). Model: `docs/initiatives/documentation-revamp.md`.
+- **Does this change behaviour a catfactory.ai page describes? Then it ships with a WEBSITE PR, opened and
+  merged FIRST, and NAMED in this PR's description.** OWNERSHIP FOLLOWS THE READER: the website owns what
+  anyone can act on with NO checkout, a doc here keeps internal design plus a LINK, split by DEPTH, never
+  mirrored; a new env var, endpoint, capability, failure mode or operator step meets that test. **LOAD the
+  page before you link it**: neither repo's CI can see the other (the crossing guard is weekly BY DESIGN),
+  so a reduction that ASSERTED its page existed left 600 lines reachable from nowhere. Before reducing a
+  doc, check what deep-links its HEADINGS from code (`check-doc-anchors.mjs`). Model: `docs/initiatives/documentation-revamp.md`.
 
 ### Bigger initiatives get a tracker document
 
@@ -150,8 +153,7 @@ messages, code comments, UI copy.
 
 ## Environment quirks
 
-- **Do not validate Cloudflare auth before deployments.** Skip `wrangler whoami`; assume the login is
-  correct.
+- **Do not validate Cloudflare auth before deployments**: skip `wrangler whoami`, assume the login is correct.
 - **Multi-line git messages: bash heredoc in the Bash tool, NOT a PowerShell here-string.** The Bash tool
   is POSIX sh, so `@'…'@` leaks literal `@` characters into the commit subject. Use
   `git commit -F - <<'EOF'`; `git commit --amend -F -` fixes a mangled message before pushing.
@@ -432,8 +434,6 @@ native-child env allow-list) updates that doc in the same PR.
 - **The model JUDGES; the platform COMPUTES.** A ranking, a score ratio, a regression count is derived in
   code from the model's stated judgements, never read off the reply, or a list is ordered by something its
   own rationale doesn't explain.
-- **A best-effort side channel LOGS its failures** through `runBestEffort`, or a swallowed classification
-  failure surfaces only as a permanently broken feature.
 - **A pass-through is the correct disposition for an unwired capability**, and it must be invisible to the
   domain: a gate with no provider, a judge with no assessor, an unset validation config are all
   byte-for-byte the prior behaviour.

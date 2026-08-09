@@ -1,22 +1,29 @@
 # Documentation revamp: the repo ⇄ website split
 
-Status: **executing; items 12 and 16 are what is left.** The 2026-08-09 revision found the
-remaining scope bigger than the checklist read, and the phase that followed closed most of it: item
-17 decided manifest ownership, the website's phase E landed the four destinations that decision and
-the audit's repo-only row were waiting on, every one of the ten pointerless docs gained its pointer,
-the three reductions blocked on a missing page ran, and items 16 and 18 turned the whole
-markdown-link class from unguarded into CI-enforced in both repositories.
+Status: **executing; item 15's eleven unread docs are what is left.** Item 12's render landed, item
+16's follow-on is settled, and item 19 fixed a breakage the previous phase introduced and did not
+notice.
 
-What is open, and neither is blocked on anything:
+**The previous phase reduced two docs toward website pages that did not exist**, and said in its
+commit message that they did. `mcp-tool-servers.md` went 723 → 347 and `debug-api.md` 433 → 207,
+each pointing at a page the website's phase E never landed. So for the time between those merges,
+roughly 600 lines of the only account anyone had of wiring an MCP tool server and of reading a run's
+telemetry existed nowhere a reader could reach, behind pointers that 404'd. That is the worst
+failure this split can produce, it is named in this file's own gotchas as the worst failure this
+split can produce, and it happened anyway. Item 19 is the fix and the rule it earned.
 
-- **Item 12**, rendering the `/api/v1` reference from `docs/openapi.json` onto the site, on the
-  `sync-env-vars.mjs` machinery both repos already trust.
-- **Item 16's follow-on judgement**: the guard is green and the twelve dangling links are fixed, but
-  the CHANGELOG exclusion is a decision recorded in code rather than one anybody has revisited.
+What is open:
+
+- **Item 15**, the eleven docs in the per-doc table still marked NOT READ, plus
+  `document-sources.md`'s unfinished half. Named as debt, with a verdict owed per doc.
+- **Item 12b**, the reduction half of item 12, now scoped by measurement rather than by estimate.
+  See the checklist entry: the answer is much smaller than three revisions of this tracker assumed,
+  and knowing that is the deliverable.
 
 The sibling tracker is
 [`planning/documentation-revamp.md`](https://github.com/kibertoad/cat-factory-website/blob/main/planning/documentation-revamp.md)
-in the website repo, reopened with a phase E for the four destinations it owed.
+in the website repo, now carrying a phase F for the two destinations phase E was never told about
+plus the generated API reference.
 
 ## Goal and rationale
 
@@ -119,7 +126,7 @@ senior partner because it has more sections.
 | Topic                            | Repo doc                                                                                          | Website page                                                                | Proposed authority                                                                                                                                                                                                                                                                                                    |
 | -------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Custom agents                    | `backend/docs/custom-agents.md`, `custom-agent-roles.md`, `custom-agent-gate-ergonomics.md`       | `extend/custom-agents.md`, `extend/custom-gates.md`                         | Website owns authoring how-to; repo keeps engine design (registries, the three stages). All three now open with a pointer.                                                                                                                                                                                            |
-| Public API                       | `backend/docs/public-api.md`                                                                      | `extend/public-api.md`                                                      | Website owns endpoint/scope/webhook usage; repo keeps the stability policy (ADR 0034) and the contracts → spec → SDK chain.                                                                                                                                                                                           |
+| Public API                       | `backend/docs/public-api.md`                                                                      | `extend/public-api.md`, `extend/api-reference.md` (GENERATED, owns SHAPES)  | Three-way, settled by item 12: the site's page owns the integrator's first read, the generated page owns every operation's path/scope/parameters/schemas, and the repo doc keeps what the spec cannot express (refusal codes behind each `4XX`, caps, ordering, the worked walkthroughs).                             |
 | Model support                    | `backend/docs/model-support.md`                                                                   | `guide/model-providers.md`                                                  | Website owns configuration and usage; repo keeps provisioning internals. Pilot slice.                                                                                                                                                                                                                                 |
 | Runner pools                     | `backend/docs/runner-pool-integration.md`                                                         | `operate/runner-pools.md`                                                   | Website owns operating a pool; repo keeps the integration protocol.                                                                                                                                                                                                                                                   |
 | Environments                     | `backend/docs/environments-integration.md`, `local-k3s-environments.md`, `kubernetes-topology.md` | `operate/environments.md`, `deploy/kubernetes.md`, `extend/manifests.md`    | Website owns setup and operation; repo keeps provider integration design. Reduced in slice 15b, with ONE exception the site must close first: `extend/manifests.md` stops above the field level, so the environment manifest's schema, worked example and variable tables stay in the repo doc.                       |
@@ -147,20 +154,20 @@ keeps the internal design plus a link.
 Rather than one row per file, whole categories classify together and only the exceptions are named,
 because a per-file table of 160 rows rots faster than the docs it describes.
 
-| Category                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Classification       | Rule                                                                                                                                                                                                  |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `backend/docs/adr/*` (50 files)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | contributor          | A decision record is written for whoever changes the code next. None moves.                                                                                                                           |
-| `docs/initiatives/*` (64 files)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | contributor          | Describes a target state that may be partly built. Never a user-facing source.                                                                                                                        |
-| `docs/internal/*`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | contributor          | This repository's own process.                                                                                                                                                                        |
-| Engine flow docs: `agent-prompt-overrides`, `bug-hunt`, `bug-triage-pipeline`, `concurrency-and-redis`, `consensus-panels`, `container-reaping`, `env-lifecycle`, `execution-state-machine`, `gitlab-parity`, `individual-subscription-usage`, `infrastructure-providers-window`, `logging`, `per-service-provisioning`, `pipeline-catalog-lifecycle`, `pipeline-pr-descriptions`, `prompt-caching`, `ralph-loop`, `requirements-review`, `review-debt-friction`, `service-connections`, `visual-confirmation`                   | contributor          | Each describes a seam, an invariant or a flow the code implements. The product behaviour they produce is described on the website by the page that owns that feature, and none of these is that page. |
-| `model-support`, `security-model`, `storage-and-retention`, `llm-telemetry`, `custom-agents`, `custom-agent-roles`, `custom-agent-gate-ergonomics`, `mcp-tool-servers`, `custom-binary-stores`, `github-integration`, `github-operations`, `vcs-providers`, `environments-integration`, `local-k3s-environments`, `native-environment-adapter`, `kubernetes-topology`, `runner-pool-integration`, `document-sources`, `auth`, `reports`, `debug-api`, `reusable-operations`, `initiative-presets`, `figma-claude-design-context` | mixed                | Split by depth. All 24 now open with a pointer naming the website page that owns the user-facing account, and the reduction has run on twelve. Per-doc state: item 15's inventory.                    |
-| `docs/environment-variables.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | user-facing, stays   | A CI guard reads it. The website RENDERS it.                                                                                                                                                          |
-| `docs/glossary.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | contributor          | Code-level naming map; the product vocabulary is the website's glossary.                                                                                                                              |
-| `docs/README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `AGENTS.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | contributor          | This repository's own orientation and process.                                                                                                                                                        |
-| `backend/docs/public-api.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | mixed, deferred      | See checklist item 12.                                                                                                                                                                                |
-| `backend/docs/local-kubernetes-setup-windows.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | user-facing, unmoved | A platform-specific setup recipe with no website home yet. Candidate for the Deploy section; not worth a page of its own until the Kubernetes page needs it.                                          |
-| `sdk/README.md`, `sdk/mcp/README.md`, `sdk/*/README.md`, `backend/packages/*/README.md`, `deploy/*/README.md`                                                                                                                                                                                                                                                                                                                                                                                                                    | named exception      | A README that ships in a published tarball stays self-contained and links the website by absolute URL.                                                                                                |
-| `docs/openapi.json`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | named exception      | Generated. The site links or renders it, never recreates it.                                                                                                                                          |
+| Category                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Classification          | Rule                                                                                                                                                                                                  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `backend/docs/adr/*` (50 files)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | contributor             | A decision record is written for whoever changes the code next. None moves.                                                                                                                           |
+| `docs/initiatives/*` (64 files)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | contributor             | Describes a target state that may be partly built. Never a user-facing source.                                                                                                                        |
+| `docs/internal/*`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | contributor             | This repository's own process.                                                                                                                                                                        |
+| Engine flow docs: `agent-prompt-overrides`, `bug-hunt`, `bug-triage-pipeline`, `concurrency-and-redis`, `consensus-panels`, `container-reaping`, `env-lifecycle`, `execution-state-machine`, `gitlab-parity`, `individual-subscription-usage`, `infrastructure-providers-window`, `logging`, `per-service-provisioning`, `pipeline-catalog-lifecycle`, `pipeline-pr-descriptions`, `prompt-caching`, `ralph-loop`, `requirements-review`, `review-debt-friction`, `service-connections`, `visual-confirmation`                   | contributor             | Each describes a seam, an invariant or a flow the code implements. The product behaviour they produce is described on the website by the page that owns that feature, and none of these is that page. |
+| `model-support`, `security-model`, `storage-and-retention`, `llm-telemetry`, `custom-agents`, `custom-agent-roles`, `custom-agent-gate-ergonomics`, `mcp-tool-servers`, `custom-binary-stores`, `github-integration`, `github-operations`, `vcs-providers`, `environments-integration`, `local-k3s-environments`, `native-environment-adapter`, `kubernetes-topology`, `runner-pool-integration`, `document-sources`, `auth`, `reports`, `debug-api`, `reusable-operations`, `initiative-presets`, `figma-claude-design-context` | mixed                   | Split by depth. All 24 now open with a pointer naming the website page that owns the user-facing account, and the reduction has run on twelve. Per-doc state: item 15's inventory.                    |
+| `docs/environment-variables.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | user-facing, stays      | A CI guard reads it. The website RENDERS it.                                                                                                                                                          |
+| `docs/glossary.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | contributor             | Code-level naming map; the product vocabulary is the website's glossary.                                                                                                                              |
+| `docs/README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `AGENTS.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | contributor             | This repository's own orientation and process.                                                                                                                                                        |
+| `backend/docs/public-api.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | mixed, split three ways | The SHAPES are generated onto the site (item 12); the refusal vocabulary and the walkthroughs stay. Item 12b is what remains.                                                                         |
+| `backend/docs/local-kubernetes-setup-windows.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | user-facing, unmoved    | A platform-specific setup recipe with no website home yet. Candidate for the Deploy section; not worth a page of its own until the Kubernetes page needs it.                                          |
+| `sdk/README.md`, `sdk/mcp/README.md`, `sdk/*/README.md`, `backend/packages/*/README.md`, `deploy/*/README.md`                                                                                                                                                                                                                                                                                                                                                                                                                    | named exception         | A README that ships in a published tarball stays self-contained and links the website by absolute URL.                                                                                                |
+| `docs/openapi.json`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | named exception         | Generated. The site links or renders it, never recreates it.                                                                                                                                          |
 
 Two classifications changed as the slices ran, and both are recorded because the reasoning is not
 obvious from the file:
@@ -227,18 +234,33 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
 - [x] 11. State the model: `docs/README.md` and `CONTRIBUTING.md` gained "Where does a new doc go?",
       and CLAUDE.md's staleness sweep gained the website question (paid for inside the file's size
       budget, not by raising it).
-- [ ] 12. **The `/api/v1` endpoint reference stays in the repo, and the slice that moves it is the
-      WRONG slice.** `public-api.md` is 2029 lines of prose companion to the generated
-      `docs/openapi.json`, and several of its anchors are linked from published package READMEs and
-      from error messages in code. The deferral held, but "move 2000 lines of prose" was never the
-      shape of the answer: the site already owns the integrator's first read (`extend/public-api.md`),
-      and the complete, always-current endpoint reference is the SPEC, which the site today only
-      tells the reader to fetch from this repo. So the work is to RENDER it, on the one piece of
-      machinery both repos already trust: a `sync-openapi.mjs` beside `sync-env-vars.mjs`, emitting a
-      generated reference page from `docs/openapi.json` with a `--check` that fails on staleness.
-      That leaves `public-api.md` as the stability policy plus the contracts → spec → SDK chain,
-      which is what its classification says it is. The anchor inventory is still the first step,
-      because the four inbound shipped-README links decide which headings survive the reduction.
+- [x] 12. **RENDER the `/api/v1` reference; never move it.** `sync-openapi.mjs` landed beside
+      `sync-env-vars.mjs` in the website repo, emitting `extend/api-reference.md` from
+      `docs/openapi.json`: every operation with its minimum scope, parameters, request body and
+      responses, grouped by the spec's own tags, plus a field table per schema. `--check` compares
+      against this repo on a weekly schedule; `--verify` blocks a pull request there on the half
+      needing no second checkout. The generator ASSERTS what makes the output a reference rather
+      than a dump, each failing the render: every operation states a scope (one that did not would
+      read as an endpoint needing no authorization), summaries are unique because they become the
+      anchors, every operation carries exactly one tag because the grouping IS the navigation, and
+      no two headings on the page slug the same.
+- [ ] 12b. **The reduction half, re-scoped by measuring instead of estimating.** Three revisions of
+      this tracker described `public-api.md` as "2,029 lines of prose companion to the spec", which
+      framed the cut as enormous and is why it was deferred four times. It is wrong. The
+      `## Reference` section is 1,352 lines of which **125 are endpoint-table rows**; the rest is
+      worked walkthroughs, refusal vocabularies and judgement. So the generated page does not
+      subsume this section, and the anchor inventory that was going to be the first step is not the
+      blocker either (the load-bearing set is five: `#from-an-mcp-host` from `sdk/mcp/README.md`,
+      `#run-evidence-report--outcome--artifacts`, `#attaching-requirements-documents`,
+      `#spend-by-repository-ticket-or-run` and `#merge-evidence-apiv1merge-records`).
+      **What blocks the table cut is the spec's own shape**: it collapses every client failure into
+      one `4XX` with a shared `ErrorResponse`, so `429 too_many_active_runs` and the five-in-flight
+      cap that raises it are on no generated page, and gutting the tables toward one would delete
+      the surface's whole refusal vocabulary. What CAN go is narrower and is what 12b is: the
+      request/response bodies still spelled inside `Behaviour` cells, which the generated page now
+      owns field by field. The doc says so at the top of the section, so the next pass reads the
+      verdict rather than re-deriving it. Fixing the spec to declare its refusal codes per operation
+      would change this answer, and is a public-API change rather than a documentation one.
 - [x] 14. Enforce the coupling slice 9 broke silently. `scripts/check-doc-anchors.mjs` resolves
       every doc URL built in code to a file AND a heading, across all THREE modules that build them
       (`config/docs.ts`, `vcs-errors.ts`, `providers/docs.ts`: each layer sits below the last and
@@ -316,6 +338,30 @@ Each slice is a repo PR, a website PR, or a coordinated pair. Update with PR lin
       a REDIRECTED URL still resolves for a reader, so the guard reads each page's own
       `redirectFrom` frontmatter rather than keeping a list, which is the same reason a moved page
       carries its redirect in the first place.
+- [x] 16b. **The CHANGELOG exclusion, revisited rather than left as a decision only the code
+      states.** Item 16 excluded generated `CHANGELOG`s and carried 33 of the 43 dangling targets
+      out of scope with them. Re-examined and KEPT, for a reason worth writing down once so it is
+      not re-litigated: a changelog entry is a claim about what was true at a released version, and
+      a link inside one is part of that claim. Re-pointing it at a file's new path would make the
+      entry describe a repository layout that did not exist when the version shipped, which is
+      falsifying a record to satisfy a link checker. The alternative considered and rejected was
+      rewriting only the links whose TARGET still exists somewhere: that is worse, because it leaves
+      a changelog whose links are silently a mix of contemporaneous and back-dated, with nothing
+      marking which is which. The 33 stay dangling on purpose, and the guard says so at the site
+      that skips them.
+- [x] 19. **Land the two website destinations the previous phase assumed, and make the ordering rule
+      an ACTION.** Slices 15i and 15j cut toward `extend/tool-servers.html` and
+      `operate/debugging-a-run.html`; neither page existed, and the commit message asserted both
+      did. The website repo's phase F wrote them, to the anchors this repo already deep-links rather
+      than the other way round, since those anchors were chosen here before the pages existed.
+      **What let it happen is not a missing guard**, and this is the part worth carrying forward.
+      Item 18's crossing guard is weekly BY DESIGN, for the good reason recorded in the gotcha
+      below, and it was written in the same pull request as the breakage, so its first scheduled run
+      was still days away. Neither repository's pull-request CI can see the other, by construction.
+      So the check is a person, and the rule is now phrased as something you DO: CLAUDE.md's
+      staleness sweep says open the website pull request first and NAME it in this one's
+      description, and load the page before linking it. An assertion that the page exists is what
+      failed; opening the URL is what would not have.
 
 ## Slice 15 reductions
 
@@ -545,10 +591,16 @@ next iteration re-propose it.
 
 ### 15i. `mcp-tool-servers.md`: DONE (723 → 347 lines)
 
+**Correction, and it is the one this whole initiative is most embarrassed by: the page was NOT
+written first.** This entry claimed `extend/tool-servers.md` was landed ahead of the cut and it was
+not landed at all, so for the life of that gap the reduction pointed at a 404 and the material was
+reachable from nowhere. The page exists now (item 19), written to the anchors this entry had already
+committed to. The rest of this entry stands.
+
 The largest single reduction of the initiative, and the clearest case of the pattern item 17 first
 exposed: 723 lines here against 65 on the site, inside a subsection of the custom-agents page. The
-reduction was therefore blocked on a page that did not exist, so `extend/tool-servers.md` was written
-first, and it takes the whole deployment-author path: registering, the harness support matrix, the
+reduction was blocked on a page that did not exist, and `extend/tool-servers.md` takes the whole
+deployment-author path: registering, the harness support matrix, the
 credential rules, OAuth end to end, the Test button's nine verdicts, operating a `stdio` server, the
 security posture, the worked Slack runbook and the adoption checklist.
 
@@ -570,7 +622,8 @@ The same shape at a smaller scale: 433 lines against about 25 spread over two pa
 "Investigating a run" walkthrough (find it, follow the signal, grep for the cause, attribute the
 spend, read the conversation, export the bundle) sitting here where a caller with an API key and no
 checkout is exactly the reader. `operate/debugging-a-run.md` takes it, plus the endpoint table and
-the size ceilings.
+the size ceilings. Same correction as 15i: that page was landed by item 19, AFTER this cut rather
+than before it.
 
 Kept: the one design constraint every endpoint obeys (a response's size is computable BEFORE the
 request), why the path is `/debug`, the auth model, where the code lives, and the mothership-mode
@@ -655,9 +708,16 @@ converts.
 
 ## Gotchas
 
-- **Land the website page before the repo link to it.** A repo doc linking a 404 fails
-  silently for every reader. This tracker's header obeys its own rule: it links the open website
-  PR, not the file that PR adds.
+- **Land the website page before the repo link to it, and LOAD it rather than believing you did.**
+  A repo doc linking a 404 fails silently for every reader. This tracker's header obeys the first
+  half; item 19 exists because a phase obeyed neither. The failure mode is specific and it is not
+  laziness: a slice that WROTE a website page in its plan, and then reduced against that plan,
+  reads its own intent as an accomplished fact, and every artefact it produces afterwards (the
+  commit message, this tracker's own slice entry) repeats the claim rather than checking it. Two
+  reduction entries here asserted a page was written first; neither page existed. **The check that
+  works is opening the URL**, and the phrasing that survives is an action rather than an ordering:
+  CLAUDE.md's sweep now says to open the website pull request first and NAME it in the repo one's
+  description, which is a thing a reviewer can see the absence of.
 - **The website restructure changes URLs.** Its tracker's phase A regroups navigation without
   moving files precisely so slices here can start early; slices that link moved pages wait
   for the website's redirect slice, or link section anchors that survive the move.
