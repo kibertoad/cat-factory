@@ -5,11 +5,11 @@
 > kind and declaring its capabilities. This page is the ROLE layer under it: what to write
 > in a prompt and what the platform composes around it.
 
-The authoring guide for the ROLE a custom agent kind carries: what to write in its system
-prompt and what the platform composes around it, how to author the skills (procedural
-playbooks) and tool servers (MCP) it declares, and the behaviour knobs beyond the prompt.
+The ROLE a custom agent kind carries: what to write in its system prompt and what the
+platform composes AROUND that text, how to author the skills (procedural playbooks) it
+declares, and the behaviour knobs beyond the prompt.
 
-It sits between two neighbouring docs and deliberately restates neither:
+It sits between three neighbouring docs and deliberately restates none of them:
 
 - [`custom-agents.md`](./custom-agents.md): the extension MODEL: the three stages
   (preOps / agent / postOps), the registry seams, how the engine and harness run a
@@ -19,7 +19,8 @@ It sits between two neighbouring docs and deliberately restates neither:
   registration validation.
 - [`mcp-tool-servers.md`](./mcp-tool-servers.md): the full tool-server (MCP) model:
   registration, harness support, credentials, the probe, security posture and limits.
-  The "Tool servers" section below is the authoring half of that model.
+  Authoring one is the website's; the section below keeps only what the platform does with
+  a declaration.
 
 The design record for capabilities is
 [ADR 0029](./adr/0029-agent-kind-capabilities.md); the worked example every section
@@ -131,35 +132,23 @@ brief). The contract when you do:
 ## Traits
 
 A trait is a checkable capability marker; some also carry prompt guidance
-(`packages/agents/src/agents/kinds/traits.ts`). Declare the standard ones on
-`AgentKindDefinition.traits` when they apply to your kind:
+(`packages/agents/src/agents/kinds/traits.ts`). The website's
+[trait table](https://www.catfactory.ai/extend/custom-agents.html#traits) lists every one the
+platform reads and what it does. Two composition rules it does not carry, because both are about
+what the ENGINE does with the fold rather than about picking a trait:
 
-| Trait             | Effect                                                                                                                                                          |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `code-aware`      | Marker: the engine folds the service's selected best-practice fragments into the system prompt.                                                                 |
-| `doc-aware`       | Marker: same fold, but the block's writing-style fragments (the document-authoring track).                                                                      |
-| `spec-aware`      | Guidance: appends the in-repo `spec/` reading instructions. Give it to any kind that clones and should honour the service spec.                                 |
-| `brief-standards` | Marker: fold the CONDENSED `brief` of each standard instead of the full body. For implementer kinds running a long agentic loop (the prompt re-sends per turn). |
-| `binary-storage`  | Marker: the engine refuses to START a pipeline carrying the kind when the account has no binary-artifact store (for screenshot/artifact-producing kinds).       |
-| `interview-gate`  | Marker: the kind runs the shared interactive-interviewer park/resume spine. Engine-internal; don't declare it on an ordinary kind.                              |
+- **Pick `brief-standards` by loop length, not prestige.** A `code-aware` kind that edits code over
+  many turns should carry it (the built-in coder/fixers do), because the system prompt is re-sent
+  every turn; a reviewer or planner that runs few turns benefits from the full standard text and
+  should not.
+- **`standardsDelivery: 'context-files'` is orthogonal**: it stops the fold entirely and makes YOUR
+  preOp responsible for writing the standards as `.cat-context/` files (the delegating-agent case;
+  see [`custom-agents.md` → The seams](./custom-agents.md#the-seams) for why the fold is skipped
+  and what happens when that preOp does not run).
 
-Two composition rules:
-
-- **Pick `brief-standards` by loop length, not prestige.** A `code-aware` kind that edits
-  code over many turns should carry it (the built-in coder/fixers do); a reviewer or
-  planner that runs few turns benefits from the full standard text and should not.
-- **`standardsDelivery: 'context-files'` is orthogonal**: it stops the fold entirely and
-  makes YOUR preOp responsible for writing the standards as `.cat-context/` files (the
-  delegating-agent case; see [`custom-agents.md` → The seams](./custom-agents.md#the-seams)
-  for why the fold is skipped and what happens when that preOp does not run).
-
-**A custom trait** is for a capability SEVERAL of your kinds share: register the
-definition once (`registry.registerTrait({ id, guidance })`; `guidance` may be a
-`(kind) => string`), then list the id in each kind's `traits`. A guidance trait is a
-reusable prompt block with an identity; a pure marker trait (no `guidance`) is only
-useful if your own backend code checks it via `hasTrait` / `traitsFor`: the engine knows
-nothing about it. `registry.assignTraits(kind, [...])` adds traits to a kind you did not
-define (this is how `@cat-factory/consensus` marks built-in kinds eligible).
+A pure MARKER trait (no `guidance`) is only useful if your own backend code checks it via
+`hasTrait` / `traitsFor`: the engine knows nothing about it, so registering one and expecting a
+behaviour change is the mistake this sentence exists to prevent.
 
 ## Skills: authoring the playbook
 
@@ -210,63 +199,26 @@ across the two.
 
 ## Tool servers: authoring the MCP definition
 
-A tool server extends what the agent can REACH. The wiring rules (credential resolution,
-drop-and-state behaviour, harness support, the security posture of `allowedTools` and the
-`https`-or-loopback rule) are in [`mcp-tool-servers.md`](./mcp-tool-servers.md) and ADR 0029.
-This section is the field-by-field authoring reference for `McpServerDefinition`
-(`packages/kernel/src/domain/agent-capabilities.ts`).
+The whole authoring surface is on the website:
+[Give Agents External Tools (MCP)](https://www.catfactory.ai/extend/tool-servers.html) owns
+registering a server, the harness matrix, `allowedTools`, the credential rules (including the
+reserved-lookup-key floor and `envName`) and OAuth end to end. The design behind those rules is
+[`mcp-tool-servers.md`](./mcp-tool-servers.md) and [ADR 0029](./adr/0029-agent-kind-capabilities.md).
 
-| Field          | What it actually does                                                                                                                                                                                                                                               |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`           | The MCP server NAME the CLI exposes tools under (`mcp__<id>__<tool>`) and, for Codex, a TOML table key, so it must match `MCP_SERVER_ID_PATTERN` (lowercase alphanumerics, `-`, `_`, ≤64 chars). A malformed id is a boot error, not a mid-run mystery.             |
-| `label`        | Human name for the prompt section and run diagnostics. Defaults to the id.                                                                                                                                                                                          |
-| `guidance`     | One or two sentences telling the agent WHAT the server is for and WHEN to reach for it. **Load-bearing, not decoration**: an agent handed a tool it wasn't told the purpose of tends not to use it. Phrase it as a decision rule ("look up X here before doing Y"). |
-| `transport`    | `{ kind: 'stdio', command, args?, env? }` (a child process in the run container) or `{ kind: 'http', url, headers? }`. `env` and `headers` here are NON-secret config; anything secret rides `secretKeys`.                                                          |
-| `allowedTools` | Bare tool names the agent may call. Omit ⇒ every tool. Scoping, never a security boundary: see the rules doc.                                                                                                                                                       |
-| `harnesses`    | NARROWS which MCP-capable harnesses may serve it (it can never widen: Pi has no MCP client regardless). Declare `['claude-code']` on an `http` server so the Codex drop is stated rather than invisible.                                                            |
-| `secretKeys`   | Credentials by NAME (below).                                                                                                                                                                                                                                        |
-| `oauth`        | For an `http` server that authenticates with a GRANT rather than a static token (below). Composes with `secretKeys` rather than replacing them.                                                                                                                     |
+Three field-level facts sit under that page rather than on it, each because it is about how the
+platform reads a declaration rather than about writing one:
 
-### `secretKeys` anatomy (`McpSecretRef`)
-
-How a resolved secret reaches the server depends on the transport:
-
-- **`stdio`**: the value becomes an environment variable of the server process, named by
-  `key`. That is the whole story: `header`/`headerTemplate` don't apply.
-- **`http`**: the value is sent as a request header, so an HTTP server's secret MUST
-  declare `header` (e.g. `Authorization`): a header-less secret on an HTTP server is
-  passed as an env var the remote endpoint can never see. `headerTemplate` shapes the
-  value with `{value}` standing in for the secret (`'Bearer {value}'`); omitted means the
-  bare value.
-
-`required` defaults to **true**: an unresolved required secret DROPS the whole server
-(stated to the agent in the prompt), because a tool whose first call 401s is worse than
-one the agent knows it lacks. Set `required: false` only for a credential the server
-genuinely works without (higher rate limits, extra scopes).
-
-Name keys under a dedicated `MCP_` prefix by convention: that is what a deployment's
-`createEnvToolSecretResolver(env, { allowKeys })` allow-list keys off when it installs
-agent packages it did not author.
-
-### `oauth` anatomy (`McpOAuthConfig`)
-
-`http` transport only — a `stdio` server is a child process with no request to authorise, and the
-combination is a boot error rather than an inert declaration.
-
-| Field                           | What it actually does                                                                                                                                                                                                                           |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `grant`                         | `'authorization_code'` (a person with `secrets.manage` presses Connect and signs in at the vendor) or `'client_credentials'` (the deployment's own client, no browser, no UI, token minted on first dispatch).                                  |
-| `clientId`                      | The OAuth client this deployment registered at the vendor. Static: dynamic client registration (RFC 7591) is not performed.                                                                                                                     |
-| `clientSecretKey`               | LOOKUP key for the client secret, resolved through the SAME capability-credential chain a `secretKeys` entry uses, and held to the same reserved-key floor. Omit for a public client (PKCE only), which is what most remote MCP servers expect. |
-| `authorizationUrl` / `tokenUrl` | Omit ⇒ DISCOVERED from the server url (RFC 9728 → RFC 8414 → OpenID Connect discovery). Declared, it wins over discovery, half a pair included. Either way the endpoint must be https (or loopback).                                            |
-| `scopes`                        | Requested at authorization. The GRANTED scopes (which may be narrower) are what the connection row reports.                                                                                                                                     |
-| `resource`                      | The RFC 8707 resource indicator. Defaults to the server's own url, which is right whenever the server is its own resource.                                                                                                                      |
-| `header` / `headerTemplate`     | Where the access token rides. Defaults to `Authorization` / `Bearer {value}`. A `secretKeys` entry naming the SAME header is a boot warning: the granted token wins, so the static credential reaches the server as nothing.                    |
-
-The operator-facing half (what a deployment configures and what a board sees) is the website's
-[OAuth-protected servers](https://www.catfactory.ai/extend/tool-servers.html#oauth-protected-servers);
-why the flow is shaped the way it is, in
-[`mcp-tool-servers.md`](./mcp-tool-servers.md#oauth-the-four-decisions-that-are-not-obvious).
+- **`guidance` is load-bearing, not decoration.** It is rendered verbatim as the one sentence under
+  the server's bullet, competing with the rest of the prompt for attention, so phrase it as a
+  decision rule ("look up X here before doing Y"). An agent handed a tool it was not told the
+  purpose of tends not to use it.
+- **`harnesses` NARROWS and can never widen.** Pi has no MCP client regardless of what a definition
+  says, so the field's only effect is to exclude.
+- **`oauth` carries two fields the website's walkthrough does not need.** `resource` is the RFC 8707
+  resource indicator, defaulting to the server's own url, which is right whenever the server is its
+  own resource; `header` / `headerTemplate` default to `Authorization` / `Bearer {value}`, and a
+  `secretKeys` entry naming the SAME header is a boot WARNING rather than an error, because the
+  granted token wins and the static credential reaches the server as nothing.
 
 ### What the agent actually sees
 
@@ -294,18 +246,12 @@ registrations first, deployment overrides second.
 
 ## Extending built-in kinds
 
-You cannot redefine a built-in kind's prompt (see resolution order above), but you can
-extend its role without forking:
-
-- `assignSkills('coder', ['org-playbook'])`: the house playbook on every coder run.
-- `assignToolServers('pr-reviewer', ['org-advisories'])`: the org's MCP server for the
-  reviewer.
-- `assignTraits(kind, [...])`: extra trait markers.
-
-All three are additive and dedup against the kind's own declarations; assigned skills
-come AFTER the kind's own at the ref level, so a built-in's ordering is preserved (the
-bundled-before-catalog caveat in "Skills" above applies to the resolved order). There is
-no "unassign": narrowing a built-in kind means defining your own kind instead.
+`assignSkills` / `assignToolServers` / `assignTraits` are on the website's
+[custom-agents page](https://www.catfactory.ai/extend/custom-agents.html#skills-and-tool-servers).
+What it does not say, and what a change here has to keep true: all three are ADDITIVE and dedup
+against the kind's own declarations, assigned skills come AFTER the kind's own at the ref level (so
+a built-in's ordering is preserved, subject to the bundled-before-catalog caveat above), and there
+is no "unassign". Narrowing a built-in kind means defining your own kind instead.
 
 ## Behaviour knobs beyond the prompt
 
