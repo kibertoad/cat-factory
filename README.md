@@ -258,7 +258,7 @@ the backend's hosted `POST /api/v1/mcp`, mounted from this same package. `sdk/ga
 third projection from the same generator: a **policy-annotated operation table** (per-operation
 key-scope floors, mutation and transport metadata, invoke thunks over the TypeScript client) for
 credential-holding front-ends such as a Cloudflare OS Gatekeeper; see the
-[initiative tracker](./docs/initiatives/cloudflare-os-gatekeeper.md). `sdk/gatekeeper-worker` is
+[design record](./backend/docs/adr/0052-cloudflare-os-gatekeeper.md). `sdk/gatekeeper-worker` is
 the one member here that is hand-written rather than projected: the **Gatekeeper Worker
 machinery** a deployment installs (capabilities compiled from that table, the Cloudflare OS object
 model and approval queue in front of them, per-actor key minting, the verified webhook receiver and

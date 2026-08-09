@@ -23,7 +23,7 @@ export default defineConfig({
       // Nothing in this Worker has a remote-only binding, and a remote session would need
       // credentials the suite must never require.
       remoteBindings: false,
-      wrangler: { configPath: './test/wrangler.toml' },
+      wrangler: { configPath: './test/wrangler.jsonc' },
       miniflare: {
         outboundService: 'cat-factory',
         workers: [{ name: 'cat-factory', modules: true, script: fakeCatFactory }],
@@ -42,10 +42,12 @@ export default defineConfig({
     }),
   ],
   test: {
-    // `test/live/**` is the same Worker against a REAL deployment and is run by
-    // `vitest.live.config.ts` from `@cat-factory/sdk-smoketest`, which boots one. Excluded rather
-    // than left to vitest's default glob, which would pick it up here and fail on the bindings the
-    // harness supplies — a hermetic suite that needs a database is not hermetic.
-    exclude: ['test/live/**', '**/node_modules/**', '**/dist/**'],
+    // The other two legs run the same Worker with one of its fakes taken away, and each has a
+    // config of its own: `test/live/**` against a REAL deployment (booted by
+    // `@cat-factory/sdk-smoketest`) and `test/os-live/**` against a REAL Cloudflare OS (booted by
+    // the nightly workflow, out of a partner checkout). Excluded rather than left to vitest's
+    // default glob, which would pick them up here and fail on what their harnesses supply: a
+    // hermetic suite that needs a database, or somebody else's workspace, is not hermetic.
+    exclude: ['test/live/**', 'test/os-live/**', '**/node_modules/**', '**/dist/**'],
   },
 })

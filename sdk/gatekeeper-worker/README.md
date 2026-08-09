@@ -351,12 +351,35 @@ What that deliberately does not cover is a delivery that TRAVELLED: the platform
 a loopback endpoint, so the receiver is driven with an envelope the suite signs around the
 platform's own notification object.
 
+`test/os-live/` is the third leg, and it takes away the fake the other two share: the workspace.
+Cloudflare OS's own `@gadgets/integration-tests` toolkit boots the real `workshop-backend` beside
+this Worker under wrangler's test harness, so a real workspace discovers the vendor off a service
+binding, mints an account, binds the paired deployment as a resource and shares it. Nightly, pinned
+to a partner commit by `GATEKEEPER_OS_REF`, and non-blocking by living in a workflow of its own
+(`.github/workflows/gatekeeper-os.yml`). To run it yourself, clone the partner repository and point
+the suite at it:
+
+```sh
+GATEKEEPER_OS_DIR=/path/to/cloudflare-os pnpm --filter @cat-factory/gatekeeper-worker test:os
+```
+
+It exists for the three seams no other suite here structurally reaches: the entrypoint NAMES (the
+workspace resolves them and never asks this package what they are called), the stubs handed over
+(`createAccount()` returns something the workspace persists, and `getGatekeeperClassFor()` a class
+only the workspace's own machinery can instantiate), and the transcribed protocol in
+`src/os/protocol.ts`, which a hermetic suite cannot tell from a shape that has fallen behind. Its
+first run found a real one: without the `allow_irrevocable_stub_storage` compatibility flag, a
+workspace cannot store the account stub, so every account anyone connected failed. What it does NOT
+reach is a session: the harness runs no gadget code, so `startSession` is never called and the
+approval queue, the argument checks and the answerers stay with the hermetic suite. Two legs, two
+questions.
+
 ## References
 
 - [`deploy/gatekeeper`](https://github.com/kibertoad/cat-factory/tree/main/deploy/gatekeeper): the
   template you copy, its configuration walkthrough and the OS-side usage example.
-- [The initiative tracker](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/cloudflare-os-gatekeeper.md):
-  design notes, the decisions behind each half, and what the suite deliberately does not cover.
+- [ADR 0052](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0052-cloudflare-os-gatekeeper.md):
+  the design record, the decisions behind each half, and what each suite deliberately does not cover.
 - [`backend/docs/public-api.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/public-api.md):
   the API this rides (keys, scopes, webhooks, endpoint semantics).
 - [`@cat-factory/gatekeeper-bindings`](https://www.npmjs.com/package/@cat-factory/gatekeeper-bindings):

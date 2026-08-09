@@ -1,0 +1,126 @@
+name: Gatekeeper OS leg
+
+# The Cloudflare OS Gatekeeper, driven by a REAL Cloudflare OS.
+#
+# `ci.yml`'s `test-gatekeeper` lane runs this Worker twice, against a scripted cat-factory and
+# against a real one. Both of those fake the OTHER side: the workspace is a test object in the same
+# isolate. This workflow takes that fake away, booting `cloudflare/cloudflare-os`'s own
+# `workshop-backend` beside our Worker under wrangler's test harness, which is the only thing that
+# can answer whether a real workspace is happy with the shapes we serve it. It found the answer was
+# no on its first run (a missing `allow_irrevocable_stub_storage` compatibility flag made every
+# account a workspace connected fail), which is the class of bug it exists for.
+#
+# It is a SEPARATE workflow rather than a `continue-on-error` job in `ci.yml`, for the reason
+# `mutation.yml` states: a separate workflow contributes no check to the aggregated `Build` / `Test`
+# gates, so a red run here can never block a merge. That is what "non-blocking" has to mean for a
+# lane whose subject is a partner repository we do not control. `continue-on-error` would have been
+# the wrong shape for the same reason a silently absent report is: it makes the job report a pass it
+# did not earn, and a lane nobody can distinguish from green is a lane nobody reads.
+#
+# The partner is PINNED, never tracked. A ref that moves under us turns "this run is red" into
+# "something changed somewhere", which is the one thing this lane must not become. Bumping the pin
+# below is a deliberate, reviewable commit, and the diff that comes with it is the point.
+
+on:
+  # Nightly, off-peak, and offset from `mutation.yml` so the two do not compete for runners.
+  schedule:
+    - cron: '40 3 * * *'
+  # A change to this leg runs it on the PR making the change. `workflow_dispatch` only exists once a
+  # workflow sits on the default branch, so without this the flow could first be proven only AFTER
+  # merging it. An ordinary PR matches none of these paths and pays nothing.
+  pull_request:
+    paths:
+      - '.github/workflows/gatekeeper-os.yml'
+      - 'scripts/grade-vitest-report.mjs'
+      - 'sdk/gatekeeper-worker/test/os-live/**'
+      - 'sdk/gatekeeper-worker/test/wrangler.jsonc'
+      - 'sdk/gatekeeper-worker/vitest.os.config.ts'
+  # Manual runs on any branch, so a change to the object model can be measured against a real
+  # workspace before it merges, and so a candidate partner ref can be tried before the pin moves.
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'cloudflare/cloudflare-os commit to boot. Empty = the pinned one.'
+        required: false
+        default: ''
+
+concurrency:
+  group: gatekeeper-os-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+env:
+  # The pinned partner commit. `cloudflare/cloudflare-os` @ 2026-08-07.
+  GATEKEEPER_OS_REF: 1cb5e3d9096589e38f3fcfaf3f2191aa95a4c592
+  # Inside this repository's root on purpose: wrangler's harness boots both Workers under ONE root,
+  # and the only root that contains ours and theirs is this checkout. Dot-prefixed, so no workspace
+  # glob in either repository picks it up. ABSOLUTE, because the suite's config is read with the
+  # package as its working directory and a relative path would resolve under `sdk/`.
+  GATEKEEPER_OS_DIR: ${{ github.workspace }}/.cloudflare-os
+
+jobs:
+  os-leg:
+    name: Object model against a real Cloudflare OS
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
+        with:
+          turbo-cache: 'true'
+
+      # Through Turbo, so the `^build` edge builds the workspace dependencies the Worker's own
+      # imports resolve through their `dist`. The harness bundles `test/worker.ts` with esbuild, so
+      # a stale dist is a bundle error rather than a failing assertion.
+      - name: Build the published surface it consumes
+        run: pnpm exec turbo run build --filter=@cat-factory/gatekeeper-worker...
+
+      # The dispatch input arrives via env, never interpolated into the script body (repo
+      # convention; keeps this off zizmor's template-injection radar). A ref that cannot be checked
+      # out fails here rather than later as a puzzling harness error.
+      - name: Check out the pinned Cloudflare OS
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          ref="${REF:-$GATEKEEPER_OS_REF}"
+          echo "booting cloudflare/cloudflare-os @ $ref"
+          git init "$GATEKEEPER_OS_DIR"
+          git -C "$GATEKEEPER_OS_DIR" remote add origin https://github.com/cloudflare/cloudflare-os.git
+          git -C "$GATEKEEPER_OS_DIR" fetch --depth 1 origin "$ref"
+          git -C "$GATEKEEPER_OS_DIR" checkout FETCH_HEAD
+
+      # `--ignore-scripts`: this is a partner tree booted in our CI, so nothing in it runs a
+      # lifecycle script here. What the harness needs beyond the install is one generated module the
+      # backend imports, which the partner exposes as a named script of its own; asking for it by
+      # name rather than by file path is what keeps this step readable when they move it.
+      - name: Install and prepare it
+        working-directory: ${{ env.GATEKEEPER_OS_DIR }}
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm --filter @gadgets/workshop-backend run build:format-blueprints
+
+      # The report is removed first, so a run that dies before writing one is graded as the absence
+      # it is rather than against whatever the last run left behind.
+      #
+      # `|| true` is what lets the grader be the thing that speaks: it names each spec that failed
+      # or did not run, where a bare non-zero exit names none. The run's own output is above it in
+      # the log either way.
+      - name: Drive the object model
+        run: |
+          rm -f sdk/gatekeeper-worker/os-leg-report.json
+          pnpm --filter @cat-factory/gatekeeper-worker run test:os || true
+
+      # The REPORT is graded, never the exit code: a suite that collected nothing exits 0, and so
+      # does one whose specs were every one of them skipped, which is the shape this lane must never
+      # report as a pass.
+      - name: Grade the run
+        run: >-
+          node scripts/grade-vitest-report.mjs sdk/gatekeeper-worker/os-leg-report.json
+          --label 'the Gatekeeper OS leg'

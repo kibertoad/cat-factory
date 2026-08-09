@@ -41,7 +41,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.dev.json --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:live": "vitest run --config vitest.live.config.ts"
+    "test:live": "vitest run --config vitest.live.config.ts",
+    "test:os": "vitest run --config vitest.os.config.ts"
   },
   "dependencies": {
     "@cat-factory/gatekeeper-bindings": "workspace:*",

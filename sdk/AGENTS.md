@@ -35,6 +35,7 @@ run `pnpm gen:sdk`. `pnpm check:sdk` fails CI on drift and on version skew.
 | `gatekeeper-worker/src/**`                                 | hand-written throughout: the Worker factory, capability, key broker, webhook receiver, approval inbox      |
 | `gatekeeper-worker/src/policy/`                            | the `./policy` entry point: the policy vocabulary, with no Worker runtime, so a policy file loads anywhere |
 | `gatekeeper-worker/test/live/`                             | the same Worker against a REAL deployment, run by `@cat-factory/sdk-smoketest` (`--only=gatekeeper`)       |
+| `gatekeeper-worker/test/os-live/`                          | the same Worker against a REAL Cloudflare OS, run nightly out of a partner checkout (`GATEKEEPER_OS_DIR`)  |
 | `*/smoketest/`                                             | the per-SDK smoketest programs the cross-SDK harness drives                                                |
 
 **The generator** is `scripts/sdk/` (`ir.mjs` → spec-to-IR, `surface.mjs` → the chosen public

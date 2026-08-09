@@ -11,5 +11,16 @@
     "module": "ESNext",
     "moduleResolution": "Bundler"
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts", "vitest.live.config.ts"]
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "vitest.config.ts",
+    "vitest.live.config.ts",
+    "vitest.os.config.ts"
+  ],
+  // The OS leg imports Cloudflare OS's own test toolkit, which lives in a partner checkout this
+  // repository does not vendor: `vitest.os.config.ts` aliases it at run time from
+  // `GATEKEEPER_OS_DIR`. There is nothing for tsc to resolve on an ordinary checkout, so the leg is
+  // typechecked by the nightly run that has one, and by nothing else.
+  "exclude": ["test/os-live/**/*.ts"]
 }
