@@ -2,10 +2,11 @@ import type {
   Block,
   BlockRepository,
   ExecutionInstance,
+  RepoFiles,
   ResolveRunRepoContext,
   SpecDoc,
 } from '@cat-factory/kernel'
-import type { ServiceSpecView } from '@cat-factory/contracts'
+import type { PublicSpecProvenance, ServiceSpecView } from '@cat-factory/contracts'
 import { EMPTY_SERVICE_SPEC_VIEW, isTesterKind, runSpecBranch } from '@cat-factory/contracts'
 import { readServiceSpec } from '@cat-factory/agents'
 
@@ -43,6 +44,47 @@ export function specDocOf(view: ServiceSpecView | null): SpecDoc | null {
   return view?.present ? view.spec : null
 }
 
+/**
+ * WHERE a run's `spec/` read stopped, and what it produced.
+ *
+ * The reductions above fold every one of these onto "no spec", which is right for them: a coverage
+ * section already states its own absence, and a report that refused to compose because a repository
+ * was unreachable would be worse than one that says so. It is wrong for a caller that has to REPORT
+ * the read rather than survive it, which is what `GET /api/v1/runs/:runId/spec` does: folded, an
+ * outage tells an integrator that the run's service declares no requirements, and nothing in the
+ * payload contradicts it.
+ *
+ * So the states are separated HERE, at the one read, and the folding consumers fold on the way out.
+ * A second reader that made its own branch choice, ran its own gate or kept its own memo would
+ * describe a different run from the outcome summary the caller is joining against, which is the
+ * exact drift this loader exists to prevent.
+ */
+export type RunSpecRead =
+  /** The run's block is gone: there is nothing to read a spec FOR. */
+  | { status: 'no_block' }
+  /** This deployment wired no run-repo resolver at all. */
+  | { status: 'vcs_unwired' }
+  /** Wired, but this workspace has connected no version control (the resolver answered null). */
+  | { status: 'no_connection' }
+  /**
+   * Nothing was read, because no tester has reported yet.
+   *
+   * Not a failure and not an empty spec. The read is gated on a tester report so the tree served is
+   * the one the verdicts were made against (see {@link RunEvidenceLoader}), so before that point
+   * the platform has consulted no tree and the run's own outcome summary says `spec: 'not_read'`.
+   */
+  | { status: 'not_read' }
+  /** The repository could not be read. Retry: the spec may well be there. */
+  | { status: 'read_failed' }
+  /** A tree, an empty branch, or a corrupt anchor: the reader's own view, plus where it came from. */
+  | { status: 'read'; view: ServiceSpecView; provenance: PublicSpecProvenance }
+
+/** The memoised half of a settled read: the view, and the snapshot it describes. */
+interface MemoisedSpec {
+  view: ServiceSpecView
+  provenance: PublicSpecProvenance
+}
+
 export interface RunEvidenceLoaderDeps {
   blockRepository: BlockRepository
   /**
@@ -71,7 +113,8 @@ export class RunEvidenceLoader {
   async load(workspaceId: string, instance: ExecutionInstance): Promise<RunEvidence | null> {
     const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return null
-    return { block, specView: await this.serviceSpec(workspaceId, instance, block) }
+    const read = await this.readRunSpec(workspaceId, instance, block)
+    return { block, specView: read.status === 'read' ? read.view : null }
   }
 
   /**
@@ -86,19 +129,33 @@ export class RunEvidenceLoader {
    *
    * `EMPTY_SERVICE_SPEC_VIEW` rather than null on an unread spec: the card's own composer already
    * treats an absent spec as `spec: 'not_read'` and says so, and the read is best-effort by
-   * design (see {@link serviceSpec}).
+   * design (see {@link runSpecRead}).
    */
   async specViewForRun(workspaceId: string, instance: ExecutionInstance): Promise<ServiceSpecView> {
+    const read = await this.runSpecRead(workspaceId, instance)
+    return read.status === 'read' ? read.view : EMPTY_SERVICE_SPEC_VIEW
+  }
+
+  /**
+   * The run's `spec/` read WITH the outcome of the read, for a caller whose job is to report it:
+   * `GET /api/v1/runs/:runId/spec`.
+   *
+   * The same gate, the same branch rule, the same memo and the same reader the two reductions use.
+   * The difference is only that nothing is folded on the way out (see {@link RunSpecRead}), which
+   * is what lets a headless caller tell a service that declares nothing from a repository nobody
+   * can currently read.
+   */
+  async runSpecRead(workspaceId: string, instance: ExecutionInstance): Promise<RunSpecRead> {
     const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
-    if (!block) return EMPTY_SERVICE_SPEC_VIEW
-    return (await this.serviceSpec(workspaceId, instance, block)) ?? EMPTY_SERVICE_SPEC_VIEW
+    if (!block) return { status: 'no_block' }
+    return this.readRunSpec(workspaceId, instance, block)
   }
 
   /**
    * The service's in-repo `spec/`, reassembled from the run's branch for the requirement →
-   * evidence join. Null whenever it could not be read, which every consumer reports with a
-   * stated absence rather than a blank.
+   * evidence join, and WHERE the read stopped when there is no tree to hand back.
    *
+
    * GATED, then MEMOISED, because this is the only repo-reading path either reduction has and
    * the PR-report hook fires on EVERY settled step:
    *  - Gate: nothing is read until a tester step has actually produced a report. Before that the
@@ -119,46 +176,82 @@ export class RunEvidenceLoader {
    * have succeeded. The reader never throws for the last of those, so the distinction is made on
    * its `diagnostics.anchor` rather than on control flow.
    */
-  private async serviceSpec(
+  private async readRunSpec(
     workspaceId: string,
     instance: ExecutionInstance,
     block: Block,
-  ): Promise<ServiceSpecView | null> {
+  ): Promise<RunSpecRead> {
     const resolve = this.deps.resolveRunRepoContext
-    if (!resolve) return null
+    if (!resolve) return { status: 'vcs_unwired' }
     const testerReported = instance.steps.some(
       (s) => isTesterKind(s.agentKind) && s.test?.lastReport != null,
     )
-    if (!testerReported) return null
+    if (!testerReported) return { status: 'not_read' }
     const cached = this.specByRun.get(instance.id)
-    if (cached !== undefined) return cached
+    if (cached) return { status: 'read', ...cached }
     try {
       const ctx = await resolve(workspaceId, instance.blockId)
-      if (!ctx) return null
+      if (!ctx) return { status: 'no_connection' }
       // Read the RUN's branch, not the repo default: the spec increment this task wrote is on
       // the PR branch and has not merged yet, so the default branch would be missing exactly
       // the requirements the tester just ruled on. The rule is `runSpecBranch` rather than a
       // local `??` because the SPA answers the same question and the two had already drifted.
-      const view = await readServiceSpec(ctx.repo, runSpecBranch(block, ctx.baseBranch))
+      const ref = runSpecBranch(block, ctx.baseBranch)
+      // Resolved BEFORE the walk, so the commit named is one the tree is at least as new as, and
+      // memoised with it: a later reader of this run gets the snapshot the tester ruled against
+      // rather than a commit resolved long afterwards. It is also the only POSITIVE evidence the
+      // read has that the branch resolves at all, which is what lets a reporting caller tell an
+      // empty branch from an unreachable repository (both answer 404 for the anchor).
+      const commit = await this.headSha(ctx.repo, ref)
+      const view = await readServiceSpec(ctx.repo, ref)
       // The reader is TOTAL, so a provider outage arrives as a returned value rather than a throw:
       // without this line the `catch` below covered only a throwing resolver, and one flaky read
       // was memoised as the run's answer for the rest of its life. The reader's own anchor is the
       // discriminator. Every other state IS an answer and is cached: a tree, a branch with no
       // `spec/`, and a corrupt anchor, which re-reading cannot improve.
-      if (view.diagnostics?.anchor === 'read_failed') return null
-      this.rememberSpec(instance.id, view)
-      return view
+      if (view.diagnostics?.anchor === 'read_failed') return { status: 'read_failed' }
+      const provenance: PublicSpecProvenance = {
+        provider: ctx.provider ?? 'github',
+        // The resolver's owner/name are optional for back-compat with older fakes; the real
+        // resolvers always set them, and an empty string is the honest stand-in for a binding
+        // that did not.
+        owner: ctx.owner ?? '',
+        repo: ctx.name ?? '',
+        ref,
+        commit,
+      }
+      this.rememberSpec(instance.id, { view, provenance })
+      return { status: 'read', view, provenance }
     } catch {
-      // Best-effort: an unreadable spec is reported as such by each consumer, never fails a run,
-      // and is re-attempted on the next settlement.
+      // Best-effort for the two reductions: an unreadable spec is reported as such by each
+      // consumer, never fails a run, and is re-attempted on the next settlement. The reporting
+      // caller gets the same fact as a refusal rather than as an empty spec.
+      return { status: 'read_failed' }
+    }
+  }
+
+  /**
+   * The head of the branch the spec is read from, or null when it cannot be resolved.
+   *
+   * Null is "unproven", not "unimportant": a provider degraded only on refs still answers the
+   * tree, and refusing there would drop an answer we hold. What it may never do is fail the read,
+   * which is why it is swallowed here rather than left to the outer `catch` (that one means the
+   * spec itself could not be read).
+   */
+  private async headSha(repo: RepoFiles, ref: string): Promise<string | null> {
+    try {
+      return await repo.headSha(ref)
+    } catch {
+      // silent-catch-ok: an unresolvable ref is a VALUE this read reports (`commit: null`), and
+      // the anchor's own bytes decide whether an empty answer is trustworthy.
       return null
     }
   }
 
   /** Per-execution spec memo, bounded by {@link MAX_TRACKED_RUNS}. */
-  private readonly specByRun = new Map<string, ServiceSpecView>()
+  private readonly specByRun = new Map<string, MemoisedSpec>()
 
-  private rememberSpec(executionId: string, spec: ServiceSpecView): void {
+  private rememberSpec(executionId: string, spec: MemoisedSpec): void {
     this.specByRun.delete(executionId)
     this.specByRun.set(executionId, spec)
     while (this.specByRun.size > MAX_TRACKED_RUNS) {

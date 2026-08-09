@@ -3,7 +3,10 @@ import { vcsProviderSchema } from './routes/auth.js'
 import { readSpecDocSchema, specReadIssueSchema } from './spec.js'
 
 // ---------------------------------------------------------------------------
-// The public read of a service's in-repo SPECIFICATION (`GET /api/v1/services/:serviceId/spec`).
+// The public reads of the in-repo SPECIFICATION: a service's, from the repository's default branch
+// (`GET /api/v1/services/:serviceId/spec`), and a run's, from the branch that run pushed its work
+// to (`GET /api/v1/runs/:runId/spec`). Everything below describes the first; the second carries the
+// same body at a different ref, and {@link publicRunSpecSchema} states what it changes and why.
 //
 // The spec is the platform's requirements truth: structured requirement items with a MoSCoW
 // priority, an `aspirational ⇄ established` lifecycle state and Gherkin-shaped acceptance
@@ -225,3 +228,66 @@ export const publicServiceSpecSchema = v.object({
   truncations: v.array(publicSpecTruncationSchema),
 })
 export type PublicServiceSpec = v.InferOutput<typeof publicServiceSpecSchema>
+
+/**
+ * How the presence anchor resolved for a RUN's spec, for a caller that got a `200`.
+ *
+ * {@link publicSpecAnchorSchema} plus `not_read`, which is a fact about the RUN rather than about
+ * the repository and therefore cannot occur on the service-scoped read:
+ *
+ *  - `not_read` — nothing was read. The run's spec read is gated on a tester having reported, so
+ *    that the tree served is the one the verdicts were made against; before that point the
+ *    platform has consulted no tree, which is exactly what `requirements.spec: "not_read"` on the
+ *    same run's outcome summary already says. `provenance` is null, because there is no snapshot
+ *    to name.
+ *
+ * A separate picklist rather than a fourth member on the service one: `not_read` is unreachable
+ * there, and an enum carrying a value its endpoint can never answer is a state consumers write
+ * dead branches for.
+ */
+export const publicRunSpecAnchorSchema = v.picklist(['present', 'absent', 'unparsed', 'not_read'])
+export type PublicRunSpecAnchor = v.InferOutput<typeof publicRunSpecAnchorSchema>
+
+/**
+ * The spec ONE RUN was judged against, as `/api/v1` serves it.
+ *
+ * The sibling of {@link publicServiceSpecSchema} rather than a flag on it, for the reason the
+ * internal pair already splits on: they answer different questions. The service read answers "what
+ * does this service require", from the repository's DEFAULT branch. This answers "what did this run
+ * rule on", from the branch the run pushed its work to, which is a different tree for as long as
+ * the pull request is open. A caller joining `requirements` rows on `/api/v1/runs/:runId/outcome`
+ * or `…/report` back to the criteria they were scored against needs THIS one: every requirement the
+ * run itself added is missing from the default branch, so the service read leaves each of those
+ * verdicts unjoinable.
+ *
+ * Same body as the service read (the tree, the Gherkin, the issues, the caps), because it is the
+ * same document read at a different ref, and two wire shapes over one artifact are two things to
+ * keep in step. What differs is the key (`runId`), the fourth {@link publicRunSpecAnchorSchema}
+ * state, and a nullable `provenance`.
+ */
+export const publicRunSpecSchema = v.object({
+  /** The run this spec was read for, echoed so a response stands alone. */
+  runId: v.string(),
+  /**
+   * What the RUN's branch holds where the spec should be, or `not_read` when the platform has
+   * consulted no tree for this run yet. `spec` is non-null exactly when this is `present`.
+   */
+  anchor: publicRunSpecAnchorSchema,
+  /** The structured tree, or null when `anchor` is not `present`. */
+  spec: v.nullable(readSpecDocSchema),
+  /** The rendered Gherkin, one entry per `.feature` file. */
+  features: v.array(publicSpecFeatureFileSchema),
+  /**
+   * Where the tree was read from: the RUN's branch (its pull request's head while one is open, the
+   * repository default otherwise) and the commit it was at.
+   *
+   * Null exactly when `anchor` is `not_read`, and that is the whole reason it is nullable: there is
+   * no snapshot to name, and naming the branch anyway would imply a read that did not happen.
+   */
+  provenance: v.nullable(publicSpecProvenanceSchema),
+  /** Files the read could not fully account for. Capped at {@link PUBLIC_SPEC_MAX_ISSUES}. */
+  issues: v.array(specReadIssueSchema),
+  /** Every cap that bit. Empty when nothing was left out. */
+  truncations: v.array(publicSpecTruncationSchema),
+})
+export type PublicRunSpec = v.InferOutput<typeof publicRunSpecSchema>

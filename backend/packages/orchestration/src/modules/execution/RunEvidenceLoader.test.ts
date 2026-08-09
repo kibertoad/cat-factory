@@ -144,6 +144,90 @@ describe('RunEvidenceLoader', () => {
     expect(reads).toBe(after)
   })
 
+  // The reporting read. Same gate, same branch, same memo, same reader as everything above: what
+  // it adds is that nothing is folded on the way out, because `GET /api/v1/runs/:runId/spec` has
+  // to REPORT the read rather than survive it. Folded, an outage tells an integrator that the run
+  // was judged against a service that declares no requirements.
+  describe('runSpecRead', () => {
+    it('names the branch and commit a read describes, so a caller knows which tree it got', async () => {
+      const repo = {
+        getFile: async () => null,
+        listDirectory: async () => [],
+        headSha: async () => 'sha-1',
+      } as unknown as RepoFiles
+      const target = block({ pullRequest: { branch: PR_BRANCH } as never })
+      const read = await loaderFor(target, repo).runSpecRead('ws_1', instance())
+
+      expect(read.status).toBe('read')
+      if (read.status !== 'read') return
+      expect(read.provenance.ref).toBe(PR_BRANCH)
+      expect(read.provenance.commit).toBe('sha-1')
+      // A branch that demonstrably holds no `spec/` is an ANSWER, and it reaches the caller as
+      // one. Only the reporting layer decides that an `absent` with no resolved commit is
+      // unproven; the loader states both facts and keeps them apart.
+      expect(read.view.diagnostics?.anchor).toBe('absent')
+    })
+
+    it('keeps the four ways there is no tree apart, instead of one empty view', async () => {
+      const { repo } = recordingRepo()
+      const unwired = new RunEvidenceLoader({
+        blockRepository: { get: async () => block() } as never,
+      })
+      expect(await unwired.runSpecRead('ws_1', instance())).toEqual({ status: 'vcs_unwired' })
+
+      const unconnected = new RunEvidenceLoader({
+        blockRepository: { get: async () => block() } as never,
+        resolveRunRepoContext: async () => null,
+      })
+      expect(await unconnected.runSpecRead('ws_1', instance())).toEqual({ status: 'no_connection' })
+
+      // Gated, not empty: before a tester reports, the platform has consulted no tree at all, and
+      // that is the same fact the run's own outcome summary states as `spec: 'not_read'`.
+      const noTester = instance([{ agentKind: 'coder', state: 'done' } as unknown as PipelineStep])
+      expect(await loaderFor(block(), repo).runSpecRead('ws_1', noTester)).toEqual({
+        status: 'not_read',
+      })
+
+      const throwing = {
+        getFile: async () => {
+          throw new Error('GitHub 502')
+        },
+        listDirectory: async () => [],
+        headSha: async () => null,
+      } as unknown as RepoFiles
+      expect(await loaderFor(block(), throwing).runSpecRead('ws_1', instance())).toEqual({
+        status: 'read_failed',
+      })
+    })
+
+    it('serves a memo hit with the provenance the read was memoised WITH', async () => {
+      // The memo deliberately holds the spec as it stood when the tester ruled, so the commit has
+      // to be held with it: re-resolving one at serve time would name a commit the tree was never
+      // read at, which is the one thing provenance exists to prevent.
+      let heads = 0
+      const repo = {
+        getFile: async () => null,
+        listDirectory: async () => [],
+        headSha: async () => `sha-${++heads}`,
+      } as unknown as RepoFiles
+      const loader = loaderFor(block(), repo)
+
+      const first = await loader.runSpecRead('ws_1', instance())
+      const second = await loader.runSpecRead('ws_1', instance())
+      expect(heads).toBe(1)
+      expect(second).toEqual(first)
+    })
+
+    it('answers no_block for a run whose task is gone', async () => {
+      const { repo } = recordingRepo()
+      const loader = new RunEvidenceLoader({
+        blockRepository: { get: async () => null } as never,
+        resolveRunRepoContext: async () => ({ repo, baseBranch: DEFAULT_BRANCH }) as never,
+      })
+      expect(await loader.runSpecRead('ws_1', instance())).toEqual({ status: 'no_block' })
+    })
+  })
+
   it('answers an unknown run with an empty view rather than throwing', async () => {
     const { repo } = recordingRepo()
     const loader = new RunEvidenceLoader({

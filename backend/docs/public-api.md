@@ -1327,12 +1327,13 @@ exhaustive.
 What a run PROVED, for a consumer whose job is to judge it rather than debug it: a trial harness
 deciding whether to accept a change, an evaluation pipeline scoring a fleet of runs.
 
-| Method / path                            | Scope  | Behaviour                                                                   |
-| ---------------------------------------- | ------ | --------------------------------------------------------------------------- |
-| `GET /api/v1/runs/:runId/report`         | `read` | The engine's **verification report** for the run.                           |
-| `GET /api/v1/runs/:runId/outcome`        | `read` | The run's **outcome summary**: what it changed, and what backs that up.     |
-| `GET /api/v1/runs/:runId/artifacts`      | `read` | The run's binary artifacts, captured and task-attached (metadata; unpaged). |
-| `GET /api/v1/artifacts/:artifactId/blob` | `read` | One artifact's **bytes**, with its recorded image content type.             |
+| Method / path                            | Scope  | Behaviour                                                                                                                                   |
+| ---------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/runs/:runId/report`         | `read` | The engine's **verification report** for the run.                                                                                           |
+| `GET /api/v1/runs/:runId/outcome`        | `read` | The run's **outcome summary**: what it changed, and what backs that up.                                                                     |
+| `GET /api/v1/runs/:runId/artifacts`      | `read` | The run's binary artifacts, captured and task-attached (metadata; unpaged).                                                                 |
+| `GET /api/v1/artifacts/:artifactId/blob` | `read` | One artifact's **bytes**, with its recorded image content type.                                                                             |
+| `GET /api/v1/runs/:runId/spec`           | `read` | The **specification this run was judged against**, at the run's own branch. See [The run's own specification](#the-runs-own-specification). |
 
 A run is addressable here on the same terms as the [decision routes](#parked-decisions-apiv1runsruniddecisions)
 that share the `/api/v1/runs/:runId/*` prefix: the runs this key could already read through
@@ -1599,8 +1600,10 @@ jq --slurpfile s spec.json 'map(. + {spec: $s[0][.id]})' verdicts.json
 
 A run's join reads the spec from the branch that run pushed to, not the default branch, because a
 task's spec increment has not merged while its pull request is open. This endpoint always answers
-the **default branch**, which is the service's agreed truth. The two differ exactly for the
-requirements a run is still adding, and `provenance.commit` is what lets a caller notice.
+the **default branch**, which is the service's agreed truth; its sibling
+[`GET /api/v1/runs/:runId/spec`](#the-runs-own-specification) answers the run's branch and is what a
+join keyed on one run should use. The two differ exactly for the requirements a run is still adding,
+and `provenance.commit` is what lets a caller notice.
 
 **What the response says about itself.** A spec read has several outcomes and this endpoint keeps
 them apart, because most of them produce an empty tree and need different reactions:
@@ -1683,6 +1686,42 @@ reviewed commit: agents propose changes through pull requests, and `state` is pr
 observed test pass. An API write would bypass exactly the review that makes the spec worth reading.
 The natural sibling, importing Gherkin as requirement items, is a separate proposal for the same
 reason: it AUTHORS requirements, so it belongs behind the review path rather than behind an API key.
+
+#### The run's own specification
+
+`GET /api/v1/runs/:runId/spec`, at `read` scope. The same document, read at the branch THAT RUN
+pushed its work to.
+
+This is the one the criterion to evidence join actually needs, and the join example above is the
+short version rather than the correct one. A task's spec increment lives on its pull request's
+branch until it merges, so while a run is open the service read is missing exactly the requirements
+that run ADDED, and every verdict naming one of them has no criterion to join to. Swapping the first
+fetch is the whole change:
+
+```sh
+# Every requirement THIS RUN was scored against, by id, from the branch it pushed to.
+curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/spec" \
+  | jq '[.spec.modules[].groups[].requirements[] | {key: .id, value: .}] | from_entries' > spec.json
+```
+
+Reach for the service read when the question is about the SERVICE (what is it committed to, what
+does its board declare); reach for this one whenever the answer is paired with a run.
+
+`provenance.ref` is the branch it read, and `commit` the head it was at, so a caller can see which
+of the two trees it got rather than infer it.
+
+The refusals are the service read's, with one addition and one omission. The addition is a fourth
+`anchor` value, `not_read`: nothing was read, and `provenance` is `null`. That is not an empty spec
+and not an outage. The run's spec read is gated on a tester having reported, so that the tree served
+is the one the verdicts were made against rather than one re-read afterwards (the promotion post-op
+rewrites this very branch as soon as the tester settles); before that gate opens, the platform has
+consulted no tree, which is the same fact `requirements.spec: "not_read"` on the run's own outcome
+already states. Both endpoints answer it from ONE read for that reason: a spec fetched here and a
+coverage count fetched there can never disagree about the tree they describe.
+
+The omission is `422`: a service with no linked repository cannot be reached down this path, because
+a run resolved a repository to push to before it could exist. A repository that becomes unreadable
+answers `503 spec_read_failed` here, as everywhere else on this surface.
 
 ### Key provisioning (`/api/v1/keys`)
 

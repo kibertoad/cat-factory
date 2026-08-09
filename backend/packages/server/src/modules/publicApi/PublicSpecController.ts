@@ -1,4 +1,5 @@
 import {
+  getPublicRunSpecContract,
   getPublicServiceSpecContract,
   type PublicSpecAnchor,
   type PublicSpecProvenance,
@@ -7,21 +8,35 @@ import {
 import { readServiceSpec } from '@cat-factory/agents'
 import type { RunRepoContext } from '@cat-factory/kernel'
 import { NotFoundError, UnavailableError } from '@cat-factory/kernel'
+import type { RunSpecRead } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
+import { requireScopedRun, runNotFound } from './decisions/scope.js'
 import { authorizeOrThrow } from './publicApiAuth.js'
-import { toPublicServiceSpec } from './specProjection.js'
+import { toPublicRunSpec, toPublicServiceSpec } from './specProjection.js'
 
-// The public SPEC read (`GET /api/v1/services/:serviceId/spec`): the service's in-repo prescriptive
-// specification (the structured requirement tree and the Gherkin rendered from it) for a consumer
-// holding only an API key.
+// The public SPEC reads: the in-repo prescriptive specification (the structured requirement tree
+// and the Gherkin rendered from it) for a consumer holding only an API key, at the two refs that
+// answer two different questions.
 //
-// It exists because the requirement ids on `GET /api/v1/runs/:runId/report` and `…/outcome` were a
-// join key onto a document no headless caller could fetch. With this, reviewing a run's outcome
+//  - `GET /api/v1/services/:serviceId/spec` reads the repository's DEFAULT branch: what the service
+//    is committed to honouring.
+//  - `GET /api/v1/runs/:runId/spec` reads the branch ONE RUN pushed its work to: what that run was
+//    judged against. A different tree for as long as its pull request is open, and the one a caller
+//    joining that run's verdicts needs, since every requirement the run itself added is absent from
+//    the default branch.
+//
+// They exist because the requirement ids on `GET /api/v1/runs/:runId/report` and `…/outcome` were a
+// join key onto a document no headless caller could fetch. With these, reviewing a run's outcome
 // against the criteria it was scored on is two GETs and a map lookup, with no repository clone and
 // no VCS credential.
+//
+// Both read through the ONE spec reader, and the run read through the engine's own evidence loader,
+// so the tree a caller joins against is the tree the platform joined against. A second reader with
+// its own branch rule is how the app's outcome card and the outcome endpoint once came to describe
+// one run differently.
 //
 // Everything below is one idea applied repeatedly: **a spec read has several outcomes and this
 // controller refuses to fold them**, because the fold is silent and always in the same direction.
@@ -193,5 +208,81 @@ export function publicSpecController(): Hono<AppEnv> {
     return c.json(toPublicServiceSpec(serviceId, anchor, view, provenanceOf(ctx, commit)), 200)
   })
 
+  // The RUN's spec, at the branch that run pushed to. Everything the read decides is decided by the
+  // engine's evidence loader (the branch rule, the tester gate, the per-run memo, the reader), the
+  // same three the verification report and `…/outcome` read through; this route only maps WHERE the
+  // read stopped onto the surface's vocabulary. Composing a second read here is what would let this
+  // endpoint hand a caller a tree the run's own outcome summary was never joined against.
+  buildHonoRoute(app, getPublicRunSpecContract, async (c) => {
+    const auth = await authorizeOrThrow(c, getPublicRunSpecContract.minScope)
+    const { workspaceId } = auth
+    const { runId } = c.req.valid('param')
+    // The same resolution every route under `/api/v1/runs/:runId/*` uses, so one prefix carries one
+    // access semantic: a run this key could already reach through `GET /jobs/:id` or
+    // `GET /tasks/:taskId/run`, and a 404 for anything else.
+    await requireScopedRun(c, workspaceId, runId)
+    const read = await c.get('container').executionService.readRunSpecOutcome(workspaceId, runId)
+    if (!read) throw runNotFound(runId)
+    return c.json(toPublicRunSpec(runId, runSpecAnchor(runId, read)), 200)
+  })
+
   return app
+}
+
+/**
+ * The run read's anchor, or the refusal that says why there is no tree.
+ *
+ * The run's counterpart to {@link requireReadableAnchor}, and it defers to it for the half the two
+ * share: an `absent` with no resolved commit is unproven on the run's branch for exactly the reason
+ * it is on the default one. What it adds is the run-only pair at the top. `not_read` is a `200`
+ * because it is an ANSWER (the platform has consulted no tree for this run, which is what the same
+ * run's outcome summary already reports), while an unwired integration and an unreadable repository
+ * are outages that must never reach a body: served as an empty spec they would tell an integrator
+ * that a run was judged against no requirements at all.
+ *
+ * Exhaustive over `RunSpecRead` through a `never`, so a state added to the loader fails the build
+ * here rather than surfacing as an unmapped value on `/api/v1`.
+ */
+function runSpecAnchor(
+  runId: string,
+  read: RunSpecRead,
+):
+  | { anchor: PublicSpecAnchor; view: ServiceSpecView; provenance: PublicSpecProvenance }
+  | { anchor: 'not_read' } {
+  switch (read.status) {
+    case 'not_read':
+      return { anchor: 'not_read' }
+    case 'read':
+      return {
+        anchor: requireReadableAnchor(read.view, read.provenance.commit),
+        view: read.view,
+        provenance: read.provenance,
+      }
+    case 'vcs_unwired':
+      throw new UnavailableError(
+        'No version-control integration is configured for this deployment',
+        'vcs_not_configured',
+      )
+    case 'no_connection':
+      throw new UnavailableError(
+        'No version-control integration is connected for this workspace',
+        'vcs_not_configured',
+      )
+    case 'read_failed':
+      // Also where a service that lost its repository link lands, which is the one place this
+      // route is less precise than its service-scoped sibling (a `422` there). It stays folded
+      // here on purpose: a run resolved a repository to push to, so on this path an unlinked
+      // service is not a state a caller can reach, and a branch nothing reaches is a branch that
+      // costs four published SDKs an error code they can never see.
+      throw new UnavailableError(
+        "The run's repository could not be read; the spec may exist but could not be fetched",
+        'spec_read_failed',
+      )
+    case 'no_block':
+      // The same 404 the report and outcome reads answer when composition comes back empty: from
+      // outside, "no such run this key may read" and "the run's task is gone" are one fact.
+      throw runNotFound(runId)
+    default:
+      return assertNever(read)
+  }
 }
