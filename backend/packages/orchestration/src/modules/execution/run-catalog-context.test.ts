@@ -99,7 +99,7 @@ function registeredViews() {
     summary: 'Pixel-art image generation.',
     description: '',
     modalities: ['image'],
-    credential: { key: 'RD_TOKEN' },
+    credentials: [{ key: 'RD_TOKEN' }],
   })
   return generators.views()
 }
