@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import * as v from 'valibot'
 import {
   BINARY_OPTION_CAPABILITIES,
+  binaryAcceptsWithoutCapability,
   binaryCapabilityCoverage,
   binaryCapabilityProviders,
   binaryGenerationOptionsObject,
@@ -261,14 +262,16 @@ describe('binaryGeneratorAcceptsSchema', () => {
 
 describe('binaryValueCoverage', () => {
   const bucketed = {
+    id: 'grok',
     capabilities: caps('aspect-ratio'),
     accepts: { aspectRatios: ['1:1', '16:9'] },
   }
-  const anyRatio = { capabilities: caps('aspect-ratio') }
+  const anyRatio = { id: 'flux', capabilities: caps('aspect-ratio') }
 
   it('refuses a value every declarer enumerated away, naming what they do accept', () => {
     expect(binaryValueCoverage({ aspectRatio: '7:3' }, [bucketed])).toEqual({
       unaccepted: [{ option: 'aspectRatio', requested: '7:3', accepted: ['1:1', '16:9'] }],
+      partial: [],
       unverifiable: [],
     })
   })
@@ -284,7 +287,55 @@ describe('binaryValueCoverage', () => {
   it('reports a value as unverifiable when a declarer states no set', () => {
     expect(binaryValueCoverage({ aspectRatio: '7:3' }, [bucketed, anyRatio])).toEqual({
       unaccepted: [],
+      partial: [],
       unverifiable: ['aspectRatio'],
+    })
+  })
+
+  // The motivating failure, and the one a first-accepting-declarer short-circuit reported as
+  // nothing at all: both endpoints enumerate, one takes the value and the other crops to its
+  // nearest listed shape. Servable, so not a refusal, and definite, so not silence.
+  it('names the declarers that enumerated the value away when another accepts it', () => {
+    const wide = {
+      id: 'nano',
+      capabilities: caps('aspect-ratio'),
+      accepts: { aspectRatios: ['7:3', '1:1'] },
+    }
+    expect(binaryValueCoverage({ aspectRatio: '7:3' }, [wide, bucketed])).toEqual({
+      unaccepted: [],
+      partial: [{ option: 'aspectRatio', requested: '7:3', refusedBy: ['grok'] }],
+      unverifiable: [],
+    })
+  })
+
+  // The inversion that made the short-circuit worse than under-reporting: the SAME selection with
+  // the second endpoint audited (an accurate, narrower statement of the truth) must not report
+  // LESS than the one where it stated nothing.
+  it('does not go quiet when a silent declarer is replaced by an accurate one', () => {
+    const wide = {
+      id: 'nano',
+      capabilities: caps('aspect-ratio'),
+      accepts: { aspectRatios: ['7:3'] },
+    }
+    const withSilent = binaryValueCoverage({ aspectRatio: '7:3' }, [wide, anyRatio])
+    const withStated = binaryValueCoverage({ aspectRatio: '7:3' }, [wide, bucketed])
+    expect(withSilent.unverifiable.concat(withSilent.partial.map((p) => p.option))).toEqual([])
+    expect(withStated.partial.map((p) => p.option)).toEqual(['aspectRatio'])
+  })
+
+  // A declarer that stated nothing beside one that accepts is the pre-field unknown, not a
+  // finding: it is what the platform knew before this axis existed, and reporting it would fire
+  // on nearly every mixed selection.
+  it('stays silent about a declarer that states no set beside one that accepts', () => {
+    const wide = {
+      id: 'nano',
+      capabilities: caps('aspect-ratio'),
+      accepts: { aspectRatios: ['7:3'] },
+    }
+    expect(binaryValueCoverage({ aspectRatio: '7:3' }, [wide, anyRatio])).toEqual({
+      unaccepted: [],
+      partial: [],
+      unverifiable: [],
     })
   })
 
@@ -294,6 +345,7 @@ describe('binaryValueCoverage', () => {
   it('says nothing at all when no declarer states a set', () => {
     expect(binaryValueCoverage({ aspectRatio: '7:3' }, [anyRatio, anyRatio])).toEqual({
       unaccepted: [],
+      partial: [],
       unverifiable: [],
     })
   })
@@ -301,8 +353,11 @@ describe('binaryValueCoverage', () => {
   // The coarse axis already refuses this selection by name. Counting it here too would report one
   // fault twice, under two headings with two different remedies.
   it('ignores an integration that does not declare the gating capability', () => {
-    expect(binaryValueCoverage({ aspectRatio: '7:3' }, [{ capabilities: caps('seed') }])).toEqual({
+    expect(
+      binaryValueCoverage({ aspectRatio: '7:3' }, [{ id: 'mesh', capabilities: caps('seed') }]),
+    ).toEqual({
       unaccepted: [],
+      partial: [],
       unverifiable: [],
     })
   })
@@ -313,11 +368,13 @@ describe('binaryValueCoverage', () => {
 
   it('judges sizes and upscale factors by the same rule', () => {
     const recraft = {
+      id: 'recraft',
       capabilities: caps('exact-size', 'upscale'),
       accepts: { outputSizes: [{ width: 1024, height: 1024 }], upscaleFactors: [2] },
     }
     expect(binaryValueCoverage({ outputSize: { width: 96, height: 96 } }, [recraft])).toEqual({
       unaccepted: [{ option: 'outputSize', requested: '96x96', accepted: ['1024x1024'] }],
+      partial: [],
       unverifiable: [],
     })
     expect(binaryValueCoverage({ upscale: 4 }, [recraft]).unaccepted).toEqual([
@@ -348,11 +405,55 @@ describe('binaryValueCoverage', () => {
         outputSizes: [{ width: 1, height: 1 }],
         upscaleFactors: [2],
       }
-      expect(binaryValueCoverage(requested, [{ capabilities: [capability], accepts }])).toEqual({
+      expect(
+        binaryValueCoverage(requested, [{ id: 'one', capabilities: [capability], accepts }]),
+      ).toEqual({
         unaccepted: [expect.objectContaining({ option })],
+        partial: [],
         unverifiable: [],
       })
     }
+  })
+})
+
+// A declaration whose two halves contradict each other, which every reader believes a different
+// half of. Derived from the same table the coverage rule folds over, so the pin is against the
+// source rather than a third copy of which capability gates which set.
+describe('binaryAcceptsWithoutCapability', () => {
+  it('names each stated set whose gating capability is undeclared', () => {
+    expect(
+      binaryAcceptsWithoutCapability({
+        capabilities: ['exact-size'],
+        accepts: { aspectRatios: ['1:1'], outputSizes: [{ width: 96, height: 96 }] },
+      }),
+    ).toEqual([{ option: 'aspectRatio', capability: 'aspect-ratio' }])
+  })
+
+  it('says nothing about a set whose capability is declared, or about no sets at all', () => {
+    expect(
+      binaryAcceptsWithoutCapability({
+        capabilities: ['aspect-ratio'],
+        accepts: { aspectRatios: ['1:1'] },
+      }),
+    ).toEqual([])
+    expect(binaryAcceptsWithoutCapability({ capabilities: ['aspect-ratio'] })).toEqual([])
+    expect(binaryAcceptsWithoutCapability({ accepts: {} })).toEqual([])
+  })
+
+  // Every option the coverage rule can judge is one this check can catch: a member added to the
+  // value table with no capability of its own would be judged by one rule and unguarded by the
+  // other.
+  it('covers every value option the coverage rule judges', () => {
+    const declaredForNothing = binaryAcceptsWithoutCapability({
+      accepts: {
+        aspectRatios: ['1:1'],
+        outputSizes: [{ width: 1, height: 1 }],
+        upscaleFactors: [2],
+      },
+    })
+    expect(declaredForNothing.map((entry) => entry.option).sort()).toEqual(
+      (['aspectRatio', 'outputSize', 'upscale'] as const).slice().sort(),
+    )
   })
 })
 

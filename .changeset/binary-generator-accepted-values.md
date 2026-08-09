@@ -20,11 +20,29 @@ value nothing selected accepts, naming what they do accept; the pipeline builder
 refusal where the fix is a visible field; and each integration's accepted sets are stated in the
 agent's brief beside its formats, since an agent holding two image APIs chooses per artifact.
 
-**FOUR outcomes, judged over the integrations that declare the gating capability.** Nobody stating a
-set is SILENT, which is the one that let this ship: it is the state every registration is in until
-someone audits an endpoint, and an advisory firing there would ride nearly every step carrying an
-aspect ratio. A stated set containing the value is covered; a value on no stated set with some
-declarer silent is UNVERIFIABLE and reported; a value every declarer enumerated away is refused.
+**FIVE outcomes, judged per option and per DECLARER over the integrations that declare the gating
+capability.** Nobody stating a set is SILENT, which is the one that let this ship: it is the state
+every registration is in until someone audits an endpoint, and an advisory firing there would ride
+nearly every step carrying an aspect ratio. Every stated set containing the value is covered; a
+value one stated set contains and another EXCLUDES is PARTIAL, reported with the integrations that
+exclude it named; a value on no stated set with some declarer silent is UNVERIFIABLE and reported; a
+value every declarer enumerated away is refused.
+
+The partial outcome is the motivating example itself, so judging on the first accepting declarer
+would have shipped the axis silent about the case that justified it: two endpoints enumerate, one
+takes the value and the other crops, no refusal and no advisory, while the brief's provider list
+names both as honouring the option. It also inverts the reporting, which is the sharper argument: a
+declarer that stated NOTHING raises an advisory, so auditing that endpoint and writing down an
+accurate set would have bought silence. It is advisory rather than a refusal for the reason one
+declarer covers a capability, since which integration renders which artifact is the agent's call;
+naming the ones that refuse is what makes it actionable.
+
+**A stated set whose gating capability is undeclared fails BOOT**
+(`binary_generator_accepts_without_capability`). The two halves are otherwise believed by different
+readers: the brief renders the set as fact, the value rule judges only over the capability's
+declarers and never sees it, and admission refuses every step asking for the option as
+`capability_unsupported`. That is the accurate half made unreachable and the step refused for
+lacking a capability the same registration was documenting.
 
 **`exact-size` changes meaning, and this is the part to look at.** It used to mean ARBITRARY
 dimensions, which forced an endpoint whose `size` parameter offers a closed list of `WxH` values to
@@ -46,6 +64,15 @@ statement of the truth, it is a fabricated one.
 
 An empty list is refused at registration, so absent stays the one spelling of "not stated". A
 mothership-mode node absorbs a reply with no `accepts` (an older mothership serves none, and every
-option is then judged exactly as it was before this field existed), checking only that a present one
-is an object, which is the same tolerance the capability axis gets and the opposite of the credential
-list's refusal.
+option is then judged exactly as it was before this field existed), checking that a present one is an
+object and that each member it knows is an array, which is the same tolerance the capability axis
+gets and the opposite of the credential list's refusal. A member this build has no table entry for is
+left alone rather than refused, so a mothership one build ahead is not an ordering constraint.
+
+**It supersedes a ruling published one release ago.** `@cat-factory/contracts@0.289.0`'s note closes
+by telling a deployment whose `size` parameter offers a closed list of `WxH` values to declare
+`aspect-ratio` rather than `exact-size`, on the ground that a capability never says which values are
+accepted. That is the classification this change moves, and a definition written to that guidance
+keeps working unchanged: it declares a capability it genuinely has, and gains the more honest one
+plus a set. The parameterless half of that paragraph (an endpoint with no parameter declares nothing
+and says what it does in `guidance`) still stands, and is restated above.

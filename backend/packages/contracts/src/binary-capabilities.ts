@@ -715,10 +715,27 @@ export interface BinaryUnacceptedValue {
   accepted: string[]
 }
 
+/**
+ * A value some selected integration accepts and another has ENUMERATED AWAY: the step can be
+ * served, by a subset of what it selected, and the rest will quietly deliver something else.
+ */
+export interface BinaryPartiallyAcceptedValue {
+  option: BinaryValueOption
+  /** What the step asks for, in the spelling a message states back. */
+  requested: string
+  /** Ids of the integrations whose stated set EXCLUDES it, in selection order. */
+  refusedBy: string[]
+}
+
 /** How a step's requested option VALUES stand against what its selected integrations accept. */
 export interface BinaryValueCoverage {
   /** Requested values every integration that stated a set excludes, and none left open. Refuses. */
   unaccepted: BinaryUnacceptedValue[]
+  /**
+   * Requested values a stated set contains and ANOTHER stated set excludes, naming the
+   * integrations that exclude them. The step is servable, so this is advisory.
+   */
+  partial: BinaryPartiallyAcceptedValue[]
   /**
    * Requested values no stated set contains, where another integration declaring the capability
    * stated NO set, so the value may still be served and nothing may say otherwise. Advisory.
@@ -729,16 +746,24 @@ export interface BinaryValueCoverage {
 /**
  * Judge the VALUES a step asks for against the sets its selected integrations accept.
  *
- * Four outcomes rather than the three the axes above it have, and the extra one is the reason
- * this can ship at all. Judged per option, over the integrations that DECLARE the gating
- * capability (an integration that declares none of it is already the coarse axis's answer, and
- * counting it here would report one fault twice):
+ * Judged per option and PER DECLARER, over the integrations that declare the gating capability
+ * (one that declares none of it is already the coarse axis's answer, and counting it here would
+ * report one fault twice). Each declarer is in one of three states, and the disposition is a
+ * function of the whole set rather than of the first agreeable member:
  *
  * - **Nobody stated a set.** SILENT. This is the state every registration is in until somebody
  *   audits an endpoint, and it is exactly what the platform knew before this field existed. An
  *   advisory that fired here would ride nearly every step with an aspect ratio, which is how a
  *   line stops being read.
- * - **A stated set contains the value.** Covered.
+ * - **Every declarer that stated a set contains the value.** Covered, and a declarer that stated
+ *   nothing beside them stays the pre-field unknown rather than a finding.
+ * - **Some stated set contains it and another stated set EXCLUDES it.** PARTIAL. The step is
+ *   servable and is not refused, for the reason {@link binaryCapabilityCoverage} treats one
+ *   declarer as covering a capability: which integration renders which artifact is the agent's
+ *   call, not the platform's. But an excluding set is a DEFINITE fact about a definite endpoint,
+ *   so it is named rather than absorbed. Absorbing it is the exact silent crop this axis exists
+ *   to prevent, and it inverted the reporting: the LESS informed selection (a declarer that
+ *   stated nothing) raised an advisory, so declaring an accurate second set bought silence.
  * - **No stated set contains it, and some declarer stated none.** UNVERIFIABLE. One integration
  *   refuses the value and another has not said, so the step may well be served: reported, never
  *   refused, the same disposition {@link binaryCapabilityCoverage} gives its own third state.
@@ -747,18 +772,22 @@ export interface BinaryValueCoverage {
  *   it takes, and this is not among them.
  *
  * Takes the step's OPTIONS rather than a pre-derived requirement list, unlike its neighbours,
- * because the judgement needs the value and not only the capability it implies.
+ * because the judgement needs the value and not only the capability it implies. It takes each
+ * integration's `id` for the same reason {@link binaryCapabilityProviders} does: a partial
+ * finding whose remedy is routing is unusable without naming who to route around.
  */
 export function binaryValueCoverage(
   options: BinaryGenerationOptions | undefined,
   selected: readonly {
+    id: string
     capabilities?: readonly BinaryGeneratorCapability[]
     accepts?: BinaryGeneratorAccepts
   }[],
 ): BinaryValueCoverage {
   const unaccepted: BinaryUnacceptedValue[] = []
+  const partial: BinaryPartiallyAcceptedValue[] = []
   const unverifiable: BinaryValueOption[] = []
-  if (!options) return { unaccepted, unverifiable }
+  if (!options) return { unaccepted, partial, unverifiable }
   for (const [key, entry] of Object.entries(BINARY_VALUE_OPTIONS)) {
     const option = key as BinaryValueOption
     const requested = entry.requested(options)
@@ -766,17 +795,61 @@ export function binaryValueCoverage(
     const declarers = selected.filter((generator) =>
       (generator.capabilities ?? []).includes(entry.capability),
     )
-    const stated = declarers.flatMap((generator) => {
+    const stated: string[][] = []
+    const refusedBy: string[] = []
+    let accepting = 0
+    let silent = false
+    for (const generator of declarers) {
       const values = generator.accepts ? entry.accepted(generator.accepts) : undefined
-      return values ? [values] : []
-    })
+      if (!values) {
+        silent = true
+        continue
+      }
+      stated.push(values)
+      if (values.includes(requested)) accepting += 1
+      else refusedBy.push(generator.id)
+    }
     if (stated.length === 0) continue
-    if (stated.some((values) => values.includes(requested))) continue
-    if (stated.length < declarers.length) {
+    if (accepting > 0) {
+      if (refusedBy.length > 0) partial.push({ option, requested, refusedBy })
+      continue
+    }
+    if (silent) {
       unverifiable.push(option)
       continue
     }
     unaccepted.push({ option, requested, accepted: [...new Set(stated.flat())] })
   }
-  return { unaccepted, unverifiable }
+  return { unaccepted, partial, unverifiable }
+}
+
+/**
+ * The value sets a definition states for options its capabilities do NOT declare.
+ *
+ * A definition saying which aspect ratios it accepts while declaring no `aspect-ratio` has stated
+ * two contradicting facts about one endpoint, and every reader believes a different half:
+ * {@link binaryValueCoverage} judges only over the capability's declarers and never sees the set,
+ * the agent's brief renders the set as fact beside the integration's formats, and admission
+ * refuses every step asking for the option at all. So the accurate half is unreachable and the
+ * step is refused for lacking a capability the same registration was documenting.
+ *
+ * Derived from the same table the coverage rule folds over, so an option added to
+ * {@link BinaryValueOption} is checked here with no second edit. Lives beside that table rather
+ * than in the boot validator for the reason the table is private: a caller re-deriving which
+ * capability gates which set is the drift this returns instead.
+ */
+export function binaryAcceptsWithoutCapability(declaration: {
+  capabilities?: readonly BinaryGeneratorCapability[]
+  accepts?: BinaryGeneratorAccepts
+}): { option: BinaryValueOption; capability: BinaryGeneratorCapability }[] {
+  const accepts = declaration.accepts
+  if (!accepts) return []
+  const declared = declaration.capabilities ?? []
+  const missing: { option: BinaryValueOption; capability: BinaryGeneratorCapability }[] = []
+  for (const [key, entry] of Object.entries(BINARY_VALUE_OPTIONS)) {
+    if (!entry.accepted(accepts)) continue
+    if (declared.includes(entry.capability)) continue
+    missing.push({ option: key as BinaryValueOption, capability: entry.capability })
+  }
+  return missing
 }

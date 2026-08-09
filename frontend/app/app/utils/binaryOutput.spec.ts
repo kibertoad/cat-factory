@@ -571,6 +571,41 @@ describe('binaryOutputPickIssues, generative half', () => {
     expect(pick.unverifiableValues).toEqual(['aspectRatio'])
   })
 
+  // ADVISORY too, and the one the reader can act on precisely: one selected endpoint takes the
+  // ratio and another has written down that it does not. Naming the second is the whole remedy,
+  // and it is the finding a first-accepting-declarer short-circuit reported as nothing at all.
+  it('names the integrations that enumerated a value away when another accepts it', () => {
+    const pick = binaryOutputPickIssues(
+      {
+        storageServiceId: 'files',
+        generatorIds: ['wide', 'bucketed'],
+        generation: { aspectRatio: '7:3' },
+      },
+      catalog,
+      true,
+      [
+        {
+          id: 'wide',
+          modalities: ['image' as const],
+          capabilities: ['aspect-ratio' as const],
+          accepts: { aspectRatios: ['7:3', '1:1'] },
+        },
+        {
+          id: 'bucketed',
+          modalities: ['image' as const],
+          capabilities: ['aspect-ratio' as const],
+          accepts: { aspectRatios: ['1:1', '16:9'] },
+        },
+      ],
+    )
+    expect(pick.issues).toContain('option_value_partial')
+    expect(pick.issues).not.toContain('option_value_unaccepted')
+    expect(pick.issues).not.toContain('option_value_unverifiable')
+    expect(pick.partiallyAcceptedValues).toEqual([
+      { option: 'aspectRatio', requested: '7:3', refusedBy: ['bucketed'] },
+    ])
+  })
+
   it('reports BOTH faults when an unknown id was the one covering a requirement', () => {
     // One edit should clear the step. Naming only the missing id would leave the user to
     // discover the uncovered requirement on the next round trip.

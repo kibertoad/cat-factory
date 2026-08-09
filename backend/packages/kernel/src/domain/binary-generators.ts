@@ -578,6 +578,16 @@ function generationOptionLines(
   // the second one, so the agent is the party that has to route around the first, and it can only
   // do that if it is told which fact it is holding.
   const values = binaryValueCoverage(generation, selected)
+  // The DEFINITE version of that fact, and the one the providers list above actively misleads
+  // about: every integration named there declares the option, and one of them has written down
+  // that it will not take this value. Naming it is the whole remedy, since the agent is the party
+  // choosing which endpoint renders which artifact.
+  for (const value of values.partial) {
+    lines.push(
+      `${joinIds(value.refusedBy)} ${value.refusedBy.length === 1 ? 'states the values it accepts' : 'state the values they accept'} for ${VALUE_OPTION_LABELS[value.option]} and ${value.refusedBy.length === 1 ? 'does' : 'do'} NOT accept the ${value.requested} this step asks for, while another selected integration does. Send these generations to one that accepts it. Do not send this option to ${joinIds(value.refusedBy)}: the call would succeed and return a nearby value instead. If routing is impossible for an artifact, report the option by name rather than substituting.`,
+      '',
+    )
+  }
   if (values.unverifiable.length > 0) {
     const named = values.unverifiable.map((option) => VALUE_OPTION_LABELS[option]).join(', ')
     lines.push(

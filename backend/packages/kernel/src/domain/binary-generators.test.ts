@@ -1125,4 +1125,34 @@ describe('generation option VALUES', () => {
     }).join('\n')
     expect(lines).not.toContain('does NOT accept what this step asks for')
   })
+
+  // Two enumerating endpoints where only one takes the value: the step is servable, so admission
+  // stays out of it, and the providers list directly above names BOTH as honouring the option.
+  // Naming the one that will crop is the whole remedy, because routing is the agent's call.
+  it('names the integration that enumerated the value away when another accepts it', () => {
+    const wide = generator({
+      id: 'nano-banana',
+      capabilities: ['aspect-ratio'],
+      accepts: { aspectRatios: ['7:3', '1:1'] },
+    })
+    const lines = renderBinaryGeneratorSection({
+      selection: { selected: [wide, bucketed], unresolvedIds: [] },
+      requestedModalities: [],
+      generation: { aspectRatio: '7:3' },
+    }).join('\n')
+    expect(lines).toContain('`grok-imagine` states the values it accepts')
+    expect(lines).toContain('does NOT accept the 7:3 this step asks for')
+    expect(lines).not.toContain('`nano-banana` states the values it accepts')
+    // Servable by part of the selection, so it is a brief paragraph and not a refusal.
+    expect(
+      binaryGeneratorSelectionIssues(
+        {
+          storageServiceId: 'store',
+          generatorIds: ['nano-banana', 'grok-imagine'],
+          generation: { aspectRatio: '7:3' },
+        },
+        [wide, bucketed],
+      ),
+    ).toEqual([])
+  })
 })

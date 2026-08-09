@@ -4364,6 +4364,7 @@
       "binaryCapabilityUnsupported": "Nessuna integrazione selezionata supporta {capabilities}, richiesta dalle opzioni di generazione di questo passo. Rimuovi l’opzione oppure seleziona un’integrazione che dichiari la capacità.",
       "binaryCapabilityUnverifiable": "Nessuna integrazione selezionata dichiara di supportare {capabilities}, ma una di esse non dichiara alcuna capacità, quindi non è stato possibile verificarlo. Il passo parte comunque; conferma dall’API dell’integrazione.",
       "binaryOptionValueUnaccepted": "Nessuna integrazione selezionata accetta {option} di {requested}. Insieme accettano: {accepted}. Richiedi uno di questi valori oppure seleziona un'integrazione che generi questo.",
+      "binaryOptionValuePartial": "{generators} non accetta {option} di {requested}, mentre un'altra integrazione selezionata sì. Il passo si avvia comunque: invia questa opzione solo alle integrazioni che la accettano, oppure rimuovi le altre.",
       "binaryOptionValueUnverifiable": "Un'integrazione selezionata dichiara i valori che accetta e non accetta quello richiesto da questo passo ({options}), mentre un'altra non ne dichiara nessuno, quindi non è stato possibile verificarlo. Il passo si avvia comunque e solo alcune delle tue integrazioni lo serviranno.",
       "binaryReferenceImages": "Immagini di riferimento",
       "binaryReferenceImagesPlaceholder": "ruolo{'|'}posizione{'|'}servizio, una per riga",

@@ -14,6 +14,7 @@ import type {
   BinaryGeneratorCapability,
   BinaryModality,
   BinaryModalityOverlap,
+  BinaryPartiallyAcceptedValue,
   BinaryUnacceptedValue,
   BinaryValueOption,
   ConflictingOutputSizeOption,
@@ -542,6 +543,14 @@ export type BinaryOutputPickIssue =
    */
   | 'option_value_unaccepted'
   /**
+   * A selected integration ACCEPTS the step's value and another has enumerated it away, so the
+   * step is servable by part of what it selected and the rest would quietly deliver something
+   * else. ADVISORY, and the reason is the same one that makes a capability covered when a single
+   * integration declares it: which endpoint renders which artifact is the agent's call. What is
+   * NOT optional is naming the ones that refuse it, since routing around them is the whole remedy.
+   */
+  | 'option_value_partial'
+  /**
    * The step's value is on no stated set, and a selected integration that declares the capability
    * states no set at all, so it may still be served. ADVISORY, for the reason
    * `capability_unverifiable` is, and it is deliberately silent where NOBODY states a set: that is
@@ -587,6 +596,9 @@ export interface BinaryOutputPickState {
   /** The requested option values nothing selected accepts, each with what IS accepted, so the
    *  message names a value the reader can pick instead of only the one they cannot. */
   unacceptedValues: readonly BinaryUnacceptedValue[]
+  /** The requested values a selected integration accepts and another enumerated away, naming the
+   *  ones that refuse them, since the remedy is dropping or re-routing around those. */
+  partiallyAcceptedValues: readonly BinaryPartiallyAcceptedValue[]
   /** The ones a silent declarer left open, kept apart from the refusal above. */
   unverifiableValues: readonly BinaryValueOption[]
   /** The options restating the delivered dimensions beside an exact size, for the line that names
@@ -633,6 +645,7 @@ function generatorPickIssues(
   unsupportedCapabilities: BinaryGeneratorCapability[]
   unverifiableCapabilities: BinaryGeneratorCapability[]
   unacceptedValues: BinaryUnacceptedValue[]
+  partiallyAcceptedValues: BinaryPartiallyAcceptedValue[]
   unverifiableValues: BinaryValueOption[]
 } {
   const none = {
@@ -644,6 +657,7 @@ function generatorPickIssues(
     unsupportedCapabilities: [],
     unverifiableCapabilities: [],
     unacceptedValues: [],
+    partiallyAcceptedValues: [],
     unverifiableValues: [],
   }
   if (unavailable) return { issues: ['generators_unavailable'], ...none }
@@ -685,6 +699,7 @@ function generatorPickIssues(
   if (capability.uncovered.length) issues.push('capability_unsupported')
   if (capability.unverifiable.length) issues.push('capability_unverifiable')
   if (value.unaccepted.length) issues.push('option_value_unaccepted')
+  if (value.partial.length) issues.push('option_value_partial')
   if (value.unverifiable.length) issues.push('option_value_unverifiable')
   return {
     issues,
@@ -696,6 +711,7 @@ function generatorPickIssues(
     unsupportedCapabilities: capability.uncovered,
     unverifiableCapabilities: capability.unverifiable,
     unacceptedValues: value.unaccepted,
+    partiallyAcceptedValues: value.partial,
     unverifiableValues: value.unverifiable,
   }
 }
@@ -772,6 +788,7 @@ export function binaryOutputPickIssues(
       unsupportedCapabilities: generative.unsupportedCapabilities,
       unverifiableCapabilities: generative.unverifiableCapabilities,
       unacceptedValues: generative.unacceptedValues,
+      partiallyAcceptedValues: generative.partiallyAcceptedValues,
       unverifiableValues: generative.unverifiableValues,
       conflictingSizeOptions,
     }
@@ -801,6 +818,7 @@ export function binaryOutputPickIssues(
     unsupportedCapabilities: generative.unsupportedCapabilities,
     unverifiableCapabilities: generative.unverifiableCapabilities,
     unacceptedValues: generative.unacceptedValues,
+    partiallyAcceptedValues: generative.partiallyAcceptedValues,
     unverifiableValues: generative.unverifiableValues,
     conflictingSizeOptions,
   }

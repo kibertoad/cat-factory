@@ -892,16 +892,34 @@ refused by name: visible, and one word to fix. A vendor that REMOVES one leaves 
 is exactly today's behaviour and no worse. The status quo, by contrast, fails silently and
 delivers the wrong asset.
 
-Four rulings bound it:
+Five rulings bound it:
 
-- **FOUR outcomes, and the extra one is what let this ship.** Judged per option over the
-  integrations that DECLARE the gating capability (counting the others would report one fault
-  twice under two headings): nobody stated a set is SILENT, a stated set containing the value is
-  covered, no stated set containing it with some declarer silent is UNVERIFIABLE (advisory), and
-  every declarer having enumerated it away is UNACCEPTED (refusal). The silent case is the one
-  that matters most: it is the state every registration is in until an endpoint is audited, and an
-  advisory that fired there would ride nearly every step carrying an aspect ratio, which is how a
-  line stops being read.
+- **FIVE outcomes, and the extra silent one is what let this ship.** Judged per option and PER
+  DECLARER over the integrations that DECLARE the gating capability (counting the others would
+  report one fault twice under two headings): nobody stated a set is SILENT, every stated set
+  containing the value is covered, some stated set containing it beside one that EXCLUDES it is
+  PARTIAL (advisory, naming who excludes it), no stated set containing it with some declarer
+  silent is UNVERIFIABLE (advisory), and every declarer having enumerated it away is UNACCEPTED
+  (refusal). The silent case is the one that matters most: it is the state every registration is
+  in until an endpoint is audited, and an advisory that fired there would ride nearly every step
+  carrying an aspect ratio, which is how a line stops being read.
+- **The disposition is a function of the WHOLE declarer set, never of the first agreeable member.**
+  Shipped as a `some(accepts)` short-circuit, the rule went silent on its own motivating example
+  the moment BOTH endpoints enumerated: one takes `7:3`, the other crops to its nearest listed
+  shape, no refusal and no advisory, with `binaryCapabilityProviders` naming both as honouring the
+  option one paragraph earlier in the same brief. It also inverted the reporting, which is the
+  sharper tell: the LESS informed selection (a declarer that stated nothing) raised an advisory, so
+  auditing that endpoint and writing down an accurate set BOUGHT SILENCE. Partial is advisory
+  rather than a refusal for the reason one declarer covers a capability: which integration renders
+  which artifact is the agent's call. What is not optional is NAMING the ones that refuse, since
+  routing around them is the entire remedy.
+- **A stated `accepts` set whose gating capability is undeclared fails BOOT**
+  (`binary_generator_accepts_without_capability`), the same class as the media-type/modality
+  contradiction beside it. Left to run, the two halves are believed by different readers: the brief
+  renders the set as fact, the value rule judges only over the capability's declarers and never
+  sees it, and admission refuses every step asking for the option as `capability_unsupported`. The
+  accurate half is unreachable and the step is refused for lacking a capability the same
+  registration was documenting.
 - **An endpoint that takes NO parameter declares nothing, and a set cannot rescue it.** Recraft's
   `crispUpscale` enlarges at a ratio it fixes itself, so declaring `upscale` for it would admit a
   step asking for 4x and hand back an unknown multiple. `upscale: [2]` would not be a narrower

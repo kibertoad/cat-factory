@@ -939,6 +939,23 @@ const declaredFormats = computed(() => {
         })
       }}
     </p>
+    <!-- ADVISORY, and the one of the three the reader can act on precisely: another selected
+         integration DOES accept the value, so the step starts, and the ones that will not take it
+         are named because dropping or re-routing around them is the whole fix. -->
+    <p
+      v-for="value in pick.partiallyAcceptedValues"
+      :key="value.option"
+      class="text-[10px] text-slate-500"
+      data-testid="binary-output-value-partial"
+    >
+      {{
+        t('pipeline.builder.binaryOptionValuePartial', {
+          option: VALUE_OPTION_LABELS[value.option](),
+          requested: value.requested,
+          generators: value.refusedBy.join(', '),
+        })
+      }}
+    </p>
     <!-- ADVISORY, grouped with the lines above it: one selected integration refuses the value and
          another has not said what it takes, so the step starts and is served by the second. -->
     <p
