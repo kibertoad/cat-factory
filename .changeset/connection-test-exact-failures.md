@@ -16,6 +16,11 @@ recognises, wired into the Kubernetes environment + runner probes, the shared HT
 manifest environment/runner-pool providers, the Cloudflare preview probe, and the Compose probe. An
 unrecognised failure is still reported verbatim, with no hint.
 
+The failure CLASS also rides the wire as `ConnectionTestResult.failureCause` (a new optional field,
+with the vocabulary in `@cat-factory/contracts`), so the connect forms state what failed in the
+operator's own language and keep the backend's English account, which names the concrete host and
+the remedy, as the detail beneath it.
+
 A pasted ServiceAccount token is also checked on the field now: a token copied across a wrapped
 terminal line carries a newline that no HTTP header can hold, and it previously surfaced as an
 opaque request failure minutes later. The impossible case blocks Test and Save and is refused by

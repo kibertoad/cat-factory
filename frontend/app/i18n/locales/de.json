@@ -369,6 +369,19 @@
         "button": "Verbindung testen",
         "ok": "Verbindung OK",
         "failed": "Verbindung fehlgeschlagen",
+        "causes": {
+          "refused": "An dieser Adresse wartet nichts: Die Verbindung wurde abgelehnt.",
+          "dns": "Dieser Hostname lässt sich von dieser Installation aus nicht auflösen.",
+          "timeout": "Es kam keine Antwort, bevor die Prüfung abgelaufen ist.",
+          "aborted": "Die Anfrage wurde abgebrochen, bevor eine Antwort ankam.",
+          "unreachable": "Von dieser Installation aus gibt es keine Netzwerkroute zu dieser Adresse.",
+          "reset": "Die Verbindung wurde geschlossen, bevor eine Antwort ankam.",
+          "tlsUntrusted": "Diese Installation vertraut dem TLS-Zertifikat nicht.",
+          "tlsExpired": "Das TLS-Zertifikat liegt außerhalb seines Gültigkeitszeitraums.",
+          "tlsHostname": "Das TLS-Zertifikat wurde nicht für diesen Hostnamen ausgestellt.",
+          "tlsProtocol": "Der TLS-Handshake ist fehlgeschlagen.",
+          "invalidHeader": "Die Anfrage ließ sich nicht erstellen: Ein Zugangsdaten-Wert enthält ein Zeichen, das ein HTTP-Header nicht übertragen kann."
+        },
         "warningsTitle": "Lücken in dieser Konfiguration",
         "warnings": {
           "runner_manifest_no_release": "Kein Release-Template: Beim Abbrechen eines Laufs kann dem Pool nicht mitgeteilt werden, dass er seinen Job stoppen soll. Ein verwaister Job belegt seinen Runner, bis der Pool ihn von selbst zurücknimmt.",

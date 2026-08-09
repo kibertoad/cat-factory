@@ -1030,6 +1030,27 @@ export function tailOutput(output: string, lines = 12): string {
     .join('\n')
 }
 
+/**
+ * A connect-form failure line for the compose probe: the REMEDY first, then whatever docker said,
+ * on ONE line.
+ *
+ * Both halves are deliberate. The verdict renders as a paragraph that collapses newlines, so a
+ * multi-line stderr spliced mid-sentence ran together into an unreadable wall and glued its own
+ * trailing period onto the next clause; and the remedy is what the operator acts on, so it goes
+ * where it is read rather than after twelve lines of captured output.
+ *
+ * `label` names WHO is speaking, because the two are different faults: a non-zero exit is docker
+ * reporting something, while a throw is the invocation never getting that far.
+ */
+export function composeProbeFailure(
+  remedy: string,
+  output: string,
+  label = 'Docker reported',
+): string {
+  const captured = tailOutput(output).replace(/\s+/g, ' ').trim()
+  return captured ? `${remedy} ${label}: ${captured}` : remedy
+}
+
 // ---------------------------------------------------------------------------
 // STACK RECIPES — multi-`-f` layering, profiles, env-file materialization, ordered setup
 // steps + a terminal health gate. All pure (no I/O): the provider drives the daemon / host

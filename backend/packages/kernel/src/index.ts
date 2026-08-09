@@ -804,7 +804,7 @@ export {
 } from './shared/post-mortem.logic.js'
 export { describeError, runBestEffort } from './shared/best-effort.js'
 export {
-  connectionFailureMessage,
+  connectionFailureResult,
   describeConnectionFailure,
   type ConnectionFailureCause,
   type ConnectionFailureContext,

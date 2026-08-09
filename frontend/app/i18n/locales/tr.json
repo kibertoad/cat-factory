@@ -2945,6 +2945,19 @@
         "button": "Bağlantıyı test et",
         "ok": "Bağlantı tamam",
         "failed": "Bağlantı başarısız",
+        "causes": {
+          "refused": "Bu adreste dinleyen bir şey yok: bağlantı reddedildi.",
+          "dns": "Bu ana bilgisayar adı bu kurulumdan çözümlenemiyor.",
+          "timeout": "Test zaman aşımına uğrayana kadar yanıt gelmedi.",
+          "aborted": "Yanıt gelmeden önce istek iptal edildi.",
+          "unreachable": "Bu kurulumdan bu adrese ağ yolu yok.",
+          "reset": "Yanıt gelmeden önce bağlantı kapatıldı.",
+          "tlsUntrusted": "Bu kurulum TLS sertifikasına güvenmiyor.",
+          "tlsExpired": "TLS sertifikası geçerlilik süresinin dışında.",
+          "tlsHostname": "TLS sertifikası bu ana bilgisayar adı için verilmemiş.",
+          "tlsProtocol": "TLS el sıkışması başarısız oldu.",
+          "invalidHeader": "İstek oluşturulamadı: kimlik bilgisi, bir HTTP başlığının taşıyamayacağı bir karakter içeriyor."
+        },
         "warningsTitle": "Bu yapılandırmadaki eksikler",
         "warnings": {
           "runner_manifest_no_release": "Release şablonu yok: bir çalıştırma iptal edildiğinde havuza işi durdurması söylenemez, bu yüzden sahipsiz kalan iş, havuz onu kendi kendine geri alana kadar runner'ını meşgul tutar.",

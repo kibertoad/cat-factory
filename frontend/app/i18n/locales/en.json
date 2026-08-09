@@ -3055,6 +3055,19 @@
         "button": "Test connection",
         "ok": "Connection OK",
         "failed": "Connection failed",
+        "causes": {
+          "refused": "Nothing is listening at that address: the connection was refused.",
+          "dns": "That host name does not resolve from this deployment.",
+          "timeout": "No answer arrived before the test timed out.",
+          "aborted": "The request was cancelled before an answer arrived.",
+          "unreachable": "There is no network route to that address from this deployment.",
+          "reset": "The connection was closed before an answer arrived.",
+          "tlsUntrusted": "This deployment does not trust the TLS certificate.",
+          "tlsExpired": "The TLS certificate is outside its validity window.",
+          "tlsHostname": "The TLS certificate was not issued for that host name.",
+          "tlsProtocol": "The TLS handshake failed.",
+          "invalidHeader": "The request could not be built: a credential holds a character an HTTP header cannot carry."
+        },
         "warningsTitle": "Gaps in this configuration",
         "warnings": {
           "runner_manifest_no_release": "No release template: cancelling a run cannot tell the pool to stop its job, so an orphaned job keeps its runner until the pool reclaims it on its own.",

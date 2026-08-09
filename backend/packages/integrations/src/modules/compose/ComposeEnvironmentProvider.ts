@@ -21,6 +21,7 @@ import {
   checkoutDepthFor,
   classifyComposePs,
   composeFileDir,
+  composeProbeFailure,
   countComposePs,
   parseComposeEnvConfig,
   parseHostPort,
@@ -248,7 +249,10 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
       if (version.code !== 0) {
         return {
           ok: false,
-          message: `${tailOutput(version.stderr || version.stdout) || `\`docker compose version\` exited ${version.code} with no output`}. The Compose v2 CLI plugin could not be run at all: check that Docker is installed and on this host's PATH.`,
+          message: composeProbeFailure(
+            `\`docker compose version\` exited ${version.code}: the Compose v2 CLI plugin could not be run at all. Check that Docker is installed and on this host's PATH.`,
+            version.stderr || version.stdout,
+          ),
         }
       }
       // `version --short` is a client-only call and succeeds even with the daemon stopped, so it
@@ -260,7 +264,10 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
       if (ls.code !== 0) {
         return {
           ok: false,
-          message: `${tailOutput(ls.stderr || ls.stdout) || `\`docker compose ls\` exited ${ls.code} with no output`}. The Compose CLI ran but could not reach the Docker daemon: start Docker (Docker Desktop, colima, or the \`docker\` service), and check \`DOCKER_HOST\` if it points somewhere unusual.`,
+          message: composeProbeFailure(
+            `\`docker compose ls\` exited ${ls.code}: the Compose CLI ran but could not reach the Docker daemon. Start Docker (Docker Desktop, colima, or the \`docker\` service), and check \`DOCKER_HOST\` if it points somewhere unusual.`,
+            ls.stderr || ls.stdout,
+          ),
         }
       }
       const v = version.stdout.trim()
@@ -274,7 +281,11 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
       // and reported a problem: those are the non-zero branches above, read off stderr.
       return {
         ok: false,
-        message: `Could not run \`docker compose\`: ${getErrorMessage(err)}. Check that Docker (with the Compose v2 plugin) is installed, on this host's PATH, and running.`,
+        message: composeProbeFailure(
+          "Could not run `docker compose` at all: check that Docker (with the Compose v2 plugin) is installed, on this host's PATH, and running.",
+          getErrorMessage(err),
+          'The invocation failed with',
+        ),
       }
     }
   }

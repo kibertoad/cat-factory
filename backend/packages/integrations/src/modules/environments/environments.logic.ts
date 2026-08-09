@@ -9,7 +9,7 @@ import type {
   TeardownProbe,
 } from '@cat-factory/kernel'
 import type { EnvironmentRecord, UrlSafetyPolicy } from '@cat-factory/kernel'
-import { connectionFailureMessage, STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
+import { connectionFailureResult, STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
 import { safeFetch } from '../shared/safe-fetch.js'
 import { assertSafePublicUrl } from '../shared/url-guard.js'
 
@@ -251,9 +251,9 @@ export function missingRequiredConfigKeys(
  *
  * `options.subject` names what is being reached, purely so the failure hint can say "the runner
  * pool API is most likely not running" instead of "the server". The URL-policy refusals thrown by
- * `assertSafeEnvironmentUrl` pass through {@link connectionFailureMessage} unchanged: they carry
- * no error `code`, so they classify as unrecognised and are reported verbatim with no hint,
- * which is right, since a refused host is a config decision and not a reachability problem.
+ * `assertSafeEnvironmentUrl` pass through {@link connectionFailureResult} unchanged: they carry
+ * no error `code`, so they classify as `unknown` and are reported verbatim with no hint, which is
+ * right, since a refused host is a config decision and not a reachability problem.
  */
 export async function probeConnection(
   baseUrl: string,
@@ -280,13 +280,10 @@ export async function probeConnection(
     }
     return { ok: true, message: `Reachable (HTTP ${res.status})` }
   } catch (err) {
-    return {
-      ok: false,
-      message: connectionFailureMessage(err, {
-        ...(subject ? { subject } : {}),
-        target: baseUrl,
-      }),
-    }
+    return connectionFailureResult(err, {
+      ...(subject ? { subject } : {}),
+      target: baseUrl,
+    })
   }
 }
 

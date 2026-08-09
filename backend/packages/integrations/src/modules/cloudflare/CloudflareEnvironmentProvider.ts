@@ -16,7 +16,7 @@ import {
   type SecretResolver,
   type TeardownProbe,
   type UrlSafetyPolicy,
-  connectionFailureMessage,
+  connectionFailureResult,
   STRICT_URL_SAFETY_POLICY,
 } from '@cat-factory/kernel'
 import { type MakeHttpError, readCappedText, safeFetch } from '../shared/safe-fetch.js'
@@ -272,15 +272,12 @@ export class CloudflareEnvironmentProvider implements EnvironmentProvider {
       }
     } catch (err) {
       // A `CloudflareEnvironmentApiError` (the VCS API answered with a status) carries no error
-      // `code`, so it classifies as unrecognised and is reported verbatim, exactly as before. A
+      // `code`, so it classifies as `unknown` and is reported verbatim, exactly as before. A
       // transport failure is the case this rescues: its cause chain, not a bare "fetch failed".
-      return {
-        ok: false,
-        message: connectionFailureMessage(err, {
-          subject: 'the VCS API',
-          target: vcsApiBase(config),
-        }),
-      }
+      return connectionFailureResult(err, {
+        subject: 'the VCS API',
+        target: vcsApiBase(config),
+      })
     }
   }
 

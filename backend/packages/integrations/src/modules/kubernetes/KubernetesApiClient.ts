@@ -62,9 +62,15 @@ export class KubernetesApiClient {
     timeoutMs: number,
     contentType?: string,
   ): Promise<Response> {
-    const token = this.tokenProvider
+    const stored = this.tokenProvider
       ? await this.tokenProvider()
       : this.resolveSecret(this.tokenKey)
+    // Trimmed HERE, not just inside the classifier. `classifyServiceAccountToken` judges the
+    // TRIMMED value, on the stated premise that surrounding padding is stripped before use, so
+    // this is the line that has to make that true. Left untrimmed, a token ending in a newline
+    // passed the guard clean and then died in undici as `TypeError: Invalid header value`: the
+    // exact failure the guard exists to replace, now with a guard that called the token fine.
+    const token = stored?.trim()
     if (!token) throw new Error(`Missing Kubernetes ServiceAccount token ('${this.tokenKey}')`)
     // Refuse a token that cannot become a header BEFORE handing it to `fetch`. This is the one
     // boundary every apiserver call (env + runner, probe + provision) passes through, so it is

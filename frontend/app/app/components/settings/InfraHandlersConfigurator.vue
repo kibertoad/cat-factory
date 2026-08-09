@@ -12,7 +12,7 @@
 //                      per custom type (matched to a service's pinned `manifestId`).
 // In LOCAL mode each handler additionally offers a per-USER override (this-machine only),
 // written to the `/me/environment-handlers` endpoints. Drives the infraConfig store.
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type {
   CustomManifestType,
   EnvironmentHandlerView,
@@ -29,6 +29,7 @@ import ProviderManifestEditor from '~/components/settings/ProviderManifestEditor
 import CustomManifestTypeEditor from '~/components/settings/CustomManifestTypeEditor.vue'
 import CloudflareHandlerSection from '~/components/settings/CloudflareHandlerSection.vue'
 import ConnectionTestVerdict from '~/components/settings/ConnectionTestVerdict.vue'
+import { consumeKubernetesScrollAnchor } from '~/components/settings/InfraHandlersConfigurator.logic'
 
 const { t } = useI18n()
 const infra = useInfraConfigStore()
@@ -99,23 +100,27 @@ watch(
 // target set to `kubernetes`, so bring that section into view once rather than dropping the
 // operator at the top of the tab to hunt for the form the CLI just described.
 //
-// Watched together with `infra.available` rather than on the target alone (which the account
-// settings' equivalent can do): the whole configurator is behind `v-if="infra.available === true"`
-// and that probe resolves AFTER the deep link fires, so a target-only watch would run with nothing
-// rendered and silently do nothing.
+// Attempted from BOTH the watch and `onMounted`, and the anchor is cleared only on a real scroll:
+// the section is behind `v-if="infra.available === true"`, whose probe resolves after the deep link
+// fires, so a single attempt that finds nothing rendered would swallow the hand-off with neither
+// watched value ever changing again to re-drive it. The decision itself is in the logic module,
+// where it is tested.
 const kubeSection = ref<HTMLElement | null>(null)
-watch(
-  [() => ui.infrastructureScrollTarget, () => infra.available],
-  async ([target, available]) => {
-    if (target !== 'kubernetes' || available !== true) return
-    await nextTick()
-    const el = kubeSection.value
-    if (!el) return
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    ui.clearInfrastructureScrollTarget()
-  },
-  { immediate: true },
-)
+async function anchorKubernetesSection() {
+  await nextTick()
+  const outcome = consumeKubernetesScrollAnchor({
+    target: ui.infrastructureScrollTarget,
+    available: infra.available,
+    section: kubeSection.value,
+  })
+  if (outcome === 'scrolled') ui.clearInfrastructureScrollTarget()
+}
+watch([() => ui.infrastructureScrollTarget, () => infra.available], () => {
+  void anchorKubernetesSection()
+})
+onMounted(() => {
+  void anchorKubernetesSection()
+})
 
 const busy = ref(false)
 

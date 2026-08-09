@@ -597,7 +597,7 @@ DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is
 - **A probe that never got an ANSWER is described from the CAUSE CHAIN, not from `err.message`
   (phase 20 reference: D5).** Every "Test connection" button ends in a `fetch` that either answered
   (an HTTP status each provider already maps) or threw, and the threw half is now kernel's
-  `describeConnectionFailure` / `connectionFailureMessage`
+  `describeConnectionFailure` / `connectionFailureResult`
   (`kernel/src/shared/connection-failure.logic.ts`), the sibling of `describeVcsApiError` and kept
   in kernel for the same reason: the probes live in packages that share only kernel. Four things
   about it bind anything new:
@@ -608,11 +608,38 @@ DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is
     other" is a different diagnosis from "refused on both"). Both are walked; the `fetch failed`
     wrapper is dropped whenever something more specific exists.
   - **The DETAIL and the HINT are separate, and only the detail is unconditional.** The cause is a
-    closed union (`refused` / `dns` / `timeout` / `unreachable` / `reset` / the four TLS splits /
-    `invalid-header` / `unknown`) matched on the transport `code`, and `unknown` is a real member:
-    an unmatched chain is reported verbatim with NO hint, because a guessed remedy for an
+    closed union (`refused` / `dns` / `timeout` / `aborted` / `unreachable` / `reset` / the four TLS
+    splits / `invalid-header` / `unknown`) matched on the transport `code`, and `unknown` is a real
+    member: an unmatched chain is reported verbatim with NO hint, because a guessed remedy for an
     unrecognised failure sends the operator somewhere wrong. Callers pass a `subject` noun so the
-    hint names what was probed rather than "the server".
+    hint names what was probed rather than "the server". A cause pair whose remedies DIVERGE is two
+    members, never one: an `AbortError` is a cancelled request, and reporting it as a `timeout` sent
+    the operator to inspect firewalls over a request that was never allowed to finish.
+  - **The CAUSE is what a localized surface renders; the prose is the detail beside it.** The union
+    lives in **contracts** (`connectionFailureCauseSchema`) and rides the wire on
+    `ConnectionTestResult.failureCause`, so the SPA states the failure class in the operator's own
+    language (`CONNECTION_FAILURE_CAUSE_KEYS` → `settings.providerConnection.test.causes.*`) and
+    keeps the English account underneath, which is where the concrete host and remedy live. Every
+    probe answers through `connectionFailureResult`, not a hand-built `{ ok: false, message }`,
+    because a literal structurally cannot carry the machine-readable half: the same argument as
+    `handleError` owning the HTTP error envelope. Absent and `unknown` are different facts (no
+    transport cause at all, i.e. the probe got an ANSWER, vs. a chain that matched nothing).
+  - **Specificity runs INNERMOST-first, and a message match never outranks a code.** undici wraps a
+    mid-handshake `DEPTH_ZERO_SELF_SIGNED_CERT` in a `SocketError` whose own `UND_ERR_SOCKET` is
+    itself a recognised cause, so taking the first match in walk order answered with the wrapper and
+    told the operator to hunt for a proxy instead of pasting a CA bundle. The one code-less cause
+    (`invalid-header`) is matched on the runtime's whole wording and only after every link failed to
+    yield a code: a bare `invalid character` also matches Go's JSON decode error, which is what a
+    kube-apiserver or an intercepting proxy answers with when something returns HTML.
+  - **Scrub before capping, and say what the cap dropped.** `redactSecrets` runs on the whole
+    rendered chain and only then is it capped, because a secret sliced in half matches none of the
+    shape rules (a JWT cut after its second segment, a `bearer` token cut under the rule's minimum
+    run). The cap appends the dropped character count, since a silent slice reads exactly like a
+    complete chain. The probed `target` needs its own scrub: it comes from the caller's config
+    rather than from the error, and a base URL may legitimately carry `user:secret@` userinfo.
+  - **The hints are written for the connect FORM.** They end in "then test again", so a caller with
+    no Test button (the teardown-verification `reason`) takes `describeConnectionFailure(...).detail`
+    and leaves the remedy behind.
   - **Only a SCREAMING_SNAKE `code` is appended to the detail.** Our own `DomainError`s reach these
     same catch blocks and carry a lowercase status class (`validation`), which identifies nothing
     about a connection and rendered as a baffling `(validation)` glued onto a finished sentence.
@@ -635,6 +662,11 @@ DispatchError`, reading `.status`), NOT the `/dispatch failed/i` regex, which is
     `authorization` header, so env + runner and probe + provision are all covered by one guard with
     no new registry seam. It throws a `ValidationError` with a `service_account_token_whitespace`
     reason rather than letting undici answer with an opaque `Invalid header value`.
+  - **A guard that judges a NORMALISED value must be where the normalising happens.** The classifier
+    judges the TRIMMED token, on the stated premise that surrounding padding is stripped before use,
+    so the client trims at the same line it builds the header from: reading the guard's verdict while
+    sending the raw value let a token with a trailing newline pass as fine and then die in undici
+    with the very error the guard replaces.
 - **Executor-harness changes bump the image tag** + the three hand-maintained pins
   (`deploy/backend/package.json`, `deploy/backend/wrangler.toml`,
   `RECOMMENDED_HARNESS_IMAGE`): batch all F-rows into one slice to pay that cost once.

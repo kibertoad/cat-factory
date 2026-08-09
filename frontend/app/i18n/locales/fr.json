@@ -2744,6 +2744,19 @@
         "button": "Tester la connexion",
         "ok": "Connexion réussie",
         "failed": "Échec de la connexion",
+        "causes": {
+          "refused": "Rien n'écoute à cette adresse : la connexion a été refusée.",
+          "dns": "Ce nom d'hôte n'est pas résolu depuis ce déploiement.",
+          "timeout": "Aucune réponse n'est arrivée avant l'expiration du test.",
+          "aborted": "La requête a été annulée avant l'arrivée d'une réponse.",
+          "unreachable": "Aucune route réseau ne mène à cette adresse depuis ce déploiement.",
+          "reset": "La connexion a été fermée avant l'arrivée d'une réponse.",
+          "tlsUntrusted": "Ce déploiement ne fait pas confiance au certificat TLS.",
+          "tlsExpired": "Le certificat TLS est en dehors de sa période de validité.",
+          "tlsHostname": "Le certificat TLS n'a pas été émis pour ce nom d'hôte.",
+          "tlsProtocol": "La négociation TLS a échoué.",
+          "invalidHeader": "La requête n'a pas pu être construite : un identifiant contient un caractère qu'un en-tête HTTP ne peut pas transporter."
+        },
         "warningsTitle": "Lacunes dans cette configuration",
         "warnings": {
           "runner_manifest_no_release": "Aucun modèle de release : annuler une exécution ne permet pas de demander au pool d'arrêter son job, donc un job orphelin occupe son runner jusqu'à ce que le pool le récupère de lui-même.",
