@@ -1,5 +1,66 @@
 # @cat-factory/executor-harness
 
+## 1.110.0
+
+### Minor Changes
+
+- 2428b6b: Attribute a cross-service run's pull request to every involved service frame whose changes ride
+  it, not just the first.
+
+  The multi-repo fan-out checks out one repo per REPO, so several involved services living in one
+  monorepo already shared a checkout, a work branch and a single pull request. Only the RECORD was
+  singular, which left every frame but the first looking like a service the run had opened no pull
+  request for. The attribution is now a set (`frameIds`) from the dispatch through the harness echo
+  to `block.peerPullRequests`, the merge order, and the verification report. The own-service report
+  carries it too, naming the involved services co-located in the task's own repo: those open no pull
+  request of their own, so that report is the only place their change is reported. A peer checkout
+  also stops inheriting one co-located service's `serviceDirectory`: it is whole-repo, as the primary
+  already was, so the services that resolved second are reachable.
+
+  A recorded peer pull request is now ADDRESSED by its repo rather than by its frames, which is what
+  a checkout is identified by, and one the platform cannot resolve is named to the merger instead of
+  being dropped from the combined diff it scores.
+
+  Internal break: `peerPullRequestSchema.frameId`, `allPullRequests`, `MergePrEntry.frameId`,
+  `PrReportTarget.frameId` and the harness `peerRepos`/`peerPullRequests` wire fields are replaced
+  by `frameIds`. Peer PRs recorded on a block before this ship lose their frame attribution (the
+  pull requests themselves are untouched). Public `/api/v1` is additive only: `PrReportScope` gains
+  `frameIds` and keeps `frameId` as its head (surface version 1.40.0). `frameId` is no longer always
+  null on an own-service report: it names a co-located involved service when there is one.
+
+  The runner image moves to `cat-factory-executor:1.109.0`.
+
+## 1.108.0
+
+### Minor Changes
+
+- 19baddf: Show a task's design PICTURES to the agents that build the screen.
+
+  The frames an import retains for a linked design (Figma, Zeplin) already fed the
+  visual-confirmation gate and the UI tester's capture set. They now also reach the kinds that build
+  or plan a screen, on the two channels a dispatch can actually carry an image over: written into
+  `.cat-context/design-renders/` for a harness whose CLI reads image files, and attached to the model
+  request as image parts for an inline call. Which kinds get them is a declared trait
+  (`design-images`, on `coder` / `architect` / `fixer`), so a deployment's own UI kind opts in the
+  same way.
+
+  Delivery joins two DECLARED facts, and neither is inferred: `HARNESS_IMAGE_INPUT` says which agent
+  CLI can get bytes into a turn (`claude-code`; Codex and Pi are `false` with their reason stated),
+  and the new per-flavour `ModelRef.acceptsImages` says which model takes one. A dispatch that cannot
+  show the pictures TELLS the agent they exist, with which of the two is missing, so the textual
+  design description never reads as everything the platform had. An UNDECLARED model modality is its
+  own refusal reason rather than a silent "no", so an undeclared multimodal model cannot read as a
+  text-only one forever.
+
+  **Runner image bump** (`cat-factory-executor:1.107.0`): the harness gained the download for the new
+  manifest, and `designImages` joins `HARNESS_BODY_CAPABILITIES`, so a deployment running an older
+  image is told rather than leaving the backend's prompt naming a directory nothing wrote. Mirror the
+  tag into your registry and roll it out; nothing else in the change requires it.
+
+  Recorded prompt bodies now pass through `redactImagePayloads` on both the inline and proxy paths: a
+  `Uint8Array` JSON-stringifies to one entry per byte, so an attached frame would otherwise have
+  landed in telemetry as megabytes per recorded call.
+
 ## 1.106.0
 
 ### Minor Changes

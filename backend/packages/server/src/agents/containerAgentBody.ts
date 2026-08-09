@@ -1,4 +1,11 @@
-import type { AgentRunContext } from '@cat-factory/kernel'
+import type {
+  AgentRunContext,
+  DesignImageDelivery,
+  DesignImageSet,
+  HarnessKind,
+  ModelRef,
+} from '@cat-factory/kernel'
+import { noopLogger, resolveDesignImageDelivery } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
   CONFLICT_RESOLVER_AGENT_KIND,
@@ -57,6 +64,86 @@ export function buildRepoSpec(repo: RepoTarget, origin: RepoOrigin) {
 }
 
 /**
+ * What THIS dispatch can do with the task's design pictures, or `undefined` when it holds none.
+ *
+ * A DISPATCH fact for the same reason the tool servers are: it takes the resolved harness AND the
+ * resolved model, neither of which the engine knows while it is building the context. Resolved even
+ * when the answer is no, because the prompt has to STATE a withheld picture rather than leave the
+ * agent reading the textual design description as everything the platform had.
+ */
+export function dispatchDesignImageDelivery(
+  context: AgentRunContext,
+  harness: HarnessKind,
+  ref: Pick<ModelRef, 'acceptsImages'>,
+): DesignImageDelivery | undefined {
+  return context.designImages?.files.length
+    ? resolveDesignImageDelivery({ channel: 'files', harness }, ref)
+    : undefined
+}
+
+/** One image manifest as the harness parses it: where to fetch, with what, and which files. */
+interface ImageManifestBody {
+  url: string
+  token: string
+  files: { artifactId: string; fileName: string; view: string }[]
+  omitted?: string[]
+}
+
+/**
+ * The two image manifests a job body may carry: the reference designs a CAPTURING kind compares
+ * against, and the design pictures a BUILDING kind is shown.
+ *
+ * One builder, because both ride the same seam: only identities travel (a run's frames are
+ * megabytes of PNG and a job body is JSON that crosses every transport and is persisted with the
+ * dispatch), and the bytes come back through the container's own session token, so neither needs an
+ * extra credential or a public URL. They stay two FIELDS with two directories because they are
+ * opposite instructions: one names the views to CAPTURE, the other is the design to BUILD, and a
+ * capturing kind reading the builder's short list would take it for the complete set of views.
+ *
+ * Each is gated on a set that says SOMETHING. The engine already answered "this kind wants none" by
+ * resolving nothing at all, and a manifest of zero files would have the harness create an empty
+ * directory, which reads to the agent as designs that gave nothing rather than as a task with none
+ * linked. For the capture half `omitted` counts as something to say on its own, since a set the cap
+ * emptied entirely still owes the agent the view names it is expected to capture; the design half
+ * carries no `omitted`, because the BACKEND's prompt names those views and the container is only
+ * ever asked to CORRECT that list.
+ */
+function buildImageManifests(
+  context: AgentRunContext,
+  auth: Record<string, unknown>,
+  designImages: DesignImageSet | undefined,
+): { referenceScreenshots?: ImageManifestBody; designImages?: ImageManifestBody } {
+  const { proxyBaseUrl, sessionToken } = auth
+  if (typeof proxyBaseUrl !== 'string' || typeof sessionToken !== 'string') return {}
+  const url = `${proxyBaseUrl}/artifacts/reference`
+  const files = (set: { files: { artifactId: string; fileName: string; view: string }[] }) =>
+    set.files.map((file) => ({
+      artifactId: file.artifactId,
+      fileName: file.fileName,
+      view: file.view,
+    }))
+  const references = context.referenceScreenshots
+  return {
+    ...(references?.files.length || references?.omitted.length
+      ? {
+          referenceScreenshots: {
+            url,
+            token: sessionToken,
+            files: files(references),
+            // The views the engine's cap dropped, carried so the harness can state them beside the
+            // ones that failed to transfer: from the agent's side both are a view it must capture
+            // with no image to compare against.
+            ...(references.omitted.length ? { omitted: references.omitted } : {}),
+          },
+        }
+      : {}),
+    ...(designImages?.files.length
+      ? { designImages: { url, token: sessionToken, files: files(designImages) } }
+      : {}),
+  }
+}
+
+/**
  * Assemble the fields EVERY harness job body carries (`common`), built once so the per-kind
  * bodies can't drift on which jobId/model/auth/repo/proxy fields they forward. Extracted from
  * `ContainerAgentExecutor.buildJobBody` to keep it under the complexity ceiling.
@@ -75,6 +162,7 @@ export function buildCommonBody(
     mcpServers?: McpServerJobSpec[]
     generatorSecrets?: GeneratorSecretJobSpec[]
     guardLimits?: unknown
+    designImages?: DesignImageSet
   },
   deps: ContainerAgentExecutorDependencies,
   agentKindRegistry: AgentKindRegistry,
@@ -99,36 +187,13 @@ export function buildCommonBody(
     typeof auth.sessionToken === 'string'
       ? { url: `${auth.proxyBaseUrl}/artifacts/ingest`, token: auth.sessionToken }
       : undefined
-  // The other direction of the same seam: the reference design images the engine resolved for
-  // this task, as a MANIFEST the harness downloads into `.cat-context/reference-screenshots/`.
-  // Only identities travel (a run's frames are megabytes of PNG and a job body is JSON that
-  // crosses every transport and is persisted with the dispatch), and the bytes come back through
-  // the container's own session token, so no extra credential and no public URL is involved.
-  //
-  // Gated on a set that says SOMETHING: the engine already answered "this kind captures nothing"
-  // by resolving nothing at all, and a manifest of zero files would have the harness create an
-  // empty directory, which reads to the agent as designs that gave nothing rather than as a task
-  // with none linked. `omitted` counts as something to say on its own, because a set the cap
-  // emptied entirely still owes the agent the view names it is expected to capture.
-  const references = context.referenceScreenshots
-  const referenceScreenshots =
-    (references?.files.length || references?.omitted.length) &&
-    typeof auth.proxyBaseUrl === 'string' &&
-    typeof auth.sessionToken === 'string'
-      ? {
-          url: `${auth.proxyBaseUrl}/artifacts/reference`,
-          token: auth.sessionToken,
-          files: references.files.map((reference) => ({
-            artifactId: reference.artifactId,
-            fileName: reference.fileName,
-            view: reference.view,
-          })),
-          // The views the engine's cap dropped, carried so the harness can state them beside the
-          // ones that failed to transfer: from the agent's side both are a view it must capture
-          // with no image to compare against, and only the CAUSE differs.
-          ...(references.omitted.length ? { omitted: references.omitted } : {}),
-        }
-      : undefined
+  // The other direction of the same seam: the images the engine resolved for this task, as
+  // manifests the harness downloads before the agent's first turn.
+  const { referenceScreenshots, designImages } = buildImageManifests(
+    context,
+    auth,
+    args.designImages,
+  )
   return {
     jobId,
     // The run's correlation ids, carried purely so the container's own log lines can be joined
@@ -175,6 +240,7 @@ export function buildCommonBody(
     ...(generatorSecrets?.length ? { generatorSecrets } : {}),
     ...(artifactUpload ? { artifactUpload } : {}),
     ...(referenceScreenshots ? { referenceScreenshots } : {}),
+    ...(designImages ? { designImages } : {}),
     ...(guardLimits ? { guardLimits } : {}),
   }
 }
@@ -205,14 +271,14 @@ export async function resolveMultiRepoFanout(
   deps: ContainerAgentExecutorDependencies,
   agentKindRegistry: AgentKindRegistry,
 ): Promise<{
-  peerRepos?: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+  peerRepos?: { repo: Record<string, unknown>; frameIds?: string[]; cloneBranch?: string }[]
   multiRepoSection?: string
   repoSpecOverride?: Record<string, unknown>
   repoTargets: RepoTarget[]
 }> {
   const { workspaceId, blockId, repo } = args
   let peerRepos:
-    | { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+    | { repo: Record<string, unknown>; frameIds?: string[]; cloneBranch?: string }[]
     | undefined
   let multiRepoSection: string | undefined
   let repoSpecOverride: Record<string, unknown> | undefined
@@ -239,10 +305,20 @@ export async function resolveMultiRepoFanout(
     if (peerCheckouts.length > 0 || coLocated.length > 0) {
       const origin = deps.resolveRepoOrigin ?? githubRepoOrigin
       if (peerCheckouts.length > 0) {
-        peerRepos = peerCheckouts.map((c: RepoCheckout) => ({
-          repo: buildRepoSpec(c.target, origin(c.target)),
-          ...(c.involved[0]?.frameId ? { frameId: c.involved[0].frameId } : {}),
-        }))
+        peerRepos = peerCheckouts.map((c: RepoCheckout) => {
+          // Whole-repo, exactly like the primary below: a peer checkout can host SEVERAL of the
+          // run's involved services (one monorepo, several service frames), and scoping it to
+          // the subdirectory of whichever resolved first would put the rest out of reach. The
+          // layout section names each service's subdirectory instead.
+          const { serviceDirectory: _drop, ...rootTarget } = c.target
+          return {
+            repo: buildRepoSpec(rootTarget, origin(rootTarget)),
+            // EVERY frame this repo hosts, not the first: they share this checkout, its work
+            // branch and its single pull request, so the PR the harness echoes them back onto
+            // is the one pull request all of them landed in.
+            ...(c.involved.length ? { frameIds: c.involved.map((i) => i.frameId) } : {}),
+          }
+        })
         repoTargets.push(...peerCheckouts.map((c: RepoCheckout) => c.target))
       }
       multiRepoSection = renderMultiRepoWorkspaceSection(checkouts, involvedServices)
@@ -269,9 +345,13 @@ export async function resolveMultiRepoFanout(
  * `context.conflictTarget`. Point the (single-repo) resolver at that PEER repo — resolve its
  * target and swap `repo`/`common.repo` — instead of the task's own service. The resolver clones
  * the peer's PR (work) branch and merges the peer's base in (jobBody pins the branch to the shared
- * work branch and reads `mergeBase` off this swapped target). An own-repo conflict carries no
- * `frameId`, so this returns `undefined` and the resolver targets the own service. Extracted from
+ * work branch and reads `mergeBase` off this swapped target). Extracted from
  * `ContainerAgentExecutor.resolveAuxiliaryRepos` to keep it under the complexity ceiling.
+ *
+ * Own or peer is decided by the target's REPO, the same field that addresses the checkout, and
+ * never by whether the gate managed to tag a frame beside it: the frame is attribution, it comes
+ * off a recorded pull request, and a record carrying none would otherwise read as an own-repo
+ * conflict and send the resolver at a repo that does not conflict.
  */
 export async function resolveConflictResolverPeer(
   context: AgentRunContext,
@@ -283,12 +363,25 @@ export async function resolveConflictResolverPeer(
   deps: ContainerAgentExecutorDependencies,
 ): Promise<{ repoForKind: RepoTarget; repoSpecOverride: Record<string, unknown> } | undefined> {
   const { workspaceId, blockId, repo } = args
-  const conflictFrameId =
-    context.agentKind === CONFLICT_RESOLVER_AGENT_KIND ? context.conflictTarget?.frameId : undefined
-  if (!conflictFrameId || !deps.resolveRepoTargets) return undefined
-  const { checkouts } = await deps.resolveRepoTargets(workspaceId, blockId, [conflictFrameId], repo)
+  const target =
+    context.agentKind === CONFLICT_RESOLVER_AGENT_KIND ? context.conflictTarget : undefined
+  // Nothing to retarget: a single-repo block (the gate tags no target at all) or a conflict on
+  // the task's own repo, which is where the resolver already runs.
+  if (!target || target.repo === `${repo.owner}/${repo.name}` || !deps.resolveRepoTargets) {
+    return undefined
+  }
+  // The frames whose repos to resolve: the task's involved services, plus the one the gate
+  // tagged when it had it. The tag alone was not enough, since a peer pull request recorded
+  // without its attribution tags nothing.
+  const frameIds = [
+    ...new Set([
+      ...(context.involvedServices ?? []).map((s) => s.frameId),
+      ...(target.frameId ? [target.frameId] : []),
+    ]),
+  ]
+  const { checkouts } = await deps.resolveRepoTargets(workspaceId, blockId, frameIds, repo)
   const peer = checkouts.find(
-    (c) => !c.primary && c.involved.some((i) => i.frameId === conflictFrameId),
+    (c) => !c.primary && `${c.target.owner}/${c.target.name}` === target.repo,
   )
   // Fail fast if the tagged peer can't be resolved (e.g. a stale/missing repo projection row):
   // falling through would silently point the resolver at the OWN repo, which has no conflict, so
@@ -297,7 +390,7 @@ export async function resolveConflictResolverPeer(
   // inconsistency immediately instead.
   if (!peer) {
     throw new Error(
-      `Conflict-resolver could not resolve the conflicted peer repo (frame '${conflictFrameId}') ` +
+      `Conflict-resolver could not resolve the conflicted peer repo '${target.repo}' ` +
         `for block '${blockId}' — its repo projection may be missing or unlinked.`,
     )
   }
@@ -318,6 +411,15 @@ export async function resolveConflictResolverPeer(
  * own PR branch to check out, plus a section naming the sibling diff commands. Returns `undefined`
  * (leaving the fan-out result to stand) when it doesn't fire. Extracted from
  * `ContainerAgentExecutor.resolveAuxiliaryRepos` to keep it under the complexity ceiling.
+ *
+ * A recorded peer PR is addressed by its REPO, never by its frame attribution, which is the same
+ * split the conflict gate makes (`conflictTarget.frameId` addresses, `frameIds` attributes). The
+ * repo is what a checkout is, and it is the one field every recorded peer PR carries: keying the
+ * lookup on the attribution instead made a record whose frames were absent resolve to NOTHING, so
+ * the merger fell back to scoring the own-service diff alone and auto-merged a cross-repo change
+ * on a third of the evidence, with nothing to tell that apart from a genuine single-repo run.
+ * `resolveRepoTargets` is what CONFIRMS the repo (it is harness-reported), so a peer outside the
+ * resolved checkout set is dropped LOUDLY: named to the merger in the section, and logged.
  */
 export async function resolveMergerCombinedDiff(
   context: AgentRunContext,
@@ -330,7 +432,7 @@ export async function resolveMergerCombinedDiff(
   deps: ContainerAgentExecutorDependencies,
 ): Promise<
   | {
-      peerRepos: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+      peerRepos: { repo: Record<string, unknown>; frameIds?: string[]; cloneBranch?: string }[]
       multiRepoSection: string
       repoTargets: RepoTarget[]
     }
@@ -341,46 +443,76 @@ export async function resolveMergerCombinedDiff(
   if (context.agentKind !== MERGER_AGENT_KIND || peerPrs.length === 0 || !deps.resolveRepoTargets) {
     return undefined
   }
-  const frameIds = peerPrs.map((p) => p.frameId).filter((f): f is string => !!f)
+  // The frames to resolve: what the task declares as involved, plus any frame a recorded peer PR
+  // attributes itself to. The union rather than either alone, the same rule the report publisher
+  // resolves its targets by. The declared list is what the run fanned out over, the recorded
+  // attribution is what it actually opened, and a peer whose frame has since left the task still
+  // has an open pull request whose diff belongs in the score.
+  const frameIds = [
+    ...new Set([
+      ...(context.involvedServices ?? []).map((s) => s.frameId),
+      ...peerPrs.flatMap((p) => p.frameIds ?? []),
+    ]),
+  ]
   if (frameIds.length === 0) return undefined
   const { checkouts } = await deps.resolveRepoTargets(workspaceId, blockId, frameIds, repo)
   const origin = deps.resolveRepoOrigin ?? githubRepoOrigin
+  const byRepo = new Map(
+    checkouts.filter((c) => !c.primary).map((c) => [`${c.target.owner}/${c.target.name}`, c]),
+  )
   const legs: {
     spec: Record<string, unknown>
-    frameId: string
+    frameIds: string[]
     cloneBranch: string
     target: RepoTarget
   }[] = []
+  const unaddressable: string[] = []
   for (const pr of peerPrs) {
-    if (!pr.frameId) continue
-    const checkout = checkouts.find(
-      (c) => !c.primary && c.involved.some((i) => i.frameId === pr.frameId),
-    )
-    if (!checkout) continue
+    const checkout = pr.repo ? byRepo.get(pr.repo) : undefined
+    if (!checkout) {
+      unaddressable.push(pr.repo || pr.ref.url)
+      continue
+    }
     legs.push({
       spec: buildRepoSpec(checkout.target, origin(checkout.target)),
-      frameId: pr.frameId,
+      // The recorded attribution when the run stated one, else the frames this checkout hosts:
+      // the same derivation the dispatch made, off the same resolution, so a record that
+      // carries none is attributed rather than left blank.
+      frameIds: pr.frameIds?.length ? pr.frameIds : checkout.involved.map((i) => i.frameId),
       cloneBranch: pr.ref.branch ?? workBranch,
       target: checkout.target,
+    })
+  }
+  if (unaddressable.length) {
+    // Not a dispatch failure: the merger still scores every repo it CAN see, and refusing the
+    // whole run over one unresolvable peer would be worse. It must know the diff it is holding
+    // is partial, though, so the omission is named to the model and to the operator alike.
+    ;(deps.logger ?? noopLogger).warn('Merger combined diff omits an unresolvable peer repo', {
+      workspaceId,
+      blockId,
+      repos: unaddressable,
     })
   }
   if (legs.length === 0) return undefined
   return {
     peerRepos: legs.map((l) => ({
       repo: l.spec,
-      frameId: l.frameId,
+      frameIds: l.frameIds,
       cloneBranch: l.cloneBranch,
     })),
     // The own service rides the primary checkout at its PR head (clone `pr`, or base when the
     // own service had no change); list it first so the section names its diff command too.
-    multiRepoSection: renderMergerMultiRepoSection([
-      { owner: repo.owner, name: repo.name, baseBranch: repo.baseBranch },
-      ...legs.map((l) => ({
-        owner: l.target.owner,
-        name: l.target.name,
-        baseBranch: l.target.baseBranch,
-      })),
-    ]),
+    multiRepoSection: renderMergerMultiRepoSection(
+      [
+        { owner: repo.owner, name: repo.name, baseBranch: repo.baseBranch },
+        ...legs.map((l) => ({
+          owner: l.target.owner,
+          name: l.target.name,
+          baseBranch: l.target.baseBranch,
+        })),
+      ],
+      unaddressable,
+    ),
     repoTargets: legs.map((l) => l.target),
   }
 }
@@ -552,7 +684,7 @@ export async function resolveAuxiliaryRepos(
   deps: ContainerAgentExecutorDependencies,
   agentKindRegistry: AgentKindRegistry,
 ): Promise<{
-  peerRepos?: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+  peerRepos?: { repo: Record<string, unknown>; frameIds?: string[]; cloneBranch?: string }[]
   multiRepoSection?: string
   repoSpecOverride?: Record<string, unknown>
   repoForKind: RepoTarget

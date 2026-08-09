@@ -4176,6 +4176,9 @@
       "monorepoBrowseHint": "Przeglądaj repozytorium i wybierz katalogi usług, które chcesz dodać — z dowolnego folderu. Agenci pracujący nad usługą działają w obrębie jej podkatalogu.",
       "selectedServices": "Wybrane usługi",
       "noServicesSelected": "Nie wybrano jeszcze żadnych usług. Wybierz katalogi powyżej.",
+      "frontendLabel": "Aplikacja frontendowa (opcjonalnie)",
+      "frontendHint": "Oznacz jeden z wybranych katalogów jako frontend dla pozostałych. Zostanie dodany jako aplikacja frontendowa przypięta do tego podkatalogu i powiązany z każdą usługą backendową dodaną obok. Nazwy zmiennych środowiskowych z adresami URL backendów uzupełnij następnie w inspektorze frontendu.",
+      "frontendNone": "Brak: wszystkie wybrane pozycje to usługi backendowe",
       "addServices": "Dodaj {count} usługę | Dodaj {count} usługi | Dodaj {count} usług",
       "removeService": "Usuń {directory}",
       "addedConfigure": "Dodano {title}, skonfiguruj",
@@ -4189,7 +4192,9 @@
         "addedDescription": "{title} jest na tablicy, skonfiguruj ją poniżej.",
         "addFailedTitle": "Nie udało się dodać usługi",
         "servicesAddedTitle": "Dodano usługi",
-        "servicesAddedDescription": "Dodano {count} usługę do tablicy. | Dodano {count} usługi do tablicy. | Dodano {count} usług do tablicy."
+        "servicesAddedDescription": "Dodano {count} usługę do tablicy. | Dodano {count} usługi do tablicy. | Dodano {count} usług do tablicy.",
+        "frontendLinkedNote": "{directory} dodano jako frontend i powiązano z pozostałymi. Nazwy jego zmiennych środowiskowych z adresami URL backendów uzupełnij w inspektorze.",
+        "frontendWiringFailedNote": "Ustawienia frontendu nie zostały zapisane. Otwórz inspektor każdej aplikacji frontendowej, aby ustawić jej podkatalog i usługi backendowe."
       },
       "repoType": "Typ repozytorium",
       "repoTypeHint": "Czym jest to repozytorium: usługą backendową, aplikacją frontendową, współdzieloną biblioteką lub repozytorium dokumentacji (tylko dokumenty/spike'i)."

@@ -119,8 +119,12 @@ export interface RunnerJobResult {
    * phase 3): one per involved-service repo it actually changed, beside the own-service
    * `prUrl`/`branch`. The executor's `toRunResult` lifts these onto `AgentRunResult`. Absent
    * for a single-repo run.
+   *
+   * `frameIds` echoes back the involved frames the DISPATCH attributed to that checkout: the
+   * fan-out clones one checkout per repo, so a monorepo hosting several of the run's involved
+   * services yields ONE pull request carrying all of their frames.
    */
-  peerPullRequests?: { repo: string; frameId?: string; prUrl: string; branch: string }[]
+  peerPullRequests?: { repo: string; frameIds?: string[]; prUrl: string; branch: string }[]
   summary?: string
   error?: string
   /** A repo-bootstrap job's pushed default branch (the bootstrap coding flow's product). */

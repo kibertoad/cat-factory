@@ -159,14 +159,42 @@ harness path via a widened `peerRepos` job body, with no runner-image bump. `ste
     whose own service was a no-op but a peer changed surfaces the peer PRs in its output; and
     the multi-repo dispatch reuses the already-resolved primary `RepoTarget` (no second
     installation read / ancestry walk).
-  - **Deferred: all-frame peer-PR attribution.** A shared-monorepo peer checkout can carry
-    `>1` involved frame (`RepoCheckout.involved[]`), but the peer PR is attributed to only
-    `involved[0].frameId` end-to-end (`PeerRepoSpec.frameId`, `peerPullRequestSchema.frameId`,
-    the gate `conflictTarget`, `mergeOrder`). Phase 4 keys its gates + merge-order off the
-    SINGULAR `frameId`, so widening the whole chain to `frameIds[]` (contracts → kernel →
-    harness → server → gates → mergeOrder + tests) is its own isolated change, not a rider on
-    the review fixes. Until then a monorepo hosting several involved services links its single
-    PR to just the first frame.
+  - **All-frame peer-PR attribution: LANDED.** A shared-monorepo peer checkout carries every
+    involved frame it hosts (`RepoCheckout.involved[]`), and that whole set now travels the
+    chain as `frameIds[]`: `peerPullRequestSchema` / `allPullRequests` / `MergePrEntry` /
+    `PrReportTarget` / `RunnerJobResult` and the harness's `PeerRepoSpec` + `RepoLeg`. The
+    harness echoes it back untouched (it decides no attribution of its own), so the ONE pull
+    request a monorepo peer opens is recorded against every frame whose change landed in it.
+    The OWN-SERVICE pull request carries the set too, naming the involved services co-located in
+    the task's own repo: the fan-out dedupes by repo, so those open no PR of their own and the
+    report on the own-service one is the only place their change is reported. It is DERIVED at
+    settle time off the resolution `PrVerificationReportPublisher.resolveTargets` already pays
+    for, rather than persisted: which frames a repo hosts is board state, and the record would
+    have needed a second wire field plus an image bump to carry it. `PrReportScope.frameId` is
+    published `/api/v1`, kept beside the new `frameIds` as its head (surface 1.40.0), and is
+    therefore no longer always null on an own-service report. `mergeOrder` keys a peer on the
+    LEAST of its frames, so the order is a function of the set rather than of resolution order.
+    The same change stopped a peer checkout inheriting one co-located service's
+    `serviceDirectory`: it is whole-repo, exactly as the primary already was.
+  - **Frames ATTRIBUTE, the repo ADDRESSES, and only the repo may be keyed on.** Every reader
+    that looked a recorded pull request up by its frames degraded SILENTLY when a record carried
+    none (one written before the attribution existed, or echoed by a runner pool still on an
+    older harness image): `resolveMergerCombinedDiff` returned nothing and the merger scored a
+    cross-service change on the own-service diff alone, and the conflicts gate dropped its
+    `conflictTarget`, which reads as an own-repo conflict and spends the gate's whole attempt
+    budget on the repo that does not conflict. Both now match `owner/name` against the resolved
+    checkout set, the frames only widening what is resolved, and both attribute a frameless
+    record from the checkout it resolved to. `RepoMergeability.frameId` stays singular as a
+    hint. A pull request whose repo is outside the resolved set is NAMED (in the merger's prompt
+    and in a log) rather than dropped: the repo is harness-reported, so an unconfirmed identity
+    is not written to, and a partial combined diff must not read as a whole one.
+  - **Deferred: the conflict-resolver's service-directory scoping.** The resolver is SINGLE-repo,
+    so it keeps the ordinary `serviceDirectory` cwd scoping on both the own and the peer repo.
+    On a monorepo whose work branch touched two involved services' subtrees that points the agent
+    at one of them, while the merge it is resolving is whole-repo (git operations already run at
+    the checkout root; only the agent's cwd is scoped). Left alone here because it is symmetric
+    with the own-repo path and predates this change: fixing it means deciding what scoping a
+    whole-repo REPAIR should have at all, which is not the fan-out's question.
   - **Deferred: `runMultiRepoCoding` ⇄ `runCodingAgent` duplication.** The multi-repo flow
     re-implements the no-op-result object, the `hasWork`/resumed-branch detection, and the
     involved-frame level resolution rather than sharing helpers with the single-repo path /

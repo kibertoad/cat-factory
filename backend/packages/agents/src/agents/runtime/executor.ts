@@ -1,11 +1,14 @@
 import { generateText } from 'ai'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
 import type {
+  DesignImageDelivery,
   ModelFlavor,
   ModelProvider,
   ModelProviderResolver,
   ModelRef,
+  ResolveBinaryArtifactStore,
 } from '@cat-factory/kernel'
+import { resolveDesignImageDelivery } from '@cat-factory/kernel'
 import { type AgentKindRegistry, defaultAgentKindRegistry } from '../kinds/registry.js'
 import { standardsVerbosityFor } from '../kinds/traits.js'
 import { systemPromptFor, userPromptFor } from '../catalog.js'
@@ -17,6 +20,11 @@ import {
   providerWebSearchTools,
   webResearchGuidanceFor,
 } from './web-search.js'
+import {
+  type LoadedDesignImage,
+  foldLoadedDesignImages,
+  loadDesignImages,
+} from './design-images.js'
 
 export interface AiAgentExecutorDependencies {
   /**
@@ -73,6 +81,17 @@ export interface AiAgentExecutorDependencies {
    * (built-ins only) when a facade doesn't inject one.
    */
   agentKindRegistry?: AgentKindRegistry
+  /**
+   * The account's binary-artifact store, for reading the bytes of the design pictures the engine
+   * resolved for this dispatch. Only ever called when the resolved model accepts images AND the
+   * context carries a set, so a deployment with no storage (which resolves no set in the first
+   * place) never reaches it.
+   *
+   * Optional because an inline executor is servable without it: the run then keeps the textual
+   * design description, and its prompt SAYS the pictures could not be delivered rather than
+   * pretending the task had none.
+   */
+  resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
 }
 
 /**
@@ -98,6 +117,7 @@ export class AiAgentExecutor implements AgentExecutor {
   private readonly runsInline?: (ref: ModelRef) => boolean
   private readonly webSearch?: InlineWebSearchOptions
   private readonly agentKindRegistry: AgentKindRegistry
+  private readonly resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
 
   constructor({
     modelProviderResolver,
@@ -108,6 +128,7 @@ export class AiAgentExecutor implements AgentExecutor {
     runsInline,
     webSearch,
     agentKindRegistry,
+    resolveBinaryArtifactStore,
   }: AiAgentExecutorDependencies) {
     if (!modelProviderResolver && !modelProvider) {
       throw new Error('AiAgentExecutor requires a modelProviderResolver or a modelProvider')
@@ -120,6 +141,53 @@ export class AiAgentExecutor implements AgentExecutor {
     this.runsInline = runsInline
     this.webSearch = webSearch
     this.agentKindRegistry = agentKindRegistry ?? defaultAgentKindRegistry()
+    this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
+  }
+
+  /**
+   * Settle what this inline call can do with the task's design pictures, and load the bytes when it
+   * can carry them.
+   *
+   * An ordinary inline call carries them as MESSAGE PARTS whatever harness the ref names:
+   * `harness: 'pi'` describes how a CONTAINER dispatch of that model is served, and here this
+   * executor composes the model message itself.
+   *
+   * The ambient inline path (`runsInline`) carries them by NEITHER route, which is why it is a
+   * refusal rather than a second carrier. The deployment serves the ref by driving its CLI as a
+   * host subprocess: `CliInlineLanguageModel` flattens the prompt to system + user TEXT on stdin,
+   * so an image part is dropped on the way out, and there is no checkout to write a file into
+   * either. Reading the container answer for the same CLI (`claude-code` opens image files) is what
+   * once left this path claiming `channel: 'files'` for a directory nothing ever wrote.
+   */
+  private async resolveDesignImages(
+    context: AgentRunContext,
+    ref: ModelRef,
+  ): Promise<{
+    context: Pick<AgentRunContext, 'designImages' | 'designImageDelivery'>
+    images: LoadedDesignImage[]
+  }> {
+    const set = context.designImages
+    if (!set?.files.length) return { context: {}, images: [] }
+    const delivery: DesignImageDelivery = this.runsInline?.(ref)
+      ? { attached: false, reason: 'inline_harness_text_only' }
+      : resolveDesignImageDelivery({ channel: 'message' }, ref)
+    if (!delivery.attached)
+      return { context: { designImages: set, designImageDelivery: delivery }, images: [] }
+    const resolveStore = this.resolveBinaryArtifactStore
+    if (!resolveStore || !context.workspaceId) {
+      // The set exists and this executor has no way to read its bytes: a facade that resolved
+      // pictures and wired no store. Reported as the transfer failure it is, never as an
+      // attachment of nothing.
+      return {
+        context: {
+          designImages: set,
+          designImageDelivery: { attached: false, reason: 'transfer_failed' },
+        },
+        images: [],
+      }
+    }
+    const loaded = await loadDesignImages(resolveStore, context.workspaceId, set)
+    return { context: foldLoadedDesignImages(set, loaded, delivery), images: loaded.images }
   }
 
   /** Resolve the model provider for a run's scope (per-scope DB pool, else the static one). */
@@ -222,10 +290,35 @@ export class AiAgentExecutor implements AgentExecutor {
       ? `${composed}${webResearchGuidanceFor(context.agentKind, this.agentKindRegistry, { fetch: false })}`
       : composed
 
+    // The task's design pictures: whether this model can be shown them, and their bytes when it
+    // can. Resolved BEFORE the prompt, because the prompt states what became of them.
+    const design = await this.resolveDesignImages(context, ref)
+    const promptContext: AgentRunContext = { ...context, ...design.context }
+    const userPrompt = userPromptFor(promptContext, this.agentKindRegistry)
+
     const { text, usage } = await generateText({
       model,
       system,
-      prompt: userPromptFor(context, this.agentKindRegistry),
+      // One user message carrying the prompt plus an image part per delivered picture, in the order
+      // the prompt names them. A plain `prompt` string whenever there is nothing to attach, so
+      // every run that carries no design is byte-identical on the wire to what it was before.
+      ...(design.images.length
+        ? {
+            messages: [
+              {
+                role: 'user' as const,
+                content: [
+                  { type: 'text' as const, text: userPrompt },
+                  ...design.images.map((image) => ({
+                    type: 'image' as const,
+                    image: image.data,
+                    mediaType: image.mediaType,
+                  })),
+                ],
+              },
+            ],
+          }
+        : { prompt: userPrompt }),
       temperature: config.temperature,
       // The engine resolves the effective ceiling once per dispatch (step option > workspace
       // setting > this deployment default), so every executor path agrees on the budget. Absent

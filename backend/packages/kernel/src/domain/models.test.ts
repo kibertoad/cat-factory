@@ -296,13 +296,18 @@ describe('resolveModelRef (the effective variant)', () => {
     expect(resolveModelRef('claude-opus-4-8', caps())).toEqual({
       provider: 'bedrock',
       model: 'anthropic.claude-opus-4-8',
+      acceptsImages: true,
     })
     expect(
       resolveModelRef(
         'claude-opus-4-8',
         caps({ bedrockModels: new Set(['us.anthropic.claude-opus-4-8']) }),
       ),
-    ).toEqual({ provider: 'bedrock', model: 'us.anthropic.claude-opus-4-8' })
+    ).toEqual({
+      provider: 'bedrock',
+      model: 'us.anthropic.claude-opus-4-8',
+      acceptsImages: true,
+    })
   })
 
   it('carries the bedrock window when the catalog declares one, and omits it when it does not', () => {
@@ -320,6 +325,7 @@ describe('resolveModelRef (the effective variant)', () => {
       model: 'claude-sonnet-5',
       harness: 'claude-code',
       contextTokens: 1_000_000,
+      acceptsImages: true,
     })
   })
 
@@ -875,6 +881,7 @@ describe('isModelUsableInline', () => {
           model: 'claude-sonnet-5',
           harness: 'claude-code',
           contextTokens: 1_000_000,
+          acceptsImages: true,
         },
       ])
     })

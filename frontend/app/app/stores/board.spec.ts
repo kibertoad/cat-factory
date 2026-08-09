@@ -256,10 +256,20 @@ describe('board store read getters', () => {
     s.hydrate([frame('f1', { title: 'Original', description: 'orig' })])
     // With no active workspace, `requireId()` throws inside updateBlock's try — the same catch
     // that a rejected API write hits — so this exercises the optimistic-rollback + toast path.
-    await s.updateBlock('f1', { title: 'Edited', description: 'changed' })
+    // The outcome is REPORTED to the caller, not only toasted: a caller that goes on to announce
+    // what the patch achieved (the monorepo import's frontend wiring) has to see the rollback.
+    await expect(s.updateBlock('f1', { title: 'Edited', description: 'changed' })).resolves.toBe(
+      false,
+    )
     expect(s.getBlock('f1')?.title).toBe('Original')
     expect(s.getBlock('f1')?.description).toBe('orig')
     expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ color: 'error' }))
+  })
+
+  it('updateBlock reports a no-op for a block that is not on the board', async () => {
+    // Nothing is patched and nothing is toasted, so the return value is the ONLY signal that the
+    // write did not happen.
+    await expect(store.updateBlock('missing', { title: 'Edited' })).resolves.toBe(false)
   })
 
   it('hydrate replaces and upsert inserts/updates cached blocks', () => {
@@ -305,9 +315,19 @@ describe('board store optimistic rollback', () => {
     }))
     const store = useBoardStore()
     store.hydrate([frame('f1'), task('t1', 'f1', { title: 'orig', description: 'keep' })])
-    await store.updateBlock('t1', { title: 'renamed' })
+    await expect(store.updateBlock('t1', { title: 'renamed' })).resolves.toBe(false)
     expect(store.getBlock('t1')?.title).toBe('orig')
     expect(store.getBlock('t1')?.description).toBe('keep')
+  })
+
+  it('updateBlock reports the patch persisted when the API accepts it', async () => {
+    vi.stubGlobal('useApi', () => ({
+      updateBlock: async () => task('t1', 'f1', { title: 'renamed' }),
+    }))
+    const store = useBoardStore()
+    store.hydrate([frame('f1'), task('t1', 'f1', { title: 'orig' })])
+    await expect(store.updateBlock('t1', { title: 'renamed' })).resolves.toBe(true)
+    expect(store.getBlock('t1')?.title).toBe('renamed')
   })
 
   it('previewResize translates the children when the drag moves the content origin', () => {

@@ -92,7 +92,7 @@ function makeBuilder(over: Partial<AgentContextBuilderDeps> = {}): {
   }
 }
 
-describe('AgentContextBuilder: reference designs for a capturing dispatch', () => {
+describe('AgentContextBuilder: the images a dispatch is handed', () => {
   it('resolves and NAMES the task’s references for a kind that declares the ui image', async () => {
     const made = makeBuilder()
     const s = step('tester-ui')
@@ -105,15 +105,27 @@ describe('AgentContextBuilder: reference designs for a capturing dispatch', () =
     })
   })
 
-  it('never asks for a kind that captures nothing', async () => {
+  it('gives a BUILDING kind the pictures instead of a capture manifest', async () => {
     const made = makeBuilder()
     const s = step('coder')
 
     const context = await made.builder.buildContext('ws1', instance(s), s, true, TASK)
 
-    // Absent, not empty: this dispatch did not ask, which is a different fact from a task with no
-    // references, and the two reads stay off the dispatch path of every ordinary run.
+    // Absent, not empty: this dispatch captures nothing, which is a different fact from a task
+    // with no references. It is shown the same artifacts to BUILD from instead.
     expect(context.referenceScreenshots).toBeUndefined()
+    expect(context.designImages?.files.map((file) => file.view)).toEqual(['Checkout'])
+  })
+
+  it('never asks for a kind that neither captures nor builds a screen', async () => {
+    const made = makeBuilder()
+    const s = step('merger')
+
+    const context = await made.builder.buildContext('ws1', instance(s), s, true, TASK)
+
+    // The reads stay off the dispatch path of every run with no use for either half.
+    expect(context.referenceScreenshots).toBeUndefined()
+    expect(context.designImages).toBeUndefined()
     expect(made.reads).toBe(0)
   })
 

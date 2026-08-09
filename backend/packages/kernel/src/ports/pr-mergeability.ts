@@ -22,7 +22,15 @@ export type MergeabilityVerdict = 'mergeable' | 'conflicted' | 'unknown'
 export interface RepoMergeability {
   /** The repo (owner/name) this PR is in. */
   repo: string
-  /** The involved-service frame whose repo this is; absent for the own-service PR. */
+  /**
+   * ONE involved-service frame this repo hosts, absent for the own-service PR and for a peer
+   * pull request whose attribution was not recorded.
+   *
+   * Singular on purpose, and not an under-reporting of a monorepo peer's several frames: a git
+   * conflict is per-REPO, so the id is only ever a hint. What ADDRESSES the conflicted checkout
+   * is {@link RepoMergeability.repo}, which the conflicts gate copies onto `conflictTarget` and
+   * `resolveConflictResolverPeer` resolves back to that repo's whole checkout.
+   */
   frameId?: string
   /** The PR head commit; null when no open PR/branch is resolved. */
   headSha: string | null

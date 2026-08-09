@@ -40,12 +40,11 @@ import {
   agentTuningFor,
   withComplexityAllowance,
   defaultAgentKindRegistry,
-  isProxyableProvider,
   isReadOnlyAgentKind,
   webResearchGuidanceFor,
 } from '@cat-factory/agents'
 import { ModelRouter } from './ModelRouter.js'
-import { buildContextFiles, renderSkillsForHarness } from './contextFiles.js'
+import { buildDispatchContextFiles, renderSkillsForHarness } from './contextFiles.js'
 import {
   dispatchToolServerDeps,
   resolveDispatchToolServers,
@@ -70,6 +69,7 @@ import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.
 import type { ResolveRepoTargets } from './resolveRepoTarget.js'
 import {
   buildCommonBody,
+  dispatchDesignImageDelivery,
   buildRepoSpec,
   githubRepoOrigin,
   resolveAuxiliaryRepos,
@@ -946,7 +946,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // re-attaches to the prior round's completed job on a container-reusing transport.
     const jobId = stepJobId(executionId, context.agentKind, context.dispatchEpoch)
 
-    const { ref, harness, subscriptionVendor } = await this.resolveDispatchModel(
+    const { ref, harness, subscriptionVendor } = await this.modelRouter.resolveDispatchRef(
       context,
       workspaceId,
     )
@@ -1028,18 +1028,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Linked-context bodies are materialised into the checkout (under CONTEXT_DIR) so a
     // container agent can read what it needs on demand; the prompt only lists them. The
     // harness can't reach Jira/GitHub itself, so everything is prepared here, up front.
-    const { files: contextFiles } = buildContextFiles(context)
-    // Files a registered kind's preOp prepared for the agent to read up front (e.g. the
-    // `pr-reviewer` diff) — materialised into `.cat-context/` alongside the linked-doc files.
-    // The preOp already bounded their size; the agent's own prompt names the paths, so they need
-    // no linked-doc index entry (which is why they aren't fed through `buildContextFiles`).
-    for (const injected of context.injectedContextFiles ?? [])
-      contextFiles.push({
-        path: injected.path,
-        title: injected.path,
-        url: '',
-        content: injected.content,
-      })
+    const contextFiles = buildDispatchContextFiles(context)
     // The dispatch's resolved skills (a `skill` step's pick and/or the running kind's declared
     // playbooks), rendered harness-aware: the payload travels as the top-level `skills` job-body
     // field (the harness materialises them — natively for claude-code, under
@@ -1074,6 +1063,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Resolve the repo origin once so both the harness `RepoSpec` and the diagnostics repo
     // summary (returned below) agree on the VCS provider.
     const origin = (this.deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)
+    const designImageDelivery = dispatchDesignImageDelivery(context, harness, ref)
     const common = buildCommonBody(
       context,
       {
@@ -1094,6 +1084,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           tuning?.guardLimits,
           context.block.estimate?.complexity,
         ),
+        // Only a dispatch that can actually show them sends a manifest: a harness with no image
+        // input would download the frames into a directory nothing ever opens, and its prompt
+        // already says (from the same verdict) that the pictures could not be delivered.
+        ...(designImageDelivery?.attached ? { designImages: context.designImages } : {}),
       },
       this.deps,
       this.agentKindRegistry,
@@ -1111,6 +1105,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(tools.unavailableToolServers.length
         ? { unavailableToolServers: tools.unavailableToolServers }
         : {}),
+      ...(designImageDelivery ? { designImageDelivery } : {}),
     }
     // The proxy-backed web-tools nudge + switch, shared by the kinds that allow web access
     // (coder/mocker/ci-fixer/fixer/tester/read-only). `search` was resolved in the wave above;
@@ -1209,39 +1204,6 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       testSecretEnv: args.resolvedTestSecrets.map((e) => ({ key: e.key, value: e.value })),
       generatorSecrets,
     }
-  }
-
-  /**
-   * The model this dispatch runs and the harness that will run it, resolved together because
-   * the second is a property of the first. "Subscriptions always win": a subscription-only model
-   * carries its harness; a dual-mode GLM/Kimi step pinned to its Cloudflare base is auto-routed
-   * to Claude Code when the workspace has a pooled token for the vendor. Shared with
-   * `isQuotaBased` so the dispatch and the spend gate agree on what the step runs.
-   *
-   * The Pi harness reaches models through the LLM proxy, so its model must be a provider the
-   * proxy can serve; locking it here stops the container choosing another. The subscription
-   * harnesses (Claude Code / Codex) talk direct to the vendor with a pooled token, so the
-   * proxyable guard does not apply to them.
-   */
-  private async resolveDispatchModel(
-    context: AgentRunContext,
-    workspaceId: string,
-  ): Promise<{ ref: ModelRef; harness: HarnessKind; subscriptionVendor?: SubscriptionVendor }> {
-    const { ref, subscriptionVendor } = await this.modelRouter.resolveEffectiveRef(
-      context,
-      workspaceId,
-    )
-    const harness: HarnessKind = ref.harness ?? 'pi'
-    if (harness === 'pi' && !isProxyableProvider(ref.provider)) {
-      throw new Error(
-        `Container implementation needs a model the LLM proxy can serve ` +
-          `(Workers AI, a direct OpenAI-compatible provider, or a local runner); ` +
-          `'${ref.provider}' is not supported. Pick a Workers AI model, configure a ` +
-          `provider key (QWEN_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY), or add a local ` +
-          `runner (Ollama / LM Studio / …) and pick that model.`,
-      )
-    }
-    return { ref, harness, ...(subscriptionVendor ? { subscriptionVendor } : {}) }
   }
 
   /**

@@ -1,5 +1,176 @@
 # @cat-factory/kernel
 
+## 0.285.0
+
+### Minor Changes
+
+- 22b2459: Make each design-picture delivery site state the channel it actually has.
+
+  The shipped delivery decision derived its channel from whether the resolved ref named a harness,
+  which is not the same question and is wrong on exactly the surfaces that cannot carry a picture at
+  all. Delivery now takes a `DesignImageCarrier` the dispatch site declares: `files` plus the harness
+  for a container dispatch, `message` for an inline call that composes its own request.
+
+  Two surfaces refuse under their own reason instead of promising something. The AMBIENT INLINE path
+  (a deployment serving a subscription ref by driving the developer's CLI as a host subprocess) named
+  a harness whose container dispatch opens image files, so it claimed `.cat-context/design-renders/`
+  on a call with no checkout and a prompt flattened to text. A CONSENSUS PANEL resolved no verdict at
+  all, so its participants heard neither that pictures existed nor that they were withheld; it now
+  states the ceiling exactly as it already does for the tool servers it cannot reach.
+
+  Three more corrections to the same slice. The runner-image capability handshake never fired for
+  `designImages`, because "the body carries this capability" was a populated-ARRAY test and the design
+  manifest is an object, so an image predating the field ignored it while the prompt named a directory
+  nothing wrote; carrying is now a per-capability predicate. The omission notice no longer attributes
+  transfer losses to a ceiling nor sizes that ceiling from the DELIVERED count. And the LLM proxy's
+  Workers AI output cap measures the payload it forwards rather than the image-redacted copy kept for
+  telemetry, which would under-reserve context-window room by the size of every attached picture.
+
+- 2428b6b: Attribute a cross-service run's pull request to every involved service frame whose changes ride
+  it, not just the first.
+
+  The multi-repo fan-out checks out one repo per REPO, so several involved services living in one
+  monorepo already shared a checkout, a work branch and a single pull request. Only the RECORD was
+  singular, which left every frame but the first looking like a service the run had opened no pull
+  request for. The attribution is now a set (`frameIds`) from the dispatch through the harness echo
+  to `block.peerPullRequests`, the merge order, and the verification report. The own-service report
+  carries it too, naming the involved services co-located in the task's own repo: those open no pull
+  request of their own, so that report is the only place their change is reported. A peer checkout
+  also stops inheriting one co-located service's `serviceDirectory`: it is whole-repo, as the primary
+  already was, so the services that resolved second are reachable.
+
+  A recorded peer pull request is now ADDRESSED by its repo rather than by its frames, which is what
+  a checkout is identified by, and one the platform cannot resolve is named to the merger instead of
+  being dropped from the combined diff it scores.
+
+  Internal break: `peerPullRequestSchema.frameId`, `allPullRequests`, `MergePrEntry.frameId`,
+  `PrReportTarget.frameId` and the harness `peerRepos`/`peerPullRequests` wire fields are replaced
+  by `frameIds`. Peer PRs recorded on a block before this ship lose their frame attribution (the
+  pull requests themselves are untouched). Public `/api/v1` is additive only: `PrReportScope` gains
+  `frameIds` and keeps `frameId` as its head (surface version 1.40.0). `frameId` is no longer always
+  null on an own-service report: it names a co-located involved service when there is one.
+
+  The runner image moves to `cat-factory-executor:1.109.0`.
+
+### Patch Changes
+
+- Updated dependencies [2428b6b]
+  - @cat-factory/contracts@0.291.0
+
+## 0.284.0
+
+### Minor Changes
+
+- 19baddf: Show a task's design PICTURES to the agents that build the screen.
+
+  The frames an import retains for a linked design (Figma, Zeplin) already fed the
+  visual-confirmation gate and the UI tester's capture set. They now also reach the kinds that build
+  or plan a screen, on the two channels a dispatch can actually carry an image over: written into
+  `.cat-context/design-renders/` for a harness whose CLI reads image files, and attached to the model
+  request as image parts for an inline call. Which kinds get them is a declared trait
+  (`design-images`, on `coder` / `architect` / `fixer`), so a deployment's own UI kind opts in the
+  same way.
+
+  Delivery joins two DECLARED facts, and neither is inferred: `HARNESS_IMAGE_INPUT` says which agent
+  CLI can get bytes into a turn (`claude-code`; Codex and Pi are `false` with their reason stated),
+  and the new per-flavour `ModelRef.acceptsImages` says which model takes one. A dispatch that cannot
+  show the pictures TELLS the agent they exist, with which of the two is missing, so the textual
+  design description never reads as everything the platform had. An UNDECLARED model modality is its
+  own refusal reason rather than a silent "no", so an undeclared multimodal model cannot read as a
+  text-only one forever.
+
+  **Runner image bump** (`cat-factory-executor:1.107.0`): the harness gained the download for the new
+  manifest, and `designImages` joins `HARNESS_BODY_CAPABILITIES`, so a deployment running an older
+  image is told rather than leaving the backend's prompt naming a directory nothing wrote. Mirror the
+  tag into your registry and roll it out; nothing else in the change requires it.
+
+  Recorded prompt bodies now pass through `redactImagePayloads` on both the inline and proxy paths: a
+  `Uint8Array` JSON-stringifies to one entry per byte, so an attached frame would otherwise have
+  landed in telemetry as megabytes per recorded call.
+
+## 0.283.0
+
+### Minor Changes
+
+- 31f43c1: Let a generative binary integration declare WHICH values it accepts, not only that it accepts the option.
+
+  A capability is a yes/no, and for several real endpoints the honest answer is "yes, at one of these".
+  Two image APIs both declare `aspect-ratio`: one honours any ratio because it takes a width and a
+  height, the other offers a picklist of ten. A step asking for `7:3` is admitted against both and
+  served by one. Nothing reports the crop, because the modality is covered, the format is covered and
+  the upload succeeded. That is the silent wrong artifact the capability axis exists to prevent,
+  arriving through the capability axis, and no wording of a yes/no repairs it.
+
+  So a definition may also declare `accepts`: the closed SETS of values it takes, for the three options
+  with an enumerable domain (`aspectRatios`, `outputSizes`, `upscaleFactors`). Admission refuses a
+  value nothing selected accepts, naming what they do accept; the pipeline builder raises the same
+  refusal where the fix is a visible field; and each integration's accepted sets are stated in the
+  agent's brief beside its formats, since an agent holding two image APIs chooses per artifact.
+
+  **FIVE outcomes, judged per option and per DECLARER over the integrations that declare the gating
+  capability.** Nobody stating a set is SILENT, which is the one that let this ship: it is the state
+  every registration is in until someone audits an endpoint, and an advisory firing there would ride
+  nearly every step carrying an aspect ratio. Every stated set containing the value is covered; a
+  value one stated set contains and another EXCLUDES is PARTIAL, reported with the integrations that
+  exclude it named; a value on no stated set with some declarer silent is UNVERIFIABLE and reported; a
+  value every declarer enumerated away is refused.
+
+  The partial outcome is the motivating example itself, so judging on the first accepting declarer
+  would have shipped the axis silent about the case that justified it: two endpoints enumerate, one
+  takes the value and the other crops, no refusal and no advisory, while the brief's provider list
+  names both as honouring the option. It also inverts the reporting, which is the sharper argument: a
+  declarer that stated NOTHING raises an advisory, so auditing that endpoint and writing down an
+  accurate set would have bought silence. It is advisory rather than a refusal for the reason one
+  declarer covers a capability, since which integration renders which artifact is the agent's call;
+  naming the ones that refuse is what makes it actionable.
+
+  **A stated set whose gating capability is undeclared fails BOOT**
+  (`binary_generator_accepts_without_capability`). The two halves are otherwise believed by different
+  readers: the brief renders the set as fact, the value rule judges only over the capability's
+  declarers and never sees it, and admission refuses every step asking for the option as
+  `capability_unsupported`. That is the accurate half made unreachable and the step refused for
+  lacking a capability the same registration was documenting.
+
+  **This supersedes a rule the previous release stated**, and the two are worth reading in order.
+  `@cat-factory/contracts@0.289.0`'s note said a capability "says the request can CARRY a value, never
+  which values are accepted", and put an endpoint offering a closed list of exact `WxH` sizes on
+  `aspect-ratio` rather than `exact-size`. The first half survives and is now the boundary between the
+  two fields; the second half is reversed below, and a definition written to it keeps working
+  unchanged, since it declares a capability it genuinely has and gains the more honest one plus a set.
+  What changed is not the principle but a fact about where staleness cuts: a declared set that is too
+  narrow refuses by name, which is visible and one word to fix, while the behaviour it replaces is
+  silent and delivers the wrong asset.
+
+  **`exact-size` changes meaning, and this is the part to look at.** It used to mean ARBITRARY
+  dimensions, which forced an endpoint whose `size` parameter offers a closed list of `WxH` values to
+  declare `aspect-ratio` instead: a size-taking API classified as shape-taking, with a step needing
+  96x96 admitted against one whose nearest listed value is 1024x1024. The capability now answers what
+  the REQUEST CARRIES (a shape on `aspect-ratio`, dimensions on `exact-size`, both when both) and
+  `accepts.outputSizes` answers which ones. Capabilities are deployment code and are never persisted,
+  so no data migrates and no registration breaks: a definition that declared `aspect-ratio` for its
+  size list keeps working unchanged and gains a more honest option.
+
+  What deliberately did NOT ship, because each is the failure this axis is about wearing a new costume.
+  A range (`min`/`max`/`step`/`multiple-of`) is a constraint language, and the first thing it would
+  have to express is "any pair up to 4 MP in multiples of 32", which is the `resolutionRange`
+  discriminator the design record refuses; an endpoint with a genuine range declares the capability,
+  states no set, and puts its limits in `guidance`. A "closest supported value" rule would turn the
+  refusal back into a silent substitution. And an endpoint with no parameter at all still declares
+  nothing: `upscale: [2]` for an upscaler that enlarges at its own fixed ratio is not a narrower
+  statement of the truth, it is a fabricated one.
+
+  An empty list is refused at registration, so absent stays the one spelling of "not stated". A
+  mothership-mode node absorbs a reply with no `accepts` (an older mothership serves none, and every
+  option is then judged exactly as it was before this field existed), checking that a present one is an
+  object and that each member it knows is an array, which is the same tolerance the capability axis
+  gets and the opposite of the credential list's refusal. A member this build has no table entry for is
+  left alone rather than refused, so a mothership one build ahead is not an ordering constraint.
+
+### Patch Changes
+
+- Updated dependencies [31f43c1]
+  - @cat-factory/contracts@0.290.0
+
 ## 0.282.1
 
 ### Patch Changes

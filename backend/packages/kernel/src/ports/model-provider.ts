@@ -33,6 +33,20 @@ export interface ModelRef {
    * user sees the window the selected flavour will really give them. Absent ⇒ unknown.
    */
   contextTokens?: number
+  /**
+   * Whether this flavour accepts IMAGE input, so a run can put a design render in front of it.
+   *
+   * Per-flavour for the same reason {@link ModelRef.contextTokens} is: what a serving provider
+   * does with a modality is a fact about where the model runs, not only about the model. A
+   * flavour is marked `true` only where the serving provider documents image input for that
+   * model id.
+   *
+   * ABSENT is a real third answer and the default: this catalog has not declared the flavour's
+   * modality either way. It is NOT "no" — `resolveDesignImageDelivery` reports it under its own
+   * reason, so an undeclared multimodal model reads as the platform's silence rather than as a
+   * text-only model, which is what stops the gap from becoming permanent.
+   */
+  acceptsImages?: boolean
 }
 
 /**

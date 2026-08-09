@@ -30,7 +30,12 @@ const OPENS_NO_PULL_REQUEST: Record<string, string> = {
     'target repo carries no template to respect yet.',
 }
 
-const SOURCES = ['../src/agent.ts', '../src/coding-agent.ts', '../src/bootstrap-mode.ts']
+const SOURCES = [
+  '../src/agent.ts',
+  '../src/coding-agent.ts',
+  '../src/multi-repo-coding.ts',
+  '../src/bootstrap-mode.ts',
+]
 
 /**
  * Top-level function bodies, keyed by name. Crude on purpose, as in the sibling guard — the two

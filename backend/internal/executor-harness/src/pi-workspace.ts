@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, readdir, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { RepoSpec, ReferenceScreenshotsSpec } from './job.js'
-import { deliverReferenceScreenshots } from './reference-screenshots.js'
+import type { RepoSpec, ImageManifestSpec } from './job.js'
+import { deliverJobImages } from './job-images.js'
 import type { McpServerSpec, SkillSpec } from './agent-capabilities.js'
 import { readEffortReport } from './effort.js'
 import { log } from './logger.js'
@@ -218,7 +218,14 @@ export interface AgentRunSpec {
    * before the run and named in the agent's prompt, so a capturing agent can compare against them
    * and use their view names. Absent ⇒ nothing is downloaded and nothing is said.
    */
-  referenceScreenshots?: ReferenceScreenshotsSpec
+  referenceScreenshots?: ImageManifestSpec
+  /**
+   * The PICTURES of the task's designs. Downloaded into `.cat-context/design-renders/` before the
+   * run; the agent's prompt (composed by the backend) already names each file and its view, so the
+   * only thing said here is a CORRECTION when one of them did not land. Absent ⇒ nothing is
+   * downloaded and nothing is said.
+   */
+  designImages?: ImageManifestSpec
   /**
    * The skills to make available for this run — a `skill` step's picked skill and/or the playbooks
    * the running agent kind declares. Installed HARNESS-AWARE: the claude-code runner writes them
@@ -301,7 +308,7 @@ export async function runAgentInWorkspace(
   // cannot report a view an earlier round successfully delivered as absent. A view that MISSED is
   // retried, which is the behaviour worth having: the next round is a fresh chance at a blob
   // backend that was briefly down.
-  const referenceGuidance = await deliverReferenceScreenshots(spec.dir, spec.referenceScreenshots, {
+  const imageGuidance = await deliverJobImages(spec, {
     ...(opts.signal ? { signal: opts.signal } : {}),
     log: opts.log ?? log,
   })
@@ -328,7 +335,7 @@ export async function runAgentInWorkspace(
     const subOutcome = await runSubscriptionHarness(spec.harness, {
       cwd: spec.dir,
       model: spec.model,
-      systemPrompt: `${subscriptionSystemPrompt(spec.systemPrompt, contextFiles)}${referenceGuidance}`,
+      systemPrompt: `${subscriptionSystemPrompt(spec.systemPrompt, contextFiles)}${imageGuidance}`,
       userPrompt: spec.userPrompt,
       ...(spec.subscriptionToken ? { subscriptionToken: spec.subscriptionToken } : {}),
       subscriptionBaseUrl: spec.subscriptionBaseUrl,
@@ -398,7 +405,7 @@ export async function runAgentInWorkspace(
     serviceDirectory: spec.serviceDirectory,
     contextFiles,
     hasBlueprints,
-    ...(referenceGuidance ? { referenceGuidance } : {}),
+    ...(imageGuidance ? { referenceGuidance: imageGuidance } : {}),
     ...(spec.multiRepo ? { multiRepo: true } : {}),
   })
   // Pi's calls are metered server-side by the LLM proxy, which sees only an HTTP request — so

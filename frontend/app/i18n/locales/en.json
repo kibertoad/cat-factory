@@ -4309,6 +4309,9 @@
       "monorepoBrowseHint": "Browse the repository and select the directories of the services you want to add — from any folder. Agents working on a service run within its subdirectory.",
       "selectedServices": "Selected services",
       "noServicesSelected": "No services selected yet. Pick directories above.",
+      "frontendLabel": "Frontend app (optional)",
+      "frontendHint": "Mark one of the selected directories as the frontend for the rest. It is added as a frontend app pinned to that subdirectory and linked to every backend service added beside it. Name each backend URL environment variable afterwards in the frontend's inspector.",
+      "frontendNone": "None: every selection is a backend service",
       "addServices": "Add {count} service | Add {count} services",
       "@addServices": {
         "description": "Count-driven button label; resolved via t(key, { count }, count) so {count} also drives the plural choice. Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
@@ -4328,7 +4331,9 @@
         "servicesAddedDescription": "{count} service added to the board. | {count} services added to the board.",
         "@servicesAddedDescription": {
           "description": "Count-driven toast; resolved via t(key, { count }, count) so {count} also drives the plural choice. Provide ALL plural forms your language needs (Polish/Ukrainian need 3 - one/few/many)."
-        }
+        },
+        "frontendLinkedNote": "{directory} was added as the frontend and linked to the others. Name its backend URL environment variables in its inspector.",
+        "frontendWiringFailedNote": "The frontend settings did not save. Open each frontend app's inspector to set its subdirectory and its backend services."
       }
     },
     "repoTree": {

@@ -101,6 +101,24 @@ export interface SkillJobBody {
 }
 
 /**
+ * Every file a dispatch materialises into `.cat-context/`: the linked-context bodies plus whatever
+ * a registered kind's preOps prepared.
+ *
+ * The two producers ACCUMULATE, and the preOp files deliberately skip {@link buildContextFiles}:
+ * their size was already bounded where they were produced, and the agent's own prompt names their
+ * paths, so they need no linked-doc index entry. Assembled here rather than at the dispatch site so
+ * a second caller cannot end up materialising only one of the two halves.
+ */
+export function buildDispatchContextFiles(
+  context: AgentRunContext,
+): ReturnType<typeof buildContextFiles>['files'] {
+  const { files } = buildContextFiles(context)
+  for (const injected of context.injectedContextFiles ?? [])
+    files.push({ path: injected.path, title: injected.path, url: '', content: injected.content })
+  return files
+}
+
+/**
  * Render the dispatch's resolved skills for the running harness — a step's picked skill and/or
  * the skills the running agent KIND declared. The payload always travels as the dedicated
  * top-level `skills` job-body field (NEVER a context file — the agent-context snapshot copies
