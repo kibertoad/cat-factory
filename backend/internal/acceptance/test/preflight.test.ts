@@ -4,6 +4,8 @@ import {
   blockingResults,
   formatPreflightFailure,
   formatPreflightLine,
+  formatPrerequisiteFailure,
+  formatRemedy,
   type Prerequisite,
   type PrerequisiteVerdict,
   runPreflight,
@@ -33,12 +35,16 @@ const satisfied: PrerequisiteVerdict = { status: 'satisfied', detail: 'all good'
 const unsatisfied: PrerequisiteVerdict = {
   status: 'unsatisfied',
   problem: 'the thing is not wired',
-  remedy: 'wire the thing',
+  remedy: {
+    steps: ['wire the thing', 'restart it'],
+    commands: [{ run: 'curl -sS http://127.0.0.1:8787/health', purpose: 'confirm it came back' }],
+    docs: 'backend/docs/wiring.md',
+  },
 }
 const unreadable: PrerequisiteVerdict = {
   status: 'unknown',
   probeFailure: 'the app API answered 403',
-  remedy: 'run the deployment open',
+  remedy: { steps: ['run the deployment open'] },
 }
 
 describe('runPreflight', () => {
@@ -135,6 +141,63 @@ describe('formatPreflightFailure', () => {
   it('is null when every required prerequisite holds', async () => {
     const report = await runPreflight([prerequisite('a', 'required', satisfied)], undefined)
     expect(formatPreflightFailure(report)).toBeNull()
+  })
+
+  it('carries the commands into the refusal, which is the only place a resumed pass reads', async () => {
+    // A pass resumed into spec 02 never runs spec 00, so this one string is the whole report.
+    // Losing the commands here would leave the instructions readable only on a fresh pass.
+    const report = await runPreflight([prerequisite('a', 'required', unsatisfied)], undefined)
+    expect(formatPreflightFailure(report)).toContain('curl -sS http://127.0.0.1:8787/health')
+  })
+})
+
+describe('formatRemedy', () => {
+  it('numbers the steps and prints each command under its purpose', () => {
+    const rendered = formatRemedy({
+      steps: ['first', 'second'],
+      commands: [{ run: 'echo hi', purpose: 'say hi' }],
+      docs: 'docs/x.md',
+    })
+    // The purpose is a shell COMMENT above the command rather than prose beside it, so the whole
+    // block can be selected and pasted and is still a valid (and self-documenting) script.
+    expect(rendered).toContain('  1. first')
+    expect(rendered).toContain('  2. second')
+    expect(rendered).toContain('    # say hi\n    echo hi')
+    expect(rendered).toContain('Docs: docs/x.md')
+  })
+
+  it('prints no command heading for a fix that has none', () => {
+    // Minting a token and raising a budget are console actions. An empty "Run:" under one reads
+    // as a command that failed to render, which is worse than the absence it is reporting.
+    const rendered = formatRemedy({ steps: ['open the settings screen'] })
+    expect(rendered).not.toContain('Run:')
+    expect(rendered).toBe('  1. open the settings screen')
+  })
+})
+
+describe('formatPrerequisiteFailure', () => {
+  it('states what the prerequisite guarantees, what is wrong, and how to fix it', () => {
+    const rendered = formatPrerequisiteFailure({
+      id: 'vcs',
+      what: 'what vcs guarantees',
+      disposition: 'required',
+      verdict: unsatisfied,
+    })
+    expect(rendered).toContain('vcs (what vcs guarantees)')
+    expect(rendered).toContain('the thing is not wired')
+    expect(rendered).toContain('Fix:')
+    expect(rendered).toContain('1. wire the thing')
+  })
+
+  it('keeps an unreadable probe distinguishable from an unmet prerequisite', () => {
+    const rendered = formatPrerequisiteFailure({
+      id: 'vcs',
+      what: 'what vcs guarantees',
+      disposition: 'required',
+      verdict: unreadable,
+    })
+    expect(rendered).toContain('NOT a verdict')
+    expect(rendered).toContain('run the deployment open')
   })
 })
 

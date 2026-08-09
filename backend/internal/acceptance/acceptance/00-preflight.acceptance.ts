@@ -17,7 +17,12 @@
 // named claims rather than as one long error string.
 
 import { beforeAll, describe, expect, it } from 'vitest'
-import { advisoryNotes, formatPreflightLine, type PreflightReport } from '../src/preflight.ts'
+import {
+  advisoryNotes,
+  formatPreflightLine,
+  formatPrerequisiteFailure,
+  type PreflightReport,
+} from '../src/preflight.ts'
 import { PREREQUISITES } from '../src/prerequisites.ts'
 import { harness, preflightReport } from './fixtures.ts'
 
@@ -45,7 +50,10 @@ describe('preflight: the deployment, the key, the wiring and the cluster', () =>
         if (result.verdict.status !== 'satisfied') console.warn(formatPreflightLine(result))
         return
       }
-      expect(result.verdict.status, formatPreflightLine(result)).toBe('satisfied')
+      // The assertion message is the FULL failure (problem, then numbered steps and commands)
+      // rather than the one-line summary: this is the report a person reads when exactly one
+      // prerequisite is red, and sending them to another file for the fix wastes the report.
+      expect(result.verdict.status, `\n${formatPrerequisiteFailure(result)}\n`).toBe('satisfied')
     },
   )
 

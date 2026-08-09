@@ -7,7 +7,8 @@ local deployment with nothing faked. Full notes: [`README.md`](./README.md).
 **Entry:** `acceptance/*.acceptance.ts` via
 `pnpm --filter @cat-factory/acceptance run acceptance`. Needs a running deployment, a k3s cluster
 and real model credentials; `src/config.ts` refuses with the whole list of missing VARIABLES, and
-`src/prerequisites.ts` then refuses with the whole list of unsatisfied DEPLOYMENT conditions.
+`src/prerequisites.ts` then refuses with the whole list of unsatisfied DEPLOYMENT conditions, each
+carrying the steps and commands that fix it.
 
 **A pass is watchable and resumable, and both are load-bearing rather than conveniences.**
 `pnpm --filter @cat-factory/acceptance run status [runId|latest]` reduces the ledger and the
@@ -35,9 +36,13 @@ every CI lane.
 **The rules the specs are written to** (each expanded in the README, and each the reason a
 particular file exists):
 
-0. **Refuse before spending.** `src/prerequisites.ts` runs in EVERY spec's `beforeAll`, not just
-   spec 00: a resumed pass starts where it stopped, so a gate only the first file mounts is one
-   the resume path skips. An unreadable probe is its own verdict, never read as "unmet".
+0. **Refuse before spending, with the fix attached.** `src/prerequisites.ts` runs in EVERY spec's
+   `beforeAll`, not just spec 00: a resumed pass starts where it stopped, so a gate only the first
+   file mounts is one the resume path skips. An unreadable probe is its own verdict, never read as
+   "unmet". Every negative verdict carries a `Remedy` (numbered steps, pasteable commands, a doc),
+   built by the check from what it just READ, so the command holds the real workspace id or account
+   rather than a hole. A fix with no CLI names the screen and offers the read that confirms it:
+   never a plausible-looking invented command.
 1. **Assert on evidence the platform COMPUTED, never on agent prose.** `src/evidence.ts` reduces
    the verification report; grepping a coder's reply tests the model's phrasing, not the product.
 2. **Never auto-answer an unplanned decision, and never answer one in FLIGHT.**

@@ -13,7 +13,7 @@ import { waitFor } from './deadline.ts'
 import { isActionable } from './decisions.ts'
 import type { Journal } from './journal.ts'
 
-export type { PublicDecisionList, PublicRun, PublicService }
+export type { PublicDecisionList, PublicIdentity, PublicRun, PublicService }
 
 export function createClient(config: AcceptanceConfig): CatFactoryClient {
   return new CatFactoryClient({ baseUrl: config.baseUrl, apiKey: config.apiKey })
@@ -28,26 +28,43 @@ export function createClient(config: AcceptanceConfig): CatFactoryClient {
  * which reads as a broken deployment), and a key below `admin` (spec 01 creates services and
  * spec 03 answers a human gate, so a `write` key gets a third of the way and refuses).
  *
- * A returned string rather than a throw, because the prerequisite gate reports it as one verdict
+ * A returned value rather than a throw, because the prerequisite gate reports it as one verdict
  * beside nine others: refusing out of the first probe is what collecting every problem exists to
  * avoid.
+ *
+ * The `code` is a CLOSED vocabulary rather than decoration on the prose: the two failures have
+ * different fixes (one is an environment variable, the other is a token that must be minted
+ * again), so `prerequisites.ts` keys its instructions off it and gains a compile error rather
+ * than a paraphrase when a third failure is added here.
  */
-export function describeKeyProblem(identity: PublicIdentity, workspaceId: string): string | null {
+export type KeyProblem = {
+  code: 'workspace-mismatch' | 'insufficient-scope'
+  problem: string
+}
+
+export function describeKeyProblem(
+  identity: PublicIdentity,
+  workspaceId: string,
+): KeyProblem | null {
   if (identity.workspaceId !== workspaceId) {
-    return (
-      `CAT_FACTORY_API_KEY is bound to workspace ${identity.workspaceId}, but ` +
-      `ACCEPTANCE_WORKSPACE_ID is ${workspaceId}. The public API is workspace-scoped and the ` +
-      `app-API setup calls are addressed by id, so the two must name the same board.`
-    )
+    return {
+      code: 'workspace-mismatch',
+      problem:
+        `CAT_FACTORY_API_KEY is bound to workspace ${identity.workspaceId}, but ` +
+        `ACCEPTANCE_WORKSPACE_ID is ${workspaceId}. The public API is workspace-scoped and the ` +
+        `app-API setup calls are addressed by id, so the two must name the same board.`,
+    }
   }
   // The ladder is INCLUSIVE, so this is the rung test the contract asks for, not an equality
   // check: `admin` is the top and is what spec 01 (create a service) and spec 03 (answer the
   // clarity gate, which needs `decide`) between them require.
   if (identity.scope !== 'admin') {
-    return (
-      `CAT_FACTORY_API_KEY is scoped '${identity.scope}'. This suite creates services (admin) ` +
-      `and answers a parked human gate (decide), so it needs an 'admin' key.`
-    )
+    return {
+      code: 'insufficient-scope',
+      problem:
+        `CAT_FACTORY_API_KEY is scoped '${identity.scope}'. This suite creates services (admin) ` +
+        `and answers a parked human gate (decide), so it needs an 'admin' key.`,
+    }
   }
   return null
 }

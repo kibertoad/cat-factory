@@ -16,17 +16,54 @@
 //      fix a model catalog when the real problem is that the app API refused the request. So a
 //      verdict is one of THREE states and an `unknown` on a required prerequisite blocks with a
 //      message about the PROBE, not about the thing probed.
-//   3. **A remedy travels with every negative verdict.** The value here is not the refusal, it is
-//      that the refusal names the next action.
+//   3. **A remedy travels with every negative verdict, and it is INSTRUCTIONS.** The value here is
+//      not the refusal, it is that the refusal can be ACTED on without a second search: ordered
+//      steps, and the exact command where a command exists. See `Remedy` for what that costs a
+//      check to build and why a fix with no CLI states its screen rather than inventing one.
 //
 // The checks themselves live in `prerequisites.ts`. This file holds the vocabulary, the runner and
 // the pure reductions the specs and `test/preflight.test.ts` assert on.
 
+/**
+ * One command an operator can paste, with what it does.
+ *
+ * `purpose` is not decoration. Half of these reach a live cluster or a live deployment, and a
+ * command whose effect a person cannot judge before running it is worse than the sentence it
+ * replaced: they either run it blind or go and read the docs anyway.
+ */
+export type RemedyCommand = {
+  run: string
+  purpose: string
+}
+
+/**
+ * How to fix ONE unmet prerequisite: what to do, what to run, and where to read the long version.
+ *
+ * **Commands are RENDERED, never illustrative.** A remedy is built by the check that just failed,
+ * so it carries the values that check read (the workspace the key actually names, the account the
+ * workspace is actually connected to, the template that failed to render) instead of an
+ * `<angle-bracket>` the reader has to go and resolve. That is the whole difference between
+ * instructions and a description of instructions.
+ *
+ * **A fix with no CLI names the screen instead.** `commands` is optional because minting an API
+ * token, raising a budget and re-connecting a VCS account are console actions, and a
+ * plausible-looking invented command sends someone to a shell that will refuse them. Where the
+ * fix is done in the UI, a read-only command that CONFIRMS it landed is still worth carrying:
+ * it is the half a terminal can do.
+ */
+export type Remedy = {
+  /** Ordered, imperative, one action each. Never empty: a remedy with no step is not one. */
+  steps: readonly string[]
+  commands?: readonly RemedyCommand[]
+  /** A repo-relative doc path or a URL that deepens the steps, which stay sufficient without it. */
+  docs?: string
+}
+
 /** What one prerequisite check concluded. See rule 2 above for why `unknown` is its own state. */
 export type PrerequisiteVerdict =
   | { status: 'satisfied'; detail: string }
-  | { status: 'unsatisfied'; problem: string; remedy: string }
-  | { status: 'unknown'; probeFailure: string; remedy: string }
+  | { status: 'unsatisfied'; problem: string; remedy: Remedy }
+  | { status: 'unknown'; probeFailure: string; remedy: Remedy }
 
 /**
  * `required` refuses the pass; `advisory` is reported and never blocks.
@@ -97,8 +134,17 @@ async function evaluate<Context>(
     return {
       status: 'unknown',
       probeFailure: `the check threw: ${error instanceof Error ? error.message : String(error)}`,
-      remedy:
-        'Fix the probe failure above, then re-run. This is not a verdict on the prerequisite.',
+      // Deliberately generic, and it says so: this branch knows only that a probe threw, so a
+      // remedy naming a cluster or a key here would be a guess dressed as an instruction. What a
+      // reader needs from it is that the prerequisite itself was never graded.
+      remedy: {
+        steps: [
+          'Read the probe failure above: it is a fact about the CHECK, not a verdict on the prerequisite.',
+          'The usual causes are a deployment that is not running, a base URL pointing somewhere else, ' +
+            'and an app API that refuses because the deployment is not running open (AUTH_DEV_OPEN=true).',
+          'Fix that, then re-run the suite.',
+        ],
+      },
     }
   }
 }
@@ -130,6 +176,42 @@ function describeVerdict(verdict: PrerequisiteVerdict): string {
 }
 
 /**
+ * The instructions block: numbered steps, then the commands, then the doc.
+ *
+ * Commands are indented under a heading of their own rather than folded into the step that needs
+ * them, so a whole block can be selected and pasted. Each is preceded by its purpose as a shell
+ * comment, which means a paste of the block is itself a valid (and self-documenting) script.
+ */
+export function formatRemedy(remedy: Remedy, indent = ''): string {
+  const lines = remedy.steps.map((step, index) => `${indent}  ${index + 1}. ${step}`)
+  for (const [index, command] of (remedy.commands ?? []).entries()) {
+    if (index === 0) lines.push(`${indent}  Run:`)
+    lines.push(`${indent}    # ${command.purpose}`, `${indent}    ${command.run}`)
+  }
+  if (remedy.docs) lines.push(`${indent}  Docs: ${remedy.docs}`)
+  return lines.join('\n')
+}
+
+/**
+ * One failing prerequisite, in full: what it guarantees, what is wrong, and how to fix it.
+ *
+ * Spec 00 hands this to its per-prerequisite assertion and `formatPreflightFailure` stacks it, so
+ * the instructions reach BOTH readers. Those are different people in practice: the one reading a
+ * single red test in vitest's output, and the one reading the one-error refusal a resumed pass
+ * throws out of `beforeAll`.
+ */
+export function formatPrerequisiteFailure(result: PrerequisiteResult): string {
+  const verdict = result.verdict
+  if (verdict.status === 'satisfied') return `${result.id} (${result.what})\n  ${verdict.detail}`
+  const cause =
+    verdict.status === 'unsatisfied'
+      ? `  ${verdict.problem}`
+      : `  The check could not read an answer: ${verdict.probeFailure}\n` +
+        `  This is NOT a verdict that the prerequisite is unmet; the probe itself failed.`
+  return `${result.id} (${result.what})\n${cause}\n  Fix:\n${formatRemedy(verdict.remedy, '  ')}`
+}
+
+/**
  * The refusal, with every blocking prerequisite and its remedy.
  *
  * Returns null when nothing blocks, so the caller reads as `const failure = format(...); if
@@ -141,20 +223,7 @@ export function formatPreflightFailure(report: PreflightReport): string | null {
   const blocking = blockingResults(report)
   if (blocking.length === 0) return null
 
-  const lines = blocking.map((result) => {
-    const verdict = result.verdict
-    // `blockingResults` already excluded `satisfied`, but the narrowing has to be re-stated for
-    // the compiler; doing it as an early return keeps the two negative branches exhaustive, so a
-    // fourth verdict status could not be added without failing here.
-    if (verdict.status === 'satisfied')
-      return `- ${result.id} (${result.what})\n  ${verdict.detail}`
-    const cause =
-      verdict.status === 'unsatisfied'
-        ? `  ${verdict.problem}`
-        : `  The check could not read an answer: ${verdict.probeFailure}\n` +
-          `  This is NOT a verdict that the prerequisite is unmet; the probe itself failed.`
-    return `- ${result.id} (${result.what})\n${cause}\n  Fix: ${verdict.remedy}`
-  })
+  const lines = blocking.map((result) => `- ${formatPrerequisiteFailure(result)}`)
 
   const notes = advisoryNotes(report)
   const noteBlock =

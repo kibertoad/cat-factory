@@ -73,6 +73,18 @@ every merge for a person looks like a run that stalled on its last step.
 Three states, not two: a probe that cannot READ an answer reports that, and never as evidence
 that the prerequisite is unmet.
 
+**A refusal is INSTRUCTIONS, not a diagnosis.** Every unmet prerequisite comes back with numbered
+steps and the commands that carry them out, rendered with what the probe just read rather than
+with a placeholder to go and resolve: the workspace id the key is actually bound to, the account
+the workspace is actually connected to, the `kubectl auth can-i` line for the ServiceAccount, the
+resume command for the pass whose frames are in the way. Two rules keep that honest. Where the fix
+is a console action (minting a token, raising a budget, wiring a provider) the remedy names the
+SCREEN and offers only the read-only command that CONFIRMS the change landed, because an invented
+command sends someone to a shell that will refuse them. And where the deployment publishes its own
+diagnosis, `deployment-health` relays it verbatim, doc link included: the backend's per-variable
+remedy already names the exact `openssl`/`npx` line, and a paraphrase here would be a second copy
+of it, one release behind.
+
 | Prerequisite         | Checked | What it means                                                                                             |
 | -------------------- | ------- | --------------------------------------------------------------------------------------------------------- |
 | `deployment-health`  | yes     | The backend booted. A misconfigured one serves a fallback app, and its own problem list is reported.      |
@@ -217,11 +229,12 @@ namespaces through the pipeline's own `disposer`, which spec 02 asserts.
 
 Five, and each is load-bearing.
 
-**0. Refuse before spending, and say everything that is wrong.** The gate above runs in every
-spec rather than only in spec 00, because a resumed pass starts wherever it stopped and a check
-only the first file runs is a check the resume path skips. Everything it knows is reported
-together: this suite's unit of feedback is an afternoon, so learning about the second problem
-tomorrow costs a day per problem.
+**0. Refuse before spending, say everything that is wrong, and say how to fix each one.** The gate
+above runs in every spec rather than only in spec 00, because a resumed pass starts wherever it
+stopped and a check only the first file runs is a check the resume path skips. Everything it knows
+is reported together: this suite's unit of feedback is an afternoon, so learning about the second
+problem tomorrow costs a day per problem. The same arithmetic is why a refusal carries the steps
+and commands rather than a description of them, and why they are rendered from what the probe read.
 
 **1. Assert on evidence the platform COMPUTED, never on prose an agent wrote.** A test that greps a
 coder's reply for "fixed the off-by-one" is testing the model's turn of phrase; change the model
@@ -283,7 +296,7 @@ nothing, and `src/prerequisites.ts` is their only caller.
 | `acceptance/*.acceptance.ts` | The four specs, in order. `fixtures.ts` builds the harness and mounts the gate.  |
 | `src/config.ts`              | Environment → config, reporting every problem at once. Pure; unit-tested.        |
 | `src/preflight.ts`           | The prerequisite vocabulary, runner and refusal. Pure; unit-tested.              |
-| `src/prerequisites.ts`       | The checks themselves, each with its remedy.                                     |
+| `src/prerequisites.ts`       | The checks, each with the steps and commands that fix it. Unit-tested.           |
 | `src/world.ts`               | The resumable ledger, and the `latest` pointer.                                  |
 | `src/journal.ts`             | The append-only progress record a pass can be watched through.                   |
 | `src/status.ts`              | Ledger + journal → "where is this pass". Pure; unit-tested.                      |
