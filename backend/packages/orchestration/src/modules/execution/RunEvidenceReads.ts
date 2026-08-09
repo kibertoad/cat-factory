@@ -1,11 +1,13 @@
 import type { ExecutionInstance } from '@cat-factory/kernel'
 import type { PrVerificationReport, RunOutcome, ServiceSpecView } from '@cat-factory/contracts'
+import type { RunSpecRead } from './RunEvidenceLoader.js'
 
 // ---------------------------------------------------------------------------
-// The three READ paths onto a run's evidence, resolved by run id for a caller holding nothing but
+// The READ paths onto a run's evidence, resolved by run id for a caller holding nothing but
 // one: the verification report (`GET /api/v1/runs/:runId/report`), the outcome summary
-// (`GET /api/v1/runs/:runId/outcome`), and the `spec/` those two join against, which the SPA's
-// outcome card fetches because it composes the same reduction locally.
+// (`GET /api/v1/runs/:runId/outcome`), and the `spec/` those two join against, served both to the
+// SPA's outcome card (which composes the same reduction locally) and, with the outcome of the read
+// kept rather than folded, to `GET /api/v1/runs/:runId/spec`.
 //
 // One collaborator rather than three methods on `ExecutionService`, and not only for that file's
 // size budget: every one of them is the same two steps (resolve the run, hand it to the evidence
@@ -26,6 +28,7 @@ export interface RunEvidenceReadsDeps {
   ): Promise<PrVerificationReport | null>
   composeOutcome(workspaceId: string, instance: ExecutionInstance): Promise<RunOutcome | null>
   readSpec(workspaceId: string, instance: ExecutionInstance): Promise<ServiceSpecView>
+  readSpecOutcome(workspaceId: string, instance: ExecutionInstance): Promise<RunSpecRead>
 }
 
 export class RunEvidenceReads {
@@ -79,5 +82,20 @@ export class RunEvidenceReads {
     const instance = await this.deps.getInstance(workspaceId, executionId)
     if (!instance) return null
     return this.deps.readSpec(workspaceId, instance)
+  }
+
+  /**
+   * The same read as {@link spec}, with WHERE it stopped kept rather than folded onto an empty
+   * view: what `GET /api/v1/runs/:runId/spec` answers. Null when the workspace has no such run.
+   *
+   * The public endpoint reports the read rather than surviving it, so an unwired integration, an
+   * unreadable repository and a branch that genuinely carries no `spec/` have to arrive as three
+   * different answers. Routed through the same loader as its two siblings above so the tree a
+   * caller joins its verdicts against is the tree those verdicts were made against.
+   */
+  async specRead(workspaceId: string, executionId: string): Promise<RunSpecRead | null> {
+    const instance = await this.deps.getInstance(workspaceId, executionId)
+    if (!instance) return null
+    return this.deps.readSpecOutcome(workspaceId, instance)
   }
 }
