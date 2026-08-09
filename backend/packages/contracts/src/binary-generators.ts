@@ -120,15 +120,29 @@ export const binaryGeneratorCredentialSchema = v.object({
 export type BinaryGeneratorCredential = v.InferOutput<typeof binaryGeneratorCredentialSchema>
 
 /**
+ * The two names a credential carries, which is all the fallback below reads.
+ *
+ * Structural rather than {@link BinaryGeneratorCredential} itself, because the DISPATCH projection
+ * carries a narrower shape (kernel's `ResolvedBinaryGeneratorCredential`, which drops `usage` and
+ * every other prose field the container executor has no use for) and would otherwise have to
+ * either widen or re-spell the fallback. A parameter type nothing outside the two names can
+ * satisfy is what makes the "one place" claim below enforceable rather than aspirational.
+ */
+export interface BinaryCredentialNames {
+  key: string
+  envName?: string
+}
+
+/**
  * The environment variable one credential arrives as: its {@link BinaryGeneratorCredential.envName}
  * when it declares one, else its lookup key.
  *
  * The ONE place that fallback is written, because three layers apply it (the schema's uniqueness
- * check below, the dispatch projection, and the brief that tells the agent which variable to read)
- * and a copy that drifted would name a variable that is never set: an integration reported as
- * unavailable on every run, with nothing to see at either end.
+ * check below, the dispatch-time resolver that keys the job body, and the brief that tells the
+ * agent which variable to read) and a copy that drifted would name a variable that is never set:
+ * an integration reported as unavailable on every run, with nothing to see at either end.
  */
-export function binaryCredentialInjectionName(credential: BinaryGeneratorCredential): string {
+export function binaryCredentialInjectionName(credential: BinaryCredentialNames): string {
   return credential.envName ?? credential.key
 }
 

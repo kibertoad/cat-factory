@@ -294,6 +294,22 @@ conflict loudly, one value silently wins and the integration authenticates with 
 the brief NAMES a multi-credential set before its parts, because two credential paragraphs read as
 two independent keys and an agent has no reason not to try the first alone.
 
+**The same name ACROSS definitions is refused only when the key behind it differs.** One vendor
+behind an image endpoint and a music endpoint is one account, and sharing a variable is the point
+there: both look the value up under the same key, so whichever resolves first sets it to exactly
+what the other wanted. Different keys behind one name is the opposite and has no right answer.
+Serving the first claimant sets the variable the SECOND integration's brief tells the agent to
+read, so it authenticates one vendor with the other's key, and a pair loses a half the same way
+while the brief still says the two names belong together. So boot refuses it
+(`binary_generator_injection_name_collision`), and dispatch, which a mothership node reaches with
+definitions it never boot-validated, withholds the value from every claimant rather than picking
+one. Unset is the only state the brief already describes truthfully.
+
+**The multi-credential set line states its joint rule over the REQUIRED members alone.** "Never
+call the integration with a subset of them" is right for a Basic pair and contradicts an optional
+member's own line, which tells the agent to call anyway when that one is missing. Below two
+required members there is no subset to refuse, and the set line says so instead.
+
 There is no `authScheme` field and deliberately so: the agent writes the request, `usage` is
 already where each half says how it is presented, and a scheme enum would need a member for the
 first vendor with a signed request or a rotating timestamp. The platform names values; it does not

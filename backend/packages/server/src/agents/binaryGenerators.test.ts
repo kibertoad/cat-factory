@@ -247,10 +247,13 @@ describe('resolveBinaryGeneratorSecrets', () => {
     ).toEqual([{ key: 'GITHUB_MODELS_KEY', value: 'tok' }])
   })
 
-  it('dedupes on the INJECTION name, since that is what the job body is keyed by', async () => {
-    // Two integrations resolving different keys into one variable would otherwise both emit it and
-    // the last would silently win, handing the agent one vendor's key under the other's name.
-    const { resolver } = recordingResolver({ FIRST_KEY: 'a', SECOND_KEY: 'b' })
+  it('withholds a variable two integrations want to mean DIFFERENT values, from both of them', async () => {
+    // Serving the first claimant sets the variable the SECOND integration's brief tells the agent
+    // to read, so it authenticates one vendor with the other's key: a call that fails (or bills
+    // the wrong account) with a variable that is present at every layer that could report it.
+    // Unset is the one state the brief already describes truthfully, so both are told unavailable.
+    const { resolver, subjects } = recordingResolver({ FIRST_KEY: 'a', SECOND_KEY: 'b' })
+    const logger = createRecordingLogger()
     expect(
       await resolveBinaryGeneratorSecrets({
         context: context([
@@ -259,8 +262,38 @@ describe('resolveBinaryGeneratorSecrets', () => {
         ]),
         workspaceId: 'ws1',
         resolveToolSecrets: resolver,
+        logger,
       }),
-    ).toEqual([{ key: 'VENDOR_KEY', value: 'a' }])
+    ).toEqual([])
+    // Nothing is asked for either: the disagreement is settled off the projection, before any I/O.
+    expect(subjects).toEqual([])
+    const warn = logger.lines.filter((line) => line.level === 'warn')
+    expect(warn).toHaveLength(1)
+    expect(warn[0]?.fields).toMatchObject({
+      credentialEnvName: 'VENDOR_KEY',
+      binaryGeneratorIds: ['one', 'two'],
+    })
+  })
+
+  it('costs a contested integration only the contested variable, never its other credentials', async () => {
+    // The withholding is per VARIABLE. An integration that also declares a name nobody else wants
+    // still gets that one, so a collision cannot silently widen into an unrelated outage.
+    const { resolver } = recordingResolver({ FIRST_KEY: 'a', SECOND_KEY: 'b', SOLO_KEY: 'c' })
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([
+          { ...retro, id: 'one', credentials: [{ key: 'FIRST_KEY', envName: 'VENDOR_KEY' }] },
+          {
+            ...retro,
+            id: 'two',
+            credentials: [{ key: 'SECOND_KEY', envName: 'VENDOR_KEY' }, { key: 'SOLO_KEY' }],
+          },
+        ]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: resolver,
+        logger: createRecordingLogger(),
+      }),
+    ).toEqual([{ key: 'SOLO_KEY', value: 'c' }])
   })
 
   it('resolves EVERY credential one integration declares, so a key pair arrives whole', async () => {
@@ -286,12 +319,44 @@ describe('resolveBinaryGeneratorSecrets', () => {
       { key: 'SCENARIO_API_KEY', value: 'kk' },
       { key: 'SCENARIO_API_SECRET', value: 'ss' },
     ])
-    // Both looked up under ONE subject: the integration is what a per-workspace store scopes by,
-    // and a second subject for the same integration would split its rows in that store.
-    expect(subjects).toEqual([
-      { kind: 'binary-generator', id: 'retro-diffusion' },
-      { kind: 'binary-generator', id: 'retro-diffusion' },
+    // ONE call carrying both keys, which is the port's stated contract (once per dispatch per
+    // subject) and not just a saving: a per-workspace sealed store re-reads and decrypts the whole
+    // workspace bag per call, so asking one name at a time pays that twice for one account.
+    expect(subjects).toEqual([{ kind: 'binary-generator', id: 'retro-diffusion' }])
+  })
+
+  it('asks for the DISTINCT lookup keys, so one value delivered under two names is asked once', async () => {
+    // A definition wanting one stored value under two variables is allowed (only duplicate
+    // INJECTION names are refused), and repeating the key in one call would ask the resolver a
+    // question it has no way to answer twice.
+    const { resolver, subjects } = recordingResolver({ SHARED: 'v' })
+    const asked: string[][] = []
+    const spy: ToolSecretResolver = {
+      resolve: async (req) => {
+        asked.push(req.keys.map((k) => k.key))
+        return resolver.resolve(req)
+      },
+    }
+    expect(
+      await resolveBinaryGeneratorSecrets({
+        context: context([
+          {
+            ...retro,
+            credentials: [
+              { key: 'SHARED', envName: 'VENDOR_A' },
+              { key: 'SHARED', envName: 'VENDOR_B' },
+            ],
+          },
+        ]),
+        workspaceId: 'ws1',
+        resolveToolSecrets: spy,
+      }),
+    ).toEqual([
+      { key: 'VENDOR_A', value: 'v' },
+      { key: 'VENDOR_B', value: 'v' },
     ])
+    expect(asked).toEqual([['SHARED']])
+    expect(subjects).toHaveLength(1)
   })
 
   it('judges each credential of one integration by its OWN `required`', async () => {

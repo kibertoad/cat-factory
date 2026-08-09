@@ -380,6 +380,57 @@ describe('renderBinaryGeneratorSection', () => {
     expect(section).toContain('the Basic-auth password half')
   })
 
+  it('binds the "never a subset" rule to the REQUIRED members, so a mixed set states one rule', () => {
+    // The set line and an optional member's own line are about the same call, so a joint rule
+    // stated over ALL of them contradicts the member that says "still call it when this is
+    // missing". An agent holding both resolves them by guessing, and either guess costs the run:
+    // obeying the set line strands a working endpoint, obeying the member line makes the subset
+    // call the pair rule exists to prevent.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [
+          generator({
+            credentials: [
+              { key: 'SCENARIO_API_KEY' },
+              { key: 'SCENARIO_API_SECRET' },
+              { key: 'SCENARIO_ORG_ID', required: false },
+            ],
+          }),
+        ],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    // The joint rule names the two required halves and stops there.
+    expect(section).toContain(
+      '`SCENARIO_API_KEY`, `SCENARIO_API_SECRET` are parts of ONE credential',
+    )
+    expect(section).not.toContain('with a subset of them')
+    // And the optional member is told what calling without it actually means here, which is not
+    // an unauthenticated call: the Basic pair did arrive.
+    expect(section).toContain('`SCENARIO_ORG_ID` is OPTIONAL')
+    expect(section).toContain('using whichever of its other values arrived')
+    expect(section).not.toContain('still call the integration, unauthenticated')
+  })
+
+  it('claims no joint rule where at most ONE credential of several is required', () => {
+    // Nothing to join: a subset rule would invent a constraint the declaration never made, and
+    // the agent would withhold a call the deployment declared as legitimate.
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion'] },
+        [
+          generator({
+            credentials: [{ key: 'SCENARIO_API_KEY' }, { key: 'SCENARIO_ORG_ID', required: false }],
+          }),
+        ],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('They are not parts of one credential')
+    expect(section).not.toContain('parts of ONE credential')
+  })
+
   it('leaves a SINGLE credential unqualified, so the ordinary case gains no confusing plural', () => {
     const section = renderBinaryGeneratorSection({
       selection: resolveBinaryGeneratorSelection(

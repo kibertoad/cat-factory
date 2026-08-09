@@ -9,6 +9,7 @@ import {
 import type {
   BinaryGenerationOptions,
   BinaryGeneratorCapability,
+  BinaryGeneratorCredential,
   BinaryModality,
   BinaryOutputConfig,
 } from '@cat-factory/contracts'
@@ -659,18 +660,7 @@ function credentialLines(generator: BinaryGeneratorView): string[] {
     ]
   }
   const lines: string[] = []
-  // A declaration of SEVERAL is one account split across several variables (an HTTP Basic
-  // key/secret pair is the ordinary case), so the set is named before the parts. Without this the
-  // agent reads two independent-looking credential paragraphs and has no reason not to try the
-  // first one alone, which is a 401 it would then report as a bad key.
-  if (credentials.length > 1) {
-    const names = credentials
-      .map((credential) => `\`${binaryCredentialInjectionName(credential)}\``)
-      .join(', ')
-    lines.push(
-      `\`${generator.id}\` authenticates with ${credentials.length} separate values, provided to your process as the environment variables ${names}. They are parts of ONE credential: combine them exactly as stated below, and never call the integration with a subset of them.`,
-    )
-  }
+  if (credentials.length > 1) lines.push(credentialSetLine(generator.id, credentials))
   for (const credential of credentials) {
     // The INJECTION name, never the lookup key. They differ whenever a definition had to keep a
     // vendor's documented variable name while looking the value up under one of its own, and
@@ -688,8 +678,16 @@ function credentialLines(generator: BinaryGeneratorView): string[] {
     // which is the safe reading. Being wrong that way costs a reported gap, while being wrong the
     // other way burns the run on a call that 401s.
     if (credential.required === false) {
+      // What "call it anyway" MEANS depends on whether this is the integration's only credential.
+      // For a sole credential the call is genuinely unauthenticated; for one of several it is not,
+      // and telling the agent to make an unauthenticated call to an endpoint whose Basic key DID
+      // arrive is a 401 it would then report as a bad key.
+      const withoutIt =
+        credentials.length === 1
+          ? 'still call the integration, unauthenticated as its contract describes'
+          : `still call the integration, using whichever of its other values arrived and treating this one as absent`
       lines.push(
-        `\`${envName}\` is OPTIONAL for \`${generator.id}\`: if it is unset or empty, still call the integration, unauthenticated as its contract describes. Report a rejection rather than inventing a key.`,
+        `\`${envName}\` is OPTIONAL for \`${generator.id}\`: if it is unset or empty, ${withoutIt}. Report a rejection rather than inventing a key.`,
       )
       continue
     }
@@ -698,6 +696,40 @@ function credentialLines(generator: BinaryGeneratorView): string[] {
     )
   }
   return lines
+}
+
+/**
+ * The set-level sentence an integration declaring SEVERAL credentials opens with, naming the set
+ * before its parts so two paragraphs do not read as two independent keys.
+ *
+ * What that sentence may CLAIM depends on how many of them are required, and that is the whole
+ * reason it is a function rather than one string. "Never call the integration with a subset of
+ * them" is exactly right for an HTTP Basic key/secret pair, and against a set mixing a required
+ * key with an optional one it directly contradicts that member's own line below, which tells the
+ * agent to call anyway when it is missing. An agent handed two opposed instructions resolves them
+ * by guessing, and either guess costs the run: obeying the set line strands a working endpoint on
+ * an absent optional value, obeying the member line is the subset call the pair rule exists to
+ * prevent.
+ *
+ * So the joint rule is stated over the REQUIRED members alone, and only where there are two of
+ * them to join. Below that there is no subset to refuse: at most one value is needed for a
+ * legitimate call, and claiming otherwise would invent a constraint the declaration never made.
+ */
+function credentialSetLine(
+  generatorId: string,
+  credentials: readonly BinaryGeneratorCredential[],
+): string {
+  const names = (list: readonly BinaryGeneratorCredential[]): string =>
+    list.map((credential) => `\`${binaryCredentialInjectionName(credential)}\``).join(', ')
+  const required = credentials.filter((credential) => credential.required !== false)
+  const opening = `\`${generatorId}\` is given ${credentials.length} separate values, provided to your process as the environment variables ${names(credentials)}.`
+  if (required.length < 2) {
+    return `${opening} They are not parts of one credential: each carries its own condition below, so read all of them before deciding how to call it.`
+  }
+  if (required.length === credentials.length) {
+    return `${opening} They are parts of ONE credential: combine them exactly as stated below, and never call the integration with a subset of them.`
+  }
+  return `${opening} ${names(required)} are parts of ONE credential: combine them exactly as stated below, and never call the integration without all of them. The rest are separate values, each optional in the way its own line states.`
 }
 
 /** Where an integration's API contract was injected, or the explicit statement that none exists. */

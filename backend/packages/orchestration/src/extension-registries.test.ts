@@ -1321,6 +1321,50 @@ describe('generative binary integration registry validation', () => {
     ).toHaveLength(1)
   })
 
+  it('fails boot when two INTEGRATIONS want one variable to hold different values', () => {
+    // Within a definition the schema already refuses this. Across definitions there is no
+    // arbitration that can be right: serving the first claimant sets the variable the second
+    // integration's brief tells the agent to read, so it authenticates one vendor with the other's
+    // key, and withholding it (what dispatch does) costs both integrations every run. The remedy
+    // is one `envName` on one definition, which is why boot is where it is said.
+    const problems = problemsFor([
+      {
+        ...valid,
+        id: 'retro-diffusion',
+        credentials: [{ key: 'RD_TOKEN', envName: 'VENDOR_KEY' }],
+      },
+      { ...valid, id: 'studio-music', credentials: [{ key: 'STUDIO_KEY', envName: 'VENDOR_KEY' }] },
+    ])
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.code).toBe('binary_generator_injection_name_collision')
+    expect(problems[0]?.message).toContain('VENDOR_KEY')
+    expect(problems[0]?.message).toContain('retro-diffusion')
+    expect(problems[0]?.message).toContain('studio-music')
+  })
+
+  it('accepts two integrations SHARING one account, which is the same name over the same key', () => {
+    // One vendor behind an image endpoint and a music endpoint is one credential, and the shared
+    // variable is the point rather than a collision: whichever resolves first sets it to exactly
+    // what the other wanted. A check keyed on the NAME alone would refuse the working case.
+    expect(
+      problemsFor([
+        { ...valid, id: 'retro-diffusion', credentials: [{ key: 'RD_TOKEN' }] },
+        { ...valid, id: 'retro-music', credentials: [{ key: 'RD_TOKEN' }] },
+      ]),
+    ).toEqual([])
+  })
+
+  it('compares only definitions that PARSED, so one fault is never restated as two', () => {
+    const problems = problemsFor([
+      { ...valid, id: 'retro-diffusion', credentials: [{ key: 'ENCRYPTION_KEY' }] },
+      { ...valid, id: 'studio-music', credentials: [{ key: 'ENCRYPTION_KEY' }] },
+    ])
+    expect(problems.map((problem) => problem.code)).toEqual([
+      'binary_generator_invalid',
+      'binary_generator_invalid',
+    ])
+  })
+
   it('fails boot on a cleartext endpoint off loopback, because the credential rides it', () => {
     const problems = problemsFor([{ ...valid, endpoint: 'http://api.example.com/v1' }])
     expect(problems[0]?.code).toBe('insecure_binary_generator_endpoint')

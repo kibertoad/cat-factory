@@ -25,6 +25,16 @@ Two rules ship with it. Injection names must be distinct within a definition, re
 because the job body is keyed by the variable each value arrives as and a collision would silently
 deliver one value and drop the other. And the brief NAMES a multi-credential set before its parts, so
 an agent handed two paragraphs does not read them as two independent keys and try the first alone.
+That set line states its joint rule over the REQUIRED members only: "never call it with a subset of
+them" is right for a Basic pair and contradicts an optional member's own line, which says to call
+anyway when that one is missing.
+
+Across DEFINITIONS the same injection name is refused only where the lookup key behind it differs.
+Two integrations on one vendor account legitimately share a variable, since both resolve the same
+value; two that mean different values by it have no right arbitration, because serving the first sets
+the variable the second integration's brief tells the agent to read. Boot refuses that
+(`binary_generator_injection_name_collision`), and dispatch, which a mothership node reaches with
+definitions it never boot-validated, withholds the value from every claimant instead of picking one.
 
 There is deliberately no auth-scheme field and no platform-side header assembly: the agent writes the
 request, each credential's `usage` is where it is told how that value is presented, and a scheme enum

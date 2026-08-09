@@ -1,5 +1,6 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { INLINE_ENGINE_SYSTEM_PROMPTS, runsInContainer } from '@cat-factory/agents'
+import { checkBinaryGenerators } from './binaryGeneratorRegistrations.js'
 import type {
   AgentKind,
   BinaryGeneratorRegistry,
@@ -33,10 +34,8 @@ import {
   validateFoundationalDefinition,
 } from '@cat-factory/kernel'
 import {
-  type BinaryGeneratorDefinition,
   type CustomTaskType,
   type DescriptorField,
-  binaryGeneratorDefinitionIssues,
   descriptorConditionHasPredicate,
   duplicatedDescriptorSectionCaptions,
   isDeploymentScopedSource,
@@ -45,7 +44,6 @@ import {
   isNamespacedId,
   isReservedPlatformEnvKey,
   isToolchainEnvName,
-  modalitiesOfMediaType,
   reservedEnvKeyMessage,
   toolchainEnvNameMessage,
   isValidResultViewId,
@@ -315,7 +313,7 @@ export function collectRegistrationProblems(
   problems.push(...checkFoundationalServices(opts))
 
   // 9. Deployment-registered GENERATIVE BINARY INTEGRATIONS (only when a registry is supplied).
-  problems.push(...checkBinaryGenerators(opts))
+  problems.push(...checkBinaryGenerators(opts.registries.binaryGeneratorRegistry))
 
   // 10. Deployment-registered PROMPT FRAGMENTS (only when a registry is supplied).
   problems.push(...checkPromptFragments(opts))
@@ -382,91 +380,6 @@ function checkPromptFragments(opts: ValidateRegistrationsOptions): RegistrationP
         `body inline, or create the fragment at the ACCOUNT tier (POST it with its documentRef and ` +
         `a fetch-via workspace).`,
     })
-  }
-  return problems
-}
-
-/**
- * Section 9 of {@link collectRegistrationProblems}: every generative binary integration a
- * deployment registers must be a definition the platform can actually dispatch against.
- *
- * Boot is the only place these can be caught. There is no write boundary that ever refused them
- * (they are code), and every failure below is silent at run time in the same expensive way: a
- * malformed definition or an unparseable contract becomes an integration the brief describes with
- * no operations, a credential key that is not a valid environment-variable name is dropped by the
- * harness's env validation and reappears as an unexplained 401 mid-run, and a cleartext endpoint
- * puts that credential on the wire from inside the run container. Each of those costs a run to
- * discover and names nothing that points back at the registration.
- *
- * A declared MEDIA TYPE that contradicts the declared modalities is an error too, not a warning:
- * both halves drive selection (a step's content-type coverage is checked against `modalities`,
- * while the brief tells the agent the `mediaTypes`), so an integration claiming `audio` while
- * listing `image/png` will be picked for one job and asked to do the other.
- */
-function checkBinaryGenerators(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
-  const problems: RegistrationProblem[] = []
-  if (!opts.registries.binaryGeneratorRegistry) return problems
-  for (const definition of opts.registries.binaryGeneratorRegistry.all()) {
-    const issues = binaryGeneratorDefinitionIssues(definition)
-    if (issues.length > 0) {
-      problems.push({
-        severity: 'error',
-        code: 'binary_generator_invalid',
-        message: `Generative binary integration "${definition.id}" is not a valid definition: ${issues.join('; ')}`,
-      })
-      // The checks below read fields this parse just called malformed, so reporting them too
-      // would restate one fault as several.
-      continue
-    }
-    problems.push(...checkBinaryGeneratorDetails(definition))
-  }
-  return problems
-}
-
-/** The per-definition checks a valid PARSE cannot make: the endpoint, contracts, media types. */
-function checkBinaryGeneratorDetails(definition: BinaryGeneratorDefinition): RegistrationProblem[] {
-  const problems: RegistrationProblem[] = []
-  const invalid = (code: string, message: string): void => {
-    problems.push({ severity: 'error', code, message })
-  }
-  // The same rule an HTTP tool server's URL is held to, and for the same reason the helper
-  // states: a declared credential rides this request, so cleartext off loopback puts it on the
-  // wire. (The helper is MCP-named because that was its first caller; the rule is not.)
-  if (definition.endpoint && !isAllowedMcpHttpUrl(definition.endpoint)) {
-    invalid(
-      'insecure_binary_generator_endpoint',
-      `Generative binary integration "${definition.id}" has endpoint "${definition.endpoint}". Its ` +
-        `credential is sent with every request, so the endpoint must be https (plain http is ` +
-        `accepted only on loopback).`,
-    )
-  }
-  for (const problem of validateFoundationalDefinition({ contracts: definition.contracts })) {
-    invalid(
-      'binary_generator_invalid',
-      `Generative binary integration "${definition.id}": ${describeFoundationalProblem(problem)}`,
-    )
-  }
-  const declared = new Set(definition.modalities)
-  for (const mediaType of definition.mediaTypes ?? []) {
-    const consistent = modalitiesOfMediaType(mediaType)
-    // An UNRECOGNISED media type is not a fault: the platform's classifier is not a registry of
-    // every format that exists, and refusing one would make registering a new codec impossible.
-    // A recognised one that CONTRADICTS the declaration is, because both drive selection.
-    //
-    // Contradiction is an empty INTERSECTION, not an absent member, and for 3D that is the whole
-    // difference: a `.glb` is consistent with both `3d-model` and `3d-scene` because the container
-    // does not record which it holds, so requiring every member would refuse a scene generator
-    // for declaring the only format it can emit.
-    if (consistent.length > 0 && !consistent.some((modality) => declared.has(modality))) {
-      const names = consistent.join('/')
-      invalid(
-        'binary_generator_modality_mismatch',
-        `Generative binary integration "${definition.id}" declares media type "${mediaType}" ` +
-          `(${names}) but lists none of those among its modalities ` +
-          `(${definition.modalities.join(', ')}). A step selecting it for ${names} would be ` +
-          `refused, and one selecting it for the listed modalities would be told it can emit this.`,
-      )
-    }
   }
   return problems
 }
