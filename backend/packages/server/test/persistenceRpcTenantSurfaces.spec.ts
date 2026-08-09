@@ -137,6 +137,7 @@ describe.each([
     sourceRepo: 'fragmentSourceRepository',
     methods: [
       { repo: 'promptFragmentRepository', method: 'listBySource', extra: [] as unknown[] },
+      { repo: 'promptFragmentRepository', method: 'softDeleteBySource', extra: [0] as unknown[] },
       { repo: 'fragmentSourceRepository', method: 'get', extra: [] as unknown[] },
       { repo: 'fragmentSourceRepository', method: 'updateSyncState', extra: ['abc123', 0] },
       { repo: 'fragmentSourceRepository', method: 'softDelete', extra: [0] },

@@ -22,6 +22,7 @@ import {
 } from '../src/persistence/remoteRepositories.js'
 import {
   type DispatchOptions,
+  type LibrarySourceEntity,
   type PersistenceRegistry,
   dispatchPersistenceCall,
 } from '../src/persistence/rpc.js'
@@ -664,9 +665,10 @@ function buildLibraryAndCommsRepos() {
       }),
       upsert: async () => undefined,
       softDelete: async () => undefined,
-      // The sync reconcile read: echoes the sourceId, so the round-trip can assert the bound
-      // source reached the repo rather than merely that the call was admitted.
+      // The sync reconcile pair: the read echoes the sourceId, so the round-trip can assert the
+      // bound source reached the repo rather than merely that the call was admitted.
       listBySource: async (sourceId: string) => [{ sourceId }],
+      softDeleteBySource: async () => undefined,
     },
     // The generated-brief store: owner-keyed list + record-based upsert + owner-keyed delete.
     // Same (ownerKind, ownerId) pair as the fragments it condenses, so the same rules bind it.
@@ -848,17 +850,23 @@ export function makeRegistry(): {
     },
     // Built exactly as the controller builds it (source row → its owner PAIR), keyed by the same
     // `LibrarySourceEntity` the rule names, so an id from one library never resolves against the
-    // other's table. An absent row yields null, which the rule fails closed on.
+    // other's table. A LOOKUP keyed off a total map, not a ternary: under a ternary a third library
+    // would silently resolve against the foundational-service table, so the cross-table refusal
+    // this harness is the oracle for would pass while binding the wrong rows.
     resolveLibrarySourceOwner: async (entity, sourceId) => {
-      const repo =
-        entity === 'fragmentSource'
-          ? registry.fragmentSourceRepository!
-          : registry.foundationalServiceSourceRepository!
-      const source = (await repo.get!(sourceId)) as {
+      const repos: Record<LibrarySourceEntity, PersistenceRegistry[string] | undefined> = {
+        fragmentSource: registry.fragmentSourceRepository,
+        foundationalServiceSource: registry.foundationalServiceSourceRepository,
+      }
+      const repo = repos[entity]
+      if (typeof repo?.get !== 'function') return { status: 'unreadable' }
+      const source = (await repo.get(sourceId)) as {
         ownerKind?: unknown
         ownerId?: unknown
       } | null
-      return source ? { ownerKind: source.ownerKind, ownerId: source.ownerId } : null
+      return source
+        ? { status: 'found', owner: { ownerKind: source.ownerKind, ownerId: source.ownerId } }
+        : { status: 'absent' }
     },
     // Built exactly as the controller builds it (roster → userIds), so the round-trip exercises the
     // real server-side co-membership resolution for the `user`/`userList` scope.

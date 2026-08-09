@@ -116,9 +116,11 @@ export async function checkLibrarySourceScope(
   denied: DispatchResult,
 ): Promise<DispatchResult | undefined> {
   if (typeof sourceId !== 'string' || !opts.resolveLibrarySourceOwner) return denied
-  const owner = await opts.resolveLibrarySourceOwner(entity, sourceId)
-  if (!owner) return denied
-  return checkOwnerPairScope(owner.ownerKind, owner.ownerId, opts, inScope, denied)
+  const lookup = await opts.resolveLibrarySourceOwner(entity, sourceId)
+  // Only a row that exists AND could be read binds this call: `absent` and `unreadable` both fail
+  // closed here, since a sourceId-keyed method has nothing else to bind on.
+  if (lookup.status !== 'found') return denied
+  return checkOwnerPairScope(lookup.owner.ownerKind, lookup.owner.ownerId, opts, inScope, denied)
 }
 
 /**
@@ -129,6 +131,11 @@ export async function checkLibrarySourceScope(
  * The stored half is decided by row EXISTENCE: an absent row is a CREATE, which the declared half has
  * already bound. A record with no usable conflict key cannot be bound to the row it would write, so it
  * is refused rather than admitted on the declared half alone.
+ *
+ * "The row does not exist" is therefore an ADMISSION, which is why the lookup answers three states
+ * instead of a nullable owner: a table this deployment cannot read (`unreadable`) must not be spent
+ * as that admission. Its `accountFieldUpsert` twin gets the same guarantee from selecting its
+ * resolver through a `switch` over the entity with a `never` default.
  */
 export async function checkOwnerFieldUpsertScope(
   entity: LibrarySourceEntity,
@@ -147,8 +154,30 @@ export async function checkOwnerFieldUpsertScope(
   const denialForDeclared = await checkOwnerPairScope(ownerKind, ownerId, opts, inScope, denied)
   if (denialForDeclared) return denialForDeclared
   if (typeof id !== 'string' || !opts.resolveLibrarySourceOwner) return denied
-  // The stored half. No row ⇒ a create, already bound above. A row ⇒ its owner must be in scope too.
+  // The stored half. A switch, not a truthiness test: the three lookup states have three different
+  // dispositions, and adding a fourth must FAIL TO COMPILE here rather than fall through to the
+  // admission that `absent` alone has earned.
   const stored = await opts.resolveLibrarySourceOwner(entity, id)
-  if (!stored) return undefined
-  return checkOwnerPairScope(stored.ownerKind, stored.ownerId, opts, inScope, denied)
+  switch (stored.status) {
+    case 'found':
+      // A row ⇒ its owner must be in scope too, or this write would overwrite another tenant's.
+      return checkOwnerPairScope(
+        stored.owner.ownerKind,
+        stored.owner.ownerId,
+        opts,
+        inScope,
+        denied,
+      )
+    case 'absent':
+      // No row ⇒ a create, already bound by the declared half above.
+      return undefined
+    case 'unreadable':
+      // Nothing is known about what this write would land on, so nothing may be admitted.
+      return denied
+    default: {
+      const _exhaustive: never = stored
+      void _exhaustive
+      return denied
+    }
+  }
 }

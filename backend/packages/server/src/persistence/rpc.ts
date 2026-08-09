@@ -255,6 +255,24 @@ export interface LibrarySourceOwner {
   ownerId: unknown
 }
 
+/**
+ * What a {@link DispatchOptions.resolveLibrarySourceOwner} lookup ANSWERED, as three states rather
+ * than a nullable owner.
+ *
+ * `absent` and `unreadable` are the same VALUE and opposite FACTS, and only `ownerFieldUpsert` can
+ * tell them apart from the outside: it admits an absent row as a create (the declared half already
+ * bound it) and must refuse an unreadable one, because a table it cannot read cannot say whose row
+ * the write would land on. Collapsing the two into `null` is what made a deployment that wires a
+ * source table's `upsert` without its `get` — or a library added with a rule and no resolver row —
+ * silently drop the stored half and admit the cross-tenant repoint the rule exists to close.
+ */
+export type LibrarySourceOwnerLookup =
+  | { status: 'found'; owner: LibrarySourceOwner }
+  /** No such source row: for an id-keyed upsert this is a CREATE. */
+  | { status: 'absent' }
+  /** This deployment cannot read that source table at all, so nothing may be concluded. */
+  | { status: 'unreadable' }
+
 export interface MethodSpec {
   scope: ScopeRule
   /** The argument index whose `rev` the server mutates in place and must echo back. */
@@ -314,12 +332,13 @@ export interface DispatchOptions {
    * the same question about the same shape, and a second near-identical option is how a new library
    * lands with a rule and no resolver. Required for the `librarySource` and `ownerFieldUpsert` scope
    * kinds; a call hitting either with no resolver fails closed (404), like the other entity
-   * resolvers. A source that does not exist resolves to null/undefined.
+   * resolvers. Answers a {@link LibrarySourceOwnerLookup} rather than a nullable owner so that "no
+   * such row" stays distinguishable from "that table is not readable here".
    */
   resolveLibrarySourceOwner?(
     entity: LibrarySourceEntity,
     sourceId: string,
-  ): Promise<LibrarySourceOwner | null | undefined>
+  ): Promise<LibrarySourceOwnerLookup>
   /**
    * Resolve the member userIds of an account (the mothership's `MembershipRepository.listByAccount`,
    * mapped to `userId`s). Required for the `user`/`userList` scope kinds: a requested user is in

@@ -39,6 +39,14 @@ class FakeFragmentRepo implements PromptFragmentRepository {
   async listBySource(sourceId: string) {
     return [...this.rows.values()].filter((r) => r.sourceId === sourceId && r.deletedAt === null)
   }
+  /** Counts the calls so a test can pin that unlink retires the set in ONE write, not per row. */
+  softDeleteBySourceCalls = 0
+  async softDeleteBySource(sourceId: string, at: number) {
+    this.softDeleteBySourceCalls += 1
+    for (const r of this.rows.values()) {
+      if (r.sourceId === sourceId && r.deletedAt === null) r.deletedAt = at
+    }
+  }
 }
 
 class FakeSourceRepo implements FragmentSourceRepository {
@@ -154,6 +162,25 @@ describe('FragmentSourceService.sync', () => {
     // Unlink tombstones the survivors → invalidates again.
     await harness.service.unlink('workspace', 'ws1', sourceId)
     expect(harness.invalidations).toHaveLength(3)
+  })
+
+  it('retires a source’s whole fragment set in ONE write on unlink', async () => {
+    // Not a style point: in mothership mode every repository call is an HTTPS round trip, so a
+    // per-fragment `softDelete` loop costs one request per fragment against a library a repo can
+    // grow without bound. The sibling skill / foundational-service libraries retire by source too.
+    const live = await harness.fragments.listBySource(sourceId)
+    expect(live.length).toBeGreaterThan(1)
+
+    await harness.service.unlink('workspace', 'ws1', sourceId)
+
+    expect(harness.fragments.softDeleteBySourceCalls).toBe(1)
+    expect(await harness.fragments.listBySource(sourceId)).toEqual([])
+    // A hand-authored fragment under the same owner is not swept: the predicate is the SOURCE.
+    expect(
+      (await harness.fragments.listByOwner('workspace', 'ws1')).every(
+        (f) => f.sourceId !== sourceId,
+      ),
+    ).toBe(true)
   })
 
   it('keeps an explicit-id fragment live (and preserves createdAt) when its file is RENAMED', async () => {

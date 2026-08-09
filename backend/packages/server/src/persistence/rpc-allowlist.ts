@@ -1155,10 +1155,13 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
     upsert: { scope: { kind: 'ownerField', arg: 0 } },
     softDelete: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
-    // A source's live fragments, to diff against the repo listing and to tombstone on unlink. The
-    // method carries a source id and nothing else, so the `librarySource` rule resolves that
-    // source's owning tier pair server-side (`fragmentSource` names the table it lives in).
+    // The source-keyed reconcile pair, mirroring the skill and foundational-service libraries':
+    // list a source's live fragments to diff against the repo listing, and tombstone all of them
+    // in one write on unlink. Each method carries a source id and nothing else, so the
+    // `librarySource` rule resolves that source's owning tier pair server-side (`fragmentSource`
+    // names the table it lives in).
     listBySource: { scope: { kind: 'librarySource', arg: 0, entity: 'fragmentSource' } },
+    softDeleteBySource: { scope: { kind: 'librarySource', arg: 0, entity: 'fragmentSource' } },
   },
   // Model-GENERATED condensed briefs for long standards (`FragmentBriefService`), read and
   // written on the RUN path: a mothership-mode implementer dispatch resolves them alongside the

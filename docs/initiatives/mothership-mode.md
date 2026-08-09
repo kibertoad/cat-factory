@@ -335,17 +335,22 @@
   when its own library is configured, exactly as it does for fragments, so a node with the library on
   against a mothership with it off gets a clean `... is not wired`.
 
-- **Owner-pair library SYNC + the parked-review writeback markers**: twelve methods across three
+- **Owner-pair library SYNC + the parked-review writeback markers**: thirteen methods across three
   surfaces, and the shape worth copying is that all three were already REACHABLE on a node and
   broken, rather than simply absent.
   - **Both owner-pair content libraries' repo-SYNC surfaces go remote** (prompt fragments,
     foundational services), on the premise the skills slice already retired: a mothership-mode node
     HAS a GitHub client, so its `FragmentSourceService` / `FoundationalServiceSourceService` assemble
     and their link / sync / unlink routes were live and failing. Allow-listed:
-    `promptFragmentRepository.listBySource`, `fragmentSourceRepository`
+    `promptFragmentRepository` `listBySource`/`softDeleteBySource`, `fragmentSourceRepository`
     `get`/`updateSyncState`/`softDelete`, `foundationalServiceRepository`
     `listBySource`/`softDeleteBySource`, `foundationalServiceSourceRepository`
     `get`/`updateSyncState`/`softDelete`.
+
+    `promptFragmentRepository.softDeleteBySource` is NEW to the port, added with this slice on both
+    runtimes plus a `defineFragmentLibrarySuite` parity assertion: unlink retired a source's set with
+    a per-fragment `softDelete` loop, which going remote turns into one HTTPS round trip per
+    fragment. Both sibling repo-sourced libraries already retired by source.
 
     Introduces **`librarySource`**, `skillSource` generalised from an accountId to an
     `(ownerKind, ownerId)` PAIR (a fragment source can be owned by a workspace as well as an
@@ -361,6 +366,17 @@
     repoint another tenant's link at a repo it controls, whose Markdown bodies the victim's next sync
     folds into their prompts as standards. Same rule, same argument and same create-passes-on-the-
     declared-half behaviour as `accountFieldUpsert`.
+
+    **"No such row" is an ADMISSION here, so it may never be the answer to a question that was not
+    asked.** `resolveLibrarySourceOwner` therefore answers `found` / `absent` / `unreadable` rather
+    than a nullable owner, and only `absent` earns the create. A nullable owner made a table this
+    deployment cannot read (a facade wiring a source repo's `upsert` without its `get`, or a library
+    added to `LibrarySourceEntity` with no resolver row) indistinguishable from a free id, which
+    silently drops the stored half and hands back the very repoint the rule exists to close. Its
+    `accountFieldUpsert` twin gets the same guarantee from a `switch` over the entity with a `never`
+    default; the entity → source-table map in `PersistenceController` is keyed by the UNION for the
+    same reason, so a new library fails to compile until it names its table.
+
   - **`reviewQuestionPostRepository` `claim`/`settle`/`get`** (the `workspaceField` rule, since the
     marker key carries its own `workspaceId`). This one is the quietest failure the initiative has
     recorded: the ENGINE writes the marker, `claim` answered `unknown_method`, and the caller's
@@ -1266,7 +1282,7 @@ never remotely invocable (mothership-internal cron).
 | `slackConnectionRepository`              | ✅ done | connect/disconnect (sealed `tokenCipher`); `getByTeam` inbound-OAuth internal                      |
 | `slackSettingsRepository`                | ✅ done | per-workspace routing (no secrets)                                                                 |
 | `slackMemberMappingRepository`           | ✅ done | per-account mention map (no secrets)                                                               |
-| `promptFragmentRepository`               | ✅ done | owner-scoped library mgmt + the repo-sync reconcile read (`librarySource`)                         |
+| `promptFragmentRepository`               | ✅ done | owner-scoped library mgmt + the source-keyed sync pair (`librarySource`)                           |
 | `fragmentSourceRepository`               | ✅ done | owner-scoped list + link + id-keyed sync mgmt; `upsert` binds the stored row (`ownerFieldUpsert`)  |
 | `fragmentBriefRepository`                | ✅ done | owner-scoped generated briefs, read + written on the run path                                      |
 | `foundationalServiceRepository`          | ✅ done | owner-scoped catalog CRUD (run path) + the source-keyed sync pair                                  |

@@ -98,10 +98,11 @@ export class FragmentSourceService {
   async unlink(ownerKind: FragmentOwnerKind, ownerId: string, sourceId: string): Promise<void> {
     const source = await this.require(ownerKind, ownerId, sourceId)
     const now = this.deps.clock.now()
+    // Count first, then retire the whole set in ONE write: the count is only needed to decide
+    // whether the catalog cache has anything to invalidate, and a per-fragment `softDelete` loop
+    // would be one repository round trip per fragment (an HTTPS one in mothership mode).
     const fragments = await this.deps.promptFragmentRepository.listBySource(sourceId)
-    for (const f of fragments) {
-      await this.deps.promptFragmentRepository.softDelete(f.ownerKind, f.ownerId, f.fragmentId, now)
-    }
+    await this.deps.promptFragmentRepository.softDeleteBySource(sourceId, now)
     await this.deps.fragmentSourceRepository.softDelete(source.id, now)
     if (fragments.length > 0) await this.deps.invalidateCatalog?.(ownerKind, ownerId)
   }
